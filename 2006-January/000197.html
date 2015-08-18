@@ -1,0 +1,770 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r216 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r216%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601221505.k0MF5hBi030135%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000196.html">
+   <LINK REL="Next"  HREF="000198.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r216 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r216%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601221505.k0MF5hBi030135%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r216 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Jan 22 16:05:43 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000196.html">[OpenFDM-svn] r215 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000198.html">[OpenFDM-svn] r217 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/XML
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#197">[ date ]</a>
+              <a href="thread.html#197">[ thread ]</a>
+              <a href="subject.html#197">[ subject ]</a>
+              <a href="author.html#197">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-22 16:05:40 +0100 (Sun, 22 Jan 2006)
+New Revision: 216
+
+Removed:
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Remove main.cpp
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-22 08:54:23 UTC (rev 215)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-22 15:05:40 UTC (rev 216)
+@@ -1,15 +1,12 @@
+ 
+ INCLUDES = -I$(srcdir)/..
+ 
+-noinst_PROGRAMS = main units
++noinst_PROGRAMS = units
+ 
+ # define some unit tests
+ check_PROGRAMS = quattest
+ TESTS          = $(check_PROGRAMS)
+ 
+-main_SOURCES = main.cpp
+-main_LDADD = libOpenFDM.la
+-
+ units_SOURCES = units.cpp
+ units_LDADD = libOpenFDM.la
+ 
+
+Deleted: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-22 08:54:23 UTC (rev 215)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-22 15:05:40 UTC (rev 216)
+@@ -1,669 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#include &lt;iostream&gt;
+-#include &lt;fstream&gt;
+-#include &lt;sstream&gt;
+-#include &lt;iomanip&gt;
+-#include &lt;vector&gt;
+-#include &lt;list&gt;
+-#include &lt;string&gt;
+-using namespace std;
+-
+-#include &lt;OpenFDM/Object.h&gt;
+-#include &lt;OpenFDM/Vector.h&gt;
+-#include &lt;OpenFDM/Matrix.h&gt;
+-#include &lt;OpenFDM/Quaternion.h&gt;
+-#include &lt;OpenFDM/Frame.h&gt;
+-#include &lt;OpenFDM/Friction2D.h&gt;
+-#include &lt;OpenFDM/Units.h&gt;
+-#include &lt;OpenFDM/Planet.h&gt;
+-#include &lt;OpenFDM/DefaultPlanet.h&gt;
+-#include &lt;OpenFDM/RigidBody.h&gt;
+-#include &lt;OpenFDM/MobileRootJoint.h&gt;
+-#include &lt;OpenFDM/AeroForce.h&gt;
+-#include &lt;OpenFDM/SimpleContact.h&gt;
+-#include &lt;OpenFDM/SimpleGear.h&gt;
+-#include &lt;OpenFDM/ExplicitEuler.h&gt;
+-#include &lt;OpenFDM/ExplicitAdams.h&gt;
+-#include &lt;OpenFDM/ImplicitEuler.h&gt;
+-#include &lt;OpenFDM/MidpointRule.h&gt;
+-#include &lt;OpenFDM/DoPri5.h&gt;
+-#include &lt;OpenFDM/Newton.h&gt;
+-#include &lt;OpenFDM/Mass.h&gt;
+-#include &lt;OpenFDM/Vehicle.h&gt;
+-#include &lt;OpenFDM/RevoluteJoint.h&gt;
+-#include &lt;OpenFDM/PrismaticJoint.h&gt;
+-#include &lt;OpenFDM/ReaderWriter.h&gt;
+-#include &lt;OpenFDM/LogStream.h&gt;
+-#include &lt;OpenFDM/Variant.h&gt;
+-#include &lt;OpenFDM/Property.h&gt;
+-
+-// Model includes
+-#include &lt;OpenFDM/Model.h&gt;
+-#include &lt;OpenFDM/ModelGroup.h&gt;
+-#include &lt;OpenFDM/Bias.h&gt;
+-#include &lt;OpenFDM/ConstModel.h&gt;
+-#include &lt;OpenFDM/DeadBand.h&gt;
+-#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
+-#include &lt;OpenFDM/Gain.h&gt;
+-#include &lt;OpenFDM/Integrator.h&gt;
+-#include &lt;OpenFDM/TimeDerivative.h&gt;
+-#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
+-#include &lt;OpenFDM/BinaryFunctionModel.h&gt;
+-#include &lt;OpenFDM/Product.h&gt;
+-#include &lt;OpenFDM/Saturation.h&gt;
+-#include &lt;OpenFDM/Summer.h&gt;
+-
+-#include &quot;XML/XMLReader.h&quot;
+-
+-using namespace OpenFDM;
+-
+-namespace OpenFDM {
+-
+-class OpenFDMReader :
+-    public ReaderWriter {
+-public:
+-  OpenFDMReader(void) {}
+-  virtual ~OpenFDMReader(void) {}
+-
+-//   void setInputFile(const std::string&amp; inputFile)
+-//   { mInputFile = inputFile; }
+-//   const std::string&amp; getInputFile(void) const
+-//   { return mInputFile; }
+-
+-//   // FIXME
+-//   std::string mInputFile;
+-
+-
+-  // FIXME
+-  virtual void reset(void)
+-  {}
+-
+-  /** Read scalar value element from dom tree.
+-   * 
+-   */
+-  template&lt;typename T&gt;
+-  bool
+-  readScalar(const XMLElement* element, T&amp; scalar)
+-  {
+-    if (!element)
+-      return error(&quot;Error reading scalar: no such element!&quot;);
+-    
+-    // FIXME handle units!!!
+-
+-    std::stringstream stream(element-&gt;getData());
+-    stream &gt;&gt; scalar;
+-    if (stream.fail())
+-      return error(&quot;Error reading scalar: Could not read scalar data!&quot;);
+-
+-    return true;
+-  }
+-  
+-  /** Read scalar value element from dom tree.
+-   * 
+-   */
+-  bool
+-  readVector3(const XMLElement* element, Vector3&amp; v)
+-  {
+-    if (!element || element-&gt;getName() != &quot;Vector&quot;)
+-      return error(&quot;Error reading Vector: no such element!&quot;);
+-    
+-    // FIXME handle units!!!
+-    std::stringstream stream(element-&gt;getData());
+-    stream &gt;&gt; v(1) &gt;&gt; v(2) &gt;&gt; v(3);
+-    if (stream.fail())
+-      return error(&quot;Error reading Vector: Could not read vector data!&quot;);
+-
+-    return true;
+-  }
+-  
+-  bool
+-  readQuaternion(const XMLElement* element, Quaternion&amp; q)
+-  {
+-    if (!element || element-&gt;getName() != &quot;quaternion&quot;)
+-      return error(&quot;Error reading Quternion: no such element!&quot;);
+-    
+-    std::stringstream stream(element-&gt;getData());
+-    stream &gt;&gt; q(1) &gt;&gt; q(2) &gt;&gt; q(3) &gt;&gt; q(4);
+-    if (stream.fail())
+-      return error(&quot;Error reading Quaternion: Could not read vector data!&quot;);
+-    
+-    // Check if the norm is properly normalized
+-    bool normalized = (norm(q)-1) &lt; 8*Limits&lt;Quaternion::value_type&gt;::epsilon();
+-    if (!normalized)
+-      return error(&quot;Error reading Quaternion: Quaternion is not normalized!&quot;);
+-
+-    return true;
+-  }
+-
+-  bool
+-  readMatrix(const XMLElement* element, Matrix&amp; m)
+-  {
+-    if (!element || element-&gt;getName() != &quot;matrix&quot;)
+-      return error(&quot;Error reading Vector: no such element!&quot;);
+-    
+-    unsigned columns = 1;
+-    std::string columnsStr = element-&gt;getAttribute(&quot;columns&quot;);
+-    if (!columnsStr.empty()) {
+-      std::stringstream stream(columnsStr);
+-      stream &gt;&gt; columns;
+-      if (stream.fail())
+-        error(&quot;Error reading matrix: cannot read Columns attribute!&quot;);
+-    }
+-    
+-    unsigned rows = 1;
+-    std::string rowsStr = element-&gt;getAttribute(&quot;rows&quot;);
+-    if (!rowsStr.empty()) {
+-      std::stringstream stream(rowsStr);
+-      stream &gt;&gt; rows;
+-      if (stream.fail())
+-        error(&quot;Error Reading Matrix: cannot read Rows attribute!&quot;);
+-    }
+-
+-    m.resize(rows, columns);
+-    // FIXME handle units!!!
+-    std::stringstream stream(element-&gt;getData());
+-    for (unsigned i = 1; i &lt;= rows; ++i)
+-      for (unsigned j = 1; j &lt;= columns; ++j)
+-        stream &gt;&gt; m(i, j);
+-
+-    if (stream.fail())
+-      return error(&quot;Error reading Matrix: Could not read matrix data!&quot;);
+-
+-    return true;
+-  }
+-
+-  bool
+-  readOrientation(const XMLElement* element, Quaternion&amp; q)
+-  {
+-    if (!element || element-&gt;getName() != &quot;Orientation&quot;)
+-      return error(&quot;Error reading Orientation: no such element!&quot;);
+-    
+-    // Check if the orientation is present in a quaternion.
+-    std::list&lt;XMLElement::const_pointer&gt; qs = element-&gt;getElements(&quot;quaternion&quot;);
+-    // Fail if there are multiple elements.
+-    if (1 &lt; qs.size())
+-      return error(&quot;Error reading Orientation: Multiple Quaternion elements!&quot;);
+-    if (1 == qs.size()) {
+-      if (!readQuaternion(qs.front(), q))
+-        return error(&quot;Error reading Orientation: Could not read Quaternion!&quot;);
+-      else
+-        return true;
+-    }
+-    
+-    // Check if the orientation is present in angle axis representation.
+-    std::list&lt;XMLElement::const_pointer&gt; angs = element-&gt;getElements(&quot;Angle&quot;);
+-    std::list&lt;XMLElement::const_pointer&gt; axs = element-&gt;getElements(&quot;Axis&quot;);
+-    if (0 &lt; angs.size() || 0 &lt; axs.size()) {
+-      // Fail if there are multiple elements.
+-      if (1 &lt; angs.size())
+-        return error(&quot;Error reading Orientation: Multiple Angle elements!&quot;);
+-      if (0 == angs.size())
+-        return error(&quot;Error reading Orientation: No Angle element where Axis element is present!&quot;);
+-      if (1 &lt; axs.size())
+-        return error(&quot;Error reading Orientation: Multiple Axis elements!&quot;);
+-      if (0 == axs.size())
+-        return error(&quot;Error reading Orientation: No Axis element where Angle is present!&quot;);
+-      
+-      // Read angle.
+-      real_type angle;
+-      if (!readScalar(angs.front(), angle))
+-        return error(&quot;Error reading Orientation: Could not read Angle!&quot;);
+-      
+-      // Read axis.
+-      Vector3 axis;
+-      if (!readVector3(axs.front(), axis))
+-        return error(&quot;Error reading Orientation: Could not read Axis!&quot;);
+-      
+-      q = Quaternion::fromAngleAxis(angle, axis);
+-      return true;
+-    }
+-    
+-    // Check if the orientation is present in euler angle representation.
+-    std::list&lt;XMLElement::const_pointer&gt; rll = element-&gt;getElements(&quot;Roll&quot;);
+-    std::list&lt;XMLElement::const_pointer&gt; att = element-&gt;getElements(&quot;Attitude&quot;);
+-    std::list&lt;XMLElement::const_pointer&gt; hdng = element-&gt;getElements(&quot;Heading&quot;);
+-    if (0 &lt; rll.size() || 0 &lt; att.size() || 0 &lt; hdng.size()) {
+-      // Fail if there are multiple elements.
+-      if (1 &lt; rll.size())
+-        return error(&quot;Error reading Orientation: Multiple Roll elements!&quot;);
+-      if (1 &lt; att.size())
+-        return error(&quot;Error reading Orientation: Multiple Attitude elements!&quot;);
+-      if (1 &lt; hdng.size())
+-        return error(&quot;Error reading Orientation: Multiple Heading elements!&quot;);
+-      
+-      // Read the roll angle.
+-      real_type roll = 0;
+-      if (0 &lt; rll.size() &amp;&amp; !readScalar(rll.front(), roll))
+-        return error(&quot;Error reading Orientation: Could not read Roll!&quot;);
+-      
+-      // Read the pitch angle.
+-      real_type attitude = 0;
+-      if (0 &lt; att.size() &amp;&amp; !readScalar(att.front(), attitude))
+-        return error(&quot;Error reading Orientation: Could not read Attitude!&quot;);
+-      
+-      // Read the heading angle.
+-      real_type heading = 0;
+-      if (0 &lt; hdng.size() &amp;&amp; !readScalar(hdng.front(), heading))
+-        return error(&quot;Error reading Orientation: Could not read Heading!&quot;);
+-      
+-      // FIXME: verify ...
+-      q = Quaternion::fromHeadAttBank(attitude, heading, roll);
+-      
+-      return true;
+-    }
+-    
+-    return error(&quot;Error reading Orientation: No Orientation data found!&quot;);
+-  }
+-
+-  bool
+-  readPort(const XMLElement* element, std::string&amp; name, unsigned&amp; number)
+-  {
+-    name = element-&gt;getAttribute(&quot;name&quot;);
+-    if (name.empty())
+-      return error(&quot;Port found without or with empty name attribute!&quot;);
+-    if (!readScalar(element, number))
+-      return error(&quot;Can not read port number!&quot;);
+-    return true;
+-  }
+-
+-  bool
+-  readObjectProperties(const XMLElement* element, Object* object)
+-  {
+-    std::list&lt;std::string&gt; props = object-&gt;listProperties();
+-    std::list&lt;std::string&gt;::iterator it = props.begin();
+-    while (it != props.end()) {
+-      if (1 &lt; element-&gt;getNumElements(*it))
+-        return error(std::string(&quot;Error loading Model: More than one \&quot;&quot;)
+-                     + *it + &quot;\&quot; Property tag in model definition!&quot;);
+-
+-      const XMLElement* propElement = element-&gt;getElement(*it);
+-      if (propElement) {
+-        if (1 != propElement-&gt;getNumElements(&quot;matrix&quot;))
+-          return error(&quot;InitialValue tag found without content!&quot;);
+-
+-        Matrix m;
+-        if (!readMatrix(propElement-&gt;getElement(&quot;matrix&quot;), m))
+-          return error(&quot;Cannot read InitialValue Matrix!&quot;);
+-
+-        object-&gt;setPropertyValue(*it, Variant(m));
+-
+-        // FIXME add more here
+-      }
+-      ++it;
+-    }
+-  }
+-
+-  bool
+-  readModel(const XMLElement* modelElement, ModelGroup* group)
+-  {
+-   std::string name = modelElement-&gt;getAttribute(&quot;name&quot;);
+-    if (name.empty())
+-      return error(&quot;Error loading Models: Empty name!&quot;);
+-
+-    std::string type = modelElement-&gt;getAttribute(&quot;type&quot;);
+-    SharedPtr&lt;Model&gt; model;
+-    if (type == &quot;Bias&quot;) {
+-      model = new Bias(name);
+-    } else if (type == &quot;Const&quot;) {
+-      model = new ConstModel(name, Matrix()); // FIXME
+-    } else if (type == &quot;DeadBand&quot;) {
+-      model = new DeadBand(name);
+-    } else if (type == &quot;DiscreteIntegrator&quot;) {
+-      model = new DiscreteIntegrator(name);
+-    } else if (type == &quot;Gain&quot;) {
+-      model = new Gain(name);
+-    } else if (type == &quot;Integrator&quot;) {
+-      model = new Integrator(name);
+-    } else if (type == &quot;Product&quot;) {
+-      model = new Product(name);
+-    } else if (type == &quot;Saturation&quot;) {
+-      model = new Saturation(name);
+-    } else if (type == &quot;TimeDerivative&quot;) {
+-      model = new TimeDerivative(name);
+-    } else
+-      return error(std::string(&quot;Error loading Models: Unknown Model type \&quot;&quot;)
+-                   + type + &quot;\&quot; !&quot;);
+-
+-    if (!readObjectProperties(modelElement, model))
+-      return error(&quot;Error loading Models: Error reading properties !&quot;);
+-
+-    group-&gt;addModel(model);
+-
+-    return true;
+-  }
+-
+-  bool
+-  readModelGroup(const XMLElement* controlSystem, ModelGroup* group)
+-  {
+-    // Read all Models.
+-    std::list&lt;XMLElement::const_pointer&gt; models
+-      = controlSystem-&gt;getElements(&quot;model&quot;);
+-    if (0 == models.size())
+-      return error(&quot;Error loading Vehicle: No Model found&quot;);
+-
+-    std::list&lt;XMLElement::const_pointer&gt;::iterator it = models.begin();
+-    while (it != models.end()) {
+-      if (!readModel(*it, group))
+-        return false;
+-      ++it;
+-    }
+-
+-    std::list&lt;XMLElement::const_pointer&gt; connections
+-      = controlSystem-&gt;getElements(&quot;connect&quot;);
+-    it = connections.begin();
+-    while (it != connections.end()) {
+-      if (1 != (*it)-&gt;getNumElements(&quot;src&quot;))
+-        return error(&quot;No src element found in connect element!&quot;);
+-      std::string name;
+-      unsigned number;
+-      if (!readPort((*it)-&gt;getElement(&quot;src&quot;), name, number))
+-        return false;
+-
+-      Model* srcModel = group-&gt;getModel(name);
+-      if (!srcModel)
+-        return error(&quot;Can not find src model named \&quot;&quot; + name + &quot;\&quot; !&quot;);
+-      if (srcModel-&gt;getNumOutputPorts() &lt;= number)
+-        return error(&quot;Model \&quot;&quot; + name + &quot;\&quot; has not enough output ports!&quot;);
+-      Port* srcPort = srcModel-&gt;getOutputPort(number);
+-      if (!srcPort)
+-        return error(&quot;Model \&quot;&quot; + name + &quot;\&quot; returns invalid output port!&quot;);
+-
+-      if (1 != (*it)-&gt;getNumElements(&quot;dst&quot;))
+-        return error(&quot;No dst element found in connect element!&quot;);
+-      if (!readPort((*it)-&gt;getElement(&quot;dst&quot;), name, number))
+-        return false;
+-
+-      Model* dstModel = group-&gt;getModel(name);
+-      if (!dstModel)
+-        return error(&quot;Can not find dst model named \&quot;&quot; + name + &quot;\&quot; !&quot;);
+-      if (dstModel-&gt;getNumInputPorts() &lt;= number)
+-        return error(&quot;Model \&quot;&quot; + name + &quot;\&quot; has not enough input ports!&quot;);
+-
+-      Port* dstPort = dstModel-&gt;getInputPort(number);
+-      if (!dstPort)
+-        return error(&quot;Model \&quot;&quot; + name + &quot;\&quot; returns invalid input port!&quot;);
+-      dstPort-&gt;connect(srcPort);
+-
+-      // FIXME
+-      ++it;
+-    }
+-
+-    return true;
+-  }
+-
+-  bool
+-  readRigidBodies(const XMLElement* mechanicalSystem)
+-  {
+-    // Read all rigid bodies.
+-    std::list&lt;XMLElement::const_pointer&gt; rigidBodies
+-      = mechanicalSystem-&gt;getElements(&quot;RigidBody&quot;);
+-    if (0 == rigidBodies.size())
+-      return error(&quot;Error loading Vehicle: No RigidBody found&quot;);
+-
+-    std::list&lt;XMLElement::const_pointer&gt;::iterator it = rigidBodies.begin();
+-    while (it != rigidBodies.end()) {
+-      RigidBody* rigidBody = new RigidBody(&quot;rigid body&quot;);
+-      rigidBody-&gt;setName((*it)-&gt;getAttribute(&quot;Name&quot;));
+-      
+-//       if (mVehicle-&gt;getRigidBody((*it)-&gt;getAttribute(&quot;Name&quot;)))
+-//         return error(std::string(&quot;Error loading RigidBodies: Duplicate Rigid Body Name \&quot;&quot;)
+-//                      + (*it)-&gt;getAttribute(&quot;Name&quot;) + &quot;\&quot; !&quot;);
+-      
+-//       mVehicle-&gt;addRigidBody(rigidBody);
+-      ++it;
+-    }
+-    return true;
+-  }
+-
+-  bool
+-  readJoints(const XMLElement* mechanicalSystem)
+-  {
+-    // Read all joints bodies.
+-    std::list&lt;XMLElement::const_pointer&gt; joints
+-      = mechanicalSystem-&gt;getElements(&quot;Joint&quot;);
+-    std::list&lt;XMLElement::const_pointer&gt;::iterator it = joints.begin();
+-    while (it != joints.end()) {
+-      Joint* joint = 0;
+-      std::string name = (*it)-&gt;getAttribute(&quot;Name&quot;);
+-      if ((*it)-&gt;getAttribute(&quot;Type&quot;) == &quot;Revolute&quot;)
+-        joint = new RevoluteJoint(name);
+-      else if ((*it)-&gt;getAttribute(&quot;Type&quot;) == &quot;Prismatic&quot;)
+-        joint = new PrismaticJoint(name);
+-      if (!joint)
+-        return error(std::string(&quot;Error loading Vehicle: Unknown Joint type \&quot;&quot;)
+-                     + (*it)-&gt;getAttribute(&quot;Type&quot;) + &quot;\&quot; !&quot;);
+-      
+-      
+-//       if (mVehicle-&gt;getJoint((*it)-&gt;getAttribute(&quot;Name&quot;)))
+-//         return error(std::string(&quot;Error loading Vehicle: Duplicate Name \&quot;&quot;)
+-//                      + (*it)-&gt;getAttribute(&quot;Name&quot;) + &quot;\&quot; !&quot;);
+-//       mVehicle-&gt;addJoint(joint);
+-      
+-      
+-      // Connect the joints to the rigid bodies.
+-      std::list&lt;XMLElement::const_pointer&gt; mounts
+-        = (*it)-&gt;getElements(&quot;Mount&quot;);
+-      if (mounts.size() != 2)
+-        return error(&quot;Error loading Vehicle: More or less then 2 Mounts!&quot;);
+-      std::list&lt;XMLElement::const_pointer&gt;::iterator mit = mounts.begin();
+-      for (unsigned idx = 0; mit != mounts.end(); ++idx, ++mit) {
+-        std::string mountAttrName = (*mit)-&gt;getAttribute(&quot;Name&quot;);
+-//         RigidBody* body = mVehicle-&gt;getRigidBody(mountAttrName);
+-//         if (!body)
+-//           return error(std::string(&quot;Error loading Vehicle:&quot;) +
+-//                        &quot; Can not find RigidBody \&quot;&quot; + mountAttrName +
+-//                        &quot;\&quot; for Mount of Joint \&quot;&quot; + joint-&gt;getName() + &quot;\&quot;!&quot;);
+-       
+-//         joint-&gt;setParentFrame(body, idx);
+-        
+-        // Read the orientation. No orientation element means unit orientation.
+-        // Multiple orientations is an error.
+-        std::list&lt;XMLElement::const_pointer&gt; orients
+-          = (*mit)-&gt;getElements(&quot;Orientation&quot;);
+-        Quaternion orientation = Quaternion::unit();
+-        if (0 &lt; orients.size()) {
+-          if (1 &lt; orients.size())
+-            return error(&quot;Error loading Vehicle: More than one Orientation!&quot;);
+-          if (!readOrientation(orients.front(), orientation))
+-            return error(&quot;Error loading Vehicle: Could not read Orientation!&quot;);
+-        }
+-        
+-        // Read the position. No position element means unit position.
+-        // Multiple positions is an error.
+-        std::list&lt;XMLElement::const_pointer&gt; positions
+-          = (*mit)-&gt;getElements(&quot;Position&quot;);
+-        Vector3 position = Vector3::zeros();
+-        if (0 &lt; positions.size()) {
+-          if (1 &lt; positions.size())
+-            return error(&quot;Error loading Vehicle: More than one Position!&quot;);
+-          
+-          std::list&lt;XMLElement::const_pointer&gt; vectors
+-            = positions.front()-&gt;getElements(&quot;Vector&quot;);
+-          if (vectors.size() != 1)
+-            return error(&quot;Error loading Vehicle: More than 1 Vector!&quot;);
+-          if (!readVector3(vectors.front(), position))
+-            return error(&quot;Error loading Vehicle: Could not read Position!&quot;);
+-        }
+-        
+-      }
+-      ++it;
+-    }
+-
+-    return true;
+-  }
+-
+-  bool
+-  loadVehicle(const std::string&amp; acFile)
+-  {
+-    std::ifstream infile;
+-    infile.open(acFile.c_str());
+-    if (!infile.is_open())
+-      return 0;
+-    
+-    XMLDomParser parser;
+-    if (!parser.parseXML(infile))
+-      return error(&quot;Error loading Vehicle: Could not parse xml data!&quot;);
+-    
+-    infile.close();
+-    
+-    XMLDocument* doc = parser.getDocument();
+-    if (!doc)
+-      return error(&quot;Error loading Vehicle: Could not parse xml data!&quot;);
+-    XMLElement* openFDM = doc-&gt;getElement();
+-    if (!openFDM)
+-      return error(&quot;Error loading Vehicle: Could not get toplevel element!&quot;);
+-    if (openFDM-&gt;getName() != &quot;OpenFDM&quot;)
+-      return error(&quot;Error loading Vehicle: Toplevel element is not an &quot;
+-                   &quot;OpenFDM element!&quot;);
+-    if (openFDM-&gt;getAttribute(&quot;version&quot;) != &quot;1&quot;)
+-      return error(&quot;Error loading Vehicle: Invalid OpenFDM version!&quot;);
+-    
+-    XMLElement* mechanicalSystem = openFDM-&gt;getElement(&quot;MechanicalSystem&quot;);
+-    if (!mechanicalSystem)
+-      return error(&quot;Error loading Vehicle: Cannot find a MechanicalSystem &quot;
+-                   &quot;element!&quot;);
+-    
+-    XMLElement* controlSystem = openFDM-&gt;getElement(&quot;ControlSystem&quot;);
+-    if (!controlSystem)
+-      return error(&quot;Error loading Vehicle: Cannot find a MechanicalSystem &quot;
+-                   &quot;element!&quot;);
+-
+-
+-    mVehicle = new Vehicle;
+-    
+-    if (!readModelGroup(controlSystem, mVehicle-&gt;getModelGroup()))
+-      return error(&quot;Error loading Vehicle: Can not load Model elements!&quot;);
+-
+-    if (!readRigidBodies(mechanicalSystem))
+-      return error(&quot;Error loading Vehicle: Can not load RigidBody elements!&quot;);
+-    
+-    if (!readJoints(mechanicalSystem))
+-      return error(&quot;Error loading Vehicle: Can not load Joint elements!&quot;);
+-
+-    mVehicle-&gt;setGeodPosition(Geodetic(0.0, 0.0, 0.0));
+-
+-    return true;
+-  }
+-};
+-  
+-} // namespace OpenFDM
+-
+-void printVehicle(Vehicle* vehicle)
+-{
+-  cout &lt;&lt; &quot;T = &quot; &lt;&lt; vehicle-&gt;getTime()
+-       &lt;&lt; &quot;, Pos: &quot; &lt;&lt; vehicle-&gt;getGeodPosition()
+-//        &lt;&lt; &quot;, Or: &quot; &lt;&lt; vehicle-&gt;getGeodOrientation()
+-       &lt;&lt; endl;
+-
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-#if 1
+-  if (argc &lt; 2)
+-    return 1;
+-  
+-  OpenFDMReader reader;
+-  reader.loadVehicle(argv[1]);
+-  SharedPtr&lt;Vehicle&gt; vehicle = reader.getVehicle();
+-
+-  if (reader.getErrorState()) {
+-    std::cerr &lt;&lt; &quot;Could not read vehicle:&quot; &lt;&lt; std::endl;
+-    const ReaderWriter::StringList errors = reader.getErrors();
+-    ReaderWriter::StringList::const_iterator it = errors.begin();
+-    while (it != errors.end()) {
+-      std::cerr &lt;&lt; *it &lt;&lt; std::endl;
+-      ++it;
+-    }
+-    return 1;
+-  }
+-
+-  if (!vehicle) {
+-    std::cerr &lt;&lt; &quot;could not read vehicle&quot; &lt;&lt; std::endl;
+-    return 1;
+-  }
+-
+-  printVehicle(vehicle);
+-
+-  System* system = vehicle-&gt;getSystem();
+-  bool initOk = system-&gt;init();
+-  if (!initOk) {
+-    cout &lt;&lt; &quot;Error  in init&quot; &lt;&lt; endl;
+-    return -17;
+-  }
+-  ModelGroup* modelGroup = vehicle-&gt;getModelGroup();
+-  for (unsigned i = 0; i &lt; modelGroup-&gt;getNumModels(); ++i) {
+-    cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getName() &lt;&lt; endl;
+-  }
+-  for (unsigned j = 0; j &lt; 1000; ++j) {
+-    system-&gt;simulate(j*0.01);
+-
+-    for (unsigned i = 0; i &lt; modelGroup-&gt;getNumModels(); ++i)
+-      cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getOutputPort(&quot;output&quot;)-&gt;getValue().toMatrix() &lt;&lt; &quot; &quot;;
+-
+-    cout &lt;&lt; endl;
+-  }
+-
+-#else
+-  SharedPtr&lt;Vehicle&gt; vehicle = new Vehicle();
+-
+-  Geodetic geod;
+-  geod.longitude = -81.636*deg2rad;
+-  geod.latitude = 28.594*deg2rad;
+-  geod.altitude = convertFrom(uFoot, 918720.0);
+-  vehicle-&gt;setGeodPosition(geod);
+-
+-  real_type heading = 90*deg2rad;
+-  Quaternion q = Quaternion::fromAngleAxis(heading, Vector3::unit(3));
+-  vehicle-&gt;setGeodOrientation(q);
+-
+-  vehicle-&gt;getMobileRootJoint()-&gt;setRelVel(Vector6::zeros());
+-  Vector3 vel(convertFrom(uFeetPSecond, 23900.0), 0, 0);
+-  vehicle-&gt;getMobileRootJoint()-&gt;setLinearRelVel(vel);
+-  vehicle-&gt;getTopBody()-&gt;addMultiBodyModel(new Mass(&quot;Testmass&quot;, SpatialInertia(InertiaMatrix(100,0,0,100,0,100), 100), &quot;Mass&quot;));
+-
+-
+-  RigidBody* body = new RigidBody;
+-  body-&gt;setName(&quot;Body am revolute Joint&quot;);
+-  body-&gt;addMultiBodyModel(new Mass(&quot;Testmass&quot;, SpatialInertia(InertiaMatrix(1,0,0,1,0,1), 1), &quot;Mass&quot;));
+-  vehicle-&gt;getTopBody()-&gt;addChildFrame(body);
+-  PrismaticJoint* joint = new PrismaticJoint(&quot;Prismatic Joint 1&quot;);
+-  // FIXME, seem to have a poblem with the 2*pi periodicity,
+-  // use some type of quaternion ...
+-//   RevoluteJoint* joint = new RevoluteJoint(&quot;Revolute Joint 1&quot;);
+-  joint-&gt;setJointAxis(Vector3(1, 0, 0));
+-  vehicle-&gt;getTopBody()-&gt;addMultiBodyModel(joint);
+-  body-&gt;addMultiBodyModel(joint, 1);
+-
+-
+-  RigidBody* body2 = new RigidBody;
+-  body2-&gt;setName(&quot;Body2 am prismatic Joint&quot;);
+-  body2-&gt;addMultiBodyModel(new Mass(&quot;Testmass&quot;, SpatialInertia(InertiaMatrix(1,0,0,1,0,1), 1), &quot;Mass&quot;));
+-  body-&gt;addChildFrame(body2);
+-//   PrismaticJoint* joint2 = new PrismaticJoint(&quot;Prismatic Joint 1&quot;);
+-  RevoluteJoint* joint2 = new RevoluteJoint(&quot;Revolute Joint 2&quot;);
+-  joint2-&gt;setJointAxis(Vector3(0, 1, 0));
+-  body-&gt;addMultiBodyModel(joint2);
+-  body2-&gt;addMultiBodyModel(joint2, 1);
+-
+-  vehicle-&gt;init();
+-
+-  printVehicle(vehicle);
+-
+-
+-  real_type tEnd = 200;
+-  real_type dt = 10;
+-//   dt = 1.0/128;
+-  while (vehicle-&gt;getTime() &lt; tEnd) {
+-    vehicle-&gt;output();
+-    vehicle-&gt;update(dt);
+-    printVehicle(vehicle);
+-  }
+-#endif
+-
+-  return 0;
+-}
+-
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000196.html">[OpenFDM-svn] r215 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000198.html">[OpenFDM-svn] r217 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/XML
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#197">[ date ]</a>
+              <a href="thread.html#197">[ thread ]</a>
+              <a href="subject.html#197">[ subject ]</a>
+              <a href="author.html#197">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

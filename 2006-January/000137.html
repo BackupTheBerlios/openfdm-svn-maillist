@@ -1,0 +1,1094 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r153 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r153%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021225.k02CPVBP006394%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000136.html">
+   <LINK REL="Next"  HREF="000138.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r153 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r153%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021225.k02CPVBP006394%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r153 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan  2 13:25:31 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000136.html">[OpenFDM-svn] r152 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000138.html">[OpenFDM-svn] r154 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#137">[ date ]</a>
+              <a href="thread.html#137">[ thread ]</a>
+              <a href="subject.html#137">[ subject ]</a>
+              <a href="author.html#137">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-02 13:25:24 +0100 (Mon, 02 Jan 2006)
+New Revision: 153
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+Log:
+Move aerodynamic force evaluation away from the
+old Expression based approach.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 09:18:40 UTC (rev 152)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 12:25:24 UTC (rev 153)
+@@ -16,7 +16,6 @@
+ #include &lt;OpenFDM/ConstSystem.h&gt;
+ #include &lt;OpenFDM/DeadBand.h&gt;
+ #include &lt;OpenFDM/DiscreteIntegrator.h&gt;
+-#include &lt;OpenFDM/Expression.h&gt;
+ #include &lt;OpenFDM/TransferFunction.h&gt;
+ #include &lt;OpenFDM/DirectForce.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+@@ -94,9 +93,6 @@
+   // Default discrete stepsize of JSBSim
+   mVehicle-&gt;getModelGroup()-&gt;addSampleTime(SampleTime(1.0/120));
+ 
+-  // Create the aerodynamic properties of JSBSim.
+-  makeAeroprops();
+-
+   // Try to find the given file on the given search path
+   std::ifstream acFileStream;
+   if (!openFile(mAircraftPath, acFileName, acFileStream))
+@@ -222,13 +218,18 @@
+   Port* port;
+   if (mExpressionTable.count(propName) &lt;= 0) {
+     // Not yet available, so look and see if it is an input
+-    port = createAndScheduleInput(propName);
++    port = createAndScheduleAeroProp(propName);
+ 
+-    // Ok, still not available, create a constant zero thing and bail out ...
+     if (!port || !port-&gt;isConnected()) {
+-      std::cerr &lt;&lt; &quot;Creating expression \&quot;&quot; &lt;&lt; propName &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-
+-      return addConstModel(propName + &quot; constant&quot;, 0);
++      // Not yet available, so look and see if it is an input
++      port = createAndScheduleInput(propName);
++      
++      // Ok, still not available, create a constant zero thing and bail out ...
++      if (!port || !port-&gt;isConnected()) {
++        std::cerr &lt;&lt; &quot;Creating expression \&quot;&quot; &lt;&lt; propName &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++        
++        return addConstModel(propName + &quot; constant&quot;, 0);
++      }
+     }
+     
+   } else {
+@@ -458,6 +459,172 @@
+ }
+ 
+ Port*
++LegacyJSBSimReader::createAndScheduleAeroProp(const std::string&amp; propName)
++{
++  // This routine checks if the given propName is a aerodynamic reference
++  // point property. If so, it schedules and registers a discrete input model.
++  Port* port = 0;
++  if (propName == &quot;fdm/jsbsim/velocities/vt-mps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;trueSpeed&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/vt-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;trueSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;True Speed fps&quot;, uFeetPSecond, port);
++  } else if (propName == &quot;fdm/jsbsim/velocities/vt-kts&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;trueSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;True Speed kts&quot;, uKnots, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/mach-norm&quot; ||
++             propName == &quot;fdm/jsbsim/velocities/mach&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;machNumber&quot;);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/p-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;p&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/p-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;p&quot;);
++    port = addMultiBodyToUnit(&quot;P deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/q-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;q&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/q-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;q&quot;);
++    port = addMultiBodyToUnit(&quot;Q deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/r-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;r&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/r-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;r&quot;);
++    port = addMultiBodyToUnit(&quot;R deg_sec&quot;, uDegree, port);
++
++    /// FIXME: the aero stuff is yet missing!!!
++  } else if (propName == &quot;fdm/jsbsim/velocities/p-aero-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;p&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/p-aero-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;p&quot;);
++    port = addMultiBodyToUnit(&quot;P-aero deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/q-aero-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;q&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/q-aero-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;q&quot;);
++    port = addMultiBodyToUnit(&quot;Q-aero deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/r-aero-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;r&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/r-aero-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;r&quot;);
++    port = addMultiBodyToUnit(&quot;R-aero deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/u-aero-mps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;u&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/u-aero-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;u&quot;);
++    port = addMultiBodyToUnit(&quot;U-aero fps&quot;, uFeetPSecond, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/v-aero-mps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;v&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/v-aero-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;v&quot;);
++    port = addMultiBodyToUnit(&quot;V-aero fps&quot;, uFeetPSecond, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/w-aero-mps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;w&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/w-aero-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;w&quot;);
++    port = addMultiBodyToUnit(&quot;W-aero fps&quot;, uFeetPSecond, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/qbar-pa&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;dynamicPressure&quot;);
++  } else if (propName == &quot;fdm/jsbsim/aero/qbar-psf&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;dynamicPressure&quot;);
++    port = addMultiBodyToUnit(&quot;Dynamic pressure psf&quot;, uPoundPFt2, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/tat-r&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;temperature&quot;);
++    port = addMultiBodyToUnit(&quot;Temperature Rankine&quot;, uRankine, port);
++  } else if (propName == &quot;fdm/jsbsim/velocities/tat-f&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;temperature&quot;);
++    port = addMultiBodyToUnit(&quot;Degree Fahrenheit&quot;, uFahrenheit, port);
++
++    // Braindead: a pressure value in velocities ...
++  } else if (propName == &quot;fdm/jsbsim/velocities/pt-pa&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;pressure&quot;);
++  } else if (propName == &quot;fdm/jsbsim/velocities/pt-lbs_sqft&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;temperature&quot;);
++    port = addMultiBodyToUnit(&quot;Static pressure psf&quot;, uPoundPFt2, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/alpha-rad&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;alpha&quot;);
++  } else if (propName == &quot;fdm/jsbsim/aero/mag-alpha-rad&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;alpha&quot;);
++    port = addMultiBodyAbsModel(&quot;Angle of attack mag&quot;, port);
++  } else if (propName == &quot;fdm/jsbsim/aero/alpha-deg&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;alpha&quot;);
++    port = addMultiBodyToUnit(&quot;Angle of attack deg&quot;, uDegree, port);
++  } else if (propName == &quot;fdm/jsbsim/aero/mag-alpha-deg&quot;) {
++    port = lookupJSBExpression(&quot;aero/alpha-deg&quot;);
++    port = addMultiBodyAbsModel(&quot;Angle of attack mag deg&quot;, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/beta-rad&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
++  } else if (propName == &quot;fdm/jsbsim/aero/mag-beta-rad&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
++    port = addMultiBodyAbsModel(&quot;Angle of attack mag&quot;, port);
++  } else if (propName == &quot;fdm/jsbsim/aero/beta-deg&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
++    port = addMultiBodyToUnit(&quot;Angle of attack deg&quot;, uDegree, port);
++  } else if (propName == &quot;fdm/jsbsim/aero/mag-beta-deg&quot;) {
++    port = lookupJSBExpression(&quot;aero/beta-deg&quot;);
++    port = addMultiBodyAbsModel(&quot;Angle of attack mag deg&quot;, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/alphadot-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;alphaDot&quot;);
++  } else if (propName == &quot;fdm/jsbsim/aero/alphadot-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;alphaDot&quot;);
++    port = addMultiBodyToUnit(&quot;Angle of attack deriv deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/betadot-rad_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;betaDot&quot;);
++  } else if (propName == &quot;fdm/jsbsim/aero/betadot-deg_sec&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;betaDot&quot;);
++    port = addMultiBodyToUnit(&quot;Angle of attack deriv deg_sec&quot;, uDegree, port);
++
++  } else if (propName == &quot;fdm/jsbsim/metrics/bw-ft&quot;) {
++    /// FIXME, just schedule a constant block for that??
++    port = mAeroForce-&gt;getOutputPort(&quot;wingSpan&quot;);
++    port = addMultiBodyToUnit(&quot;Wingspan ft&quot;, uFoot, port);
++
++  } else if (propName == &quot;fdm/jsbsim/metrics/Sw-sqft&quot;) {
++    /// FIXME, just schedule a constant block for that??
++    port = mAeroForce-&gt;getOutputPort(&quot;wingArea&quot;);
++    port = addMultiBodyToUnit(&quot;Wingarea ft&quot;, uFoot2, port);
++
++  } else if (propName == &quot;fdm/jsbsim/metrics/cbarw-ft&quot;) {
++    /// FIXME, just schedule a constant block for that??
++    port = mAeroForce-&gt;getOutputPort(&quot;coord&quot;);
++    port = addMultiBodyToUnit(&quot;Coord ft&quot;, uFoot, port);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/bi2vel&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;wingSpanOver2Speed&quot;);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/ci2vel&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;coordOver2Speed&quot;);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/h_b-cg-ft&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;hOverWingSpan&quot;);
++
++  } else if (propName == &quot;fdm/jsbsim/aero/h_b-mac-ft&quot;) {
++    /// Hmmm, FIXME
++    port = lookupJSBExpression(&quot;aero/h_b-cg-ft&quot;);
++
++  }
++
++  if (port &amp;&amp; port-&gt;isConnected())
++    registerExpression(propName, port);
++  
++  return port;
++}
++
++Port*
+ LegacyJSBSimReader::addInputModel(const std::string&amp; name,
+                                   const std::string&amp; propName, real_type gain)
+ {
+@@ -521,6 +688,51 @@
+   }
+ }
+ 
++Port*
++LegacyJSBSimReader::addMultiBodyToUnit(const std::string&amp; name, Unit u,
++                                       Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::SiToUnit, u);
++  addMultiBodyModel(unitConv);
++  unitConv-&gt;getInputPort(0)-&gt;connect(in);
++  return unitConv-&gt;getOutputPort(0);
++}
++
++Port*
++LegacyJSBSimReader::addMultiBodyFromUnit(const std::string&amp; name, Unit u,
++                                         Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::UnitToSi, u);
++  addMultiBodyModel(unitConv);
++  unitConv-&gt;getInputPort(0)-&gt;connect(in);
++  return unitConv-&gt;getOutputPort(0);
++}
++
++Port*
++LegacyJSBSimReader::addMultiBodyAbsModel(const std::string&amp; name, Port* in)
++{
++  UnaryFunctionModel *unary
++    = new UnaryFunctionModel(name + &quot; Abs&quot;, UnaryFunctionModel::Abs);
++  unary-&gt;getInputPort(0)-&gt;connect(in);
++  addMultiBodyModel(unary);
++  return unary-&gt;getOutputPort(0);
++}
++
++void
++LegacyJSBSimReader::addMultiBodyModel(Model* model)
++{
++  // FIXME
++  while (mVehicle-&gt;getMultiBodySystem()-&gt;addModel(model) == ~0u) {
++    model-&gt;setName(model-&gt;getName() + &quot;x&quot;);
++  }
++}
++
+ bool
+ LegacyJSBSimReader::convertDocument(const XMLDocument* jsbDoc)
+ {
+@@ -1882,44 +2094,40 @@
+   for (it = elems.begin(); it != elems.end(); ++it) {
+     std::string axisname = (*it)-&gt;getAttribute(&quot;NAME&quot;);
+ 
+-    SharedPtr&lt;UnitToSiExpressionImpl&gt; toNewton
+-      = new UnitToSiExpressionImpl(uPoundForce);
+-    SharedPtr&lt;UnitToSiExpressionImpl&gt; toNewtonMeter
+-      = new UnitToSiExpressionImpl(uPoundForceFt);
+-    SharedPtr&lt;SumExpressionImpl&gt; sum = new SumExpressionImpl;
+-    toNewtonMeter-&gt;setInputProperty(TypedProperty&lt;real_type&gt;(sum));
+-    toNewton-&gt;setInputProperty(TypedProperty&lt;real_type&gt;(sum));
++    SharedPtr&lt;Summer&gt; sum = new Summer(axisname + &quot; Sum&quot;);
++    sum-&gt;setNumSummands(0);
++
++    // Now parse the summands
++    if (!convertAEROSummands(*it, sum, 0))
++      return error(&quot;Cannot convert aerodynamic summands for axis \&quot;&quot; + 
++                   axisname  + &quot;\&quot;&quot;);
++    if (!sum-&gt;getNumSummands())
++      continue;
++    addMultiBodyModel(sum);
++    Port* port = sum-&gt;getOutputPort(0);
++
+     if (axisname == &quot;LIFT&quot;) {
+-      SharedPtr&lt;MinusExpressionImpl&gt; minus = new MinusExpressionImpl;
+-      minus-&gt;setInputProperty(TypedProperty&lt;real_type&gt;(toNewton));
+-      mAeroForce-&gt;addStabilityAxisSummand(AeroForce::LiftAxis,
+-                                          TypedProperty&lt;real_type&gt;(minus));
++      port = addMultiBodyFromUnit(&quot;LIFT unit converter&quot;, uPoundForce, port);
++      mAeroForce-&gt;getInputPort(&quot;lift&quot;)-&gt;connect(port);
+     }
+     else if (axisname == &quot;DRAG&quot;) {
+-      SharedPtr&lt;MinusExpressionImpl&gt; minus = new MinusExpressionImpl;
+-      minus-&gt;setInputProperty(TypedProperty&lt;real_type&gt;(toNewton));
+-      mAeroForce-&gt;addStabilityAxisSummand(AeroForce::DragAxis,
+-                                          TypedProperty&lt;real_type&gt;(minus));
++      port = addMultiBodyFromUnit(&quot;DRAG unit converter&quot;, uPoundForce, port);
++      mAeroForce-&gt;getInputPort(&quot;drag&quot;)-&gt;connect(port);
+     }
+     else if (axisname == &quot;SIDE&quot;) {
+-      mAeroForce-&gt;addBodyAxisSummand(AeroForce::SideAxis,
+-                                     TypedProperty&lt;real_type&gt;(toNewton));
++      port = addMultiBodyFromUnit(&quot;SIDE unit converter&quot;, uPoundForce, port);
++      mAeroForce-&gt;getInputPort(&quot;side&quot;)-&gt;connect(port);
+     } else if (axisname == &quot;ROLL&quot;) {
+-      mAeroForce-&gt;addBodyAxisSummand(AeroForce::RollAxis,
+-                                     TypedProperty&lt;real_type&gt;(toNewtonMeter));
++      port = addMultiBodyFromUnit(&quot;ROLL unit converter&quot;, uPoundForceFt, port);
++      mAeroForce-&gt;getInputPort(&quot;roll&quot;)-&gt;connect(port);
+     } else if (axisname == &quot;PITCH&quot;) {
+-      mAeroForce-&gt;addBodyAxisSummand(AeroForce::PitchAxis,
+-                                     TypedProperty&lt;real_type&gt;(toNewtonMeter));
++      port = addMultiBodyFromUnit(&quot;PITCH unit converter&quot;, uPoundForceFt, port);
++      mAeroForce-&gt;getInputPort(&quot;pitch&quot;)-&gt;connect(port);
+     } else if (axisname == &quot;YAW&quot;) {
+-      mAeroForce-&gt;addBodyAxisSummand(AeroForce::YawAxis,
+-                                     TypedProperty&lt;real_type&gt;(toNewtonMeter));
++      port = addMultiBodyFromUnit(&quot;YAW unit converter&quot;, uPoundForceFt, port);
++      mAeroForce-&gt;getInputPort(&quot;yaw&quot;)-&gt;connect(port);
+     } else
+       return error(&quot;Unknown aerodynamic axis!&quot;);
+-
+-    // Now parse the summands
+-    if (!convertAEROSummands(*it, sum, 0))
+-      return error(&quot;Cannot convert aerodynamic summands for axis \&quot;&quot; + 
+-                   axisname  + &quot;\&quot;&quot;);
+   }
+ 
+   return true;
+@@ -1927,19 +2135,26 @@
+ 
+ bool
+ LegacyJSBSimReader::convertAEROSummands(const XMLElement* aeroSummands,
+-                                        SumExpressionImpl* sum,
+-                                        ProductExpressionImpl* prod)
++                                        Summer* sum, Product* prod)
+ {
+   std::list&lt;SharedPtr&lt;XMLElement&gt; &gt; elems = aeroSummands-&gt;getElements();
+   std::list&lt;SharedPtr&lt;XMLElement&gt; &gt;::const_iterator it;
+   for (it = elems.begin(); it != elems.end(); ++it) {
+     if ((*it)-&gt;getName() == &quot;GROUP&quot;) {
+      
+-      SharedPtr&lt;ProductExpressionImpl&gt; newProd = new ProductExpressionImpl;
+-      sum-&gt;addInputProperty(TypedProperty&lt;real_type&gt;(newProd));
+-      SharedPtr&lt;SumExpressionImpl&gt; newSum = new SumExpressionImpl;
+-      newProd-&gt;addInputProperty(TypedProperty&lt;real_type&gt;(newSum));
++      SharedPtr&lt;Product&gt; newProd = new Product(&quot;blub FIXME Product&quot;);
++      addMultiBodyModel(newProd);
++      Port* port = newProd-&gt;getOutputPort(0);
++      unsigned ns = sum-&gt;getNumSummands();
++      sum-&gt;setNumSummands(ns+1);
++      sum-&gt;getInputPort(ns)-&gt;connect(port);
+ 
++      SharedPtr&lt;Summer&gt; newSum = new Summer(&quot;blub FIXME Summer&quot;);
++      newSum-&gt;setNumSummands(0);
++      newProd-&gt;setNumFactors(1);
++      newProd-&gt;getInputPort(0)-&gt;connect(newSum-&gt;getOutputPort(0));
++      addMultiBodyModel(newSum);
++      
+       if (!convertAEROSummands(*it, newSum, newProd))
+         return error(&quot;Error parsing aerodynamic tables&quot;);
+     }
+@@ -1948,27 +2163,27 @@
+         return error(&quot;Error parsing aerodynamic tables, FACTOR without GROUP&quot;);
+ 
+       std::string type = (*it)-&gt;getAttribute(&quot;TYPE&quot;);
+-      TypedProperty&lt;real_type&gt; prop
+-        = convertCoefficient((*it)-&gt;getData(), type);
+-      prod-&gt;addInputProperty(prop);
++      Port* port = convertCoefficient((*it)-&gt;getData(), type);
++      unsigned nf = prod-&gt;getNumFactors();
++      prod-&gt;setNumFactors(nf+1);
++      prod-&gt;getInputPort(nf)-&gt;connect(port);
+     }
+     else if ((*it)-&gt;getName() == &quot;COEFFICIENT&quot;) {
+       std::string type = (*it)-&gt;getAttribute(&quot;TYPE&quot;);
+-      TypedProperty&lt;real_type&gt; prop
+-        = convertCoefficient((*it)-&gt;getData(), type);
+-      sum-&gt;addInputProperty(prop);
++      Port* port = convertCoefficient((*it)-&gt;getData(), type);
++      unsigned ns = sum-&gt;getNumSummands();
++      sum-&gt;setNumSummands(ns+1);
++      sum-&gt;getInputPort(ns)-&gt;connect(port);
+     }
+   }
+ 
+   return true;
+ }
+ 
+-TypedProperty&lt;real_type&gt;
++Port*
+ LegacyJSBSimReader::convertCoefficient(const std::string&amp; data,
+                                        const std::string&amp; type)
+ {
+-  ProductExpressionImpl* prod = new ProductExpressionImpl;
+-
+   unsigned ndims;
+   if (type == &quot;VALUE&quot;) {
+     ndims = 0;
+@@ -1981,25 +2196,29 @@
+   } else {
+     std::cerr &lt;&lt; &quot;Unknown TYPE attribute \&quot;&quot; &lt;&lt; type
+               &lt;&lt; &quot;\&quot; for COEFFICIENT tag! Ignoring!&quot; &lt;&lt; std::endl;
+-    return TypedProperty&lt;real_type&gt;(prod);
++    return 0;
+   }
+ 
+   std::stringstream datastr(data);
+ 
+   std::string token;
+-  // The fist token is some useless string.
++  // The fist token is some name string ...
+   datastr &gt;&gt; token;
+ 
++  SharedPtr&lt;Product&gt; prod = new Product(token);
++  prod-&gt;setNumFactors(0);
++  addMultiBodyModel(prod);
++
+   // The number of table entries 
+   unsigned n[3] = { 0 };
+   for (unsigned i = 0; i &lt; ndims; ++i)
+     datastr &gt;&gt; n[i];
+ 
+   // The table lookup values.
+-  Property inVal[3];
++  SharedPtr&lt;Port&gt; inVal[3];
+   for (unsigned i = 0; i &lt; ndims; ++i) {
+     datastr &gt;&gt; token;
+-    inVal[i] = lookupJSBExpression(token)-&gt;getProperty();
++    inVal[i] = lookupJSBExpression(token);
+   }
+ 
+   // The other factors in this product.
+@@ -2014,14 +2233,22 @@
+   while (linestream &gt;&gt; token) {
+     if (token.empty() || token == &quot;none&quot;)
+       break;
+-    prod-&gt;addInputProperty(lookupJSBExpression(token)-&gt;getProperty());
++    unsigned nf = prod-&gt;getNumFactors();
++    prod-&gt;setNumFactors(nf+1);
++    prod-&gt;getInputPort(nf)-&gt;connect(lookupJSBExpression(token));
+   }
+  
+   // The lookup table values.
+   if (ndims == 0) {
+-    real_type value;
+-    datastr &gt;&gt; value;
+-    prod-&gt;addInputProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++    Matrix value(1, 1);
++    datastr &gt;&gt; value(1, 1);
++    ConstSystem* constModel
++      = new ConstSystem(prod-&gt;getName() + &quot; Factor&quot;, value);
++    addMultiBodyModel(constModel);
++
++    unsigned nf = prod-&gt;getNumFactors();
++    prod-&gt;setNumFactors(nf+1);
++    prod-&gt;getInputPort(nf)-&gt;connect(constModel-&gt;getOutputPort(0));
+   }
+   else if (ndims == 1) {
+     TableData&lt;1&gt;::SizeVector size;
+@@ -2031,11 +2258,17 @@
+     if (!parseTable1D(datastr, table, lookup))
+       // FIXME
+       std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; std::endl;
+-    TableExpressionImpl&lt;1&gt;* ti = new TableExpressionImpl&lt;1&gt;();
+-    ti-&gt;setTable(table);
+-    ti-&gt;setTableLookup(0, lookup);
+-    ti-&gt;setInputProperty(0, inVal[0]);
+-    prod-&gt;addInputProperty(Property(ti));
++
++    Table1D* table1D
++      = new Table1D(prod-&gt;getName() + &quot; Table&quot;);
++    addMultiBodyModel(table1D);
++    table1D-&gt;setTableData(table);
++    table1D-&gt;setTableLookup(lookup);
++    table1D-&gt;getInputPort(0)-&gt;connect(inVal[0]);
++
++    unsigned nf = prod-&gt;getNumFactors();
++    prod-&gt;setNumFactors(nf+1);
++    prod-&gt;getInputPort(nf)-&gt;connect(table1D-&gt;getOutputPort(0));
+   }
+   else if (ndims == 2) {
+     TableData&lt;2&gt;::SizeVector size;
+@@ -2046,13 +2279,19 @@
+     if (!parseTable2D(datastr, table, lookup))
+       // FIXME
+       std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; data &lt;&lt; std::endl;
+-    TableExpressionImpl&lt;2&gt;* ti = new TableExpressionImpl&lt;2&gt;();
+-    ti-&gt;setTable(table);
++
++    Table2D* table2D
++      = new Table2D(prod-&gt;getName() + &quot; Table&quot;);
++    addMultiBodyModel(table2D);
++    table2D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 2; ++i) {
+-      ti-&gt;setTableLookup(i, lookup[i]);
+-      ti-&gt;setInputProperty(i, inVal[i]);
++      table2D-&gt;setTableLookup(i, lookup[i]);
++      table2D-&gt;getInputPort(i)-&gt;connect(inVal[i]);
+     }
+-    prod-&gt;addInputProperty(Property(ti));
++
++    unsigned nf = prod-&gt;getNumFactors();
++    prod-&gt;setNumFactors(nf+1);
++    prod-&gt;getInputPort(nf)-&gt;connect(table2D-&gt;getOutputPort(0));
+   }
+   else if (ndims == 3) {
+     TableData&lt;3&gt;::SizeVector size;
+@@ -2064,254 +2303,22 @@
+     if (!parseTable3D(datastr, table, lookup))
+       // FIXME
+       std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; std::endl;
+-    TableExpressionImpl&lt;3&gt;* ti = new TableExpressionImpl&lt;3&gt;();
+-    ti-&gt;setTable(table);
++
++    Table3D* table3D
++      = new Table3D(prod-&gt;getName() + &quot; Table&quot;);
++    addMultiBodyModel(table3D);
++    table3D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 3; ++i) {
+-      ti-&gt;setTableLookup(i, lookup[i]);
+-      ti-&gt;setInputProperty(i, inVal[i]);
++      table3D-&gt;setTableLookup(i, lookup[i]);
++      table3D-&gt;getInputPort(i)-&gt;connect(inVal[i]);
+     }
+-    prod-&gt;addInputProperty(Property(ti));
++
++    unsigned nf = prod-&gt;getNumFactors();
++    prod-&gt;setNumFactors(nf+1);
++    prod-&gt;getInputPort(nf)-&gt;connect(table3D-&gt;getOutputPort(0));
+   }
+ 
+-  return TypedProperty&lt;real_type&gt;(prod);
++  return prod-&gt;getOutputPort(0);
+ }
+ 
+-void
+-LegacyJSBSimReader::makeAeroprops(void)
+-{
+-  Property e = mAeroForce-&gt;getProperty(&quot;trueSpeed&quot;);
+-  Port* port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/vt-mps&quot;, port);
+-  SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uFeetPSecond);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/vt-fps&quot;, port);
+-  c = new SiToUnitExpressionImpl(uKnots);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/vt-kts&quot;, port);
+-
+-  // Mach numbers, are unitless.
+-  e = mAeroForce-&gt;getProperty(&quot;machNumber&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/mach-norm&quot;, port);
+-  registerJSBExpression(&quot;velocities/mach&quot;, port);
+-
+-  // Rotational rates wrt air.
+-  e = mAeroForce-&gt;getProperty(&quot;p&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/p-rad_sec&quot;, port);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/p-aero-rad_sec&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/p-aero-deg_sec&quot;, port);
+-  e = mAeroForce-&gt;getProperty(&quot;q&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/q-rad_sec&quot;, port);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/q-aero-rad_sec&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/q-aero-deg_sec&quot;, port);
+-  e = mAeroForce-&gt;getProperty(&quot;r&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/r-rad_sec&quot;, port);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/r-aero-rad_sec&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/r-aero-deg_sec&quot;, port);
+-
+-
+-  e = mAeroForce-&gt;getProperty(&quot;u&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/u-aero-mps&quot;, port);
+-  c = new SiToUnitExpressionImpl(uFeetPSecond);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/u-aero-fps&quot;, port);
+-  e = mAeroForce-&gt;getProperty(&quot;v&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/v-aero-mps&quot;, port);
+-  c = new SiToUnitExpressionImpl(uFeetPSecond);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/v-aero-fps&quot;, port);
+-  e = mAeroForce-&gt;getProperty(&quot;w&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/w-aero-mps&quot;, port);
+-  c = new SiToUnitExpressionImpl(uFeetPSecond);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/w-aero-fps&quot;, port);
+-
+-
+-  // Dynamic pressure values.
+-  e = mAeroForce-&gt;getProperty(&quot;dynamicPressure&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/qbar-pa&quot;, port);
+-  c = new SiToUnitExpressionImpl(uPoundPFt2);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/qbar-psf&quot;, port);
+-
+-  // Temperature.
+-  e = mAeroForce-&gt;getProperty(&quot;temperature&quot;);
+-  c = new SiToUnitExpressionImpl(uRankine);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/tat-r&quot;, port);
+-  c = new SiToUnitExpressionImpl(uFahrenheit);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/tat-f&quot;, port);
+-
+-  // Braindead: a pressure value in velocities ...
+-  e = mAeroForce-&gt;getProperty(&quot;pressure&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;velocities/pt-pascal&quot;, port);
+-  c = new SiToUnitExpressionImpl(uPoundPFt2);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;velocities/pt-lbs_sqft&quot;, port);
+-
+-
+-
+-  e = mAeroForce-&gt;getProperty(&quot;wingSpan&quot;);
+-  c = new SiToUnitExpressionImpl(uFoot);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;metrics/bw-ft&quot;, port);
+-
+-  e = mAeroForce-&gt;getProperty(&quot;wingArea&quot;);
+-  c = new SiToUnitExpressionImpl(uFoot2);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;metrics/Sw-sqft&quot;, port);
+-
+-  e = mAeroForce-&gt;getProperty(&quot;coord&quot;);
+-  c = new SiToUnitExpressionImpl(uFoot);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;metrics/cbarw-ft&quot;, port);
+-
+-  e = mAeroForce-&gt;getProperty(&quot;wingSpanOver2Speed&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/bi2vel&quot;, port);
+-  e = mAeroForce-&gt;getProperty(&quot;coordOver2Speed&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/ci2vel&quot;, port);
+-
+-  // Angle of attack.
+-  e = mAeroForce-&gt;getProperty(&quot;alpha&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/alpha-rad&quot;, port);
+-  AbsExpressionImpl* a = new AbsExpressionImpl();
+-  a-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(a));
+-  registerJSBExpression(&quot;aero/mag-alpha-rad&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/alpha-deg&quot;, port);
+-  a = new AbsExpressionImpl();
+-  a-&gt;setInputProperty(Property(c));
+-  port = new Port;
+-  port-&gt;setProperty(Property(a));
+-  registerJSBExpression(&quot;aero/mag-alpha-deg&quot;, port);
+-
+-  // Angle of sideslip.
+-  e = mAeroForce-&gt;getProperty(&quot;beta&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/beta-rad&quot;, port);
+-  a = new AbsExpressionImpl();
+-  a-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(a));
+-  registerJSBExpression(&quot;aero/mag-beta-rad&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/beta-deg&quot;, port);
+-  a = new AbsExpressionImpl();
+-  a-&gt;setInputProperty(Property(c));
+-  port = new Port;
+-  port-&gt;setProperty(Property(a));
+-  registerJSBExpression(&quot;aero/mag-beta-deg&quot;, port);
+-
+-
+-  // Time derivative of alpha.
+-  e = mAeroForce-&gt;getProperty(&quot;alphaDot&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/alphadot-rad_sec&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/alphadot-deg&quot;, port);
+-
+-  // Time derivative of beta.
+-  e = mAeroForce-&gt;getProperty(&quot;betaDot&quot;);
+-  port = new Port;
+-  port-&gt;setProperty(e);
+-  registerJSBExpression(&quot;aero/betadot-rad_sec&quot;, port);
+-  c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/betadot-deg&quot;, port);
+-
+-  // The quotient agl/wingspan
+-  e = mAeroForce-&gt;getProperty(&quot;hOverWingSpan&quot;);
+-  c = new SiToUnitExpressionImpl(uFoot);
+-  c-&gt;setInputProperty(e);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/h_b-cg-ft&quot;, port);
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  registerJSBExpression(&quot;aero/h_b-mac-ft&quot;, port);
+-}
+-
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 09:18:40 UTC (rev 152)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 12:25:24 UTC (rev 153)
+@@ -20,6 +20,9 @@
+ class XMLDocument;
+ class XMLElement;
+ 
++class Summer;
++class Product;
++
+ // Implements a SimGear SGProperty compatible 'path' to 'expression'
+ // mapping.
+ // It is used to map the value names occuring in JSBSim configuration files
+@@ -148,6 +151,7 @@
+   void registerExpression(const std::string&amp; name, Port* expr);
+   void registerJSBExpression(const std::string&amp; name, Port* expr);
+ 
++  Port* createAndScheduleAeroProp(const std::string&amp; name);
+   Port* createAndScheduleInput(const std::string&amp; name);
+ 
+   Port* addInputModel(const std::string&amp; name, const std::string&amp; propName,
+@@ -160,6 +164,11 @@
+   Port* addConstModel(const std::string&amp; name, real_type value);
+ 
+   void addFCSModel(Model* model);
++
++  Port* addMultiBodyToUnit(const std::string&amp; name, Unit u, Port* in);
++  Port* addMultiBodyFromUnit(const std::string&amp; name, Unit u, Port* in);
++  Port* addMultiBodyAbsModel(const std::string&amp; name, Port* in);
++  void addMultiBodyModel(Model* model);
+   /// &lt;/FIXME&gt; document and rethink
+ 
+ 
+@@ -195,12 +204,9 @@
+   bool convertAerodynamics(const XMLElement* aerodynamics);
+   /// converts recursively AERODYNAMICS summands, factors and grooups
+   bool convertAEROSummands(const XMLElement* aeroSummands,
+-                           SumExpressionImpl* sum,
+-                           ProductExpressionImpl* prod);
++                           Summer* sum, Product* prod);
+ 
+-  TypedProperty&lt;real_type&gt; convertCoefficient(const std::string&amp; data,
+-                                              const std::string&amp; type);
+-  void makeAeroprops(void);
++  Port* convertCoefficient(const std::string&amp; data, const std::string&amp; type);
+ 
+ 
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-02 09:18:40 UTC (rev 152)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-02 12:25:24 UTC (rev 153)
+@@ -7,7 +7,6 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Force.h&quot;
+-#include &quot;Expression.h&quot;
+ #include &quot;Atmosphere.h&quot;
+ #include &quot;AeroForce.h&quot;
+ 
+@@ -16,12 +15,6 @@
+ AeroForce::AeroForce(const std::string&amp; name)
+   : ExternalForce(name)
+ {
+-  // Initialize all the expression nodes we will need.
+-  for (unsigned i = 0; i &lt; 6; ++i) {
+-    mStabilityAxisSummers[i] = new SumExpressionImpl;
+-    mBodyAxisSummers[i] = new SumExpressionImpl;
+-  }
+-
+   setPosition(Vector3::zeros());
+   setOrientation(Quaternion::unit());
+ 
+@@ -93,6 +86,46 @@
+               Property(this, &amp;AeroForce::getBodyQ));
+   addProperty(&quot;r&quot;,
+               Property(this, &amp;AeroForce::getBodyR));
++
++  addOutputPort(&quot;wingSpan&quot;, this, &amp;AeroForce::getWingSpan);
++  addOutputPort(&quot;wingArea&quot;, this, &amp;AeroForce::getWingArea);
++  addOutputPort(&quot;coord&quot;, this, &amp;AeroForce::getCoord);
++
++  addOutputPort(&quot;altitude&quot;, this, &amp;AeroForce::getAltitude);
++  addOutputPort(&quot;aboveGroundLevel&quot;, this, &amp;AeroForce::getAboveGroundLevel);
++
++  addOutputPort(&quot;trueSpeed&quot;, this, &amp;AeroForce::getTrueSpeed);
++  addOutputPort(&quot;dynamicPressure&quot;, this, &amp;AeroForce::getDynamicPressure);
++  addOutputPort(&quot;alpha&quot;, this, &amp;AeroForce::getAlpha);
++  addOutputPort(&quot;alphaDot&quot;, this, &amp;AeroForce::getAlphaDot);
++  addOutputPort(&quot;beta&quot;, this, &amp;AeroForce::getBeta);
++  addOutputPort(&quot;betaDot&quot;, this, &amp;AeroForce::getBetaDot);
++//   addOutputPort(&quot;mach&quot;, this, &amp;AeroForce::getMach);
++  addOutputPort(&quot;machNumber&quot;, this, &amp;AeroForce::getMachNumber);
++  addOutputPort(&quot;trueSpeedUW&quot;, this, &amp;AeroForce::getTrueSpeedUW);
++  addOutputPort(&quot;wingSpanOver2Speed&quot;, this, &amp;AeroForce::getWingSpanOver2Speed);
++  addOutputPort(&quot;coordOver2Speed&quot;, this, &amp;AeroForce::getCoordOver2Speed);
++  addOutputPort(&quot;hOverWingSpan&quot;, this, &amp;AeroForce::getHOverWingSpan);
++
++  addOutputPort(&quot;pressure&quot;, this, &amp;AeroForce::getPressure);
++  addOutputPort(&quot;density&quot;, this, &amp;AeroForce::getDensity);
++  addOutputPort(&quot;soundSpeed&quot;, this, &amp;AeroForce::getSoundSpeed);
++  addOutputPort(&quot;temperature&quot;, this, &amp;AeroForce::getTemperature);
++
++  addOutputPort(&quot;u&quot;, this, &amp;AeroForce::getBodyU);
++  addOutputPort(&quot;v&quot;, this, &amp;AeroForce::getBodyV);
++  addOutputPort(&quot;w&quot;, this, &amp;AeroForce::getBodyW);
++  addOutputPort(&quot;p&quot;, this, &amp;AeroForce::getBodyP);
++  addOutputPort(&quot;q&quot;, this, &amp;AeroForce::getBodyQ);
++  addOutputPort(&quot;r&quot;, this, &amp;AeroForce::getBodyR);
++
++  setNumInputPorts(6);
++  setInputPortName(0, &quot;roll&quot;);
++  setInputPortName(1, &quot;pitch&quot;);
++  setInputPortName(2, &quot;yaw&quot;);
++  setInputPortName(3, &quot;drag&quot;);
++  setInputPortName(4, &quot;side&quot;);
++  setInputPortName(5, &quot;lift&quot;);
+ }
+ 
+ AeroForce::~AeroForce(void)
+@@ -105,6 +138,33 @@
+   mEnvironment = getEnvironment();
+   if (!mEnvironment)
+     return false;
++
++  if (getInputPort(&quot;roll&quot;)-&gt;isConnected())
++    mBodyAxisTorque[0] = getInputPort(&quot;roll&quot;)-&gt;toRealPortHandle();
++  else
++    mBodyAxisTorque[0] = 0;
++  if (getInputPort(&quot;pitch&quot;)-&gt;isConnected())
++    mBodyAxisTorque[1] = getInputPort(&quot;pitch&quot;)-&gt;toRealPortHandle();
++  else
++    mBodyAxisTorque[1] = 0;
++  if (getInputPort(&quot;yaw&quot;)-&gt;isConnected())
++    mBodyAxisTorque[2] = getInputPort(&quot;yaw&quot;)-&gt;toRealPortHandle();
++  else
++    mBodyAxisTorque[2] = 0;
++
++  if (getInputPort(&quot;drag&quot;)-&gt;isConnected())
++    mStabilityAxisForce[0] = getInputPort(&quot;drag&quot;)-&gt;toRealPortHandle();
++  else
++    mStabilityAxisForce[0] = 0;
++  if (getInputPort(&quot;side&quot;)-&gt;isConnected())
++    mStabilityAxisForce[1] = getInputPort(&quot;side&quot;)-&gt;toRealPortHandle();
++  else
++    mStabilityAxisForce[1] = 0;
++  if (getInputPort(&quot;lift&quot;)-&gt;isConnected())
++    mStabilityAxisForce[2] = getInputPort(&quot;lift&quot;)-&gt;toRealPortHandle();
++  else
++    mStabilityAxisForce[2] = 0;
++
+   return ExternalForce::init();
+ }
+ 
+@@ -609,14 +669,22 @@
+ 
+   // This is simple here. Just collect all summands ...
+   Vector6 force = Vector6::zeros();
+-  for (int i = 0; i &lt; 6; ++i)
+-    force(i+1) = mStabilityAxisSummers[i]-&gt;getValue();
++  /// Lift points upward
++  /// Drag points backward
++  /// FIXME: may be we can put that already into the rotation matrix?
++  if (mStabilityAxisForce[0].isConnected())
++    force(4) -= mStabilityAxisForce[0].getRealValue();
++  if (mStabilityAxisForce[1].isConnected())
++    force(5) += mStabilityAxisForce[1].getRealValue();
++  if (mStabilityAxisForce[2].isConnected())
++    force(6) -= mStabilityAxisForce[2].getRealValue();
+ 
+   force.setAngular(Ts2b*force.getAngular());
+   force.setLinear(Ts2b*force.getLinear());
+ 
+-  for (int i = 0; i &lt; 6; ++i)
+-    force(i+1) += mBodyAxisSummers[i]-&gt;getValue();
++  for (int i = 0; i &lt; 3; ++i)
++    if (mBodyAxisTorque[i].isConnected())
++      force(i+1) += mBodyAxisTorque[i].getRealValue();
+ 
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::computeForce() &quot;
+                        &lt;&lt; trans(force) &lt;&lt; endl;
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-01-02 09:18:40 UTC (rev 152)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-01-02 12:25:24 UTC (rev 153)
+@@ -14,7 +14,6 @@
+ #include &quot;Ground.h&quot;
+ #include &quot;Wind.h&quot;
+ #include &quot;Planet.h&quot;
+-#include &quot;Expression.h&quot;
+ #include &quot;Environment.h&quot;
+ 
+ namespace OpenFDM {
+@@ -98,23 +97,6 @@
+   const Vector3&amp; getUnitDown(void) const;
+   const Plane&amp; getLocalGroundPlane(void) const;
+ 
+-  void addStabilityAxisSummand(ForceAxis axis, const RealProperty&amp; prop)
+-  {
+-    mStabilityAxisSummers[axis-1]-&gt;addInputProperty(prop);
+-  }
+-  void addStabilityAxisSummand(ForceAxis axis, const Property&amp; prop)
+-  {
+-    mStabilityAxisSummers[axis-1]-&gt;addInputProperty(prop);
+-  }
+-  void addBodyAxisSummand(ForceAxis axis, const RealProperty&amp; prop)
+-  {
+-    mBodyAxisSummers[axis-1]-&gt;addInputProperty(prop);
+-  }
+-  void addBodyAxisSummand(ForceAxis axis, const Property&amp; prop)
+-  {
+-    mBodyAxisSummers[axis-1]-&gt;addInputProperty(prop);
+-  }
+-
+   // The interface to the mechanical system.
+   virtual void computeForce(void);
+ 
+@@ -124,8 +106,8 @@
+   void computeSLAtmosphere(void) const;
+   void computeCalEquAirspeed(void) const;
+ 
+-  SharedPtr&lt;SumExpressionImpl&gt; mStabilityAxisSummers[6];
+-  SharedPtr&lt;SumExpressionImpl&gt; mBodyAxisSummers[6];
++  RealPortHandle mStabilityAxisForce[3];
++  RealPortHandle mBodyAxisTorque[3];
+ 
+   const Atmosphere* getAtmosphere(void) const
+   { return mEnvironment-&gt;getAtmosphere(); }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000136.html">[OpenFDM-svn] r152 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000138.html">[OpenFDM-svn] r154 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#137">[ date ]</a>
+              <a href="thread.html#137">[ thread ]</a>
+              <a href="subject.html#137">[ subject ]</a>
+              <a href="author.html#137">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

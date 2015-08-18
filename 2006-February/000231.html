@@ -1,0 +1,819 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r252 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r252%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200602271146.k1RBkEda022387%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000230.html">
+   <LINK REL="Next"  HREF="000232.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r252 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r252%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200602271146.k1RBkEda022387%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r252 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Feb 27 12:46:14 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000230.html">[OpenFDM-svn] r251 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000232.html">[OpenFDM-svn] r253 - trunk/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#231">[ date ]</a>
+              <a href="thread.html#231">[ thread ]</a>
+              <a href="subject.html#231">[ subject ]</a>
+              <a href="author.html#231">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-27 12:45:47 +0100 (Mon, 27 Feb 2006)
+New Revision: 252
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+   trunk/OpenFDM/src/OpenFDM/Tailhook.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.h
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+Include a simple tailhook
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -36,6 +36,7 @@
+ #include &lt;OpenFDM/SimpleGear.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/Table.h&gt;
++#include &lt;OpenFDM/Tailhook.h&gt;
+ #include &lt;OpenFDM/TimeDerivative.h&gt;
+ #include &lt;OpenFDM/UnaryFunctionModel.h&gt;
+ #include &lt;OpenFDM/Units.h&gt;
+@@ -846,8 +847,37 @@
+         addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+                        &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+         
+-      } else if (type == &quot;TAILHOOK&quot;) /*FIXME*/ {
+-      } else if (type == &quot;LAUNCHBAR&quot;) {
++      } else if (type == &quot;TAILHOOK&quot;) {
++        const XMLElement* tailhookElem = (*it);
++        std::string name = (*it)-&gt;getAttribute(&quot;name&quot;);
++
++        Tailhook* tailhook = new Tailhook(name + &quot; Tailhook&quot;);
++        real_type length = realData(tailhookElem-&gt;getElement(&quot;length&quot;), 0.5);
++        tailhook-&gt;setLength(length);
++        real_type upAngle = realData(tailhookElem-&gt;getElement(&quot;upAngle&quot;), 10);
++        tailhook-&gt;setUpAngle(convertFrom(uDegree, upAngle));
++        real_type downAngle = realData(tailhookElem-&gt;getElement(&quot;downAngle&quot;), -75);
++        tailhook-&gt;setDownAngle(convertFrom(uDegree, downAngle));
++        Vector3 loc = structToBody(locationData(tailhookElem-&gt;getElement(&quot;location&quot;)));
++        tailhook-&gt;setPosition(loc);
++        addMultiBodyModel(tailhook);
++        mVehicle-&gt;getTopBody()-&gt;addInteract(tailhook);
++        
++        Port* port = lookupJSBExpression(&quot;/controls/gear/tailhook&quot;);
++        tailhook-&gt;getInputPort(0)-&gt;connect(port);
++        
++        // expose the tailhook position
++        port = tailhook-&gt;getOutputPort(0);
++        std::string nameBase = &quot;Tailhook Position&quot;;
++        addOutputModel(port, nameBase, &quot;gear/tailhook/position-rad&quot;);
++        UnitConversionModel* unitModel
++          = new UnitConversionModel(nameBase + &quot; converter&quot;,
++                                    UnitConversionModel::SiToUnit, uDegree);
++        unitModel-&gt;getInputPort(0)-&gt;connect(port);
++        addFCSModel(unitModel);
++        addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
++                       &quot;gear/tailhook/position-deg&quot;);
++
+       } else {
+         return error(&quot;Unknown groundreactions component of type &quot; + type);
+       }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Ground.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -16,4 +16,28 @@
+ {
+ }
+ 
++bool
++Ground::getCatapultValues(real_type t, const Vector3&amp; refPos,
++                          CatapultValues&amp; catVal) const
++{
++  return false;
++}
++
++bool
++Ground::caughtWire(const HookPosition&amp; old, const HookPosition&amp; current) const
++{
++  return false;
++}
++
++bool
++Ground::getWireEnds(real_type t, WireValues&amp; wireVal) const
++{
++  return false;
++}
++
++void
++Ground::releaseWire(void) const
++{
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -32,6 +32,27 @@
+   real_type length;
+ };
+ 
++struct HookPosition {
++  /// The time it is meant for
++  real_type t;
++  /// The hooks base position in reference frames coordinates
++  Vector3 basePosition;
++  /// The hooks direction and length in reference frames coordinates
++  /// That is basePosition + hookVector = hookTip
++  Vector3 hookVector;
++};
++
++struct WireValues {
++  /// The position of the wire midpoint in reference coordinates
++  Vector3 position;
++  /// The orientation of the wire frame
++  Quaternion orientation;
++  /// The spatial velocity of the wire frame
++  Vector6 velocity;
++  /// The wire mounts width, they are assumed to be mounted along the y axis
++  real_type width;
++};
++
+ /**
+  * The Ground class.
+  */
+@@ -55,8 +76,24 @@
+    */
+   virtual bool
+   getCatapultValues(real_type t, const Vector3&amp; refPos,
+-                    CatapultValues&amp; catVal) const
+-  { return false; }
++                    CatapultValues&amp; catVal) const;
++
++  /** Returns true if we caught a wire while traversing the given rectangle
++      given in reference cordinates.
++   */
++  virtual bool
++  caughtWire(const HookPosition&amp; old, const HookPosition&amp; current) const;
++
++  /** Writes the motions values for the wires we have caught.
++      Returns false if the wires are lost somehow.
++   */
++  virtual bool
++  getWireEnds(real_type t, WireValues&amp; wireVal) const;
++
++  /** Called if the wire values are no longer used.
++   */
++  virtual void
++  releaseWire(void) const;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -15,20 +15,22 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Launchbar, ExternalForce)
+   DEF_OPENFDM_PROPERTY(Real, Length, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, HoldbackLength, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, HoldbackMount, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, UpAngle, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, DownAngle, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, LaunchForce, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Launchbar::Launchbar(const std::string&amp; name)
+-  : ExternalForce(name),
+-    mLength(0.6),
+-    mHoldbackLength(1.5),
+-    mHoldBackMount(0, 0, 0.1),
+-    mUpAngle(0.5),
+-    mDownAngle(-0.5),
+-    mAngularVelocity(1),
+-    mLaunchForce(0)
++Launchbar::Launchbar(const std::string&amp; name) :
++  ExternalForce(name),
++  mLength(0.6),
++  mHoldbackLength(1.5),
++  mHoldbackMount(0, 0, 0.1),
++  mUpAngle(0.5),
++  mDownAngle(-0.5),
++  mAngularVelocity(1),
++  mLaunchForce(0)
+ {
+   mCatFrame = new FreeFrame(&quot;Catapult frame&quot;);
+   mMountFrame-&gt;addChildFrame(mCatFrame);
+@@ -130,11 +132,11 @@
+ 
+     // ok, for now the holback is a stiff spring, will model that different
+     // when loop closure contranits are availble ...
+-    Vector3 hbDir = mHoldBackMount - hbDeckMount;
++    Vector3 hbDir = mHoldbackMount - hbDeckMount;
+     real_type hbLen = norm(hbDir);
+     if (mHoldbackLength &lt; hbLen) {
+       Vector3 hbForce = (2*mLaunchForce*(mHoldbackLength - hbLen)/hbLen)*hbDir;
+-      force += forceFrom(mHoldBackMount, hbForce);
++      force += forceFrom(mHoldbackMount, hbForce);
+     }
+ 
+     // Some damping force, just at the position the launchbar applies its force
+@@ -182,7 +184,7 @@
+           // compute the nearest point on the catapult line to the holdback
+           // mount
+           Vector3 hbNearest = catPos0
+-            + dot(mHoldBackMount - catPos0, catDir)*catDir;
++            + dot(mHoldbackMount - catPos0, catDir)*catDir;
+           
+           // Find the distance backwards from that point matching
+           // the holdback length
+@@ -282,18 +284,44 @@
+ {
+   // Transform the plane equation to the local frame.
+   Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
+-  
+-  // Get the distance to ground
+-  // negative values are above ground
+-  real_type distToGround = lp.getDist(Vector3::zeros());
+-  // The angle between the local x-axis and the launchbar, positive upwards
+-  real_type aCosAngle = distToGround/mLength;
+-  if (aCosAngle &lt; -1)
+-    aCosAngle = -1;
+-  if (1 &lt; aCosAngle)
+-    aCosAngle = 1;
+-  /// FIXME: could be done different ????
+-  real_type angle = - acos(aCosAngle) + pi05;
++
++  // Now compute the intersection of the circle where the tip can move
++  // with the ground plane. If there is no intersection movement is free
++
++  // The trick is to find a xz = (x, 0, z) with |xz| = r and dot(xz, n) + d = 0
++  // where n is the plane normal and d is the plane distance
++
++  Vector n = lp.getNormal();
++  real_type d = lp.getDist();
++
++  // we are paralell to the plane
++  if (fabs(n(3)) &lt;= Limits&lt;real_type&gt;::min())
++    return mAngleCommand;
++
++  // that leads to a quadratic equation where we pick the solution pointing
++  // backwards:
++  real_type nx2nz2 = n(1)*n(1) + n(3)*n(3);
++
++  // we need to didive through that later, with exact operations it should
++  // be safe to not check that because of n(3) being bounded away from zero,
++  // but due to the square the value can underflow
++  if (fabs(nx2nz2) &lt;= Limits&lt;real_type&gt;::min())
++    return mAngleCommand;
++
++  // the discriminant (rought german translation ...)
++  real_type discr = nx2nz2*mLength*mLength - d*d;
++  // Unconstraint angle position
++  if (discr &lt;= 0)
++    return mAngleCommand;
++
++  // the x coorinate of the tip
++  real_type x = -(d*n(1) - fabs(n(3))*sqrt(discr))/nx2nz2;
++
++  // get the z coordinate of the tip from the plane equation
++  real_type z = -(d + x*n(1))/n(3);
++
++  // ok, now the angle ...
++  real_type angle = atan2(-z, x);
+   // limit to the range of movement
+   if (angle &lt; mAngleCommand)
+     angle = mAngleCommand;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -36,6 +36,16 @@
+   void setLength(const real_type&amp; length)
+   { mLength = length; }
+ 
++  const real_type&amp; getHoldbackLength(void) const
++  { return mHoldbackLength; }
++  void setHoldbackLength(const real_type&amp; length)
++  { mHoldbackLength = length; }
++
++  const Vector3&amp; getHoldbackMount(void) const
++  { return mHoldbackMount; }
++  void setHoldbackMount(const Vector3&amp; mount)
++  { mHoldbackMount = mount; }
++
+   const real_type&amp; getUpAngle(void) const
+   { return mUpAngle; }
+   void setUpAngle(const real_type&amp; upAngle)
+@@ -65,7 +75,7 @@
+   real_type mLength;
+   real_type mHoldbackLength;
+   // The mount point of the holdback at the strut
+-  Vector3 mHoldBackMount;
++  Vector3 mHoldbackMount;
+   real_type mUpAngle;
+   real_type mDownAngle;
+   real_type mAngularVelocity;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-27 11:45:47 UTC (rev 252)
+@@ -116,6 +116,7 @@
+   System.h \
+   Table.h \
+   TableData.h \
++  Tailhook.h \
+   Tank.h \
+   TaskInfo.h \
+   TimeDerivative.h \
+@@ -197,6 +198,7 @@
+   Summer.cpp \
+   System.cpp \
+   Table.cpp \
++  Tailhook.cpp \
+   Tank.cpp \
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-02-27 11:45:47 UTC (rev 252)
+@@ -1,33 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_Config_H
+-#define OpenFDM_Config_H
+-
+-#ifdef OpenFDM_ENABLE_DEBUG
+-#undef OpenFDM_ENABLE_DEBUG
+-#endif
+-#define OpenFDM_ENABLE_DEBUG @enable_debug@
+-
+-#ifdef OpenFDM_ENABLE_RANGE_CHECKING
+-#undef OpenFDM_ENABLE_RANGE_CHECKING
+-#endif
+-#define OpenFDM_ENABLE_RANGE_CHECKING @enable_range_checking@
+-
+-#ifdef OpenFDM_HAVE_EXPAT_XMLREADER
+-#undef OpenFDM_HAVE_EXPAT_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_EXPAT_XMLREADER @OpenFDM_HAVE_EXPAT_XMLREADER@
+-
+-#ifdef OpenFDM_HAVE_EASYXML_XMLREADER
+-#undef OpenFDM_HAVE_EASYXML_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_EASYXML_XMLREADER @OpenFDM_HAVE_EASYXML_XMLREADER@
+-
+-#ifdef OpenFDM_HAVE_LIBXML2_XMLREADER
+-#undef OpenFDM_HAVE_LIBXML2_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_LIBXML2_XMLREADER @OpenFDM_HAVE_LIBXML2_XMLREADER@
+-
+-#endif
+
+Added: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -0,0 +1,278 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Environment.h&quot;
++#include &quot;Tailhook.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Tailhook, ExternalForce)
++  DEF_OPENFDM_PROPERTY(Real, Length, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, UpAngle, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, DownAngle, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++Tailhook::Tailhook(const std::string&amp; name) :
++  ExternalForce(name),
++  mLength(0.6),
++  mUpAngle(0.5),
++  mDownAngle(-0.5),
++  mAngularVelocity(1)
++{
++  mWireFrame = new FreeFrame(&quot;Wire frame&quot;);
++  mMountFrame-&gt;addChildFrame(mWireFrame);
++
++  setNumDiscreteStates(1);
++
++  // FIXME??
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;hookPosition&quot;);
++
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;angle&quot;, this, &amp;Tailhook::getAngle);
++}
++
++Tailhook::~Tailhook(void)
++{
++}
++
++bool
++Tailhook::init(void)
++{
++  mHasWire = false;
++  mFirstTime = true;
++  mAngleCommand = mUpAngle;
++
++  mHookPositionPort = getInputPort(0)-&gt;toRealPortHandle();
++  if (!mHookPositionPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of Tailhook model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++
++  mEnvironment = getEnvironment();
++  if (!mEnvironment)
++    return false;
++  return ExternalForce::init();
++}
++
++void
++Tailhook::output(const TaskInfo&amp; taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) &lt;&lt; &quot;Tailhook::output(): \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
++    getGround(taskInfo.getTime());
++  }
++
++  // The tailhook angle corrected for no ground intersection
++  mAngle = computeCurrentTailhookAngle();
++
++  if (!mHasWire || mFirstTime) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // Query the wire, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type width;
++  if (!computeWireFrame(taskInfo.getTime(), width)) {
++    Log(Model,Error) &lt;&lt; &quot;1&quot; &lt;&lt; endl;
++    mHasWire = false;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // The wire endpoints
++  Vector3 wireEnd0 = mWireFrame-&gt;posToParent(width*0.5*Vector3::unit(2));
++  Vector3 wireEnd1 = mWireFrame-&gt;posToParent(-width*0.5*Vector3::unit(2));
++
++//   Log(Model,Error) &lt;&lt; trans(wireEnd0) &lt;&lt; trans(wireEnd1) &lt;&lt; endl;
++
++  // The intersection of the x/z plane with the line between the wire ends
++  Vector3 wireDir = wireEnd1 - wireEnd0;
++  Vector3 hookWireInters = (1/width*wireDir(2))*wireDir + wireEnd0;
++  // Ok, the hook intersects the wire but the aircraft is sufficiently
++  // far that the hook tip has reached the wire
++  if (norm(hookWireInters) &lt; mLength) {
++    Log(Model,Error) &lt;&lt; &quot;2&quot; &lt;&lt; endl;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // from the hooks mount together with the wire endpoints we get a plane
++  // The plane normal is:
++  Vector3 normal = normalize(cross(wireEnd0, wireEnd1));
++  // make the normal point downwards
++
++  // now determine the hooks pos position as it lies axactly in this plane
++  mAngle = atan(-normal(1)/normal(3));
++
++  // now the relative velocities
++  Vector3 linVel = cross(mWireFrame-&gt;getRelVel().getAngular(), Vector3::unit(2));
++  Vector6 relVel0 = mWireFrame-&gt;motionToParent(mWireFrame-&gt;getRelVel() + Vector6(Vector3::zeros(), width*0.5*linVel));
++  Vector6 relVel1 = mWireFrame-&gt;motionToParent(mWireFrame-&gt;getRelVel() - Vector6(Vector3::zeros(), width*0.5*linVel));
++
++//   Vector3 tipPos(-mLength*cos(mAngle), 0, -mLength*sin(mAngle));
++
++  Vector3 wireDir0 = normalize(wireEnd0);
++  Vector3 wireDir1 = normalize(wireEnd1);
++
++  real_type vel0 = dot(relVel0.getLinear(), wireDir0);
++  real_type vel1 = dot(relVel0.getLinear(), wireDir1);
++
++// Log(Model,Error) &lt;&lt; vel0 &lt;&lt; &quot;  &quot; &lt;&lt; vel1 &lt;&lt; endl;
++  
++  real_type v = 0.5*(vel0 + vel1);
++  if (v &lt; 0.1) {
++    mHasWire = false;
++    Log(Model,Error) &lt;&lt; &quot;3&quot; &lt;&lt; endl;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  setForce(Vector6(Vector3::zeros(), (5e4 + v*5e3)*(wireDir0 + wireDir1)));
++}
++
++void
++Tailhook::update(const TaskInfo&amp; taskInfo)
++{
++  /// The current hook tip's position
++  Vector3 tipPos(-cos(mAngle)*mLength, 0, -sin(mAngle)*mLength);
++
++  /// The current hooks position and time
++  HookPosition currentPosition;
++  currentPosition.t = taskInfo.getTime();
++  currentPosition.basePosition = mMountFrame-&gt;getRefPosition();
++  currentPosition.hookVector = mMountFrame-&gt;rotToRef(tipPos);
++
++  if (!mFirstTime &amp;&amp; !mHasWire) {
++    const Ground* ground = mEnvironment-&gt;getGround();
++    mHasWire = ground-&gt;caughtWire(mOldHookPosition, currentPosition);
++    if (mHasWire)
++      Log(Model,Error) &lt;&lt; &quot;Caught wire!&quot; &lt;&lt; endl;
++  }
++  mOldHookPosition = currentPosition;
++  mFirstTime = false;
++
++  real_type hookCommand = mHookPositionPort.getRealValue();
++  hookCommand = hookCommand*mDownAngle + (1-hookCommand)*mUpAngle;
++  real_type angleError = hookCommand - mAngleCommand;
++  angleError = sign(angleError)*min(mAngularVelocity, 40*fabs(angleError));
++  /// FIXME: isPerTimestep sample times do not contain the step size ...
++  /// hardwire that ATM
++  mAngleCommand += 1/120.0*angleError;
++}
++
++void
++Tailhook::setDiscreteState(const StateStream&amp; state)
++{
++  state.readSubState(mAngleCommand);
++}
++
++void
++Tailhook::getDiscreteState(StateStream&amp; state) const
++{
++  state.writeSubState(mAngleCommand);
++}
++
++void
++Tailhook::getGround(real_type t)
++{
++  // FIXME
++  if (!mEnvironment) {
++    mEnvironment = getEnvironment();
++  }
++
++  // Get the position of the contact in the reference system.
++  Vector3 pos = mMountFrame-&gt;getRefPosition();
++  // Query for the ground parameters at this point.
++  mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
++}
++
++bool
++Tailhook::computeWireFrame(real_type t, real_type&amp; width)
++{
++  WireValues wireVals;
++  const Ground* ground = mEnvironment-&gt;getGround();
++  // Early return if no cat in range
++  if (!ground-&gt;getWireEnds(t, wireVals)) {
++    mHasWire = false;
++    return false;
++  }
++
++  mWireFrame-&gt;setRefPosition(wireVals.position);
++  mWireFrame-&gt;setRefOrientation(wireVals.orientation);
++  Vector6 locVel(mWireFrame-&gt;rotFromRef(wireVals.velocity.getAngular()),
++                 mWireFrame-&gt;rotFromRef(wireVals.velocity.getLinear()));
++  mWireFrame-&gt;setRefVel(locVel);
++  width = wireVals.width;
++
++  return true;
++}
++
++real_type
++Tailhook::computeCurrentTailhookAngle(void)
++{
++  // Transform the plane equation to the local frame.
++  Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
++
++  // Now compute the intersection of the circle where the tip can move
++  // with the ground plane. If there is no intersection movement is free
++
++  // The trick is to find a xz = (x, 0, z) with |xz| = r and dot(xz, n) + d = 0
++  // where n is the plane normal and d is the plane distance
++
++  Vector n = lp.getNormal();
++  real_type d = lp.getDist();
++
++  // we are paralell to the plane
++  if (fabs(n(3)) &lt;= Limits&lt;real_type&gt;::min())
++    return mAngleCommand;
++
++  // that leads to a quadratic equation where we pick the solution pointing
++  // backwards:
++  real_type nx2nz2 = n(1)*n(1) + n(3)*n(3);
++
++  // we need to didive through that later, with exact operations it should
++  // be safe to not check that because of n(3) being bounded away from zero,
++  // but due to the square the value can underflow
++  if (fabs(nx2nz2) &lt;= Limits&lt;real_type&gt;::min())
++    return mAngleCommand;
++
++  // the discriminant (rought german translation ...)
++  real_type discr = nx2nz2*mLength*mLength - d*d;
++  // Unconstraint angle position
++  if (discr &lt;= 0)
++    return mAngleCommand;
++
++  // the x coorinate of the tip
++  real_type x = -(d*n(1) + fabs(n(3))*sqrt(discr))/nx2nz2;
++
++  // get the z coordinate of the tip from the plane equation
++  real_type z = -(d + x*n(1))/n(3);
++
++  // ok, now the angle ...
++  real_type angle = atan2(-z, -x);
++  // limit to the range of movement
++  if (angle &lt; mAngleCommand)
++    angle = mAngleCommand;
++  if (mUpAngle &lt; angle)
++    angle = mUpAngle;
++
++  return angle;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -0,0 +1,82 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Tailhook_H
++#define OpenFDM_Tailhook_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Ground.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++class Tailhook : public ExternalForce {
++  OPENFDM_OBJECT(Tailhook, ExternalForce);
++public:
++  Tailhook(const std::string&amp; name);
++  virtual ~Tailhook(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp;);
++  virtual void update(const TaskInfo&amp;);
++
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
++
++  const real_type&amp; getAngle(void) const
++  { return mAngle; }
++
++  const real_type&amp; getLength(void) const
++  { return mLength; }
++  void setLength(const real_type&amp; length)
++  { mLength = length; }
++
++  const real_type&amp; getUpAngle(void) const
++  { return mUpAngle; }
++  void setUpAngle(const real_type&amp; upAngle)
++  { mUpAngle = upAngle; }
++
++  const real_type&amp; getDownAngle(void) const
++  { return mDownAngle; }
++  void setDownAngle(const real_type&amp; downAngle)
++  { mDownAngle = downAngle; }
++
++private:
++  void getGround(real_type t);
++  bool computeWireFrame(real_type t, real_type&amp; width);
++  real_type computeCurrentTailhookAngle(void);
++
++  real_type mLength;
++  real_type mUpAngle;
++  real_type mDownAngle;
++  real_type mAngularVelocity;
++
++  bool mHasWire;
++  bool mFirstTime;
++
++  /// Continous output of the launchbar angle
++  real_type mAngle;
++  /// discrete state of the laged tailhook position following the command
++  /// the hooks position is immediately corrected for no ground intersection
++  real_type mAngleCommand;
++
++  /// The hooks position at the prevous step
++  HookPosition mOldHookPosition;
++
++  RealPortHandle mHookPositionPort;
++
++  /// The frame where the catapult values are put in
++  SharedPtr&lt;FreeFrame&gt; mWireFrame;
++
++  GroundValues mGroundVal;
++  SharedPtr&lt;Environment&gt; mEnvironment;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000230.html">[OpenFDM-svn] r251 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000232.html">[OpenFDM-svn] r253 - trunk/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#231">[ date ]</a>
+              <a href="thread.html#231">[ thread ]</a>
+              <a href="subject.html#231">[ subject ]</a>
+              <a href="author.html#231">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

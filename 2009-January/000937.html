@@ -1,0 +1,180 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r973 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r973%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901291853.n0TIrIDG022703%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000936.html">
+   <LINK REL="Next"  HREF="000938.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r973 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r973%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901291853.n0TIrIDG022703%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r973 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Jan 29 19:53:18 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000936.html">[OpenFDM-svn] r972 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000938.html">[OpenFDM-svn] r974 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#937">[ date ]</a>
+              <a href="thread.html#937">[ thread ]</a>
+              <a href="subject.html#937">[ subject ]</a>
+              <a href="author.html#937">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-29 19:53:17 +0100 (Thu, 29 Jan 2009)
+New Revision: 973
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+Log:
+Interface and parent node consistencies.
+
+M    OpenFDM/Group.cpp
+M    OpenFDM/Node.h
+M    OpenFDM/Node.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2009-01-29 18:34:02 UTC (rev 972)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2009-01-29 18:53:17 UTC (rev 973)
+@@ -18,6 +18,9 @@
+ 
+ Group::~Group()
+ {
++  ChildList::const_iterator i;
++  for (i = mChildList.begin(); i != mChildList.end(); ++i)
++    (*i)-&gt;removeParent(this);
+ }
+ 
+ void
+@@ -64,6 +67,7 @@
+   i = std::find(mChildList.begin(), mChildList.end(), node);
+   if (i == mChildList.end())
+     return;
++  (*i)-&gt;removeParent(this);
+   mChildList.erase(i);
+ }
+ 
+@@ -74,6 +78,7 @@
+     return;
+   ChildList::iterator i = mChildList.begin();
+   std::advance(i, index);
++  (*i)-&gt;removeParent(this);
+   mChildList.erase(i);
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2009-01-29 18:34:02 UTC (rev 972)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2009-01-29 18:53:17 UTC (rev 973)
+@@ -93,12 +93,14 @@
+ }
+ 
+ bool
+-Node::isChildOf(const Group* group) const
++Node::isChildOf(const Node* node) const
+ {
++  if (!node)
++    return false;
+   ParentList::const_iterator i;
+   for (i = mParentList.begin(); i != mParentList.end(); ++i) {
+-    SharedPtr&lt;const Node&gt; node = i-&gt;lock();
+-    if (node == group)
++    SharedPtr&lt;const Node&gt; parentNode = i-&gt;lock();
++    if (node == parentNode)
+       return true;
+   }
+   return false;
+@@ -130,22 +132,22 @@
+ }
+ 
+ unsigned
+-Node::getPortIndex(const Port* portInfo) const
++Node::getPortIndex(const Port* port) const
+ {
+   PortList::const_iterator i;
+   for (i = mPortList.begin(); i != mPortList.end(); ++i) {
+-    if (portInfo == i-&gt;get())
++    if (port == i-&gt;get())
+       return std::distance(mPortList.begin(), i);
+   }
+   return ~0u;
+ }
+ 
+ bool
+-Node::checkPort(const Port* portInfo) const
++Node::checkPort(const Port* port) const
+ {
+   PortList::const_iterator i;
+   for (i = mPortList.begin(); i != mPortList.end(); ++i) {
+-    if (portInfo == i-&gt;get())
++    if (port == i-&gt;get())
+       return true;
+   }
+   return false;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2009-01-29 18:34:02 UTC (rev 972)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2009-01-29 18:53:17 UTC (rev 973)
+@@ -40,13 +40,13 @@
+   { return mParentList.size(); }
+   WeakPtr&lt;const Node&gt; getParent(unsigned i) const;
+   WeakPtr&lt;Node&gt; getParent(unsigned i);
+-  bool isChildOf(const Group* group) const;
++  bool isChildOf(const Node* node) const;
+ 
+   unsigned getNumPorts() const;
+   SharedPtr&lt;const Port&gt; getPort(unsigned index) const;
+   SharedPtr&lt;const Port&gt; getPort(const std::string&amp; name) const;
+-  unsigned getPortIndex(const Port* portInfo) const;
+-  bool checkPort(const Port* portInfo) const;
++  unsigned getPortIndex(const Port* port) const;
++  bool checkPort(const Port* port) const;
+ 
+   const SampleTime&amp; getSampleTime() const
+   { return mSampleTime; }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000936.html">[OpenFDM-svn] r972 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000938.html">[OpenFDM-svn] r974 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#937">[ date ]</a>
+              <a href="thread.html#937">[ thread ]</a>
+              <a href="subject.html#937">[ subject ]</a>
+              <a href="author.html#937">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

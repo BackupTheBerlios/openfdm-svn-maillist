@@ -1,0 +1,638 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r576%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810080540.m985e3kP000103%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000546.html">
+   <LINK REL="Next"  HREF="000548.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r576%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810080540.m985e3kP000103%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct  8 07:40:03 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000546.html">[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000548.html">[OpenFDM-svn] r577 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#547">[ date ]</a>
+              <a href="thread.html#547">[ thread ]</a>
+              <a href="subject.html#547">[ subject ]</a>
+              <a href="author.html#547">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-08 07:40:02 +0200 (Wed, 08 Oct 2008)
+New Revision: 576
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicAcceptorPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicProviderPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NumericProviderPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Simplify connection stuff a bit.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -60,6 +60,11 @@
+   SharedPtr&lt;GroupAcceptorNode&gt; mGroupPort;
+   virtual const ProxyAcceptorPortInfo* toProxyAcceptorPortInfo() const
+   { return this; }
++
++  // FIXME
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return true; }
++
+ };
+ 
+ class ProxyProviderPortInfo : public ProviderPortInfo {
+@@ -70,6 +75,9 @@
+   { return 0; } //FIXME
+   virtual const ProxyProviderPortInfo* toProxyProviderPortInfo() const
+   { return this; }
++  // FIXME
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return true; }
+   SharedPtr&lt;GroupProviderNode&gt; mGroupPort;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicAcceptorPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicAcceptorPortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicAcceptorPortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -7,6 +7,7 @@
+ 
+ #include &lt;string&gt;
+ #include &quot;AcceptorPortInfo.h&quot;
++#include &quot;MechanicPortValue.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -15,6 +16,9 @@
+   MechanicAcceptorPortInfo(Node* node, const std::string&amp; name) :
+     AcceptorPortInfo(node, name)
+   { }
++
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return dynamic_cast&lt;const MechanicPortValue*&gt;(portValue); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicProviderPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicProviderPortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicProviderPortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -16,6 +16,8 @@
+   MechanicProviderPortInfo(Node* node, const std::string&amp; name) :
+     ProviderPortInfo(node, name)
+   { }
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return dynamic_cast&lt;const MechanicPortValue*&gt;(portValue); }
+ protected:
+   virtual MechanicPortValue* newValueImplementation() const
+   { return new MechanicPortValue; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -8,6 +8,7 @@
+ #include &lt;string&gt;
+ #include &quot;AcceptorPortInfo.h&quot;
+ #include &quot;Matrix.h&quot;
++#include &quot;NumericPortValue.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -22,6 +23,12 @@
+   void setDirectInput(bool directInput)
+   { mDirectInput = directInput; }
+ 
++  virtual unsigned getMaxConnects() const
++  { return 1; }
++
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return dynamic_cast&lt;const NumericPortValue*&gt;(portValue); }
++
+ private:
+   Size mSize;
+   bool mDirectInput;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NumericProviderPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NumericProviderPortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NumericProviderPortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -8,6 +8,7 @@
+ #include &lt;string&gt;
+ #include &quot;ProviderPortInfo.h&quot;
+ #include &quot;NumericPortValue.h&quot;
++#include &quot;Limits.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -16,6 +17,12 @@
+   NumericProviderPortInfo(Node* node, const std::string&amp; name, const Size&amp; sz);
+   virtual ~NumericProviderPortInfo();
+ 
++  virtual unsigned getMaxConnects() const
++  { return Limits&lt;unsigned&gt;::max(); }
++
++  virtual bool acceptPortValue(const PortValue* portValue) const
++  { return dynamic_cast&lt;const NumericPortValue*&gt;(portValue); }
++
+ protected:
+   virtual NumericPortValue* newValueImplementation() const;
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -59,6 +59,20 @@
+ 
+   void clear();
+ 
++  virtual unsigned getMaxConnects() const
++  { return 1; }
++
++  virtual bool acceptPortValue(const PortValue*) const
++  { return false; }
++
++  /// Public interface to instantiate a new port value
++  PortValue* newValue() const
++  { return newValueImplementation(); }
++
++protected:
++  virtual PortValue* newValueImplementation() const // = 0;
++  { return 0; }
++
+ private:
+   PortInfo(const PortInfo&amp;);
+   PortInfo&amp; operator=(const PortInfo&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.cpp	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.cpp	2008-10-08 05:40:02 UTC (rev 576)
+@@ -15,12 +15,6 @@
+ {
+ }
+ 
+-PortValue*
+-ProviderPortInfo::newValue() const
+-{
+-  return newValueImplementation();
+-}
+-
+ const ProviderPortInfo*
+ ProviderPortInfo::toProviderPortInfo() const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h	2008-10-08 05:40:02 UTC (rev 576)
+@@ -15,21 +15,11 @@
+   ProviderPortInfo(Node* node, const std::string&amp; name);
+   virtual ~ProviderPortInfo();
+ 
+-  /// Public interface to instantiate a new port value
+-  PortValue* newValue() const;
+-
+   virtual bool canConnect(const PortInfo&amp; portInfo) const
+   { return portInfo.toAcceptorPortInfo(); }
+ 
+   /// Dynamic casts
+   virtual const ProviderPortInfo* toProviderPortInfo() const;
+-
+-protected:
+-  /// The basic property of a provider port is that it can provide
+-  /// a port value that can be used by acceptor ports.
+-  /// It s just important to know that one of the connected ports
+-  /// is able to provide storage for the value.
+-  virtual PortValue* newValueImplementation() const = 0;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-07 17:17:25 UTC (rev 575)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-08 05:40:02 UTC (rev 576)
+@@ -214,11 +214,6 @@
+ class System::NodeInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+-  struct AcceptorPortData;
+-  struct ProviderPortData;
+-  struct ProxyAcceptorPortData;
+-  struct ProxyProviderPortData;
+-
+   struct PortData : public WeakReferenced {
+   public:
+     PortData(AbstractNodeInstance* nodeInstance, const PortInfo* portInfo) :
+@@ -227,143 +222,88 @@
+     { }
+     virtual ~PortData()
+     { }
+-    virtual AcceptorPortData* toAcceptorPortData()
+-    { return 0; }
+-    virtual ProviderPortData* toProviderPortData()
+-    { return 0; }
+-    virtual ProxyAcceptorPortData* toProxyAcceptorPortData()
+-    { return 0; }
+-    virtual ProxyProviderPortData* toProxyProviderPortData()
+-    { return 0; }
+-    virtual bool connect(PortData*) = 0;
+ 
+-    const SharedPtr&lt;const PortInfo&gt;&amp; getPortInfo() const
+-    { return mPortInfo; }
+-
+-    void setLocalPortValue(PortValue* portValue)
++    bool addPortData(PortData* portData)
+     {
+-      if (!getPortInfo())
+-        return;
+-      if (!mNodeInstance)
+-        return;
+-      unsigned index = getPortInfo()-&gt;getIndex();
+-      mNodeInstance-&gt;getPortValueList().setPortValue(index, portValue);
++      if (getPortInfo()-&gt;getMaxConnects() &lt;= mConnectedPorts.size())
++        return false;
++      mConnectedPorts.push_back(portData);
++      return true;
+     }
+ 
+-  private:
+-    SharedPtr&lt;AbstractNodeInstance&gt; mNodeInstance;
+-    SharedPtr&lt;const PortInfo&gt; mPortInfo;
+-  };
+-
+-  struct ProviderPortData : public PortData {
+-    ProviderPortData(AbstractNodeInstance* nodeInstance,
+-                     const ProviderPortInfo* providerPort) :
+-      PortData(nodeInstance, providerPort),
+-      _providerPort(providerPort)
+-    { }
+-    virtual ProviderPortData* toProviderPortData()
+-    { return this; }
+-
+-    virtual bool connect(PortData* portData)
++    bool connect(PortData* portData)
+     {
+-      if (!portData)
++      if (getPortInfo()-&gt;getMaxConnects() &lt;= mConnectedPorts.size())
+         return false;
+-      AcceptorPortData* acceptorPortData = portData-&gt;toAcceptorPortData();
+-      if (!acceptorPortData)
++      if (!portData-&gt;addPortData(this))
+         return false;
+-      return acceptorPortData-&gt;connectToProvider(this);
++      mConnectedPorts.push_back(portData);
++      return true;
+     }
+ 
+-    virtual void createPortValue()
+-    {
+-      PortValue* portValue = _providerPort-&gt;newValue();
+-      if (!portValue)
+-        return;
+-      setPortValue(portValue);
+-    }
++    const SharedPtr&lt;const PortInfo&gt;&amp; getPortInfo() const
++    { return mPortInfo; }
+ 
+-    void setPortValue(PortValue* portValue)
++    bool setLocalPortValue(PortValue* portValue)
+     {
+-      setLocalPortValue(portValue);
+-      for (unsigned i = 0; i &lt; _acceptorPortDataList.size(); ++i)
+-        _acceptorPortDataList[i]-&gt;setPortValue(portValue);
+-    }
+-
+-    SharedPtr&lt;const ProviderPortInfo&gt; _providerPort;
+-    std::vector&lt;SharedPtr&lt;AcceptorPortData&gt; &gt; _acceptorPortDataList;
+-  };
+-  struct AcceptorPortData : public PortData {
+-    AcceptorPortData(AbstractNodeInstance* nodeInstance,
+-                     const AcceptorPortInfo* acceptorPort) :
+-      PortData(nodeInstance, acceptorPort),
+-      _acceptorPort(acceptorPort)
+-    { }
+-    virtual AcceptorPortData* toAcceptorPortData()
+-    { return this; }
+-
+-    virtual bool connect(PortData* portData)
+-    {
+-      if (!portData)
++      if (!getPortInfo())
+         return false;
+-      ProviderPortData* providerPortData = portData-&gt;toProviderPortData();
+-      if (!providerPortData)
++      if (!mNodeInstance)
+         return false;
+-      return connectToProvider(providerPortData);
++      // FIXME: move the set port value and accept port value into one call
++      if (!getPortInfo()-&gt;acceptPortValue(portValue))
++        return false;
++      unsigned index = getPortInfo()-&gt;getIndex();
++      mNodeInstance-&gt;getPortValueList().setPortValue(index, portValue);
++      return true;
+     }
+ 
+-    bool connectToProvider(ProviderPortData* providerPortData)
++    bool setConnectedPortValues(PortValue* portValue)
+     {
+-      // The current one must not be connected already ...
+-      OpenFDMAssert(!_providerPortData.lock());
+-      if (!providerPortData)
+-        return false;
+-      providerPortData-&gt;_acceptorPortDataList.push_back(this);
+-      _providerPortData = providerPortData;
+-      return true;
++      for (unsigned i = 0; i &lt; mConnectedPorts.size(); ++i) {
++        SharedPtr&lt;PortData&gt; portData = mConnectedPorts[i].lock();
++        if (!portData)
++          return false;
++        if (!portData-&gt;setProxyPortValue(portValue))
++          return false;
++      }
++      return setLocalPortValue(portValue);
+     }
+ 
+-    virtual void setPortValue(PortValue* portValue)
++    bool setProxyPortValue(PortValue* portValue)
+     {
+-      setLocalPortValue(portValue);
++      SharedPtr&lt;PortData&gt; portData = mProxyPortData.lock();
++      if (portData) {
++        if (!portData-&gt;setConnectedPortValues(portValue))
++          return false;
++      }
++      return setLocalPortValue(portValue);
+     }
+ 
+-    SharedPtr&lt;const AcceptorPortInfo&gt; _acceptorPort;
+-    WeakPtr&lt;ProviderPortData&gt; _providerPortData;
+-  };
+-  struct ProxyAcceptorPortData : public AcceptorPortData {
+-  public:
+-    ProxyAcceptorPortData(AbstractNodeInstance* nodeInstance,
+-                          const AcceptorPortInfo* acceptorPortInfo) :
+-      AcceptorPortData(nodeInstance, acceptorPortInfo)
+-    { }
+-    virtual ProxyAcceptorPortData* toProxyAcceptorPortData()
+-    { return this; }
+-    virtual void setPortValue(PortValue* portValue)
++    void setProxyPortData(PortData* proxyPortData)
++    { mProxyPortData = proxyPortData; }
++
++    virtual bool createPortValue()
+     {
+-      setLocalPortValue(portValue);
+-      mProxyProviderPortData-&gt;setPortValue(portValue);
++      if (mNodeInstance-&gt;getPortValueList().getPortValue(getPortInfo()-&gt;getIndex()))
++        return true;
++      if (mProxyPortData.lock())
++        return true;
++      PortValue* portValue = getPortInfo()-&gt;newValue();
++      if (!portValue)
++        return true; // FIXME
++      return setConnectedPortValues(portValue);
+     }
+-    SharedPtr&lt;ProxyProviderPortData&gt; mProxyProviderPortData;
+-  };
+-  struct ProxyProviderPortData : public ProviderPortData {
+-  public:
+-    ProxyProviderPortData(AbstractNodeInstance* nodeInstance,
+-                          const ProviderPortInfo* providerPortInfo) :
+-      ProviderPortData(nodeInstance, providerPortInfo)
+-    { }
+-    virtual ProxyProviderPortData* toProxyProviderPortData()
+-    { return this; }
+-    void setProxyAcceptorPortData(ProxyAcceptorPortData* proxyAcceptorPortData)
+-    { proxyAcceptorPortData-&gt;mProxyProviderPortData = this; }
+ 
+-    // FIXME
+-    virtual void createPortValue()
+-    { }
++  private:
++    SharedPtr&lt;AbstractNodeInstance&gt; mNodeInstance;
++    SharedPtr&lt;const PortInfo&gt; mPortInfo;
++    std::vector&lt;WeakPtr&lt;PortData&gt; &gt; mConnectedPorts;
++    WeakPtr&lt;PortData&gt; mProxyPortData;
+   };
+ 
+-
+   // Return true if this leaf directly depends on one of leafInstance outputs
+-  class PortDataList : public WeakReferenced {
++  class PortDataList : public Referenced {
+   public:
+     void setNodeInstance(AbstractNodeInstance* nodeInstance)
+     {
+@@ -372,45 +312,18 @@
+       mPortDataVector.resize(nodeInstance-&gt;getNode().getNumPorts());
+     }
+     
+-    AcceptorPortData* newAcceptorPortData(const AcceptorPortInfo* acceptorPort)
++    PortData* newPortData(const PortInfo* portInfo)
+     {
+-      AcceptorPortData* acceptorPortData;
+-      acceptorPortData = new AcceptorPortData(mNodeInstance, acceptorPort);
+-      mPortDataVector[acceptorPort-&gt;getIndex()] = acceptorPortData;
+-      return acceptorPortData;
++      PortData* portData = new PortData(mNodeInstance, portInfo);
++      mPortDataVector[portInfo-&gt;getIndex()] = portData;
++      return portData;
+     }
+-    ProviderPortData* newProviderPortData(const ProviderPortInfo* providerPort)
+-    {
+-      ProviderPortData* providerPortData;
+-      providerPortData = new ProviderPortData(mNodeInstance, providerPort);
+-      mPortDataVector[providerPort-&gt;getIndex()] = providerPortData;
+-      return providerPortData;
+-    }
+-    ProxyAcceptorPortData* newProxyAcceptorPortData(const AcceptorPortInfo* acceptorPort)
+-    {
+-      ProxyAcceptorPortData* acceptorPortData;
+-      acceptorPortData = new ProxyAcceptorPortData(mNodeInstance, acceptorPort);
+-      mPortDataVector[acceptorPort-&gt;getIndex()] = acceptorPortData;
+-      return acceptorPortData;
+-    }
+-    ProxyProviderPortData* newProxyProviderPortData(const ProviderPortInfo* providerPort)
+-    {
+-      ProxyProviderPortData* providerPortData;
+-      providerPortData = new ProxyProviderPortData(mNodeInstance, providerPort);
+-      mPortDataVector[providerPort-&gt;getIndex()] = providerPortData;
+-      return providerPortData;
+-    }
+     
+     bool allocAndConnectProviderPortValues()
+     {
+-      // FIXME: move that into the PortData stuff
+       for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
+-        // Also set the port value to all connected ports
+-        ProviderPortData* providerPortData;
+-        providerPortData = mPortDataVector[i]-&gt;toProviderPortData();
+-        if (!providerPortData)
+-          continue;
+-        providerPortData-&gt;createPortValue();
++        if (!mPortDataVector[i]-&gt;createPortValue())
++          return false;
+       }
+       return true;
+     }
+@@ -447,21 +360,15 @@
+   virtual void apply(const GroupAcceptorNode&amp; leaf)
+   {
+     PortDataList* portDataList = buildNodeContext(leaf);
+-
+     OpenFDMAssert(leaf.getPort(0));
+-
+-    ProviderPortData* providerPortData;
+-    providerPortData = portDataList-&gt;newProxyProviderPortData(leaf._groupInternalPort);
++    portDataList-&gt;newPortData(leaf.getPort(0));
+   }
+   // Aussen provider, innen acceptor
+   virtual void apply(const GroupProviderNode&amp; leaf)
+   {
+     PortDataList* portDataList = buildNodeContext(leaf);
+-
+     OpenFDMAssert(leaf.getPort(0));
+-
+-    AcceptorPortData* acceptorPortData;
+-    acceptorPortData = portDataList-&gt;newProxyAcceptorPortData(leaf._groupInternalPort);
++    portDataList-&gt;newPortData(leaf.getPort(0));
+   }
+ 
+   void allocPortData(AbstractNodeInstance* nodeInstance, const LeafNode&amp; leaf)
+@@ -470,19 +377,8 @@
+     portDataList = getCurrentNodePortDataList();
+     portDataList-&gt;setNodeInstance(nodeInstance);
+ 
+-    for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+-      SharedPtr&lt;const PortInfo&gt; port = leaf.getPort(i);
+-      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
+-      if (providerPort) {
+-        ProviderPortData* providerPortData;
+-        providerPortData = portDataList-&gt;newProviderPortData(providerPort);
+-      }
+-      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
+-      if (acceptorPort) {
+-        AcceptorPortData* acceptorPortData;
+-        acceptorPortData = portDataList-&gt;newAcceptorPortData(acceptorPort);
+-      }
+-    }
++    for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i)
++      portDataList-&gt;newPortData(leaf.getPort(i));
+   }
+ 
+   virtual void apply(const RootJoint&amp; node)
+@@ -540,11 +436,13 @@
+       unsigned providerNodeIndex = group.getConnectProviderNodeIndex(i);
+ 
+       if (acceptorNodeIndex == ~0u) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find acceptor node from nodeId&quot; &lt;&lt; std::endl;
++        Log(Schedule, Error)
++          &lt;&lt; &quot;Cannot find acceptor node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+       if (providerNodeIndex == ~0u) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find provider node from nodeId&quot; &lt;&lt; std::endl;
++        Log(Schedule, Error)
++          &lt;&lt; &quot;Cannot find provider node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+ 
+@@ -591,37 +489,12 @@
+ 
+       PortData* portData;
+       portData = childrenPortDataMap[nodeIndex]-&gt;mPortDataVector.front();
+-      if (portData-&gt;toProxyAcceptorPortData()) {
+-        ProxyAcceptorPortData* proxyAcceptorPortData;
+-        proxyAcceptorPortData = portData-&gt;toProxyAcceptorPortData();
+ 
+-        const ProviderPortInfo* providerPortInfo;
+-        providerPortInfo = group.getPort(i)-&gt;toProviderPortInfo();
+-        OpenFDMAssert(providerPortInfo);
++      PortData* parentPortData;
++      parentPortData = portDataList-&gt;newPortData(group.getPort(i));
+ 
+-        ProxyProviderPortData* proxyProviderPortData;
+-        proxyProviderPortData =
+-          portDataList-&gt;newProxyProviderPortData(providerPortInfo);
+-
+-        proxyProviderPortData-&gt;setProxyAcceptorPortData(proxyAcceptorPortData);
+-
+-      } else if (portData-&gt;toProxyProviderPortData()) {
+-        ProxyProviderPortData* proxyProviderPortData;
+-        proxyProviderPortData = portData-&gt;toProxyProviderPortData();
+-
+-        const AcceptorPortInfo* acceptorPortInfo;
+-        acceptorPortInfo = group.getPort(i)-&gt;toAcceptorPortInfo();
+-        OpenFDMAssert(acceptorPortInfo);
+-
+-        ProxyAcceptorPortData* proxyAcceptorPortData;
+-        proxyAcceptorPortData =
+-          portDataList-&gt;newProxyAcceptorPortData(acceptorPortInfo);
+-
+-        proxyProviderPortData-&gt;setProxyAcceptorPortData(proxyAcceptorPortData);
+-
+-      } else {
+-        OpenFDMAssert(false);
+-      }
++      parentPortData-&gt;setProxyPortData(portData);
++      portData-&gt;setProxyPortData(parentPortData);
+     }
+   }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000546.html">[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000548.html">[OpenFDM-svn] r577 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#547">[ date ]</a>
+              <a href="thread.html#547">[ thread ]</a>
+              <a href="subject.html#547">[ subject ]</a>
+              <a href="author.html#547">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

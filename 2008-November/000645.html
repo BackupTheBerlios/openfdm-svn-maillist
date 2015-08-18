@@ -1,0 +1,175 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r676 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r676%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811070959.mA79xogs026677%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000644.html">
+   <LINK REL="Next"  HREF="000646.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r676 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r676%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811070959.mA79xogs026677%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r676 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov  7 10:59:50 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000644.html">[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+        <LI>Next message: <A HREF="000646.html">[OpenFDM-svn] r677 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#645">[ date ]</a>
+              <a href="thread.html#645">[ thread ]</a>
+              <a href="subject.html#645">[ subject ]</a>
+              <a href="author.html#645">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-07 10:59:50 +0100 (Fri, 07 Nov 2008)
+New Revision: 676
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+Log:
+Store parent and child link information in the context.
+
+M    CartesianJoint.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-07 09:47:34 UTC (rev 675)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-07 09:59:50 UTC (rev 676)
+@@ -156,65 +156,53 @@
+                           const PortValueList&amp; portValues, const VectorN&amp;,
+                           ContinousStateValueVector&amp;) const = 0;
+ 
+-  void velocity(const Task&amp;,
+-                const ContinousStateValueVector&amp; continousState,
+-                PortValueList&amp; portValues) const
+-  {
+-    velocity(portValues[mParentLink], portValues[mChildLink],
+-             continousState, portValues);
+-  }
+-
+-  void articulation(const Task&amp;,
+-                    const ContinousStateValueVector&amp; continousState,
+-                    PortValueList&amp; portValues, MatrixFactorsNN&amp; hIh) const
+-  {
+-    articulation(portValues[mParentLink], portValues[mChildLink],
+-                 continousState, portValues, hIh);
+-  }
+-
+-  void acceleration(const Task&amp;,
+-                    const ContinousStateValueVector&amp; continousState,
+-                    PortValueList&amp; portValues, const MatrixFactorsNN&amp; hIh,
+-                    VectorN&amp; velDot) const
+-  {
+-    acceleration(portValues[mParentLink], portValues[mChildLink],
+-                 continousState, portValues, hIh, velDot);
+-  }
+-  
+ private:
+   class Context : public MechanicContext {
+   public:
+-    Context(const CartesianJoint* cartesianJoint) : mCartesianJoint(cartesianJoint) {}
++    Context(const CartesianJoint* cartesianJoint) :
++      mCartesianJoint(cartesianJoint)
++    { }
+     virtual ~Context() {}
+     
+     virtual const CartesianJoint&amp; getNode() const
+     { return *mCartesianJoint; }
+     
+     virtual bool alloc()
+-    { if (!allocStates()) return false; return mCartesianJoint-&gt;alloc(*this); }
++    {
++      if (!allocStates())
++        return false;
++      mParentLink = &amp;mPortValueList[mCartesianJoint-&gt;mParentLink];
++      mChildLink = &amp;mPortValueList[mCartesianJoint-&gt;mChildLink];
++      return mCartesianJoint-&gt;alloc(*this);
++    }
+     virtual void initVelocities(const /*Init*/Task&amp; task)
+     {
+       mCartesianJoint-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+-      mCartesianJoint-&gt;velocity(task, mContinousState, mPortValueList);
++      mCartesianJoint-&gt;velocity(*mParentLink, *mChildLink,
++                                mContinousState, mPortValueList);
+     }
+     
+     virtual void velocities(const Task&amp; task)
+     {
+-      mCartesianJoint-&gt;velocity(task, mContinousState, mPortValueList);
++      mCartesianJoint-&gt;velocity(*mParentLink, *mChildLink,
++                                mContinousState, mPortValueList);
+     }
+     virtual void articulation(const Task&amp; task)
+     {
+-      mCartesianJoint-&gt;articulation(task, mContinousState, mPortValueList, hIh);
++      mCartesianJoint-&gt;articulation(*mParentLink, *mChildLink,
++                                    mContinousState, mPortValueList, hIh);
+     }
+     virtual void accelerations(const Task&amp; task)
+     {
+-      mCartesianJoint-&gt;acceleration(task, mContinousState, mPortValueList, hIh, velDot);
++      mCartesianJoint-&gt;acceleration(*mParentLink, *mChildLink, mContinousState,
++                                    mPortValueList, hIh, velDot);
+     }
+     
+     virtual void derivative(const Task&amp;)
+     {
+-      mCartesianJoint-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+-                         velDot, mContinousStateDerivative);
++      mCartesianJoint-&gt;derivative(mDiscreteState, mContinousState,
++                                  mPortValueList, velDot,
++                                  mContinousStateDerivative);
+     }
+     
+     virtual void update(const DiscreteTask&amp;)
+@@ -224,6 +212,9 @@
+     // Stores some values persistent accross velocity/articulation/acceleration
+     MatrixFactorsNN hIh;
+     VectorN velDot;
++
++    SharedPtr&lt;MechanicLinkValue&gt; mParentLink;
++    SharedPtr&lt;MechanicLinkValue&gt; mChildLink;
+     
+     SharedPtr&lt;const CartesianJoint&gt; mCartesianJoint;
+   };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000644.html">[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+	<LI>Next message: <A HREF="000646.html">[OpenFDM-svn] r677 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#645">[ date ]</a>
+              <a href="thread.html#645">[ thread ]</a>
+              <a href="subject.html#645">[ subject ]</a>
+              <a href="author.html#645">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

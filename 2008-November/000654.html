@@ -1,0 +1,272 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r685 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r685%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811090844.mA98i4nk012523%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000653.html">
+   <LINK REL="Next"  HREF="000655.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r685 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r685%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811090844.mA98i4nk012523%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r685 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov  9 09:44:04 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000653.html">[OpenFDM-svn] r684 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000655.html">[OpenFDM-svn] r686 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#654">[ date ]</a>
+              <a href="thread.html#654">[ thread ]</a>
+              <a href="subject.html#654">[ subject ]</a>
+              <a href="author.html#654">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-09 09:44:04 +0100 (Sun, 09 Nov 2008)
+New Revision: 685
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+   branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+Log:
+Make joint input forces optional.
+
+M    OpenFDM/PrismaticJoint.cpp
+M    OpenFDM/RevoluteJoint.cpp
+M    OpenFDM/UniversalJoint.h
+M    OpenFDM/PrismaticJoint.h
+M    OpenFDM/RevoluteJoint.h
+M    OpenFDM/UniversalJoint.cpp
+M    test/mechanic.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-09 08:44:04 UTC (rev 685)
+@@ -23,7 +23,6 @@
+ 
+ PrismaticJoint::PrismaticJoint(const std::string&amp; name) :
+   CartesianJoint&lt;1&gt;(name),
+-  mForcePort(this, &quot;force&quot;, Size(1, 1), true),
+   mPositionPort(this, &quot;position&quot;, Size(1, 1)),
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+@@ -60,6 +59,23 @@
+ }
+ 
+ void
++PrismaticJoint::setEnableExternalForce(bool enable)
++{
++  if (enable == getEnableExternalForce())
++    return;
++  if (enable)
++    mForcePort = MatrixInputPort(this, &quot;force&quot;, Size(1, 1), true);
++  else
++    mForcePort.clear();
++}
++
++bool
++PrismaticJoint::getEnableExternalForce() const
++{
++  return !mForcePort.empty();
++}
++
++void
+ PrismaticJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-09 08:44:04 UTC (rev 685)
+@@ -33,6 +33,9 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
++  void setEnableExternalForce(bool enable);
++  bool getEnableExternalForce() const;
++
+ protected:
+ 
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-09 08:44:04 UTC (rev 685)
+@@ -23,7 +23,6 @@
+ 
+ RevoluteJoint::RevoluteJoint(const std::string&amp; name) :
+   CartesianJoint&lt;1&gt;(name),
+-  mForcePort(this, &quot;force&quot;, Size(1, 1), true),
+   mPositionPort(this, &quot;position&quot;, Size(1, 1)),
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+@@ -60,6 +59,23 @@
+ }
+ 
+ void
++RevoluteJoint::setEnableExternalForce(bool enable)
++{
++  if (enable == getEnableExternalForce())
++    return;
++  if (enable)
++    mForcePort = MatrixInputPort(this, &quot;force&quot;, Size(1, 1), true);
++  else
++    mForcePort.clear();
++}
++
++bool
++RevoluteJoint::getEnableExternalForce() const
++{
++  return !mForcePort.empty();
++}
++
++void
+ RevoluteJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-09 08:44:04 UTC (rev 685)
+@@ -33,6 +33,9 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
++  void setEnableExternalForce(bool enable);
++  bool getEnableExternalForce() const;
++
+ protected:
+ 
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-09 08:44:04 UTC (rev 685)
+@@ -23,7 +23,6 @@
+ 
+ UniversalJoint::UniversalJoint(const std::string&amp; name) :
+   CartesianJoint&lt;2&gt;(name),
+-  mForcePort(this, &quot;force&quot;, Size(2, 1), true),
+   mOrientationPort(this, &quot;orientation&quot;, Size(4, 1)),
+   mVelocityPort(this, &quot;velocity&quot;, Size(2, 1)),
+   mPositionStateInfo(new Vector3StateInfo),
+@@ -68,6 +67,23 @@
+ }
+ 
+ void
++UniversalJoint::setEnableExternalForce(bool enable)
++{
++  if (enable == getEnableExternalForce())
++    return;
++  if (enable)
++    mForcePort = MatrixInputPort(this, &quot;force&quot;, Size(2, 1), true);
++  else
++    mForcePort.clear();
++}
++
++bool
++UniversalJoint::getEnableExternalForce() const
++{
++  return !mForcePort.empty();
++}
++
++void
+ UniversalJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-09 08:44:04 UTC (rev 685)
+@@ -33,6 +33,9 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
++  void setEnableExternalForce(bool enable);
++  bool getEnableExternalForce() const;
++
+ protected:
+ 
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-11-09 08:27:34 UTC (rev 684)
++++ branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-11-09 08:44:04 UTC (rev 685)
+@@ -37,10 +37,13 @@
+   RigidBody *body = new RigidBody(&quot;Rigid Body&quot;);
+   body-&gt;addLink(&quot;link2&quot;);
+   Group::NodeId rigidBody = group-&gt;addChild(body);
+-  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
+-  Group::NodeId revolute = group-&gt;addChild(new RevoluteJoint(&quot;Revolute Joint&quot;));
++  InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
++  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, inertia));
++  RevoluteJoint* revoluteJoint = new RevoluteJoint(&quot;Revolute Joint&quot;);
++  revoluteJoint-&gt;setEnableExternalForce(true);
++  Group::NodeId revolute = group-&gt;addChild(revoluteJoint);
+   Group::NodeId rigidBody2 = group-&gt;addChild(new RigidBody(&quot;Rigid Body 2&quot;));
+-  Group::NodeId mass2 = group-&gt;addChild(new Mass(&quot;Mass 2&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
++  Group::NodeId mass2 = group-&gt;addChild(new Mass(&quot;Mass 2&quot;, 1, inertia));
+ 
+   group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
+   group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
+@@ -49,7 +52,7 @@
+   group-&gt;connect(rigidBody2, &quot;link1&quot;, mass2, &quot;link&quot;);
+ 
+   Group::NodeId jointForce = group-&gt;addChild(new ConstModel(&quot;Joint Force&quot;, 1));
+-//   Group::NodeId jointForce = group-&gt;addChild(new ConstModel(&quot;Joint Force&quot;, 0));
++
+   group-&gt;connect(jointForce, &quot;output&quot;, revolute, &quot;force&quot;);
+ 
+   return group.release();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000653.html">[OpenFDM-svn] r684 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000655.html">[OpenFDM-svn] r686 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#654">[ date ]</a>
+              <a href="thread.html#654">[ thread ]</a>
+              <a href="subject.html#654">[ subject ]</a>
+              <a href="author.html#654">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

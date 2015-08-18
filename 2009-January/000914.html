@@ -1,0 +1,248 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r949 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r949%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901191854.n0JIsFC2009240%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000913.html">
+   <LINK REL="Next"  HREF="000915.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r949 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r949%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901191854.n0JIsFC2009240%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r949 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jan 19 19:54:15 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000913.html">[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000915.html">[OpenFDM-svn] r950 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#914">[ date ]</a>
+              <a href="thread.html#914">[ thread ]</a>
+              <a href="subject.html#914">[ subject ]</a>
+              <a href="author.html#914">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-19 19:54:15 +0100 (Mon, 19 Jan 2009)
+New Revision: 949
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+Improove normal force control.
+
+M    tiretestrig.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-19 17:45:13 UTC (rev 948)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-19 18:54:15 UTC (rev 949)
+@@ -13,6 +13,7 @@
+ #include &lt;OpenFDM/GroupMechanicLink.h&gt;
+ #include &lt;OpenFDM/GroupOutput.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/PrismaticActuator.h&gt;
+ #include &lt;OpenFDM/PrismaticJoint.h&gt;
+ #include &lt;OpenFDM/RevoluteActuator.h&gt;
+ #include &lt;OpenFDM/RevoluteJoint.h&gt;
+@@ -77,9 +78,74 @@
+   rimAndTire-&gt;addLink(&quot;link2&quot;);
+   group-&gt;connect(rimAndTire-&gt;getPort(&quot;link2&quot;), pacejkaTire-&gt;getPort(&quot;link&quot;));
+ 
++  GroupOutput* normalForceOutput = new GroupOutput(&quot;Normal Force Output&quot;);
++  group-&gt;addChild(normalForceOutput);
++  normalForceOutput-&gt;setExternalPortName(&quot;normalForce&quot;);
++  group-&gt;connect(pacejkaTire-&gt;getPort(&quot;normalForce&quot;),
++                 normalForceOutput-&gt;getPort(&quot;input&quot;));
++
+   return group.release();
+ }
+ 
++Node*
++createController(const real_type&amp; p, const real_type&amp; i, const real_type&amp; d)
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Controller&quot;);
++
++  GroupInput* input = new GroupInput(&quot;Input&quot;);
++  group-&gt;addChild(input);
++  input-&gt;setExternalPortName(&quot;input&quot;);
++
++  GroupInput* desiredInput = new GroupInput(&quot;Desired Input&quot;);
++  group-&gt;addChild(desiredInput);
++  desiredInput-&gt;setExternalPortName(&quot;desiredInput&quot;);
++
++  Summer* summer = new Summer(&quot;Error&quot;);
++  summer-&gt;setNumSummands(2);
++  summer-&gt;setInputSign(0, Summer::Minus);
++  summer-&gt;setInputSign(1, Summer::Plus);
++  group-&gt;addChild(summer);
++  group-&gt;connect(input-&gt;getPort(0), summer-&gt;getPort(&quot;input0&quot;));
++  group-&gt;connect(desiredInput-&gt;getPort(0), summer-&gt;getPort(&quot;input1&quot;));
++  
++  // the proportional thing
++  Gain* proportionalGain = new Gain(&quot;Proportional Gain&quot;);
++  proportionalGain-&gt;setGain(p);
++  group-&gt;addChild(proportionalGain);
++  group-&gt;connect(summer-&gt;getPort(&quot;output&quot;), proportionalGain-&gt;getPort(&quot;input&quot;));
++
++
++  // the integral thing
++  Integrator* integrator = new Integrator(&quot;Integrator&quot;);
++  group-&gt;addChild(integrator);
++  group-&gt;connect(summer-&gt;getPort(&quot;output&quot;), integrator-&gt;getPort(&quot;input&quot;));
++
++  Gain* integralGain = new Gain(&quot;Integral Gain&quot;);
++  integralGain-&gt;setGain(i);
++  group-&gt;addChild(integralGain);
++  group-&gt;connect(integrator-&gt;getPort(&quot;output&quot;), integralGain-&gt;getPort(&quot;input&quot;));
++
++
++  // the derivative thing
++//   TimeDerivative* timeDerivative = new Integrator(&quot;Integrator&quot;);
++
++  // The output sum
++  Summer* outputSum = new Summer(&quot;Output Sum&quot;);
++  outputSum-&gt;setNumSummands(2);
++  group-&gt;addChild(outputSum);
++  group-&gt;connect(proportionalGain-&gt;getPort(&quot;output&quot;),
++                 outputSum-&gt;getPort(&quot;input0&quot;));
++  group-&gt;connect(integralGain-&gt;getPort(&quot;output&quot;),
++                 outputSum-&gt;getPort(&quot;input1&quot;));
++  
++  GroupOutput* output = new GroupOutput(&quot;Output&quot;);
++  group-&gt;addChild(output);
++  output-&gt;setExternalPortName(&quot;output&quot;);
++  group-&gt;connect(outputSum-&gt;getPort(&quot;output&quot;), output-&gt;getPort(&quot;input&quot;));
++
++  return group.release();
++}
++
+ // Build up the tiretestrig system.
+ // When we have proper serialization, load that from a file.
+ Node*
+@@ -87,48 +153,38 @@
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Tire Testrig&quot;);
+ 
++  group-&gt;addChild(wheel);
++
+   // First build up the mechanical system
+   FixedRootJoint* fixedRootJoint = new FixedRootJoint(&quot;Fixed Root Joint&quot;);
+   group-&gt;addChild(fixedRootJoint);
+-  fixedRootJoint-&gt;setRootPosition(Vector3(0, 0, -1));
++  fixedRootJoint-&gt;setRootPosition(Vector3(0, 0, -0.5));
+ 
+-//   PrismaticActuator* prismaticActuator
+-//     = new PrismaticActuator(&quot;Normal Force Actuator&quot;);
+-//   prismaticActuator-&gt;setAxis(Vector3::unit(2));
+-//   prismaticActuator-&gt;setMaxVel(Vector3::unit(2));
+-//   group-&gt;addChild(prismaticActuator);
++  PrismaticActuator* prismaticActuator
++    = new PrismaticActuator(&quot;Normal Force Actuator&quot;);
++  prismaticActuator-&gt;setAxis(Vector3::unit(2));
++  prismaticActuator-&gt;setVelDotGain(100);
++  prismaticActuator-&gt;setVelocityControl(true);
++  group-&gt;addChild(prismaticActuator);
+ 
+-  PrismaticJoint* prismaticJoint = new PrismaticJoint(&quot;Normal Force joint&quot;);
+-  prismaticJoint-&gt;setAxis(Vector3::unit(2));
+-  prismaticJoint-&gt;setEnableExternalForce(true);
+-  group-&gt;addChild(prismaticJoint);
+-
+-  Summer* normalForceSum = new Summer(&quot;Normal Force Sum&quot;);
+-  normalForceSum-&gt;setNumSummands(2);
+-  group-&gt;addChild(normalForceSum);
+-  group-&gt;connect(prismaticJoint-&gt;getPort(&quot;force&quot;),
+-                 normalForceSum-&gt;getPort(&quot;output&quot;));
+-
+   ConstModel* normalForce = new ConstModel(&quot;Normal Force&quot;);
+   group-&gt;addChild(normalForce);
+-  group-&gt;connect(normalForceSum-&gt;getPort(&quot;input0&quot;),
+-                 normalForce-&gt;getPort(&quot;output&quot;));
+- 
+-  LinearSpringDamper* strutDamper = new LinearSpringDamper(&quot;Strut Damper&quot;);
+-  strutDamper-&gt;setSpringConstant(0);
+-  strutDamper-&gt;setDamperConstant(1000);
+-  group-&gt;addChild(strutDamper);
+-  group-&gt;connect(normalForceSum-&gt;getPort(&quot;input1&quot;),
+-                 strutDamper-&gt;getPort(&quot;force&quot;));
+-  group-&gt;connect(strutDamper-&gt;getPort(&quot;velocity&quot;),
+-                 prismaticJoint-&gt;getPort(&quot;velocity&quot;));
+-  group-&gt;connect(strutDamper-&gt;getPort(&quot;position&quot;),
+-                 prismaticJoint-&gt;getPort(&quot;position&quot;));
+ 
++  Node* normalForceController = createController(1e-4, 0, 0);
++  normalForceController-&gt;setName(&quot;Normal Force Controller&quot;);
++  group-&gt;addChild(normalForceController);
++  group-&gt;connect(normalForce-&gt;getPort(&quot;output&quot;),
++                 normalForceController-&gt;getPort(&quot;desiredInput&quot;));
++  group-&gt;connect(wheel-&gt;getPort(&quot;normalForce&quot;),
++                 normalForceController-&gt;getPort(&quot;input&quot;));
++  group-&gt;connect(normalForceController-&gt;getPort(&quot;output&quot;),
++                 prismaticActuator-&gt;getPort(&quot;input&quot;));
++
+   RigidBody* rootMount = new RigidBody(&quot;Root Mount&quot;);
+   group-&gt;addChild(rootMount);
+   group-&gt;connect(rootMount-&gt;getPort(&quot;link0&quot;), fixedRootJoint-&gt;getPort(&quot;link&quot;));
+-  group-&gt;connect(rootMount-&gt;getPort(&quot;link1&quot;), prismaticJoint-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rootMount-&gt;getPort(&quot;link1&quot;),
++                 prismaticActuator-&gt;getPort(&quot;link0&quot;));
+ 
+   RevoluteActuator* camberActuator = new RevoluteActuator(&quot;Camber Actuator&quot;);
+   camberActuator-&gt;setAxis(Vector3(1, 0, 0));
+@@ -142,7 +198,7 @@
+   RigidBody* normalForceStrut = new RigidBody(&quot;Normal Force Strut&quot;);
+   group-&gt;addChild(normalForceStrut);
+   group-&gt;connect(normalForceStrut-&gt;getPort(&quot;link0&quot;),
+-                 prismaticJoint-&gt;getPort(&quot;link1&quot;));
++                 prismaticActuator-&gt;getPort(&quot;link1&quot;));
+   group-&gt;connect(normalForceStrut-&gt;getPort(&quot;link1&quot;),
+                  camberActuator-&gt;getPort(&quot;link0&quot;));
+ 
+@@ -174,7 +230,6 @@
+   group-&gt;connect(hubStrut-&gt;getPort(&quot;link0&quot;), sideActuator-&gt;getPort(&quot;link1&quot;));
+   group-&gt;connect(hubStrut-&gt;getPort(&quot;link1&quot;), hubJoint-&gt;getPort(&quot;link0&quot;));
+ 
+-  group-&gt;addChild(wheel);
+   group-&gt;connect(hubJoint-&gt;getPort(&quot;link1&quot;), wheel-&gt;getPort(&quot;link&quot;));
+ 
+   return group.release();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000913.html">[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000915.html">[OpenFDM-svn] r950 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#914">[ date ]</a>
+              <a href="thread.html#914">[ thread ]</a>
+              <a href="subject.html#914">[ subject ]</a>
+              <a href="author.html#914">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

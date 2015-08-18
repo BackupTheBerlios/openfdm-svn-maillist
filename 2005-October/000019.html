@@ -1,0 +1,176 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r31 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r31%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510230834.j9N8YqIL015375%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000018.html">
+   <LINK REL="Next"  HREF="000020.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r31 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r31%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510230834.j9N8YqIL015375%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r31 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Oct 23 10:34:52 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000018.html">[OpenFDM-svn] r30 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000020.html">[OpenFDM-svn] r32 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#19">[ date ]</a>
+              <a href="thread.html#19">[ thread ]</a>
+              <a href="subject.html#19">[ subject ]</a>
+              <a href="author.html#19">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-23 10:34:49 +0200 (Sun, 23 Oct 2005)
+New Revision: 31
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+Log:
+Limit acceleration warning to frames which are
+really simulated.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-10-22 18:03:10 UTC (rev 30)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-10-23 08:34:49 UTC (rev 31)
+@@ -19,7 +19,7 @@
+   mDirtyPos(true),
+   mDirtyInVel(true),
+   mDirtyInAccel(true),
+-  mDisableInAccel(true),
++  mDisableInAccel(false),
+   mReferenceFrameId(0)
+ {
+   setPosition(Vector3::zeros());
+@@ -169,7 +169,6 @@
+   mDirtyPos = true;
+   mDirtyInVel = true;
+   mDirtyInAccel = true;
+-  mDisableInAccel = true;
+   
+   // Mark all child dirty.
+   ChildFrameList::iterator it = mChildFrames.begin();
+@@ -186,7 +185,6 @@
+   // Mark ourself dirty.
+   mDirtyInVel = true;
+   mDirtyInAccel = true;
+-  mDisableInAccel = true;
+   
+   // Mark all child dirty.
+   ChildFrameList::iterator it = mChildFrames.begin();
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2005-10-22 18:03:10 UTC (rev 30)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2005-10-23 08:34:49 UTC (rev 31)
+@@ -583,6 +583,11 @@
+   void setAngularRelAccel(const Vector3&amp; accel)
+   { setAccelDirty(); mRelAccel.setAngular(accel); }
+ 
++  void disableAccel(void)
++  { mDisableInAccel = true; }
++  void enableAccel(void)
++  { mDisableInAccel = false; }
++
+ protected:
+   void setPosDirty(void)
+   {
+@@ -606,9 +611,6 @@
+   }
+   void setAccelDirty(void)
+   {
+-    // Tell that the accelerations are usable.
+-    mDisableInAccel = false;
+-
+     // Don't bother iterating over all children if we are already dirty.
+     if (mDirtyInAccel == true)
+       return;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-10-22 18:03:10 UTC (rev 30)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-10-23 08:34:49 UTC (rev 31)
+@@ -178,6 +178,7 @@
+     if (!outboardBody)
+       return;
+ 
++    outboardBody-&gt;disableAccel();
+     outboardBody-&gt;setPosition(pos);
+     outboardBody-&gt;setOrientation(orient);
+     outboardBody-&gt;setRelVel(vel);
+@@ -189,6 +190,7 @@
+     if (!outboardBody)
+       return;
+ 
++    outboardBody-&gt;disableAccel();
+     outboardBody-&gt;setPosition(pos);
+   }
+   void setOutboardOrientation(const Quaternion&amp; orient)
+@@ -197,6 +199,7 @@
+     if (!outboardBody)
+       return;
+ 
++    outboardBody-&gt;disableAccel();
+     outboardBody-&gt;setOrientation(orient);
+   }
+   void setOutboardRelVel(const Vector6&amp; vel)
+@@ -205,6 +208,7 @@
+     if (!outboardBody)
+       return;
+ 
++    outboardBody-&gt;disableAccel();
+     outboardBody-&gt;setRelVel(vel);
+   }
+   void setOutboardRelAccel(const Vector6&amp; accel)
+@@ -213,6 +217,7 @@
+     if (!outboardBody)
+       return;
+ 
++    outboardBody-&gt;enableAccel();
+     outboardBody-&gt;setRelAccel(accel);
+   }
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000018.html">[OpenFDM-svn] r30 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000020.html">[OpenFDM-svn] r32 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#19">[ date ]</a>
+              <a href="thread.html#19">[ thread ]</a>
+              <a href="subject.html#19">[ subject ]</a>
+              <a href="author.html#19">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

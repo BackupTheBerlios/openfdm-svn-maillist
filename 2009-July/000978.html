@@ -1,0 +1,138 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1016 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1016%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907201817.n6KIHV2O022386%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000977.html">
+   <LINK REL="Next"  HREF="000979.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1016 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1016%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907201817.n6KIHV2O022386%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1016 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jul 20 20:17:31 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000977.html">[OpenFDM-svn] r1015 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+        <LI>Next message: <A HREF="000979.html">[OpenFDM-svn] r1017 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#978">[ date ]</a>
+              <a href="thread.html#978">[ thread ]</a>
+              <a href="subject.html#978">[ subject ]</a>
+              <a href="author.html#978">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-20 20:17:30 +0200 (Mon, 20 Jul 2009)
+New Revision: 1016
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+Log:
+Make use of the block diagonal structure of a local inertia matrix.
+
+M    src/OpenFDM/Mass.cpp
+M    src/OpenFDM/MechanicLinkValue.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 17:23:10 UTC (rev 1015)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 18:17:30 UTC (rev 1016)
+@@ -36,17 +36,20 @@
+   {
+     CoordinateSystem cs = getLink().getCoordinateSystem();
+ 
+-    SpatialInertia I(cs.rotToReference(mMass-&gt;getInertia()), mMass-&gt;getMass());
++    // The inertia rotated to global axis
++    InertiaMatrix I(cs.rotToReference(mMass-&gt;getInertia()));
+ 
+     // Contribute the inerita
+-    getLink().addSpatialInertia(cs.getPosition(), I);
++    getLink().addInertia(cs.getPosition(), I, mMass-&gt;getMass());
+ 
+     // Each inertia has a contribution to the spatial bias force.
+     // This part is handled here.
+     Vector6 v = getLink().getVelocity(cs.getPosition());
+-    Vector6 Iv = I*v;
+-    Vector6 vIv = Vector6(cross(v.getAngular(), Iv.getAngular()) +
+-                          cross(v.getLinear(), Iv.getLinear()),
++    Vector6 Iv = Vector6(I*v.getAngular(), mMass-&gt;getMass()*v.getLinear());
++    Vector6 vIv = Vector6(cross(v.getAngular(), Iv.getAngular())
++                          /* Not needed since Iv.getLinear() is parallel to
++                             v.getLinear(), so the cross product is zero
++                          + cross(v.getLinear(), Iv.getLinear())*/,
+                           cross(v.getAngular(), Iv.getLinear()));
+     getLink().addSpatialForce(cs.getPosition(), vIv);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 17:23:10 UTC (rev 1015)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 18:17:30 UTC (rev 1016)
+@@ -176,6 +176,13 @@
+   Vector6 getLocalAcceleration() const
+   { return mCoordinateSystem.rotToLocal(mAcceleration); }
+ 
++  void addInertia(const Vector3&amp; position,
++                  const InertiaMatrix&amp; inertia, const real_type&amp; mass)
++  {
++    Vector3 offset = position - mCoordinateSystem.getPosition();
++    mInertia += SpatialInertia(offset, inertia, mass);
++  }
++
+ protected:
+   /// The local coordinate system of the mechanic link.
+   CoordinateSystem mCoordinateSystem;
+@@ -372,6 +379,12 @@
+     OpenFDMAssert(isConnected());
+     mMechanicLinkValue-&gt;addSpatialInertia(position, inertia);
+   }
++  void addInertia(const Vector3&amp; position,
++                  const InertiaMatrix&amp; inertia, const real_type&amp; mass)
++  {
++    OpenFDMAssert(isConnected());
++    mMechanicLinkValue-&gt;addInertia(position, inertia, mass);
++  }
+ 
+ private:
+   SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000977.html">[OpenFDM-svn] r1015 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+	<LI>Next message: <A HREF="000979.html">[OpenFDM-svn] r1017 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#978">[ date ]</a>
+              <a href="thread.html#978">[ thread ]</a>
+              <a href="subject.html#978">[ subject ]</a>
+              <a href="author.html#978">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

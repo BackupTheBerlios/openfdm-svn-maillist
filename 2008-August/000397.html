@@ -1,0 +1,307 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r425 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r425%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808301252.m7UCq1D2010761%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000396.html">
+   <LINK REL="Next"  HREF="000398.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r425 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r425%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808301252.m7UCq1D2010761%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r425 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 30 14:52:01 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000396.html">[OpenFDM-svn] r424 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000398.html">[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#397">[ date ]</a>
+              <a href="thread.html#397">[ thread ]</a>
+              <a href="subject.html#397">[ subject ]</a>
+              <a href="author.html#397">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-30 14:52:00 +0200 (Sat, 30 Aug 2008)
+New Revision: 425
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateStateInfo.h
+Log:
+Implement an Integrator.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-08-30 12:17:08 UTC (rev 424)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-08-30 12:52:00 UTC (rev 425)
+@@ -5,6 +5,7 @@
+ #include &quot;Integrator.h&quot;
+ 
+ #include &quot;Assert.h&quot;
++#include &quot;LeafContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -12,16 +13,14 @@
+   DEF_OPENFDM_PROPERTY(Matrix, InitialValue, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Integrator::Integrator(const std::string&amp; name) :
+-  Model(name)
++Integrator::Integrator(const std::string&amp; name = std::string()) :
++  Model(name),
++  mInputPort(newMatrixInputPort(&quot;input&quot;)),
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
++  mInitialValuePort(newMatrixInputPort(&quot;initialValue&quot;))
+ {
+-  addSampleTime(SampleTime::Continous);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;derivatirve&quot;);
+-
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Integrator::getIntegralOutput);
++  mMatrixStateInfo = new MatrixStateInfo;
++  addContinousStateInfo(mMatrixStateInfo);
+ }
+ 
+ Integrator::~Integrator(void)
+@@ -29,69 +28,64 @@
+ }
+ 
+ bool
+-Integrator::init(void)
++Integrator::alloc(LeafContext&amp; leafContext) const
+ {
+-  mDerivativeHandle = getInputPort(0)-&gt;toMatrixPortHandle();
+-  if (!mDerivativeHandle.isConnected())
+-    return false;
+-
+-  // The initial value defaults to zero
+-  if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+-    mInitialValue.resize(mDerivativeHandle.getMatrixValue());
+-    mInitialValue.clear();
+-  }
+-
+-  setNumContinousStates(rows(mInitialValue)*cols(mInitialValue));
+-
+-  mIntegralState = mInitialValue;
+-  mIntegralOutput = mIntegralState;
+-  return Model::init();
++  Size sz = size(leafContext.mPortValueList[mInputPort]);
++  leafContext.mPortValueList.setPortSize(mOutputPort, sz);
++  leafContext.mContinousState.setValue(*mMatrixStateInfo, leafContext);
++  return true;
+ }
+ 
+ void
+-Integrator::output(const TaskInfo&amp;)
++Integrator::init(DiscreteStateValueVector&amp; discreteState,
++                 ContinousStateValueVector&amp; continousState) const
+ {
+-  mIntegralOutput = mIntegralState;
++  // Needs to be done here. Need port values???
++  // FIXME, can I ensure that at least the direct dependent ones are
++  // available and the other ones are inaccessible at compile time?
++//     if (portValues.isConnected(mInitialValuePort)) {
++//       // external initial condition
++//       continousState[*mMatrixStateInfo] = portValues[mInitialValuePort];
++//     } else {
++    // internal initial condition
++    continousState[*mMatrixStateInfo].clear(); // FIXME
++//     }
+ }
+ 
+ void
+-Integrator::setState(const StateStream&amp; state)
++Integrator::output(const DiscreteStateValueVector&amp;,
++                   const ContinousStateValueVector&amp; continousState,
++                   PortValueList&amp; portValues) const
+ {
+-  state.readSubState(mIntegralState);
++  portValues[mOutputPort] = continousState[*mMatrixStateInfo];
+ }
+ 
+ void
+-Integrator::getState(StateStream&amp; state) const
++Integrator::derivative(const DiscreteStateValueVector&amp;,
++                       const ContinousStateValueVector&amp; state,
++                       const PortValueList&amp; portValues,
++                       ContinousStateValueVector&amp; deriv) const
+ {
+-  state.writeSubState(mIntegralState);
++  deriv[*mMatrixStateInfo] = portValues[mInputPort];
+ }
+ 
+-void
+-Integrator::getStateDeriv(StateStream&amp; stateDeriv)
++bool
++Integrator::dependsOn(const PortId&amp;, const PortId&amp;) const
+ {
+-  // Just return the derivative
+-  OpenFDMAssert(mDerivativeHandle.isConnected());
+-  const Matrix&amp; input = mDerivativeHandle.getMatrixValue();
+-  OpenFDMAssert(size(input) == size(mIntegralState));
+-  stateDeriv.writeSubState(input);
++  // FIXME, make the initial value port depend here ...
++  return false;
+ }
+ 
+-const Matrix&amp;
+-Integrator::getInitialValue(void) const
+-{
+-  return mInitialValue;
+-}
+-
+ void
+-Integrator::setInitialValue(const Matrix&amp; value)
++Integrator::setInitialValue(const Matrix&amp; initialValue)
+ {
+-  mInitialValue = value;
++  mInitialValue = initialValue;
+ }
+ 
+ const Matrix&amp;
+-Integrator::getIntegralOutput(void) const
++Integrator::getInitialValue() const
+ {
+-  return mIntegralOutput;
++  return mInitialValue;
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-08-30 12:17:08 UTC (rev 424)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-08-30 12:52:00 UTC (rev 425)
+@@ -7,6 +7,7 @@
+ 
+ #include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;MatrixStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -16,27 +17,26 @@
+   Integrator(const std::string&amp; name);
+   virtual ~Integrator(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual bool alloc(LeafContext&amp; leafContext) const;
++  virtual void init(DiscreteStateValueVector&amp; discreteState,
++                    ContinousStateValueVector&amp; continousState) const;
+ 
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; stateDeriv);
++  virtual void output(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; continousState, PortValueList&amp; portValues) const;
++  virtual void derivative(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; state, const PortValueList&amp; portValues, ContinousStateValueVector&amp; deriv) const;
+ 
+-  const Matrix&amp; getInitialValue(void) const;
+-  void setInitialValue(const Matrix&amp; value);
++  virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const;
+ 
+-  const Matrix&amp; getIntegralOutput(void) const;
++  void setInitialValue(const Matrix&amp; initialValue);
++  const Matrix&amp; getInitialValue() const;
+ 
+ private:
+-  /// The handle to the input port
+-  MatrixPortHandle mDerivativeHandle;
+-  /// Holds the current output.
+-  Matrix mIntegralOutput;
+-  /// Holds the current integral state.
+-  Matrix mIntegralState;
+-  /// Holds the current integral initial state.
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mOutputPort;
++  MatrixInputPort mInitialValuePort;
+   Matrix mInitialValue;
++
++  // FIXME
++  SharedPtr&lt;MatrixStateInfo&gt; mMatrixStateInfo;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-30 12:17:08 UTC (rev 424)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-30 12:52:00 UTC (rev 425)
+@@ -207,7 +207,8 @@
+   Wind.h
+ 
+ OpenFDMModelsSOURCES = \
+-  Gain.cpp
++  Gain.cpp \
++  Integrator.cpp
+ 
+ #   AeroForce.cpp \
+ #   AirSpring.cpp \
+@@ -229,7 +230,6 @@
+ #   Gravity.cpp \
+ #   Ground.cpp \
+ #   Input.cpp \
+-#   Integrator.cpp \
+ #   Interact.cpp \
+ #   Joint.cpp \
+ #   Launchbar.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateStateInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateStateInfo.h	2008-08-30 12:17:08 UTC (rev 424)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateStateInfo.h	2008-08-30 12:52:00 UTC (rev 425)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_TemplateStateInfo_H
+ #define OpenFDM_TemplateStateInfo_H
+ 
++#include &quot;TemplateValueVector.h&quot;
++
+ namespace OpenFDM {
+ 
+ template&lt;typename T, typename I, typename V&gt;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000396.html">[OpenFDM-svn] r424 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000398.html">[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#397">[ date ]</a>
+              <a href="thread.html#397">[ thread ]</a>
+              <a href="subject.html#397">[ subject ]</a>
+              <a href="author.html#397">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

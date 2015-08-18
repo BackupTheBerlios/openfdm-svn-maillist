@@ -1,0 +1,160 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r157 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r157%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601021252.k02CqmbE020917%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000140.html">
+   <LINK REL="Next"  HREF="000142.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r157 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r157%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601021252.k02CqmbE020917%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r157 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan  2 13:52:48 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000140.html">[OpenFDM-svn] r156 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000142.html">[OpenFDM-svn] r158 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#141">[ date ]</a>
+              <a href="thread.html#141">[ thread ]</a>
+              <a href="subject.html#141">[ subject ]</a>
+              <a href="author.html#141">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-02 13:52:37 +0100 (Mon, 02 Jan 2006)
+New Revision: 157
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/Summer.h
+Log:
+Overhaul the Summer a bit.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-01-02 12:42:16 UTC (rev 156)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-01-02 12:52:37 UTC (rev 157)
+@@ -36,19 +36,34 @@
+ bool
+ Summer::init(void)
+ {
+-  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i)
+-    OpenFDMAssert(getInputPort(i)-&gt;isConnected());
+-  
+   // Make sure it is invalid if sizes do not match.
+   mSum.resize(0, 0);
+-  // Check if the sizes match.
+-  Matrix a0 = getInputPort(0)-&gt;getValue().toMatrix();
+-  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i) {
++
++  mPositiveSummandPorts.clear();
++  mNegativeSummandPorts.clear();
++  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
++    if (!getInputPort(i)-&gt;isConnected()) {
++      Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for Summer \&quot;&quot;
++                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return false;
++    }
++    if (getInputPortName(i) == &quot;-&quot;) {
++      mNegativeSummandPorts.push_back(getInputPort(i)-&gt;toMatrixPortHandle());
++    } else {
++      mPositiveSummandPorts.push_back(getInputPort(i)-&gt;toMatrixPortHandle());
++    }
++
+     Matrix a = getInputPort(i)-&gt;getValue().toMatrix();
+-    if (size(a0) != size(a))
+-      return false;
++    if (i == 0) {
++      mSum.resize(a);
++    } else {
++      if (size(mSum) != size(a)) {
++        Log(Model, Error) &lt;&lt; &quot;Input port sizes for Summer \&quot;&quot;
++                          &lt;&lt; getName() &lt;&lt; &quot;\&quot; do not match.&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
+   }
+-  mSum.resize(a0);
+   return true;
+ }
+ 
+@@ -56,14 +71,17 @@
+ Summer::output(const TaskInfo&amp;)
+ {
+   mSum.clear();
+-  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
+-    /// FIXME could be preevaluated
+-    MatrixPortHandle ph = getInputPort(i)-&gt;toMatrixPortHandle();
+-    if (getInputPortName(i) == &quot;-&quot;)
+-      mSum -= ph.getMatrixValue();
+-    else
+-      mSum += ph.getMatrixValue();
++
++  std::vector&lt;MatrixPortHandle&gt;::iterator it = mNegativeSummandPorts.begin();
++  while (it != mNegativeSummandPorts.end()) {
++    mSum -= (*it).getMatrixValue();
++    ++it;
+   }
++  it = mPositiveSummandPorts.begin();
++  while (it != mPositiveSummandPorts.end()) {
++    mSum += (*it).getMatrixValue();
++    ++it;
++  }
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.h	2006-01-02 12:42:16 UTC (rev 156)
++++ trunk/OpenFDM/src/OpenFDM/Summer.h	2006-01-02 12:52:37 UTC (rev 157)
+@@ -28,6 +28,8 @@
+ 
+ private:
+   Matrix mSum;
++  std::vector&lt;MatrixPortHandle&gt; mPositiveSummandPorts;
++  std::vector&lt;MatrixPortHandle&gt; mNegativeSummandPorts;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000140.html">[OpenFDM-svn] r156 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000142.html">[OpenFDM-svn] r158 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#141">[ date ]</a>
+              <a href="thread.html#141">[ thread ]</a>
+              <a href="subject.html#141">[ subject ]</a>
+              <a href="author.html#141">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

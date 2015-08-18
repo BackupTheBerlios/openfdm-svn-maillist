@@ -1,0 +1,532 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r234%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200602041054.k14AsQ0M031109%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000213.html">
+   <LINK REL="Next"  HREF="000215.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r234%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200602041054.k14AsQ0M031109%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Feb  4 11:54:26 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000213.html">[OpenFDM-svn] r233 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000215.html">[OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#214">[ date ]</a>
+              <a href="thread.html#214">[ thread ]</a>
+              <a href="subject.html#214">[ subject ]</a>
+              <a href="author.html#214">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-04 11:54:21 +0100 (Sat, 04 Feb 2006)
+New Revision: 234
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+Log:
+Collected small updates to the readers
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -360,7 +360,7 @@
+ 
+ 
+   std::list&lt;const XMLElement*&gt; locList = metricsElem-&gt;getElements(&quot;location&quot;);
+-  Vector3 ap = locationData(locList, &quot;AEROPROP&quot;, Vector3(0, 0, 0));
++  Vector3 ap = locationData(locList, &quot;AERORP&quot;, Vector3(0, 0, 0));
+   Vector3 ep = locationData(locList, &quot;EYEPOINT&quot;, Vector3(0, 0, 0));
+   Vector3 vrp = locationData(locList, &quot;VRP&quot;, Vector3(0, 0, 0));
+ 
+@@ -381,7 +381,7 @@
+ //   epFrame-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;getFrame()-&gt;addChildFrame(epFrame);
+-  addOutputModel(port, &quot;Normalized load value&quot;, &quot;/accelerations/nlf&quot;);
++  addOutputModel(port, &quot;Normalized load value&quot;, &quot;accelerations/nlf&quot;);
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce-&gt;setPosition(structToBody(ap));
+@@ -557,12 +557,12 @@
+         // missing output properties are &quot;wow&quot; and &quot;tire-pressure-norm&quot;
+ 
+         std::string retract = stringData((*it)-&gt;getElement(&quot;retractable&quot;));
+-        if (retract == &quot;RETRACT&quot;) {
++        if (retract == &quot;RETRACT&quot; || retract == &quot;1&quot;) {
+           Port* port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+           sg-&gt;getInputPort(&quot;enabled&quot;)-&gt;connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-                         &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++                         &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+         }
+ 
+         real_type maxSteer = realData((*it)-&gt;getElement(&quot;max_steer&quot;), 0);
+@@ -575,7 +575,7 @@
+           gain-&gt;getInputPort(0)-&gt;connect(port);
+           addFCSModel(gain);
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Steering Output&quot;,
+-                         &quot;/gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
++                         &quot;gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
+ 
+           UnitConversionModel* unitConv
+             = new UnitConversionModel(name + &quot; Degree Conversion&quot;,
+@@ -691,7 +691,7 @@
+ //           sg-&gt;getInputPort(&quot;enabled&quot;)-&gt;connect(port);
+ //           // Well, connect that directly to the input
+ //           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-//                          &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++//                          &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ //         }
+ 
+ //         if (type == &quot;STEERABLE&quot;) {
+@@ -703,7 +703,7 @@
+ //           gain-&gt;getInputPort(0)-&gt;connect(port);
+ //           addFCSModel(gain);
+ //           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Steering Output&quot;,
+-//                          &quot;/gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
++//                          &quot;gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
+ 
+ 
+ //           UnitConversionModel* unitConv
+@@ -832,12 +832,12 @@
+ 
+ //       Port* port = rj-&gt;getOutputPort(0);
+ //       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+-//                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
++//                      &quot;gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
+ 
+ //       /// FIXME add a retract joint ...
+ //       port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+ //       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-//                      &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++//                      &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ 
+ //     } else if (uctype == &quot;AC_CLG&quot;) {
+ //       std::string name, brake, steer;
+@@ -900,14 +900,14 @@
+ //         port = sj-&gt;getOutputPort(0);
+ //         std::string nameBase = &quot;Steering &quot; + numStr + &quot; Position&quot;;
+ //         addOutputModel(port, nameBase,
+-//                        &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
++//                        &quot;gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
+ //         UnitConversionModel* unitModel
+ //           = new UnitConversionModel(nameBase + &quot; converter&quot;,
+ //                                     UnitConversionModel::SiToUnit, uDegree);
+ //         unitModel-&gt;getInputPort(0)-&gt;connect(port);
+ //         addFCSModel(unitModel);
+ //         addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
+-//                        &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
++//                        &quot;gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
+ //       }
+ 
+ 
+@@ -947,11 +947,11 @@
+ //       // Prepare some outputs ...
+ //       Port* port = pj-&gt;getOutputPort(0);
+ //       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+-//                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
++//                      &quot;gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
+ 
+ //       port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+ //       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-//                      &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++//                      &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ 
+ //     } else if (uctype == &quot;AC_CONTACT&quot;) {
+ //       std::string name, type, brake, retract;
+@@ -1209,17 +1209,17 @@
+ }
+ 
+ // bool
+-// JSBSimReader::convertElectric(const Element* turbine,
+-//                                     const std::string&amp; number,
+-//                                     Port* thrusterDriver)
++// JSBSimReader::convertElectric(const XMLElement* turbine,
++//                               const std::string&amp; number,
++//                               Port* thrusterDriver)
+ // {
+ //   return true;
+ // }
+ 
+ // bool
+-// JSBSimReader::convertPiston(const Element* turbine,
+-//                                   const std::string&amp; number,
+-//                                   Port* thrusterDriver)
++// JSBSimReader::convertPiston(const XMLElement* turbine,
++//                             const std::string&amp; number,
++//                             Port* thrusterDriver)
+ // {
+ //   return true;
+ // }
+@@ -1319,10 +1319,11 @@
+     std::list&lt;const XMLElement*&gt; setting = traverse-&gt;getElements(&quot;setting&quot;);
+     std::list&lt;const XMLElement*&gt;::iterator it = setting.begin();
+     while (it != setting.end()) {
+-      real_type val = realData(fcsComponent-&gt;getElement(&quot;position&quot;), 0);
++      real_type val = realData((*it)-&gt;getElement(&quot;position&quot;), 0);
+       minVal = min(minVal, val);
+       maxVal = max(maxVal, val);
+-      allTime += realData(fcsComponent-&gt;getElement(&quot;time&quot;), 0);
++      if (it != setting.begin())
++        allTime += realData((*it)-&gt;getElement(&quot;time&quot;), 0);
+       ++it;
+     }
+     if (allTime != 0)
+@@ -1606,6 +1607,10 @@
+                               Summer* sum)
+ {
+   std::string bindName = function-&gt;getAttribute(&quot;name&quot;);
++  std::string name = bindName;
++  std::string::size_type slachPos = bindName.rfind('/');
++  if (slachPos != std::string::npos)
++    name = name.substr(slachPos+1);
+   Port* port = 0;
+   std::list&lt;const XMLElement*&gt; elems = function-&gt;getElements();
+   std::list&lt;const XMLElement*&gt;::const_iterator it;
+@@ -1613,9 +1618,9 @@
+     if ((*it)-&gt;getName() == &quot;description&quot;) {
+       // Just ignore
+     } else if ((*it)-&gt;getName() == &quot;product&quot;) {
+-      SharedPtr&lt;Product&gt; prod = new Product(bindName);
++      SharedPtr&lt;Product&gt; prod = new Product(name + &quot; product&quot;);
+       addMultiBodyModel(prod);
+-      std::list&lt;Port*&gt; inputs = readFunctionInputs(*it);
++      std::list&lt;Port*&gt; inputs = readFunctionInputs(*it, name);
+       if (inputs.empty())
+         return error(&quot;Cannot read product inputs!&quot;);
+       unsigned i = 0;
+@@ -1644,14 +1649,15 @@
+ }
+ 
+ std::list&lt;Port*&gt;
+-JSBSimReader::readFunctionInputs(const XMLElement* operationTag)
++JSBSimReader::readFunctionInputs(const XMLElement* operationTag,
++                                 const std::string&amp; name)
+ {
+   std::list&lt;Port*&gt; inputs;
+   std::list&lt;const XMLElement*&gt; args = operationTag-&gt;getElements();
+   std::list&lt;const XMLElement*&gt;::const_iterator ait;
+   for (ait = args.begin(); ait != args.end(); ++ait) {
+     if ((*ait)-&gt;getName() == &quot;value&quot;) {
+-      SharedPtr&lt;ConstModel&gt; constModel = new ConstModel(&quot;FIXME&quot;);
++      SharedPtr&lt;ConstModel&gt; constModel = new ConstModel(name + &quot; Constant&quot;);
+       addMultiBodyModel(constModel);
+       std::stringstream stream((*ait)-&gt;getData());
+       Matrix v(1, 1);
+@@ -1670,10 +1676,11 @@
+           return std::list&lt;Port*&gt;();
+         }
+         std::string token = stringData((*ait)-&gt;getElement(&quot;independentVar&quot;));
+-        Port* port = getTablePrelookup(&quot;TblLook&quot;, lookupJSBExpression(token),
++        Port* port = getTablePrelookup(name + &quot; lookup&quot;,
++                                       lookupJSBExpression(token),
+                                        lookup);
+ 
+-        SharedPtr&lt;Table1D&gt; table = new Table1D(&quot;Table&quot;);
++        SharedPtr&lt;Table1D&gt; table = new Table1D(name + &quot; Table&quot;);
+         table-&gt;getInputPort(0)-&gt;connect(port);
+         table-&gt;setTableData(data);
+         addMultiBodyModel(table);
+@@ -1696,12 +1703,14 @@
+         std::string rowInput = indepData(indeps, &quot;row&quot;);
+         std::string colInput = indepData(indeps, &quot;column&quot;);
+ 
+-        Port* rPort = getTablePrelookup(&quot;TblLk&quot;, lookupJSBExpression(rowInput),
++        Port* rPort = getTablePrelookup(name + &quot; row lookup&quot;,
++                                        lookupJSBExpression(rowInput),
+                                         lookup[0]);
+-        Port* cPort = getTablePrelookup(&quot;TblLk&quot;, lookupJSBExpression(colInput),
++        Port* cPort = getTablePrelookup(name + &quot; column lookup&quot;,
++                                        lookupJSBExpression(colInput),
+                                         lookup[1]);
+ 
+-        SharedPtr&lt;Table2D&gt; table = new Table2D(&quot;Table&quot;);
++        SharedPtr&lt;Table2D&gt; table = new Table2D(name  + &quot; Table&quot;);
+         table-&gt;getInputPort(0)-&gt;connect(rPort);
+         table-&gt;getInputPort(1)-&gt;connect(cPort);
+         table-&gt;setTableData(data);
+@@ -1779,7 +1788,7 @@
+   sv(1) = sz;
+   data = TableData&lt;1&gt;(sv);
+   for (unsigned idx = 0; idx &lt; sz; ++idx) {
+-    lookup.setAtIndex(idx, values[idx*2]);
++    lookup.setAtIndex(idx+1, values[idx*2]);
+     TableData&lt;1&gt;::Index iv;
+     iv(1) = idx + 1;
+     data(iv) = values[idx*2+1];
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-04 10:54:21 UTC (rev 234)
+@@ -52,7 +52,8 @@
+                       Port* thrusterDriver);
+   bool convertAerodynamics(const XMLElement* aero);
+   bool convertFunction(const XMLElement* function, Summer* sum);
+-  std::list&lt;Port*&gt; readFunctionInputs(const XMLElement* operationTag);
++  std::list&lt;Port*&gt; readFunctionInputs(const XMLElement* operationTag,
++                                      const std::string&amp; name);
+ 
+   unsigned getNumTableDims(const XMLElement* tableElem);
+   bool readTable1D(const XMLElement* tableElem,
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -274,54 +274,54 @@
+   if (propName.substr(0, 9) == &quot;controls/&quot;) {
+ //     std::string inputName = propName.substr(propName.rfind('/'));
+     std::string inputName = propName;
+-    return addInputModel(&quot;Control Input &quot; + inputName, propName);
++    return addInputModel(&quot;Control &quot; + inputName, propName);
+   } else {
+     Port* port = 0;
+     if (propName == &quot;fdm/jsbsim/fcs/aileron-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Aileron Input&quot;,
++      port = addInputModel(&quot;Aileron&quot;,
+                            &quot;controls/flight/aileron&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/roll-trim-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Aileron Trim Input&quot;,
++      port = addInputModel(&quot;Aileron Trim&quot;,
+                            &quot;controls/flight/aileron-trim&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/elevator-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Elevator Input&quot;,
++      port = addInputModel(&quot;Elevator&quot;,
+                            &quot;controls/flight/elevator&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/pitch-trim-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Elevator Trim Input&quot;,
++      port = addInputModel(&quot;Elevator Trim&quot;,
+                            &quot;controls/flight/elevator-trim&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/rudder-cmd-norm&quot;) {
+       // FIXME is inverted in JSBSim ...
+-      port = addInputModel(&quot;Rudder Input&quot;,
++      port = addInputModel(&quot;Rudder&quot;,
+                            &quot;controls/flight/rudder&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/yaw-trim-cmd-norm&quot;) {
+       // FIXME also with a minus
+-      port = addInputModel(&quot;Yaw Trim Input&quot;,
++      port = addInputModel(&quot;Yaw Trim&quot;,
+                            &quot;controls/flight/rudder-trim&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/steer-cmd-norm&quot;) {
+       // FIXME is seperate in flightgear ???
+-      // port = addInputModel(&quot;Steering Input&quot;, &quot;controls/gear/steering&quot;);
+-      port = addInputModel(&quot;Steering Input&quot;,
++      // port = addInputModel(&quot;Steering&quot;, &quot;controls/gear/steering&quot;);
++      port = addInputModel(&quot;Steering&quot;,
+                            &quot;controls/flight/rudder&quot;);
+ 
+     } else if (propName.substr(0, 28) == &quot;fdm/jsbsim/fcs/steer-pos-deg&quot;) {
+       return lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/flap-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Flaps Input&quot;,
++      port = addInputModel(&quot;Flaps&quot;,
+                            &quot;controls/flight/flaps&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/speedbrake-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Speedbrake Input&quot;,
++      port = addInputModel(&quot;Speedbrake&quot;,
+                            &quot;controls/flight/speedbrake&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/spoiler-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Spoiler Input&quot;,
++      port = addInputModel(&quot;Spoiler&quot;,
+                            &quot;controls/flight/spoiler&quot;);
+ 
+ 
+@@ -357,25 +357,25 @@
+       return lookupJSBExpression(cmd);
+ 
+     } else if (propName == &quot;fdm/jsbsim/gear/gear-cmd-norm&quot;) {
+-      port = addInputModel(&quot;Gear Retract Input&quot;,
++      port = addInputModel(&quot;Gear Retract&quot;,
+                            &quot;controls/gear/gear-down&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/gear/gear-pos-norm&quot;) {
+       return lookupJSBExpression(&quot;gear/gear-cmd-norm&quot;);
+ 
+     } else if (propName == &quot;controls/gear/brake-parking&quot;) {
+-      port = addInputModel(&quot;Parking Brake Input&quot;,
++      port = addInputModel(&quot;Parking Brake&quot;,
+                            &quot;controls/gear/brake-parking&quot;);
+ 
+     } else if (propName == &quot;fdm/jsbsim/gear/right-brake-pos-norm&quot;) {
+       MaxModel* maxModel = new MaxModel(&quot;Right Brake Max&quot;);
+       maxModel-&gt;setNumMaxInputs(3);
+ 
+-      Port* pilotBr = addInputModel(&quot;Right Brake Input&quot;,
++      Port* pilotBr = addInputModel(&quot;Right Brake&quot;,
+                                     &quot;controls/gear/brake-right&quot;);
+       maxModel-&gt;getInputPort(0)-&gt;connect(pilotBr);
+ 
+-      Port* copilotBr = addInputModel(&quot;Right Copilot Brake Input&quot;,
++      Port* copilotBr = addInputModel(&quot;Right Copilot Brake&quot;,
+                                       &quot;controls/gear/copilot-brake-right&quot;);
+       maxModel-&gt;getInputPort(1)-&gt;connect(copilotBr);
+ 
+@@ -389,11 +389,11 @@
+       MaxModel* maxModel = new MaxModel(&quot;Left Brake Max&quot;);
+       maxModel-&gt;setNumMaxInputs(3);
+ 
+-      Port* pilotBr = addInputModel(&quot;Left Brake Input&quot;,
++      Port* pilotBr = addInputModel(&quot;Left Brake&quot;,
+                                     &quot;controls/gear/brake-left&quot;);
+       maxModel-&gt;getInputPort(0)-&gt;connect(pilotBr);
+ 
+-      Port* copilotBr = addInputModel(&quot;Left Copilot Brake Input&quot;,
++      Port* copilotBr = addInputModel(&quot;Left Copilot Brake&quot;,
+                                       &quot;controls/gear/copilot-brake-left&quot;);
+       maxModel-&gt;getInputPort(1)-&gt;connect(copilotBr);
+       
+@@ -560,7 +560,7 @@
+   } else if (propName == &quot;fdm/jsbsim/metrics/Sw-sqft&quot;) {
+     /// FIXME, just schedule a constant block for that??
+     port = mAeroForce-&gt;getOutputPort(&quot;wingArea&quot;);
+-    port = addMultiBodyToUnit(&quot;Wingarea ft&quot;, uFoot2, port);
++    port = addMultiBodyToUnit(&quot;Wingarea ft2&quot;, uFoot2, port);
+ 
+   } else if (propName == &quot;fdm/jsbsim/metrics/cbarw-ft&quot;) {
+     /// FIXME, just schedule a constant block for that??
+@@ -699,6 +699,8 @@
+ JSBSimReaderBase::getTablePrelookup(const std::string&amp; name, Port* in,
+                                     const TableLookup&amp; tl)
+ {
++  if (!in)
++    return 0;
+   // First check if we already have a table lookup for this port/brakepoint
+   // combination. If so return that output port
+   std::vector&lt;SharedPtr&lt;TablePreLookup&gt; &gt;::iterator it;
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -318,7 +318,7 @@
+ //   epFrame-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;getFrame()-&gt;addChildFrame(epFrame);
+-  addOutputModel(port, &quot;Normalized load value&quot;, &quot;/accelerations/nlf&quot;);
++  addOutputModel(port, &quot;Normalized load value&quot;, &quot;accelerations/nlf&quot;);
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce-&gt;setPosition(structToBody(ap));
+@@ -457,7 +457,7 @@
+           sg-&gt;getInputPort(&quot;enabled&quot;)-&gt;connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-                         &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++                         &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+         }
+ 
+         if (type == &quot;STEERABLE&quot;) {
+@@ -469,7 +469,7 @@
+           gain-&gt;getInputPort(0)-&gt;connect(port);
+           addFCSModel(gain);
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Steering Output&quot;,
+-                         &quot;/gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
++                         &quot;gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
+ 
+ 
+           UnitConversionModel* unitConv
+@@ -598,12 +598,12 @@
+ 
+       Port* port = rj-&gt;getOutputPort(0);
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+-                     &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
++                     &quot;gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
+ 
+       /// FIXME add a retract joint ...
+       port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-                     &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++                     &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ 
+     } else if (uctype == &quot;AC_CLG&quot;) {
+       std::string name, brake, steer;
+@@ -666,14 +666,14 @@
+         port = sj-&gt;getOutputPort(0);
+         std::string nameBase = &quot;Steering &quot; + numStr + &quot; Position&quot;;
+         addOutputModel(port, nameBase,
+-                       &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
++                       &quot;gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
+         UnitConversionModel* unitModel
+           = new UnitConversionModel(nameBase + &quot; converter&quot;,
+                                     UnitConversionModel::SiToUnit, uDegree);
+         unitModel-&gt;getInputPort(0)-&gt;connect(port);
+         addFCSModel(unitModel);
+         addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
+-                       &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
++                       &quot;gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
+       }
+ 
+ 
+@@ -713,11 +713,11 @@
+       // Prepare some outputs ...
+       Port* port = pj-&gt;getOutputPort(0);
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+-                     &quot;/gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
++                     &quot;gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
+ 
+       port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+-                     &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++                     &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ 
+     } else if (uctype == &quot;AC_CONTACT&quot;) {
+       std::string name, type, brake, retract;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000213.html">[OpenFDM-svn] r233 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000215.html">[OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#214">[ date ]</a>
+              <a href="thread.html#214">[ thread ]</a>
+              <a href="subject.html#214">[ subject ]</a>
+              <a href="author.html#214">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,221 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r473 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r473%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809130950.m8D9okb4010139%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000444.html">
+   <LINK REL="Next"  HREF="000446.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r473 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r473%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809130950.m8D9okb4010139%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r473 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 13 11:50:46 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000444.html">[OpenFDM-svn] r472 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000446.html">[OpenFDM-svn] r474 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#445">[ date ]</a>
+              <a href="thread.html#445">[ thread ]</a>
+              <a href="subject.html#445">[ subject ]</a>
+              <a href="author.html#445">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-13 11:50:46 +0200 (Sat, 13 Sep 2008)
+New Revision: 473
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move the LeafContext data into a struct where it
+does not need to be copied later.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-13 09:25:03 UTC (rev 472)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-13 09:50:46 UTC (rev 473)
+@@ -77,6 +77,62 @@
+ /// FIXME: IMO THIS MUST WORK THIS WAY
+ ///
+ 
++
++
++///
++/// ----------------
++/// | LeafInstance |
++/// ----------------
++///             | |     ------------
++///             | -----&gt;| PortData |
++///             |       ------------
++///             |       --------------------------------
++///             -------&gt;| ModelContext/MechanicContext |
++///                     --------------------------------
++///
++/// The LeafInstanceCollector walks the graph of models and collects
++/// the leaf nodes in the system. For each leaf node there is a
++/// LeafInstance class. Each LeafInstance has a list of PortData pointers
++/// that is used to connect the Ports of leafs. Also there is a LeafContext
++/// in each instance that is later needed to run the model.
++///
++
++class ModelContext : public Referenced {
++public:
++  ModelContext(const Model* model) :
++    mModel(model)
++  { }
++
++  bool alloc()
++  { return mModel-&gt;alloc(mLeafContext); }
++
++  SharedPtr&lt;const Model&gt; mModel;
++  LeafContext mLeafContext;
++
++private:
++  ModelContext();
++  ModelContext(const ModelContext&amp;);
++  ModelContext&amp; operator=(const ModelContext&amp;);
++};
++
++class MechanicContext : public Referenced {
++public:
++  MechanicContext(const MechanicNode* mechanicNode) :
++    mMechanicNode(mechanicNode)
++  { }
++
++  bool alloc()
++  { return mMechanicNode-&gt;alloc(mLeafContext); }
++
++  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
++  LeafContext mLeafContext;
++
++private:
++  MechanicContext();
++  MechanicContext(const MechanicContext&amp;);
++  MechanicContext&amp; operator=(const MechanicContext&amp;);
++};
++
+ class LeafInstance : public WeakReferenced {
+ public:
+   struct LeafPortData;
+@@ -302,6 +358,7 @@
+   }
+ 
+   virtual const LeafNode* getLeafNode() const = 0;
++  virtual void setPortValue(unsigned, PortValue*) const = 0;
+ 
+   // Return true if this leaf directly depends on one of leafInstance outputs
+   bool dependsOn(LeafInstance* leafInstance)
+@@ -341,7 +398,7 @@
+         continue;
+ 
+       PortValue* portValue = providerPortInfo-&gt;newValue();
+-      mLeafContext.mPortValueList.setPortValue(i, portValue);
++      setPortValue(i, portValue);
+       
+       // Also set the port value to all connected ports
+       ProviderPortData* providerPortData = mPortData[i]-&gt;toProviderPortData();
+@@ -359,17 +416,11 @@
+         
+         OpenFDMAssert(acceptorPortData-&gt;getPortInfo());
+         unsigned index = acceptorPortData-&gt;getPortInfo()-&gt;getIndex();
+-        leafInstance-&gt;mLeafContext.mPortValueList.setPortValue(index, portValue);
++        leafInstance-&gt;setPortValue(index, portValue);
+       }
+     }
+   }
+-  bool alloc()
+-  {
+-    return getLeafNode()-&gt;alloc(mLeafContext);
+-  }
+ 
+-  LeafContext mLeafContext;
+-
+ private:
+   void allocPorts(const Node* node)
+   {
+@@ -393,26 +444,38 @@
+ public:
+   ModelInstance(const Model* model) :
+     LeafInstance(model),
+-    mModel(model)
++    mModelContext(new ModelContext(model))
+   { }
+ 
+   virtual const Model* getLeafNode() const
+-  { return mModel; }
++  { return mModelContext-&gt;mModel; }
+ 
+-  SharedPtr&lt;const Model&gt; mModel;
++  virtual void setPortValue(unsigned i, PortValue* portValue) const
++  { mModelContext-&gt;mLeafContext.mPortValueList.setPortValue(i, portValue); }
++
++  bool alloc()
++  { return mModelContext-&gt;alloc(); }
++
++  SharedPtr&lt;ModelContext&gt; mModelContext;
+ };
+ 
+ class MechanicInstance : public LeafInstance {
+ public:
+   MechanicInstance(const MechanicNode* mechanicNode) :
+     LeafInstance(mechanicNode),
+-    mMechanicNode(mechanicNode)
++    mMechanicContext(new MechanicContext(mechanicNode))
+   { }
+ 
+   virtual const MechanicNode* getLeafNode() const
+-  { return mMechanicNode; }
++  { return mMechanicContext-&gt;mMechanicNode; }
+ 
+-  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
++  virtual void setPortValue(unsigned i, PortValue* portValue) const
++  { mMechanicContext-&gt;mLeafContext.mPortValueList.setPortValue(i, portValue); }
++
++  bool alloc()
++  { return mMechanicContext-&gt;alloc(); }
++
++  SharedPtr&lt;MechanicContext&gt; mMechanicContext;
+ };
+ 
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000444.html">[OpenFDM-svn] r472 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000446.html">[OpenFDM-svn] r474 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#445">[ date ]</a>
+              <a href="thread.html#445">[ thread ]</a>
+              <a href="subject.html#445">[ subject ]</a>
+              <a href="author.html#445">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

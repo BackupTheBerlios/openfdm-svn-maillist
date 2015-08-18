@@ -1,0 +1,131 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r397%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231312.m4NDCNqg012862%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000369.html">
+   <LINK REL="Next"  HREF="000371.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r397%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231312.m4NDCNqg012862%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri May 23 15:12:23 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000369.html">[OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000371.html">[OpenFDM-svn] r398 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#370">[ date ]</a>
+              <a href="thread.html#370">[ thread ]</a>
+              <a href="subject.html#370">[ subject ]</a>
+              <a href="author.html#370">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-05-23 15:12:22 +0200 (Fri, 23 May 2008)
+New Revision: 397
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+Log:
+Use lock and shared pointers
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2008-05-23 13:12:03 UTC (rev 396)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2008-05-23 13:12:22 UTC (rev 397)
+@@ -86,14 +86,15 @@
+ Frame::isParentFrameOf(const Frame* const frame) const
+ {
+   return isDirectParentFrameOf(frame) ||
+-    (frame &amp;&amp; isParentFrameOf(frame-&gt;mParentFrame));
++    (frame &amp;&amp; isParentFrameOf(frame-&gt;mParentFrame.lock()));
+ }
+ 
+ bool
+ Frame::isChildFrameOf(const Frame* const frame) const
+ {
++  SharedPtr&lt;Frame&gt; parent = mParentFrame.lock();
+   return isDirectChildFrameOf(frame) ||
+-    (mParentFrame &amp;&amp; mParentFrame-&gt;isChildFrameOf(frame));
++    (parent &amp;&amp; parent-&gt;isChildFrameOf(frame));
+ }
+ 
+ bool
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2008-05-23 13:12:03 UTC (rev 396)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2008-05-23 13:12:22 UTC (rev 397)
+@@ -67,10 +67,10 @@
+ 
+   /// Return the parent frame.
+   Frame* getParentFrame(void)
+-  { return mParentFrame; }
++  { return mParentFrame.lock(); }
+   /// Return the parent frame.
+   const Frame* getParentFrame(void) const
+-  { return mParentFrame; }
++  { return mParentFrame.lock(); }
+   /// True if the current frame has a parent frame.
+   bool hasParent(void) const
+   { return getParentFrame(); }
+@@ -80,7 +80,7 @@
+   /// That means it reads:
+   ///  this-&gt;isDirectParentFrameOf(frame)
+   bool isDirectParentFrameOf(const Frame* const frame) const
+-  { return frame &amp;&amp; this == frame-&gt;mParentFrame; }
++  { return frame &amp;&amp; this == frame-&gt;mParentFrame.lock(); }
+   /// Return true if this Frame is a parent Frame of the Frame given
+   /// in the argument frame. It does not need to be the direct parent.
+   /// That means it reads:
+@@ -92,7 +92,7 @@
+   /// That means it reads:
+   ///  this-&gt;isDirectChildFrameOf(frame)
+   bool isDirectChildFrameOf(const Frame* const frame) const
+-  { return frame &amp;&amp; frame == mParentFrame; }
++  { return frame &amp;&amp; frame == mParentFrame.lock(); }
+   /// Return true if this Frame is a child Frame of the Frame given
+   /// in the argument frame. It does not need to be a direct child.
+   /// That means it reads:
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000369.html">[OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000371.html">[OpenFDM-svn] r398 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#370">[ date ]</a>
+              <a href="thread.html#370">[ thread ]</a>
+              <a href="subject.html#370">[ subject ]</a>
+              <a href="author.html#370">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

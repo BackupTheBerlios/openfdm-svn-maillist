@@ -1,0 +1,482 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r778 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r778%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232029.mANKTGJM026827%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000746.html">
+   <LINK REL="Next"  HREF="000748.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r778 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r778%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232029.mANKTGJM026827%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r778 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 23 21:29:16 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000746.html">[OpenFDM-svn] r777 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000748.html">[OpenFDM-svn] r779 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#747">[ date ]</a>
+              <a href="thread.html#747">[ thread ]</a>
+              <a href="subject.html#747">[ subject ]</a>
+              <a href="author.html#747">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-23 21:29:16 +0100 (Sun, 23 Nov 2008)
+New Revision: 778
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Move DefaultPlanet to EllipticPlanet.
+
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp	2008-11-23 20:29:08 UTC (rev 777)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp	2008-11-23 20:29:16 UTC (rev 778)
+@@ -1,108 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;DefaultPlanet.h&quot;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Unit.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Planet.h&quot;
+-
+-namespace OpenFDM {
+-
+-DefaultPlanet::DefaultPlanet(void)
+-  : mRotationRate(pi2/(60.0*60.0*24.0))
+-{
+-  // values taken from simgear
+-  setAequatorialRadius(6378137.0);
+-  setFlattening(298.257223563);
+-
+-  // Major semi axis or Aequatorial Radius is called a
+-  // Minor semi axis or polar radius is called b.
+-  // The the flattening f is defined by f = (a-b)/a.
+-  // For our earth these parameters are.
+-  //  a = 6378137.0
+-  //  b = 6356752.3142
+-  //  f = 1/298.257223563
+-}
+-
+-DefaultPlanet::~DefaultPlanet(void)
+-{
+-}
+-
+-real_type
+-DefaultPlanet::getAequatorialRadius(void) const
+-{
+-  return a;
+-}
+-
+-void
+-DefaultPlanet::setAequatorialRadius(real_type r)
+-{
+-  a = r;
+-  ra2 = 1/(a*a);
+-}
+-
+-void
+-DefaultPlanet::setFlattening(real_type flat)
+-{
+-  real_type squash = 1 - 1/flat;
+-  e2 = fabs(1 - squash*squash);
+-  e = sqrt(e2);
+-  e4 = e2*e2;
+-}
+-
+-Geodetic
+-DefaultPlanet::toGeod(const Vector3&amp; cart) const
+-{
+-  // according to
+-  // H. Vermeille,
+-  // Direct transformation from geocentric to geodetic ccordinates,
+-  // Journal of Geodesy (2002) 76:451-454
+-  real_type X = cart(0);
+-  real_type Y = cart(1);
+-  real_type Z = cart(2);
+-  real_type XXpYY = X*X+Y*Y;
+-  real_type sqrtXXpYY = sqrt(XXpYY);
+-  real_type p = XXpYY*ra2;
+-  real_type q = Z*Z*(1-e*e)*ra2;
+-  real_type r = 1.0/6.0*(p+q-e4);
+-  real_type s = e4*p*q/(4.0*r*r*r);
+-  real_type t = pow(1.0+s+sqrt(s*(2.0+s)), real_type(1)/3);
+-  real_type u = r*(1.0+t+1.0/t);
+-  real_type v = sqrt(u*u+e4*q);
+-  real_type w = e2*(u+v-q)/(2.0*v);
+-  real_type k = sqrt(u+v+w*w)-w;
+-  real_type D = k*sqrtXXpYY/(k+e2);
+-  real_type lambda = 2.0*atan2(Y, X+sqrtXXpYY);
+-  real_type sqrtDDpZZ = sqrt(D*D+Z*Z);
+-  real_type phi = 2.0*atan2(Z, D+sqrtDDpZZ);
+-  real_type h = (k+e2-1)*sqrtDDpZZ/k;
+-  return Geodetic(phi, lambda, h);
+-}
+-
+-Vector3
+-DefaultPlanet::toCart(const Geodetic&amp; geod) const
+-{
+-  // according to
+-  // H. Vermeille,
+-  // Direct transformation from geocentric to geodetic ccordinates,
+-  // Journal of Geodesy (2002) 76:451-454
+-  real_type lambda = geod.longitude;
+-  real_type phi = geod.latitude;
+-  real_type h = geod.altitude;
+-  real_type sphi = sin(phi);
+-  real_type n = a/sqrt(1.0-e2*sphi*sphi);
+-  real_type cphi = cos(phi);
+-  real_type slambda = sin(lambda);
+-  real_type clambda = cos(lambda);
+-  real_type X = (h+n)*cphi*clambda;
+-  real_type Y = (h+n)*cphi*slambda;
+-  real_type Z = (h+n-e2*n)*sphi;
+-  return Vector3(X, Y, Z);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h	2008-11-23 20:29:08 UTC (rev 777)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h	2008-11-23 20:29:16 UTC (rev 778)
+@@ -1,66 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_DefaultPlanet_H
+-#define OpenFDM_DefaultPlanet_H
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Planet.h&quot;
+-
+-namespace OpenFDM {
+-
+-/**
+- * The DefaultPlanet class.
+- *
+- * It holds some information about the planet the simulation is running on.
+- */
+-class DefaultPlanet
+-  : public Planet {
+-public:
+-  /** Default constructor.
+-   */
+-  DefaultPlanet(void);
+-
+-  /** Default destructor.
+-   */
+-  virtual ~DefaultPlanet(void);
+-
+-  /** Get aequatorial radius.
+-   */
+-  real_type getAequatorialRadius(void) const;
+-
+-  /** Set aequatorial radius.
+-   */
+-  void setAequatorialRadius(real_type r);
+-
+-  /** Set planet flattening.
+-   */
+-  void setFlattening(real_type flat);
+-
+-  /** Transform cartesian coordinates to geodetic coordinates.
+-   */
+-  virtual Geodetic toGeod(const Vector3&amp; cart) const;
+-
+-  /** Transform geodetic coordinates to cartesian coordinates.
+-   */
+-  virtual Vector3 toCart(const Geodetic&amp; geod) const;
+-
+-private:
+-  /**
+-   */
+-  real_type a;
+-  real_type ra2;
+-  real_type e;
+-  real_type e2;
+-  real_type e4;
+-
+-  real_type mRotationRate;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp (from rev 777, branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.cpp	2008-11-23 20:29:08 UTC (rev 777)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-11-23 20:29:16 UTC (rev 778)
+@@ -0,0 +1,106 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;EllipticPlanet.h&quot;
++
++#include &quot;Types.h&quot;
++#include &quot;Unit.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Quaternion.h&quot;
++
++namespace OpenFDM {
++
++EllipticPlanet::EllipticPlanet(void)
++  : mRotationRate(pi2/(60.0*60.0*24.0))
++{
++  // values taken from simgear
++  setAequatorialRadius(6378137.0);
++  setFlattening(298.257223563);
++
++  // Major semi axis or Aequatorial Radius is called a
++  // Minor semi axis or polar radius is called b.
++  // The the flattening f is defined by f = (a-b)/a.
++  // For our earth these parameters are.
++  //  a = 6378137.0
++  //  b = 6356752.3142
++  //  f = 1/298.257223563
++}
++
++EllipticPlanet::~EllipticPlanet(void)
++{
++}
++
++real_type
++EllipticPlanet::getAequatorialRadius(void) const
++{
++  return a;
++}
++
++void
++EllipticPlanet::setAequatorialRadius(real_type r)
++{
++  a = r;
++  ra2 = 1/(a*a);
++}
++
++void
++EllipticPlanet::setFlattening(real_type flat)
++{
++  real_type squash = 1 - 1/flat;
++  e2 = fabs(1 - squash*squash);
++  e = sqrt(e2);
++  e4 = e2*e2;
++}
++
++Geodetic
++EllipticPlanet::toGeod(const Vector3&amp; cart) const
++{
++  // according to
++  // H. Vermeille,
++  // Direct transformation from geocentric to geodetic ccordinates,
++  // Journal of Geodesy (2002) 76:451-454
++  real_type X = cart(0);
++  real_type Y = cart(1);
++  real_type Z = cart(2);
++  real_type XXpYY = X*X+Y*Y;
++  real_type sqrtXXpYY = sqrt(XXpYY);
++  real_type p = XXpYY*ra2;
++  real_type q = Z*Z*(1-e*e)*ra2;
++  real_type r = 1.0/6.0*(p+q-e4);
++  real_type s = e4*p*q/(4.0*r*r*r);
++  real_type t = pow(1.0+s+sqrt(s*(2.0+s)), real_type(1)/3);
++  real_type u = r*(1.0+t+1.0/t);
++  real_type v = sqrt(u*u+e4*q);
++  real_type w = e2*(u+v-q)/(2.0*v);
++  real_type k = sqrt(u+v+w*w)-w;
++  real_type D = k*sqrtXXpYY/(k+e2);
++  real_type lambda = 2.0*atan2(Y, X+sqrtXXpYY);
++  real_type sqrtDDpZZ = sqrt(D*D+Z*Z);
++  real_type phi = 2.0*atan2(Z, D+sqrtDDpZZ);
++  real_type h = (k+e2-1)*sqrtDDpZZ/k;
++  return Geodetic(phi, lambda, h);
++}
++
++Vector3
++EllipticPlanet::toCart(const Geodetic&amp; geod) const
++{
++  // according to
++  // H. Vermeille,
++  // Direct transformation from geocentric to geodetic ccordinates,
++  // Journal of Geodesy (2002) 76:451-454
++  real_type lambda = geod.longitude;
++  real_type phi = geod.latitude;
++  real_type h = geod.altitude;
++  real_type sphi = sin(phi);
++  real_type n = a/sqrt(1.0-e2*sphi*sphi);
++  real_type cphi = cos(phi);
++  real_type slambda = sin(lambda);
++  real_type clambda = cos(lambda);
++  real_type X = (h+n)*cphi*clambda;
++  real_type Y = (h+n)*cphi*slambda;
++  real_type Z = (h+n-e2*n)*sphi;
++  return Vector3(X, Y, Z);
++}
++
++} // namespace OpenFDM
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h (from rev 777, branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DefaultPlanet.h	2008-11-23 20:29:08 UTC (rev 777)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-11-23 20:29:16 UTC (rev 778)
+@@ -0,0 +1,64 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_EllipticPlanet_H
++#define OpenFDM_EllipticPlanet_H
++
++#include &quot;Types.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;AbstractPlanet.h&quot;
++
++namespace OpenFDM {
++
++/**
++ * The EllipticPlanet class.
++ *
++ * It holds some information about the planet the simulation is running on.
++ */
++class EllipticPlanet : public AbstractPlanet {
++public:
++  /** Elliptic constructor.
++   */
++  EllipticPlanet(void);
++
++  /** Elliptic destructor.
++   */
++  virtual ~EllipticPlanet(void);
++
++  /** Get aequatorial radius.
++   */
++  real_type getAequatorialRadius(void) const;
++
++  /** Set aequatorial radius.
++   */
++  void setAequatorialRadius(real_type r);
++
++  /** Set planet flattening.
++   */
++  void setFlattening(real_type flat);
++
++  /** Transform cartesian coordinates to geodetic coordinates.
++   */
++  virtual Geodetic toGeod(const Vector3&amp; cart) const;
++
++  /** Transform geodetic coordinates to cartesian coordinates.
++   */
++  virtual Vector3 toCart(const Geodetic&amp; geod) const;
++
++private:
++  /**
++   */
++  real_type a;
++  real_type ra2;
++  real_type e;
++  real_type e2;
++  real_type e4;
++
++  real_type mRotationRate;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:29:08 UTC (rev 777)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:29:16 UTC (rev 778)
+@@ -31,6 +31,7 @@
+   CowPtr.h \
+   DiscreteStateValueVector.h \
+   DoPri5.h \
++  EllipticPlanet.h \
+   Environment.h \
+   EnvironmentObject.h \
+   ExplicitAdams.h \
+@@ -140,6 +141,7 @@
+   ConstNodeVisitor.cpp \
+   ContinousStateValue.cpp \
+   DoPri5.cpp \
++  EllipticPlanet.cpp \
+   Environment.cpp \
+   ExplicitAdams.cpp \
+   ExplicitEuler.cpp \
+@@ -186,7 +188,6 @@
+ #   AtmosphereSTD1976.cpp \
+ #   DefaultGravity.cpp \
+ #   DefaultGround.cpp \
+-#   DefaultPlanet.cpp \
+ #   Gravity.cpp \
+ #   Ground.cpp
+ 
+@@ -205,7 +206,6 @@
+   DeadBand.h \
+   DefaultGravity.h \
+   DefaultGround.h \
+-  DefaultPlanet.h \
+   Delay.h \
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000746.html">[OpenFDM-svn] r777 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000748.html">[OpenFDM-svn] r779 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#747">[ date ]</a>
+              <a href="thread.html#747">[ thread ]</a>
+              <a href="subject.html#747">[ subject ]</a>
+              <a href="author.html#747">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

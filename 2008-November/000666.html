@@ -1,0 +1,644 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r697 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r697%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811091653.mA9GrGTU008230%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000665.html">
+   <LINK REL="Next"  HREF="000667.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r697 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r697%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811091653.mA9GrGTU008230%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r697 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov  9 17:53:16 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000665.html">[OpenFDM-svn] r696 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000667.html">[OpenFDM-svn] r698 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#666">[ date ]</a>
+              <a href="thread.html#666">[ thread ]</a>
+              <a href="subject.html#666">[ subject ]</a>
+              <a href="author.html#666">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-09 17:53:15 +0100 (Sun, 09 Nov 2008)
+New Revision: 697
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Move model sorting into the instance collector.
+
+M    src/OpenFDM/ModelInstance.h
+M    src/OpenFDM/ModelContext.cpp
+M    src/OpenFDM/MechanicInstance.h
+M    src/OpenFDM/MechanicInstance.cpp
+M    src/OpenFDM/ModelInstance.cpp
+M    src/OpenFDM/MechanicContext.h
+M    src/OpenFDM/MechanicContext.cpp
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/ModelContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-11-09 16:53:15 UTC (rev 697)
+@@ -10,30 +10,4 @@
+ {
+ }
+ 
+-bool
+-MechanicContext::isConnectedTo(const MechanicContext&amp; mechanicContext) const
+-{
+-  unsigned numPorts = getNode().getNumPorts();
+-  for (unsigned i = 0; i &lt; numPorts; ++i) {
+-    SharedPtr&lt;const PortInfo&gt; portInfo = getNode().getPort(i);
+-    OpenFDMAssert(portInfo);
+-    const PortValue* portValue = getPortValueList().getPortValue(i);
+-    if (!portValue)
+-      continue;
+-    unsigned otherNumPorts = mechanicContext.getNode().getNumPorts();
+-    for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
+-      if (!mechanicContext.getNode().getPort(j)-&gt;toMechanicLinkInfo())
+-        continue;
+-      
+-      const PortValue* otherPortValue;
+-      otherPortValue = mechanicContext.getPortValueList().getPortValue(j);
+-      if (portValue != otherPortValue)
+-        continue;
+-      
+-      return true;
+-    }
+-  }
+-  return false;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-09 16:53:15 UTC (rev 697)
+@@ -33,8 +33,6 @@
+   virtual void derivative(const Task&amp;) = 0;
+   virtual void update(const DiscreteTask&amp; discreteTask) = 0;
+ 
+-  virtual bool isConnectedTo(const MechanicContext&amp; mechanicContext) const;
+-
+ private:
+   MechanicContext(const MechanicContext&amp;);
+   MechanicContext&amp; operator=(const MechanicContext&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp	2008-11-09 16:53:15 UTC (rev 697)
+@@ -18,12 +18,6 @@
+ {
+ }
+ 
+-bool
+-MechanicInstance::isConnectedTo(const MechanicInstance&amp; mechanicInstance) const
+-{
+-  return mMechanicContext-&gt;isConnectedTo(*mechanicInstance.mMechanicContext);
+-}
+-
+ MechanicContext&amp;
+ MechanicInstance::getNodeContext()
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-11-09 16:53:15 UTC (rev 697)
+@@ -18,8 +18,6 @@
+                    const MechanicNode* mechanicNode);
+   virtual ~MechanicInstance();
+ 
+-  bool isConnectedTo(const MechanicInstance&amp; mechanicInstance) const;
+-
+ // protected:
+   virtual MechanicContext&amp; getNodeContext();
+   virtual const MechanicContext&amp; getNodeContext() const;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp	2008-11-09 16:53:15 UTC (rev 697)
+@@ -23,33 +23,4 @@
+   return *mModel;
+ }
+ 
+-bool ModelContext::dependsOn(const ModelContext&amp; modelContext) const
+-{
+-  unsigned numPorts = mModel-&gt;getNumPorts();
+-  for (unsigned i = 0; i &lt; numPorts; ++i) {
+-    const InputPortInfo* inputPortInfo;
+-    inputPortInfo = mModel-&gt;getPort(i)-&gt;toInputPortInfo();
+-    if (!inputPortInfo)
+-      continue;
+-    if (!inputPortInfo-&gt;getDirectInput())
+-      continue;
+-    const PortValue* portValue = getPortValueList().getPortValue(i);
+-    if (!portValue)
+-      continue;
+-    unsigned otherNumPorts = modelContext.mModel-&gt;getNumPorts();
+-    for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
+-      if (!modelContext.mModel-&gt;getPort(j)-&gt;toOutputPortInfo())
+-        continue;
+-      
+-      const PortValue* otherPortValue;
+-      otherPortValue = modelContext.getPortValueList().getPortValue(j);
+-      if (portValue != otherPortValue)
+-        continue;
+-      
+-      return true;
+-    }
+-  }
+-  return false;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-09 16:53:15 UTC (rev 697)
+@@ -41,9 +41,6 @@
+   { mModel-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+                        mContinousStateDerivative); }
+ 
+-  // Return true if this model directly depends on one of models outputs
+-  bool dependsOn(const ModelContext&amp; modelContext) const;
+-
+ private:
+   ModelContext();
+   ModelContext(const ModelContext&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-11-09 16:53:15 UTC (rev 697)
+@@ -17,12 +17,6 @@
+ {
+ }
+ 
+-bool
+-ModelInstance::dependsOn(const ModelInstance&amp; modelInstance) const
+-{
+-  return mModelContext-&gt;dependsOn(*modelInstance.mModelContext);
+-}
+-
+ ModelContext&amp;
+ ModelInstance::getNodeContext()
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-11-09 16:53:15 UTC (rev 697)
+@@ -18,9 +18,6 @@
+                 const Model* model);
+   virtual ~ModelInstance();
+ 
+-  // Return true if this leaf directly depends on one of leafInstance outputs
+-  bool dependsOn(const ModelInstance&amp; modelInstance) const;
+-
+ // protected:
+   /// The node context that belongs to this instance.
+   virtual ModelContext&amp; getNodeContext();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-09 16:20:37 UTC (rev 696)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-09 16:53:15 UTC (rev 697)
+@@ -306,6 +306,11 @@
+       return true;
+     }
+ 
++    bool isConnected(const PortData&amp; portData) const
++    {
++      return mPortConnectSet &amp;&amp; mPortConnectSet == portData.mPortConnectSet;
++    }
++
+     bool connect(PortData* portData)
+     {
+       if (getPortInfo()-&gt;getMaxConnects() &lt;= mConnectedPorts.size())
+@@ -401,6 +406,41 @@
+       return mAbstractNodeInstance-&gt;getPortValue(portInfo);
+     }
+ 
++    bool dependsOn(const Instance&amp; instance, bool acceleration = false) const
++    {
++      unsigned numPorts = getNode()-&gt;getNumPorts();
++      for (unsigned i = 0; i &lt; numPorts; ++i) {
++        const InputPortInfo* inputPortInfo;
++        inputPortInfo = getNode()-&gt;getPort(i)-&gt;toInputPortInfo();
++        if (!inputPortInfo)
++          continue;
++        if (!inputPortInfo-&gt;getDirectInput())
++          continue;
++        OpenFDMAssert(i &lt; mPortDataVector.size());
++
++        unsigned otherNumPorts = instance.getNode()-&gt;getNumPorts();
++        for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++          const OutputPortInfo* outputPortInfo;
++          outputPortInfo = instance.getNode()-&gt;getPort(j)-&gt;toOutputPortInfo();
++          if (!outputPortInfo)
++            continue;
++          if (!acceleration &amp;&amp; outputPortInfo-&gt;getAccelerationOutput())
++            continue;
++
++          OpenFDMAssert(j &lt; instance.mPortDataVector.size());
++          OpenFDMAssert(instance.mPortDataVector[j]);
++          if (!mPortDataVector[i]-&gt;isConnected(*instance.mPortDataVector[j]))
++            continue;
++          
++          return true;
++        }
++      }
++      return false;
++    }
++
++    std::string getNodeNamePath() const
++    { return Node::toNodePathName(mNodePath); }
++
+     bool allocPortValues()
+     {
+       for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
+@@ -448,6 +488,8 @@
+       mModel(&amp;model)
+     { }
+     virtual const Model* getNode() const { return mModel; }
++
++  private:
+     SharedPtr&lt;const Model&gt; mModel;
+   };
+   struct MechanicInstance : public Instance {
+@@ -456,6 +498,31 @@
+       Instance(mechanicNode, nodePath, sampleTime)
+     { }
+     virtual const MechanicNode* getNode() const = 0;
++
++    bool isLinkedTo(const MechanicInstance&amp; instance) const
++    {
++      unsigned numPorts = getNode()-&gt;getNumPorts();
++      for (unsigned i = 0; i &lt; numPorts; ++i) {
++        if (!getNode()-&gt;getPort(i)-&gt;toMechanicLinkInfo())
++          continue;
++        OpenFDMAssert(i &lt; mPortDataVector.size());
++
++        const Node* otherNode = instance.getNode();
++        unsigned otherNumPorts = otherNode-&gt;getNumPorts();
++        for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++          if (!otherNode-&gt;getPort(j)-&gt;toMechanicLinkInfo())
++            continue;
++
++          OpenFDMAssert(j &lt; instance.mPortDataVector.size());
++          OpenFDMAssert(instance.mPortDataVector[j]);
++          if (!mPortDataVector[i]-&gt;isConnected(*instance.mPortDataVector[j]))
++            continue;
++          
++          return true;
++        }
++      }
++      return false;
++    }
+   };
+   // FIXME may be root joints are joints with only one link???
+   struct RootJointInstance : public MechanicInstance {
+@@ -465,6 +532,7 @@
+       mRootJoint(&amp;rootJoint)
+     { }
+     virtual const RootJoint* getNode() const { return mRootJoint; }
++  private:
+     SharedPtr&lt;const RootJoint&gt; mRootJoint;
+   };
+   struct JointInstance : public MechanicInstance {
+@@ -474,6 +542,7 @@
+       mJoint(&amp;joint)
+     { }
+     virtual const Joint* getNode() const { return mJoint; }
++  private:
+     SharedPtr&lt;const Joint&gt; mJoint;
+   };
+   struct InteractInstance : public MechanicInstance {
+@@ -483,6 +552,7 @@
+       mInteract(&amp;interact)
+     { }
+     virtual const Interact* getNode() const { return mInteract; }
++  private:
+     SharedPtr&lt;const Interact&gt; mInteract;
+   };
+ 
+@@ -533,10 +603,6 @@
+     OpenFDM::MechanicInstance* mechanicInstance = new OpenFDM::MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     instance-&gt;mAbstractNodeInstance = mechanicInstance;
+-    if (node.getNumPorts() == 1)
+-      _rootJointInstanceList.push_back(mechanicInstance);
+-    else
+-      _jointInstanceList.push_back(mechanicInstance);
+   }
+   virtual void apply(const Interact&amp; node)
+   {
+@@ -548,7 +614,6 @@
+     OpenFDM::MechanicInstance* mechanicInstance = new OpenFDM::MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     instance-&gt;mAbstractNodeInstance = mechanicInstance;
+-    _interactInstanceList.push_back(mechanicInstance);
+   }
+   virtual void apply(const RigidBody&amp; node)
+   {
+@@ -584,7 +649,6 @@
+     OpenFDM::MechanicInstance* mechanicInstance = new OpenFDM::MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     instance-&gt;mAbstractNodeInstance = mechanicInstance;
+-    _jointInstanceList.push_back(mechanicInstance);
+   }
+   virtual void apply(const Model&amp; node)
+   {
+@@ -596,7 +660,6 @@
+     OpenFDM::ModelInstance* modelInstance = new OpenFDM::ModelInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(modelInstance);
+     instance-&gt;mAbstractNodeInstance = modelInstance;
+-    _modelInstanceList.push_back(modelInstance);
+   }
+ 
+   virtual void apply(const Group&amp; group)
+@@ -742,14 +805,10 @@
+ 
+   // The list of root nodes in the mechanical system. Will be a starting point
+   // for sorting the tree of mechanical models downwards
+-  OpenFDM::MechanicInstanceList _rootJointInstanceList; //mRootJointInstanceList
+-  OpenFDM::MechanicInstanceList _interactInstanceList; // mInteractInstanceList
+-  OpenFDM::MechanicInstanceList _jointInstanceList; // mJointInstanceList
++  MechanicInstanceList mRootJointInstanceList;
++  MechanicInstanceList mJointInstanceList;
++  MechanicInstanceList mInteractInstanceList;
+ 
+-  RootJointInstanceList mRootJointInstanceList;
+-  JointInstanceList mJointInstanceList;
+-  InteractInstanceList mInteractInstanceList;
+-
+   ////////////////////////////////////////////////////////////////////////////
+   // Used to map connections in groups ...
+   typedef std::vector&lt;SharedPtr&lt;Instance&gt; &gt; InstanceVector;
+@@ -816,8 +875,8 @@
+   // method to sort the leafs according to their dependency
+   bool sortMechanicList()
+   {
+-    if (_rootJointInstanceList.empty() &amp;&amp;
+-        (!_jointInstanceList.empty() || !_interactInstanceList.empty())) {
++    if (mRootJointInstanceList.empty() &amp;&amp;
++        (!mJointInstanceList.empty() || !mInteractInstanceList.empty())) {
+       Log(Schedule,Error)
+         &lt;&lt; &quot;No root joint in System with mechanic components&quot; &lt;&lt; std::endl;
+       return false;
+@@ -825,32 +884,32 @@
+ 
+     // Start with all the roots in front of the list ...
+     // FIXME: ensure that there is no loop here?
+-    _mechanicInstanceList.swap(_rootJointInstanceList);
++    mMechanicInstanceList.swap(mRootJointInstanceList);
+ 
+     // Not the best algorithm, but for a first cut ...
+-    while (!_jointInstanceList.empty()) {
+-      OpenFDM::MechanicInstanceList nextLevelList;
++    while (!mJointInstanceList.empty()) {
++      MechanicInstanceList nextLevelList;
+ 
+-      OpenFDM::MechanicInstanceList::iterator j;
+-      for (j = _mechanicInstanceList.begin();
+-           j != _mechanicInstanceList.end(); ++j) {
+-        OpenFDM::MechanicInstanceList::iterator i;
+-        for (i = _jointInstanceList.begin();
+-             i != _jointInstanceList.end();) {
++      MechanicInstanceList::iterator j;
++      for (j = mMechanicInstanceList.begin();
++           j != mMechanicInstanceList.end(); ++j) {
++        MechanicInstanceList::iterator i;
++        for (i = mJointInstanceList.begin();
++             i != mJointInstanceList.end();) {
+         
+-          if ((*j)-&gt;isConnectedTo(*(*i))) {
+-            SharedPtr&lt;OpenFDM::MechanicInstance&gt; mechanicInstance = *i;
++          if ((*j)-&gt;isLinkedTo(*(*i))) {
++            SharedPtr&lt;MechanicInstance&gt; mechanicInstance = *i;
+             nextLevelList.push_back(mechanicInstance);
+-            i = _jointInstanceList.erase(i);
++            i = mJointInstanceList.erase(i);
+ 
+             // Check if this current mechanic node does not reference
+             // back into the already sorted models
+-            OpenFDM::MechanicInstanceList::const_iterator k;
+-            for (k = _mechanicInstanceList.begin();
+-                 k != _mechanicInstanceList.end(); ++k) {
++            MechanicInstanceList::const_iterator k;
++            for (k = mMechanicInstanceList.begin();
++                 k != mMechanicInstanceList.end(); ++k) {
+               if (*k == *j)
+                 continue;
+-              if (mechanicInstance-&gt;isConnectedTo(*(*k))) {
++              if (mechanicInstance-&gt;isLinkedTo(*(*k))) {
+                 Log(Schedule,Error)
+                   &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
+                   &lt;&lt; mechanicInstance-&gt;getNodeNamePath()
+@@ -870,9 +929,9 @@
+       // if we have a connection in between them, there must be a
+       // closed kinematic loop.
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+-        OpenFDM::MechanicInstanceList::iterator i = j;
++        MechanicInstanceList::iterator i = j;
+         for (++i; i != nextLevelList.end(); ++i) {
+-          if ((*j)-&gt;isConnectedTo(*(*i))) {
++          if ((*j)-&gt;isLinkedTo(*(*i))) {
+             Log(Schedule,Error)
+               &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
+               &lt;&lt; (*j)-&gt;getNodeNamePath()
+@@ -885,42 +944,51 @@
+       
+ 
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+-        _mechanicInstanceList.push_back(*j);
++        mMechanicInstanceList.push_back(*j);
+       }
+     }
+ 
+     // Interacts are always computed at the end of the list
+-    _mechanicInstanceList.splice(_mechanicInstanceList.end(),
+-                                      _interactInstanceList,
+-                                      _interactInstanceList.begin(),
+-                                      _interactInstanceList.end());
++    mMechanicInstanceList.splice(mMechanicInstanceList.end(),
++                                 mInteractInstanceList,
++                                 mInteractInstanceList.begin(),
++                                 mInteractInstanceList.end());
+     
+     Log(Schedule,Info) &lt;&lt; &quot;MechanicNode Schedule&quot; &lt;&lt; std::endl;
+-    OpenFDM::MechanicInstanceList::iterator i = _mechanicInstanceList.begin();
+-    for (; i != _mechanicInstanceList.end(); ++i) {
++    MechanicInstanceList::iterator i = mMechanicInstanceList.begin();
++    for (; i != mMechanicInstanceList.end(); ++i) {
+       Log(Schedule,Info)
+         &lt;&lt; &quot;  MechanicNode \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     }
+ 
++    // FIXME: just for now
++    _mechanicInstanceList.clear();
++    MechanicInstanceList::iterator j;
++    for (j = mMechanicInstanceList.begin(); j != mMechanicInstanceList.end(); ++j) {
++      OpenFDMAssert(dynamic_cast&lt;OpenFDM::MechanicInstance*&gt;((*j)-&gt;mAbstractNodeInstance.get()));
++      _mechanicInstanceList.push_back(dynamic_cast&lt;OpenFDM::MechanicInstance*&gt;((*j)-&gt;mAbstractNodeInstance.get()));
++    }
++
+     return true;
+   }
+ 
+   // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+-    OpenFDM::ModelInstanceList sortedModelInstanceList;
+-    while (!_modelInstanceList.empty()) {
+-      SharedPtr&lt;OpenFDM::ModelInstance&gt; modelInstance = _modelInstanceList.front();
+-      _modelInstanceList.pop_front();
++    ModelInstanceList sortedModelInstanceList;
++    while (!mModelInstanceList.empty()) {
++      SharedPtr&lt;ModelInstance&gt; modelInstance = mModelInstanceList.front();
++      mModelInstanceList.pop_front();
+ 
+       if (modelInstance-&gt;dependsOn(*modelInstance)) {
+         Log(Schedule, Error)
+           &lt;&lt; &quot;Self referencing direct dependency for Model \&quot;&quot;
+-          &lt;&lt; modelInstance-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot; detected!&quot; &lt;&lt; std::endl;
++          &lt;&lt; modelInstance-&gt;getNodeNamePath()
++          &lt;&lt; &quot;\&quot; detected!&quot; &lt;&lt; std::endl;
+         return false;
+       }
+ 
+-      OpenFDM::ModelInstanceList::iterator i;
++      ModelInstanceList::iterator i;
+       for (i = sortedModelInstanceList.begin();
+            i != sortedModelInstanceList.end();
+            ++i) {
+@@ -930,9 +998,10 @@
+         // Something already sorted in depends on modelInstance,
+         // so schedule that new thing just before.
+         Log(Schedule, Info)
+-          &lt;&lt; &quot;Inserting Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getNodeNamePath()
+-          &lt;&lt; &quot;\&quot; before Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath()
+-          &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++          &lt;&lt; &quot;Inserting Model \&quot;&quot;
++          &lt;&lt; modelInstance-&gt;getNodeNamePath()
++          &lt;&lt; &quot;\&quot; before Model \&quot;&quot;
++          &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+         i = sortedModelInstanceList.insert(i, modelInstance);
+         break;
+       }
+@@ -940,7 +1009,8 @@
+         // nothing found so far that depends on model instance.
+         // So put it at the end.
+         Log(Schedule, Info)
+-          &lt;&lt; &quot;Appending Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getNodeNamePath()
++          &lt;&lt; &quot;Appending Model \&quot;&quot;
++          &lt;&lt; modelInstance-&gt;getNodeNamePath()
+           &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+ 
+         sortedModelInstanceList.push_back(modelInstance);
+@@ -952,13 +1022,30 @@
+             continue;
+           Log(Schedule,Error)
+             &lt;&lt; &quot;Detected cyclic loop: Model \&quot;&quot;
+-            &lt;&lt; modelInstance-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
++            &lt;&lt; modelInstance-&gt;getNodeNamePath()
++            &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
+             &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+           return false;
+         }
+       }
+     }
+-    _modelInstanceList.swap(sortedModelInstanceList);
++    mModelInstanceList.swap(sortedModelInstanceList);
++
++    Log(Schedule,Info) &lt;&lt; &quot;Model Schedule&quot; &lt;&lt; std::endl;
++    ModelInstanceList::iterator i = mModelInstanceList.begin();
++    for (; i != mModelInstanceList.end(); ++i) {
++      Log(Schedule,Info)
++        &lt;&lt; &quot;  Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    }
++
++    // FIXME: just for now
++    _modelInstanceList.clear();
++    ModelInstanceList::iterator j;
++    for (j = mModelInstanceList.begin(); j != mModelInstanceList.end(); ++j) {
++      OpenFDMAssert(dynamic_cast&lt;OpenFDM::ModelInstance*&gt;((*j)-&gt;mAbstractNodeInstance.get()));
++      _modelInstanceList.push_back(dynamic_cast&lt;OpenFDM::ModelInstance*&gt;((*j)-&gt;mAbstractNodeInstance.get()));
++    }
++
+     return true;
+   }
+ 
+@@ -1004,14 +1091,6 @@
+     }
+ 
+     OpenFDM::MechanicInstanceList::const_iterator j;
+-    for (j = _rootJointInstanceList.begin();
+-         j != _rootJointInstanceList.end(); ++j) {
+-      if (!(*j)-&gt;getNodeContext().alloc()) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for MechanicNode \&quot;&quot;
+-                             &lt;&lt; (*j)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-    }
+     for (j = _mechanicInstanceList.begin();
+          j != _mechanicInstanceList.end(); ++j) {
+       if (!(*j)-&gt;getNodeContext().alloc()) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000665.html">[OpenFDM-svn] r696 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000667.html">[OpenFDM-svn] r698 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#666">[ date ]</a>
+              <a href="thread.html#666">[ thread ]</a>
+              <a href="subject.html#666">[ subject ]</a>
+              <a href="author.html#666">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

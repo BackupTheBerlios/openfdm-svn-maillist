@@ -1,0 +1,539 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r114 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r114%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512231748.jBNHmm4R012937%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000097.html">
+   <LINK REL="Next"  HREF="000099.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r114 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r114%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512231748.jBNHmm4R012937%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r114 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Dec 23 18:48:48 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000097.html">[OpenFDM-svn] r113 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000099.html">[OpenFDM-svn] r115 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#98">[ date ]</a>
+              <a href="thread.html#98">[ thread ]</a>
+              <a href="subject.html#98">[ subject ]</a>
+              <a href="author.html#98">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-23 18:48:36 +0100 (Fri, 23 Dec 2005)
+New Revision: 114
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+Log:
+Move Interact into its own file.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2005-12-23 17:48:36 UTC (rev 114)
+@@ -10,6 +10,7 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
++#include &quot;Interact.h&quot;
+ #include &quot;Visitor.h&quot;
+ #include &quot;ConstVisitor.h&quot;
+ 
+
+Added: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-23 17:48:36 UTC (rev 114)
+@@ -0,0 +1,101 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iosfwd&gt;
++#include &lt;list&gt;
++#include &lt;string&gt;
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;Visitor.h&quot;
++#include &quot;ConstVisitor.h&quot;
++#include &quot;Interact.h&quot;
++
++namespace OpenFDM {
++
++Interact::Interact(const std::string&amp; name, unsigned numParents) :
++  Model(name),
++  mParents(numParents)
++{
++}
++
++Interact::~Interact(void)
++{
++}
++
++void
++Interact::accept(Visitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
++void
++Interact::traverse(Visitor&amp; visitor)
++{
++}
++
++void
++Interact::accept(ConstVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++Interact::traverse(ConstVisitor&amp; visitor) const
++{
++}
++
++bool
++Interact::attachTo(RigidBody* rigidBody)
++{
++  if (!rigidBody) {
++    Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
++    return false;
++  }
++  ParentList::iterator it;
++  for (it = mParents.begin(); it != mParents.end(); ++it) {
++    if (!(*it)) {
++      (*it) = rigidBody;
++      (*it)-&gt;addInteract(this);
++      return true;
++    }
++  }
++  
++  Log(MultiBody,Error) &lt;&lt; &quot;Cannot attach Interact \&quot;&quot; &lt;&lt; getName()
++                       &lt;&lt; &quot;\&quot; to RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
++                       &lt;&lt; &quot;\&quot;: Already attached to 2 Rigid bodies.&quot;
++                       &lt;&lt; endl;
++  return false;
++}
++
++bool
++Interact::detachFrom(RigidBody* rigidBody)
++{
++  if (!rigidBody) {
++    Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
++    return false;
++  }
++  ParentList::iterator it;
++  for (it = mParents.begin(); it != mParents.end(); ++it) {
++    if ((*it) == rigidBody) {
++      (*it)-&gt;removeInteract(this);
++      (*it) = 0;
++      return true;
++    }
++  }
++  
++  Log(MultiBody,Error) &lt;&lt; &quot;Cannot detatach Interact \&quot;&quot; &lt;&lt; getName()
++                       &lt;&lt; &quot;\&quot; from RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
++                       &lt;&lt; &quot;\&quot;: Interact is not attached to that RigidBody.&quot;
++                       &lt;&lt; endl;
++  return false;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-23 17:48:36 UTC (rev 114)
+@@ -0,0 +1,65 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Interact_H
++#define OpenFDM_Interact_H
++
++#include &lt;iosfwd&gt;
++#include &lt;list&gt;
++#include &lt;string&gt;
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++
++namespace OpenFDM {
++
++class Interact :
++    public Model {
++public:
++  Interact(const std::string&amp; name, unsigned numParents);
++  virtual ~Interact(void);
++
++
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(Visitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++  virtual void traverse(Visitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(ConstVisitor&amp; visitor) const;
++  /// Double dispatch helper for the multibody system visitor
++  virtual void traverse(ConstVisitor&amp; visitor) const;
++
++
++  bool attachTo(RigidBody* rigidBody);
++  bool detachFrom(RigidBody* rigidBody);
++
++  virtual void interactWith(RigidBody* rigidBody) = 0;
++
++  /// FIXME remove
++  const Frame* getParentFrame(unsigned id = 0) const
++  {
++    OpenFDMAssert(id &lt; mParents.size() &amp;&amp; mParents[id]);
++    return mParents[id]-&gt;getFrame();
++  }
++  /// FIXME remove
++  Frame* getParentFrame(unsigned id = 0)
++  {
++    OpenFDMAssert(id &lt; mParents.size() &amp;&amp; mParents[id]);
++    return mParents[id]-&gt;getFrame();
++  }
++
++private:
++  typedef std::vector&lt;WeakPtr&lt;RigidBody&gt; &gt; ParentList;
++  ParentList mParents;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Interact.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-23 17:48:36 UTC (rev 114)
+@@ -13,6 +13,7 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
++#include &quot;Interact.h&quot;
+ #include &quot;Visitor.h&quot;
+ #include &quot;ConstVisitor.h&quot;
+ #include &quot;Frame.h&quot;
+@@ -20,6 +21,14 @@
+ 
+ namespace OpenFDM {
+ 
++class Joint2 :
++    public Interact {
++public:
++  Joint2(const std::string&amp; name) : Interact(name, 2) { }
++  virtual ~Joint2(void) { }
++
++};
++
+ class Joint
+   : public MultiBodyModel {
+   OpenFDM_NodeImplementation(2);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-23 17:48:36 UTC (rev 114)
+@@ -58,6 +58,7 @@
+   Ground.h \
+   Input.h \
+   Integrator.h \
++  Interact.h \
+   ImplicitEuler.h \
+   Inertia.h \
+   Joint.h \
+@@ -163,6 +164,7 @@
+   Ground.cpp \
+   Input.cpp \
+   Integrator.cpp \
++  Interact.cpp \
+   ImplicitEuler.cpp \
+   LineActuator.cpp \
+   LinearSpring.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp	2005-12-23 17:48:36 UTC (rev 114)
+@@ -52,18 +52,6 @@
+   return 0;
+ }
+ 
+-Force*
+-MultiBodyModel::toForce(void)
+-{
+-  return 0;
+-}
+-
+-const Force*
+-MultiBodyModel::toForce(void) const
+-{
+-  return 0;
+-}
+-
+ Joint*
+ MultiBodyModel::toJoint(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h	2005-12-23 17:48:36 UTC (rev 114)
+@@ -13,8 +13,6 @@
+ 
+ class Frame;
+ class Mass;
+-// class Interact;
+-class Force;
+ class Joint;
+ class Visitor;
+ class ConstVisitor;
+@@ -34,13 +32,6 @@
+   virtual Mass* toMass(void);
+   virtual const Mass* toMass(void) const;
+ 
+-  /// FIXME, hmm ...
+-//   virtual Interact* toInteract(void) { return 0; }
+-//   virtual const Interact* toInteract(void) const { return 0; }
+-
+-  virtual Force* toForce(void);
+-  virtual const Force* toForce(void) const;
+-
+   virtual Joint* toJoint(void);
+   virtual const Joint* toJoint(void) const;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-23 17:48:36 UTC (rev 114)
+@@ -103,20 +103,6 @@
+                       cross(iv.getLinear(), Jiv.getLinear()),
+                       cross(iv.getAngular(), Jiv.getLinear()));
+ 
+-  // Collect all forces acting directly on that body.
+-//   n = getNumMultiBodyModels();
+-//   for (unsigned i = 0; i &lt; n; ++i) {
+-//     Force* child = getMultiBodyModel(i)-&gt;toForce();
+-//     if (child) {
+-//       Log(ArtBody, Debug) &lt;&lt; &quot;Adding local force \&quot;&quot; &lt;&lt; child-&gt;getName()
+-//                           &lt;&lt; &quot;\&quot; to body \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-     
+-//       // FIXME: why is this - sign ???
+-//       // Ok, because of the minus in MobileRoot ...
+-//       mArtForce -= child-&gt;getForce(this);
+-//     }
+-//   }
+-
+   // Now collect all articulated forces and all articulated inertias.
+   for (unsigned i = 0; i &lt; n; ++i) {
+     Joint* joint = getMultiBodyModel(i)-&gt;toJoint();
+@@ -191,17 +177,4 @@
+   child-&gt;attachTo(this);
+ }
+ 
+-/// FIXME does not belong here
+-void
+-Interact::accept(Visitor&amp; visitor)
+-{
+-  visitor.apply(*this);
+-}
+-
+-void
+-Interact::accept(ConstVisitor&amp; visitor) const
+-{
+-  visitor.apply(*this);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-23 16:30:12 UTC (rev 113)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-23 17:48:36 UTC (rev 114)
+@@ -122,103 +122,12 @@
+   InteractList mInteracts;
+ 
+   /// FIXME: is interact too???
+-  typedef std::vector&lt;SharedPtr&lt;Mass&gt; &gt; MassList;
+-  MassList mMasses;
++//   typedef std::vector&lt;SharedPtr&lt;Mass&gt; &gt; MassList;
++//   MassList mMasses;
+ 
+   friend class Interact;
+ };
+ 
+-class Interact :
+-    public Model {
+-public:
+-  Interact(const std::string&amp; name, unsigned numParents) :
+-    Model(name), mParents(numParents) { }
+-  virtual ~Interact(void) { }
+-
+-
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(Visitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(Visitor&amp; visitor)
+-  { }
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ConstVisitor&amp; visitor) const;
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(ConstVisitor&amp; visitor) const
+-  { }
+-
+-
+-  bool attachTo(RigidBody* rigidBody)
+-  {
+-    if (!rigidBody) {
+-      Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    ParentList::iterator it;
+-    for (it = mParents.begin(); it != mParents.end(); ++it) {
+-      if (!(*it)) {
+-        (*it) = rigidBody;
+-        (*it)-&gt;addInteract(this);
+-        return true;
+-      }
+-    }
+-
+-    Log(MultiBody,Error) &lt;&lt; &quot;Cannot attach Interact \&quot;&quot; &lt;&lt; getName()
+-                         &lt;&lt; &quot;\&quot; to RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
+-                         &lt;&lt; &quot;\&quot;: Already attached to 2 Rigid bodies.&quot;
+-                         &lt;&lt; endl;
+-    return false;
+-  }
+-  bool detachFrom(RigidBody* rigidBody)
+-  {
+-    if (!rigidBody) {
+-      Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    ParentList::iterator it;
+-    for (it = mParents.begin(); it != mParents.end(); ++it) {
+-      if ((*it) == rigidBody) {
+-        (*it)-&gt;removeInteract(this);
+-        (*it) = 0;
+-        return true;
+-      }
+-    }
+-
+-    Log(MultiBody,Error) &lt;&lt; &quot;Cannot detatach Interact \&quot;&quot; &lt;&lt; getName()
+-                         &lt;&lt; &quot;\&quot; from RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
+-                         &lt;&lt; &quot;\&quot;: Interact is not attached to that RigidBody.&quot;
+-                         &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  virtual void interactWith(RigidBody* rigidBody) = 0;
+-
+-  /// FIXME remove
+-  const Frame* getParentFrame(unsigned id = 0) const
+-  {
+-    OpenFDMAssert(id &lt; mParents.size() &amp;&amp; mParents[id]);
+-    return mParents[id]-&gt;getFrame();
+-  }
+-  /// FIXME remove
+-  Frame* getParentFrame(unsigned id = 0)
+-  {
+-    OpenFDMAssert(id &lt; mParents.size() &amp;&amp; mParents[id]);
+-    return mParents[id]-&gt;getFrame();
+-  }
+-
+-private:
+-  typedef std::vector&lt;WeakPtr&lt;RigidBody&gt; &gt; ParentList;
+-  ParentList mParents;
+-};
+-
+-class Joint2 :
+-    public Interact {
+-public:
+-  Joint2(const std::string&amp; name) : Interact(name, 2) { }
+-  virtual ~Joint2(void) { }
+-
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000097.html">[OpenFDM-svn] r113 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000099.html">[OpenFDM-svn] r115 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#98">[ date ]</a>
+              <a href="thread.html#98">[ thread ]</a>
+              <a href="subject.html#98">[ subject ]</a>
+              <a href="author.html#98">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

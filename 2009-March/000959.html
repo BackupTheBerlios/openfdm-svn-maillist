@@ -1,0 +1,334 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r996 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r996%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200903191706.n2JH6fxT006704%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000958.html">
+   <LINK REL="Next"  HREF="000960.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r996 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r996%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200903191706.n2JH6fxT006704%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r996 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Mar 19 18:06:41 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000958.html">[OpenFDM-svn] r995 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000960.html">[OpenFDM-svn] r997 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#959">[ date ]</a>
+              <a href="thread.html#959">[ thread ]</a>
+              <a href="subject.html#959">[ subject ]</a>
+              <a href="author.html#959">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-03-19 18:06:40 +0100 (Thu, 19 Mar 2009)
+New Revision: 996
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Blindly convert the old actuator code.
+
+M    OpenFDM/Makefile.am
+AM   OpenFDM/Actuator.cpp
+M    OpenFDM/Actuator.h
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp	2009-03-19 17:06:40 UTC (rev 996)
+@@ -0,0 +1,84 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Actuator.h&quot;
++
++#include &quot;Types.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++Actuator::Actuator(const std::string&amp; name) :
++  Model(name),
++  mInputPort(newRealInputPort(&quot;input&quot;, false)),
++  mPositionPort(newRealOutputPort(&quot;position&quot;)),
++  mVelocityPort(newRealOutputPort(&quot;velocity&quot;)),
++  mPositionStateInfo(new Vector1StateInfo),
++  mVelocityStateInfo(new Vector1StateInfo),
++  mInitialPosition(0),
++  mInitialVelocity(0),
++  mMinDeflection(-Limits&lt;real_type&gt;::max()),
++  mMaxDeflection(Limits&lt;real_type&gt;::max()),
++  mMaxRate(Limits&lt;real_type&gt;::max()),
++  mEigenFreq(15),
++  mDampingRatio(0.7)
++{
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
++}
++
++Actuator::~Actuator()
++{
++}
++
++void
++Actuator::init(const Task&amp;, DiscreteStateValueVector&amp; discreteState,
++               ContinousStateValueVector&amp; continousState,
++               const PortValueList&amp; portValueList) const
++{
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
++}
++
++void
++Actuator::output(const Task&amp;,const DiscreteStateValueVector&amp;,
++                 const ContinousStateValueVector&amp; states,
++                 PortValueList&amp; portValues) const
++{
++  portValues[mPositionPort] = states[*mPositionStateInfo](0);
++  portValues[mVelocityPort] = states[*mVelocityStateInfo](0);
++}
++
++void
++Actuator::derivative(const DiscreteStateValueVector&amp;,
++                     const ContinousStateValueVector&amp; states,
++                     const PortValueList&amp; portValues,
++                     ContinousStateValueVector&amp; deriv) const
++{
++  // The desired position
++  real_type desiredPos = portValues[mInputPort];
++  // Apply the actuator limits.
++  desiredPos = min(desiredPos, mMaxDeflection);
++  desiredPos = max(desiredPos, mMinDeflection);
++
++  // Compute the position error
++  real_type positionError = desiredPos - states[*mPositionStateInfo](0);
++    
++  // The velocity at eigenfrequency
++  real_type omega = 1/mEigenFreq;
++  
++  // Apply the rate limits
++  positionError = min(positionError, 2*mDampingRatio*mMaxRate/omega);
++  positionError = max(positionError, -2*mDampingRatio*mMaxRate/omega);
++
++  // Compute acceleration
++  real_type accel = positionError*omega*omega - 2*omega*mDampingRatio;
++
++  // And return the state derivative
++  deriv[*mPositionStateInfo] = states[*mVelocityStateInfo];
++  deriv[*mVelocityStateInfo] = accel;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h	2009-03-19 17:06:40 UTC (rev 996)
+@@ -9,6 +9,7 @@
+ #include &quot;Types.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;RealStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -17,85 +18,59 @@
+ class Actuator :
+     public Model {
+ public:
+-  Actuator(const std::string&amp; name) : Model(name)
+-  {
+-    mVel = 0;
++  Actuator(const std::string&amp; name);
++  virtual ~Actuator();
+ 
+-    mMinDeflection = -Limits&lt;real_type&gt;::max();
+-    mMaxDeflection = Limits&lt;real_type&gt;::max();
+-    mMaxRate = Limits&lt;real_type&gt;::max();
+-    mOmega = 1.0/150;
+-    mDampingRatio = 0.7;
+-  }
+-  virtual ~Actuator() {}
++  virtual void init(const Task&amp;, DiscreteStateValueVector&amp; discreteState,
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp; portValueList) const;
++  virtual void output(const Task&amp;,const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp; continousState,
++                      PortValueList&amp; portValues) const;
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp; state,
++                          const PortValueList&amp; portValues,
++                          ContinousStateValueVector&amp; deriv) const;
+ 
+-  virtual void update(real_type dt)
+-  {
+-    real_type input; /* FIXME = mInput-&gt;getValue();*/
+-
+-    // Apply the actuator limits.
+-    input = min(input, mMaxDeflection);
+-    input = max(input, mMinDeflection);
+-
+-    // Current output
+-    real_type output = mOutput-&gt;getValue();
+-
+-    // Build the error
+-    real_type error = input - output;
+-    
+-    // Apply some rate limit
+-    error = min(error, 2*mDampingRatio*mMaxRate/mOmega);
+-    error = max(error, -2*mDampingRatio*mMaxRate/mOmega);
+-
+-    // compute acceleration
+-    real_type accel = error*mOmega*mOmega - 2*mOmega*mDampingRatio;
+-
+-    // Compute the actuator velocity
+-    mVel += dt*accel;
+-
+-    // Compute the actuator position.
+-    output += dt*mVel;
+-
+-    // Apply the actuator limits.
+-    output = min(output, mMaxDeflection);
+-    output = max(output, mMinDeflection);
+-    
+-    // Set the output value
+-    mOutput-&gt;setValue(output);
+-  }
+-
+-  void setMinPos(real_type m)
++  void setMinPos(const real_type&amp; m)
+   { mMinDeflection = m; }
+-  real_type getMinPos(void) const
++  const real_type&amp; getMinPos(void) const
+   { return mMinDeflection; }
+ 
+-  void setMaxPos(real_type m)
++  void setMaxPos(const real_type&amp; m)
+   { mMaxDeflection = m; }
+-  real_type getMaxPos(void) const
++  const real_type&amp; getMaxPos(void) const
+   { return mMaxDeflection; }
+ 
+-  void setMaxRate(real_type rate)
++  void setMaxRate(const real_type&amp; rate)
+   { mMaxRate = rate; }
+-  real_type getMaxRate(void) const
++  const real_type&amp; getMaxRate(void) const
+   { return mMaxRate; }
+ 
+-  void setEigenFreq(real_type f)
+-  { mOmega = 1/f; }
++  void setEigenFreq(const real_type&amp; f)
++  { mEigenFreq = f; }
+   real_type getEigenFreq(void) const
+-  { return 1/mOmega; }
++  { return mEigenFreq; }
+ 
+-  void setDampingRatio(real_type damp)
++  void setDampingRatio(const real_type&amp; damp)
+   { mDampingRatio = damp; }
+-  real_type getDampingRatio(void) const
++  const real_type&amp; getDampingRatio(void) const
+   { return mDampingRatio; }
+ 
+ private:
+-  real_type mVel;
++  RealInputPort mInputPort;
++  RealOutputPort mPositionPort;
++  RealOutputPort mVelocityPort;
+ 
++  SharedPtr&lt;Vector1StateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
++
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
+   real_type mMinDeflection;
+   real_type mMaxDeflection;
+   real_type mMaxRate;
+-  real_type mOmega;
++  real_type mEigenFreq;
+   real_type mDampingRatio;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-19 17:06:40 UTC (rev 996)
+@@ -194,6 +194,7 @@
+ 
+ 
+ OpenFDMModelsHEADERS = \
++  Actuator.h \
+   AirSpring.h \
+   AtmosphereSTD1976.h \
+   Bias.h \
+@@ -223,6 +224,7 @@
+   UnitConversion.h
+ 
+ OpenFDMModelsSOURCES = \
++  Actuator.cpp \
+   AirSpring.cpp \
+   Bias.cpp \
+   BinaryFunction.cpp \
+@@ -297,7 +299,6 @@
+   UniversalJoint.cpp \
+   WheelContact.cpp
+ 
+-#   Actuator.h
+ 
+ #   AeroForce.cpp \
+ #   Tank.cpp
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000958.html">[OpenFDM-svn] r995 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000960.html">[OpenFDM-svn] r997 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#959">[ date ]</a>
+              <a href="thread.html#959">[ thread ]</a>
+              <a href="subject.html#959">[ subject ]</a>
+              <a href="author.html#959">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

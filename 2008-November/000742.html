@@ -1,0 +1,379 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r773 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r773%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232028.mANKSQHu026509%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000741.html">
+   <LINK REL="Next"  HREF="000743.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r773 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r773%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232028.mANKSQHu026509%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r773 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 23 21:28:26 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000741.html">[OpenFDM-svn] r772 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000743.html">[OpenFDM-svn] r774 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#742">[ date ]</a>
+              <a href="thread.html#742">[ thread ]</a>
+              <a href="subject.html#742">[ subject ]</a>
+              <a href="author.html#742">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-23 21:28:26 +0100 (Sun, 23 Nov 2008)
+New Revision: 773
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Move Environment in its implementation file.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp	2008-11-23 20:28:16 UTC (rev 772)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp	2008-11-23 20:28:26 UTC (rev 773)
+@@ -4,107 +4,17 @@
+ 
+ #include &quot;Environment.h&quot;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;EnvironmentObject.h&quot;
+-#include &quot;AtmosphereSTD1976.h&quot;
+-#include &quot;DefaultGravity.h&quot;
+-#include &quot;DefaultGround.h&quot;
+-#include &quot;DefaultPlanet.h&quot;
+-#include &quot;Turbulence.h&quot;
+-#include &quot;Wind.h&quot;
+-#include &quot;RootFrame.h&quot;
+-
+ namespace OpenFDM {
+ 
+-Environment::Environment(void)
++Environment::Environment() :
++  mInertial(new AbstractInertial),
++  mGravity(new AbstractGravity),
++  mWind(new AbstractWind)
+ {
+-  setAtmosphere(new AtmosphereSTD1976);
+-  setGravity(new DefaultGravity);
+-  setGround(new DefaultGround);
+-  setPlanet(new DefaultPlanet);
+-  setWind(new Wind);
+-  RootFrame* rootFrame = new RootFrame(&quot;Planet centered frame&quot;);
+-  Vector3 earthRotation(0.0, 0.0, pi2/(60*60*24));
+-  rootFrame-&gt;setAngularRelVel(earthRotation);
+-  setRootFrame(rootFrame);
+ }
+ 
+ Environment::~Environment(void)
+ {
+ }
+ 
+-void
+-Environment::setAtmosphere(Atmosphere* atmosphere)
+-{
+-  detachEnvironmentObject(mAtmosphere);
+-  mAtmosphere = atmosphere;
+-  attachEnvironmentObject(atmosphere);
+-}
+-
+-void
+-Environment::setGravity(Gravity* gravity)
+-{
+-  detachEnvironmentObject(mGravity);
+-  mGravity = gravity;
+-  attachEnvironmentObject(gravity);
+-}
+-
+-void
+-Environment::setGround(Ground* ground)
+-{
+-  detachEnvironmentObject(mGround);
+-  mGround = ground;
+-  attachEnvironmentObject(ground);
+-}
+-
+-void
+-Environment::setPlanet(Planet* planet)
+-{
+-  detachEnvironmentObject(mPlanet);
+-  mPlanet = planet;
+-  attachEnvironmentObject(planet);
+-}
+-
+-void
+-Environment::setTurbulence(Turbulence* turbulence)
+-{
+-  detachEnvironmentObject(mTurbulence);
+-  mTurbulence = turbulence;
+-  attachEnvironmentObject(turbulence);
+-}
+-
+-void
+-Environment::setWind(Wind* wind)
+-{
+-  detachEnvironmentObject(mWind);
+-  mWind = wind;
+-  attachEnvironmentObject(wind);
+-}
+-
+-void
+-Environment::setRootFrame(RootFrame* rootFrame)
+-{
+-  rootFrame-&gt;reparentChildren(mRootFrame);
+-  mRootFrame = rootFrame;
+-}
+-
+-void
+-Environment::attachEnvironmentObject(EnvironmentObject* environmentObject)
+-{
+-  if (!environmentObject)
+-    return;
+-
+-  environmentObject-&gt;attachToEnvironment(this);
+-}
+-
+-void
+-Environment::detachEnvironmentObject(EnvironmentObject* environmentObject)
+-{
+-  if (!environmentObject)
+-    return;
+-
+-  environmentObject-&gt;attachToEnvironment(0);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-11-23 20:28:16 UTC (rev 772)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-11-23 20:28:26 UTC (rev 773)
+@@ -5,100 +5,69 @@
+ #ifndef OpenFDM_Environment_H
+ #define OpenFDM_Environment_H
+ 
+-#include &quot;Object.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Referenced.h&quot;
++#include &quot;SharedPtr.h&quot;
++#include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Atmosphere;
+-class Gravity;
+-class Ground;
+-class Planet;
+-class Turbulence;
+-class Wind;
+-class RootFrame;
++class Environment;
+ 
+-class EnvironmentObject;
++class AbstractInertial : public Referenced {
++public:
++  virtual ~AbstractInertial() {}
++  virtual Vector3 getAngularVelocity(const real_type&amp; t) const
++  { return Vector3::zeros(); }
++//   { return Vector3(0, 0, pi2/(24*60*60)); }
++  virtual Vector6 getAcceleration(const real_type&amp; t) const
++  { return Vector6::zeros(); }
++};
+ 
+-class Environment :
+-    public Object {
++class AbstractGravity : public Referenced {
+ public:
+-  Environment(void);
+-  virtual ~Environment(void);
++  virtual ~AbstractGravity() {}
++  virtual Vector3
++  getGravityAcceleration(const Environment&amp;, const Vector3&amp;) const
++  { return Vector3(0, 0, 9.81); }
++};
+ 
+-  /** Set atmosphere model.
+-   */
+-  void setAtmosphere(Atmosphere* p);
++class AbstractWind : public Referenced {
++public:
++  virtual ~AbstractWind() {}
++  virtual Vector6
++  getWindVelocity(const Environment&amp;, const real_type&amp; t, const Vector3&amp;) const
++  { return Vector6::zeros(); }
++};
+ 
+-  /** Get atmosphere model.
+-   */
+-  const Atmosphere* getAtmosphere(void) const
+-  { return mAtmosphere; }
++class Environment : public Referenced {
++public:
++  Environment();
++  virtual ~Environment();
+ 
+-  /** Set gravity model.
+-   */
+-  void setGravity(Gravity* g);
++  // The the global coordinate frames angular velocity and acceleration.
++  // Note that the acceleration and velocity must fit together to simulate
++  // something useful.
++  Vector3 getAngularVelocity(const real_type&amp; t) const
++  { return mInertial-&gt;getAngularVelocity(t); }
++  Vector6 getAcceleration(const real_type&amp; t) const
++  { return mInertial-&gt;getAcceleration(t); }
+ 
+-  /** Get gravity model.
+-   */
+-  const Gravity* getGravity(void) const
+-  { return mGravity; }
++  // The gravity acceleration vector in the global coordinate system
++  Vector3 getGravityAcceleration(const Vector3&amp; position) const
++  { return mGravity-&gt;getGravityAcceleration(*this, position); }
+ 
+-  /** Set ground callback.
+-   */
+-  void setGround(Ground* g);
++  // The wind velocity vector in the global coordinate system
++  Vector6 getWindVelocity(const real_type&amp; t, const Vector3&amp; position) const
++  { return mWind-&gt;getWindVelocity(*this, t, position); }
+ 
+-  /** Get ground callback.
+-   */
+-  const Ground* getGround(void) const
+-  { return mGround; }
+-
+-  /** Set planet callback.
+-   */
+-  void setPlanet(Planet* p);
+-
+-  /** Get planet callback.
+-   */
+-  const Planet* getPlanet(void) const
+-  { return mPlanet; }
+-
+-  /** Set turbulence model.
+-   */
+-  void setTurbulence(Turbulence* p);
+-
+-  /** Get turbulence model.
+-   */
+-  const Turbulence* getTurbulence(void) const
+-  { return mTurbulence; }
+-
+-  /** Set wind callback.
+-   */
+-  void setWind(Wind* p);
+-
+-  /** Get wind callback.
+-   */
+-  const Wind* getWind(void) const
+-  { return mWind; }
+-
+-  /// Set RootFrame
+-  void setRootFrame(RootFrame* rootFrame);
+-
+-  /// Get RootFrame
+-  const RootFrame* getRootFrame(void) const
+-  { return mRootFrame; }
+-  RootFrame* getRootFrame(void)
+-  { return mRootFrame; }
+-
+ private:
+-  void attachEnvironmentObject(EnvironmentObject* environmentObject);
+-  void detachEnvironmentObject(EnvironmentObject* environmentObject);
+-
+-  SharedPtr&lt;Atmosphere&gt; mAtmosphere;
+-  SharedPtr&lt;Gravity&gt; mGravity;
+-  SharedPtr&lt;Ground&gt; mGround;
+-  SharedPtr&lt;Planet&gt; mPlanet;
+-  SharedPtr&lt;Turbulence&gt; mTurbulence;
+-  SharedPtr&lt;Wind&gt; mWind;
+-  SharedPtr&lt;RootFrame&gt; mRootFrame;
++  SharedPtr&lt;const AbstractInertial&gt; mInertial;
++  SharedPtr&lt;const AbstractGravity&gt; mGravity;
++  SharedPtr&lt;const AbstractWind&gt; mWind;
++//   SharedPtr&lt;const AbstractPlanet&gt; mPlanet;
++//   SharedPtr&lt;const AbstractAtmosphere&gt; mAtmosphere;
++//   SharedPtr&lt;const AbstractGround&gt; mGround;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:28:16 UTC (rev 772)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:28:26 UTC (rev 773)
+@@ -133,6 +133,7 @@
+   ConstNodeVisitor.cpp \
+   ContinousStateValue.cpp \
+   DoPri5.cpp \
++  Environment.cpp \
+   ExplicitAdams.cpp \
+   ExplicitEuler.cpp \
+   Frame.cpp \
+@@ -161,7 +162,6 @@
+   NumericPortValue.cpp \
+   Object.cpp \
+   ODESolver.cpp \
+-  Planet.cpp \
+   PortInfo.cpp \
+   PortValue.cpp \
+   RigidBody.cpp \
+@@ -173,10 +173,10 @@
+   Unit.cpp \
+   Variant.cpp
+ 
+-#   Environment.cpp \
+ #   EnvironmentObject.cpp \
+ #   ReaderWriter.cpp \
+ #   Atmosphere.cpp \
++#  Planet.cpp \
+ #   AtmosphereSTD1976.cpp \
+ #   DefaultGravity.cpp \
+ #   DefaultGround.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000741.html">[OpenFDM-svn] r772 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000743.html">[OpenFDM-svn] r774 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#742">[ date ]</a>
+              <a href="thread.html#742">[ thread ]</a>
+              <a href="subject.html#742">[ subject ]</a>
+              <a href="author.html#742">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

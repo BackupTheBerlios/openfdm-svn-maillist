@@ -1,0 +1,214 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r575%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810071717.m97HHQLd008534%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000545.html">
+   <LINK REL="Next"  HREF="000547.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r575%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810071717.m97HHQLd008534%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct  7 19:17:26 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000545.html">[OpenFDM-svn] r574 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000547.html">[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#546">[ date ]</a>
+              <a href="thread.html#546">[ thread ]</a>
+              <a href="subject.html#546">[ subject ]</a>
+              <a href="author.html#546">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-07 19:17:25 +0200 (Tue, 07 Oct 2008)
+New Revision: 575
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Attach a system log to the system.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-07 05:27:31 UTC (rev 574)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-07 17:17:25 UTC (rev 575)
+@@ -12,6 +12,7 @@
+ #include &quot;NodeInstance.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;RootJoint.h&quot;
++#include &quot;SystemLog.h&quot;
+ #include &quot;Task.h&quot;
+ 
+ #include &quot;Function.h&quot;
+@@ -109,6 +110,7 @@
+       return;
+ 
+     mList.front().mSampleHit = t;
++    discreteOutput(mList.front());
+ 
+     // Set the state into the ode solver
+     Vector v;
+@@ -810,6 +812,10 @@
+     mNodeInstanceMap[(*i)-&gt;getNodePath()] = *i;
+     mNodeInstanceList.push_back(*i);
+   }
++
++  SystemLogList::const_iterator j;
++  for (j = mSystemLogList.begin(); j != mSystemLogList.end(); ++j)
++    (*j)-&gt;attachTo(this);
+   
+   // Hmm, really here???
+   mAbstractSystem-&gt;init(0);
+@@ -823,6 +829,10 @@
+   mAbstractSystem = 0;
+   mNodeInstanceList.clear();
+   mNodeInstanceMap.clear();
++
++  SystemLogList::const_iterator i;
++  for (i = mSystemLogList.begin(); i != mSystemLogList.end(); ++i)
++    (*i)-&gt;attachTo(0);
+ }
+ 
+ /// Simulate the system until the time tEnd
+@@ -832,6 +842,11 @@
+   if (!mAbstractSystem)
+     return false;
+   mAbstractSystem-&gt;outputAt(t);
++
++  SystemLogList::const_iterator i;
++  for (i = mSystemLogList.begin(); i != mSystemLogList.end(); ++i)
++    (*i)-&gt;output(t);
++
+   return true;
+ }
+ 
+@@ -869,4 +884,27 @@
+   return i-&gt;second;
+ }
+ 
++void
++System::attach(SystemLog* systemLog)
++{
++  mSystemLogList.push_back(systemLog);
++  if (!mAbstractSystem)
++    return;
++  systemLog-&gt;attachTo(this);
++}
++
++void
++System::detach(SystemLog* systemLog)
++{
++  SystemLogList::iterator i = mSystemLogList.begin();
++  while (i != mSystemLogList.end()) {
++    if (*i == systemLog) {
++      i = mSystemLogList.erase(i);
++      if (mAbstractSystem)
++        systemLog-&gt;attachTo(0);
++    } else
++      ++i;
++  }
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-07 05:27:31 UTC (rev 574)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-07 17:17:25 UTC (rev 575)
+@@ -17,6 +17,7 @@
+ /// Provides algorithms to simulate and trim the whole system.
+ 
+ class AbstractSystem;
++class SystemLog;
+ 
+ class System : public Object {
+   OPENFDM_OBJECT(System, Object);
+@@ -48,6 +49,9 @@
+   const AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath) const;
+   AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath);
+ 
++  void attach(SystemLog* systemLog);
++  void detach(SystemLog* systemLog);
++
+ private:
+   class NodeInstanceCollector;
+ 
+@@ -56,6 +60,9 @@
+   SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
+   ConstNodeInstanceList mNodeInstanceList;
+   NodeInstanceMap mNodeInstanceMap;
++
++  typedef std::list&lt;SharedPtr&lt;SystemLog&gt; &gt; SystemLogList;
++  SystemLogList mSystemLogList;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-07 05:27:31 UTC (rev 574)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-07 17:17:25 UTC (rev 575)
+@@ -111,17 +111,14 @@
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+ 
++  system-&gt;attach(new HDF5Log(&quot;system.h5&quot;));
++
+   if (!system-&gt;init())
+     return 1;
+ 
+-  HDF5Log log(&quot;system.h5&quot;);
+-  log.attachTo(system);
+-  log.output(system-&gt;getTime());
+-
+   double h = 0.01;
+   while (system-&gt;getTime() &lt; 10) {
+     system-&gt;simulate(system-&gt;getTime() + h);
+-    log.output(system-&gt;getTime());
+   }
+ 
+   return 0;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000545.html">[OpenFDM-svn] r574 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000547.html">[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#546">[ date ]</a>
+              <a href="thread.html#546">[ thread ]</a>
+              <a href="subject.html#546">[ subject ]</a>
+              <a href="author.html#546">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r494 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r494%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809260307.m8Q37Y1l007218%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000465.html">
+   <LINK REL="Next"  HREF="000467.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r494 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r494%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809260307.m8Q37Y1l007218%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r494 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Sep 26 05:07:34 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000465.html">[OpenFDM-svn] r493 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000467.html">[OpenFDM-svn] r495 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#466">[ date ]</a>
+              <a href="thread.html#466">[ thread ]</a>
+              <a href="subject.html#466">[ subject ]</a>
+              <a href="author.html#466">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-26 05:07:33 +0200 (Fri, 26 Sep 2008)
+New Revision: 494
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateContinousStateInfo.h
+Log:
+Adjustments to the state values.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateValue.h	2008-09-23 05:06:37 UTC (rev 493)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateValue.h	2008-09-26 03:07:33 UTC (rev 494)
+@@ -5,12 +5,15 @@
+ #ifndef OpenFDM_ContinousStateValue_H
+ #define OpenFDM_ContinousStateValue_H
+ 
++#include &quot;StateStream.h&quot;
+ #include &quot;StateValue.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ class ContinousStateValue : public StateValue {
+ public:
++  virtual void setValue(const StateStream&amp; stateStream) = 0;
++  virtual void getValue(StateStream&amp; stateStream) const = 0;
+ 
+ protected:
+   virtual ~ContinousStateValue();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h	2008-09-23 05:06:37 UTC (rev 493)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h	2008-09-26 03:07:33 UTC (rev 494)
+@@ -14,6 +14,12 @@
+ public:
+   MatrixStateValue(const Size&amp; size) : mMatrix(size)
+   { }
++  MatrixStateValue()
++  { }
++
++  void resize(const Size&amp; size)
++  { mMatrix.resize(size); }
++
+   const Matrix&amp; getMatrix() const
+   { return mMatrix; }
+   Matrix&amp; getMatrix()
+@@ -21,6 +27,11 @@
+   void setMatrix(const Matrix&amp; matrix)
+   { OpenFDMAssert(size(matrix) == size(mMatrix)); mMatrix = matrix; }
+ 
++  virtual void setValue(const StateStream&amp; stateStream)
++  { stateStream.readSubState(mMatrix); }
++  virtual void getValue(StateStream&amp; stateStream) const
++  { stateStream.writeSubState(mMatrix); }
++
+ protected:
+   virtual ~MatrixStateValue();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateContinousStateInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateContinousStateInfo.h	2008-09-23 05:06:37 UTC (rev 493)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TemplateContinousStateInfo.h	2008-09-26 03:07:33 UTC (rev 494)
+@@ -6,14 +6,14 @@
+ #define OpenFDM_TemplateContinousStateInfo_H
+ 
+ #include &quot;ContinousStateInfo.h&quot;
+-#include &quot;ContinousStateValue.h&quot;
++#include &quot;MatrixStateValue.h&quot;
+ #include &quot;TemplateStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ template&lt;typename T&gt;
+ class TemplateContinousStateInfo : 
+-    public TemplateStateInfo&lt;T, ContinousStateInfo, ContinousStateValue&gt; {
++    public TemplateStateInfo&lt;T, ContinousStateInfo, MatrixStateValue&gt; {
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000465.html">[OpenFDM-svn] r493 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000467.html">[OpenFDM-svn] r495 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#466">[ date ]</a>
+              <a href="thread.html#466">[ thread ]</a>
+              <a href="subject.html#466">[ subject ]</a>
+              <a href="author.html#466">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

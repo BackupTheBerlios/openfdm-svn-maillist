@@ -1,0 +1,925 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r423 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r423%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808301138.m7UBcVu3006760%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000394.html">
+   <LINK REL="Next"  HREF="000396.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r423 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r423%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808301138.m7UBcVu3006760%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r423 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 30 13:38:31 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000394.html">[OpenFDM-svn] r422 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000396.html">[OpenFDM-svn] r424 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#395">[ date ]</a>
+              <a href="thread.html#395">[ thread ]</a>
+              <a href="subject.html#395">[ subject ]</a>
+              <a href="author.html#395">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-30 13:38:31 +0200 (Sat, 30 Aug 2008)
+New Revision: 423
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+Log:
+Model base class - now in svn.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-03 12:56:09 UTC (rev 422)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-30 11:38:31 UTC (rev 423)
+@@ -112,6 +112,7 @@
+   LeafNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
++  Model.cpp \
+   Node.cpp \
+   NodeVisitor.cpp \
+   NumericPortValue.cpp \
+@@ -136,7 +137,6 @@
+ #   ImplicitEuler.cpp \
+ #   Newton.cpp \
+ #   MidpointRule.cpp \
+-#   Model.cpp \
+ #   ModelGroup.cpp \
+ #   ReaderWriter.cpp \
+ #   ODESolver.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-08-03 12:56:09 UTC (rev 422)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-08-30 11:38:31 UTC (rev 423)
+@@ -4,401 +4,27 @@
+ 
+ #include &quot;Model.h&quot;
+ 
+-#include &lt;algorithm&gt;
+-
+ #include &quot;LogStream.h&quot;
+-#include &quot;ModelVisitor.h&quot;
++#include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Node, Object)
++BEGIN_OPENFDM_OBJECT_DEF(Model, LeafNode)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Node::Node(const std::string&amp; name) :
+-  Object(name)
+-{
+-}
+-
+-Node::~Node(void)
+-{
+-}
+-
+-void
+-Node::accept(ModelVisitor&amp; visitor)
+-{
+-  visitor.apply(*this);
+-}
+-
+-const Model*
+-Node::toModel(void) const
+-{
+-  return 0;
+-}
+-
+-Model*
+-Node::toModel(void)
+-{
+-  return 0;
+-}
+-
+-const ModelGroup*
+-Node::toModelGroup(void) const
+-{
+-  return 0;
+-}
+-
+-ModelGroup*
+-Node::toModelGroup(void)
+-{
+-  return 0;
+-}
+-
+-unsigned
+-Node::getNumParents(void) const
+-{
+-  return mParents.size();
+-}
+-
+-WeakPtr&lt;const ModelGroup&gt;
+-Node::getParent(unsigned idx) const
+-{
+-  if (mParents.size() &lt;= idx)
+-    return WeakPtr&lt;const ModelGroup&gt;(0);
+-  return mParents[idx];
+-}
+-
+-WeakPtr&lt;ModelGroup&gt;
+-Node::getParent(unsigned idx)
+-{
+-  if (mParents.size() &lt;= idx)
+-    return WeakPtr&lt;ModelGroup&gt;(0);
+-  return mParents[idx];
+-}
+-
+-class Node::PathListCollector :
+-    public ModelVisitor {
+-public:
+-  virtual void apply(Node&amp; node)
+-  {
+-    // First go up and collect the path above.
+-    // When we are back here append this.
+-    if (0 &lt; node.getNumParents())
+-      ascend(node);
+-    else
+-      pathList.push_back(getNodePath());
+-  }
+-  Node::PathList pathList;
+-};
+-
+-Node::GroupPath
+-Node::getPath()
+-{
+-  PathList pathList = getParentPathList();
+-  GroupPath path;
+-  if (!pathList.empty()) {
+-    Path::iterator i;
+-    for (i = pathList.back().begin(); i != pathList.back().end(); ++i) {
+-      ModelGroup* modelGroup = (*i)-&gt;toModelGroup();
+-      OpenFDMAssert(modelGroup);
+-      path.push_back(modelGroup);
+-    }
+-  }
+-  return path;
+-}
+-
+-Node::PathList
+-Node::getParentPathList()
+-{
+-  PathListCollector pathListCollector;
+-  accept(pathListCollector);
+-  return pathListCollector.pathList;
+-}
+-
+-unsigned
+-Node::addParent(ModelGroup* model)
+-{
+-  if (!model)
+-    return ~0u;
+-  mParents.push_back(WeakPtr&lt;ModelGroup&gt;(model));
+-  return mParents.size() - 1;
+-}
+-
+-void
+-Node::removeParent(unsigned idx)
+-{
+-  if (mParents.size() &lt;= idx)
+-    return;
+-  ParentList::iterator i = mParents.begin();
+-  std::advance(i, idx);
+-  mParents.erase(i);
+-}
+-
+-void
+-Node::setNumInputPorts(unsigned num)
+-{
+-  // Ok, strange, but required ...
+-  unsigned oldSize = mInputPorts.size();
+-  mInputPorts.resize(num);
+-  for (; oldSize &lt; mInputPorts.size(); ++oldSize) {
+-    mInputPorts[oldSize] = new NumericPortAcceptor(this);
+-  }
+-}
+-
+-void
+-Node::setNumOutputPorts(unsigned num)
+-{
+-  // Ok, strange, but required ...
+-  unsigned oldSize = mOutputPorts.size();
+-  mOutputPorts.resize(num);
+-  for (; oldSize &lt; mOutputPorts.size(); ++oldSize) {
+-    mOutputPorts[oldSize] = new NumericPortProvider(this);
+-  }
+-}
+-
+-
+-
+-
+-
+-
+-
+-BEGIN_OPENFDM_OBJECT_DEF(Model, Node)
+-  DEF_OPENFDM_ROPROP(Unsigned, NumContinousStates)
+-  DEF_OPENFDM_ROPROP(Unsigned, NumDiscreteStates)
+-  DEF_OPENFDM_ROPROP(Bool, DirectFeedThrough)
+-  END_OPENFDM_OBJECT_DEF
+-
+ Model::Model(const std::string&amp; name) :
+-  Node(name),
+-  mNumContinousStates(0l),
+-  mNumDiscreteStates(0l),
+-  mDirectFeedThrough(false),
+-  mEnabled(true),
+-  mNextEnabled(true),
+-  mEnablePort(new NumericPortAcceptor(this)),
+-  mDisableMode(Hold)
++  LeafNode(name)
+ {
+ }
+ 
+-Model::~Model(void)
++Model::~Model()
+ {
+ }
+ 
+ void
+-Model::accept(ModelVisitor&amp; visitor)
++Model::accept(NodeVisitor&amp; visitor)
+ {
+   visitor.apply(*this);
+ }
+ 
+-const Input*
+-Model::toInput(void) const
+-{
+-  return 0;
+-}
+-
+-Input*
+-Model::toInput(void)
+-{
+-  return 0;
+-}
+-
+-const Output*
+-Model::toOutput(void) const
+-{
+-  return 0;
+-}
+-
+-Output*
+-Model::toOutput(void)
+-{
+-  return 0;
+-}
+-
+-const Interact*
+-Model::toInteract(void) const
+-{
+-  return 0;
+-}
+-
+-Interact*
+-Model::toInteract(void)
+-{
+-  return 0;
+-}
+-
+-bool
+-Model::init(void)
+-{
+-  if (mEnablePort)
+-    mEnablePortHandle = mEnablePort-&gt;toRealPortHandle();
+-  else
+-    mEnablePortHandle = 0;
+-  return true;
+-}
+-
+-void
+-Model::output(const TaskInfo&amp;)
+-{
+-}
+-
+-void
+-Model::update(const TaskInfo&amp;)
+-{
+-}
+-
+-void
+-Model::setState(const StateStream&amp; state)
+-{
+-}
+-
+-void
+-Model::getState(StateStream&amp; state) const
+-{
+-}
+-
+-void
+-Model::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-}
+-
+-void
+-Model::setDiscreteState(const StateStream&amp; state)
+-{
+-}
+-
+-void
+-Model::getDiscreteState(StateStream&amp; state) const
+-{
+-}
+-
+-bool
+-Model::dependsDirectOn(Model* model)
+-{
+-  if (!mDirectFeedThrough)
+-    return false;
+-
+-  // FIXME HACK, outputs of interacts only depend on its state ...
+-  // FIXME is this always true??
+-  Interact* interact = model-&gt;toInteract();
+-  if (interact)
+-    return false;
+-
+-  // return true if any output of model is connected to any input of this
+-  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
+-    for (unsigned j = 0; j &lt; model-&gt;getNumOutputPorts(); ++j) {
+-      if (getInputPort(i)-&gt;getPortInterface() ==
+-          model-&gt;getOutputPort(j)-&gt;getPortInterface())
+-        return true;
+-    }
+-  }
+-
+-  return false;
+-}
+-
+-const std::string&amp;
+-Model::getInputPortName(unsigned i) const
+-{
+-  OpenFDMAssert(i &lt; mInputPorts.size());
+-  return mInputPorts[i]-&gt;getName();
+-}
+-
+-NumericPortAcceptor*
+-Model::getInputPort(const std::string&amp; name)
+-{
+-  // Check if this one exists and return its value.
+-  InputPortVector::iterator it = mInputPorts.begin();
+-  while (it != mInputPorts.end()) {
+-    if ((*it)-&gt;getName() == name)
+-      return *it;
+-    ++it;
+-  }
+-  return 0;
+-}
+-
+-NumericPortProvider*
+-Model::getOutputPort(const std::string&amp; name)
+-{
+-  // Check if this one exists and return its value.
+-  OutputPortVector::iterator it = mOutputPorts.begin();
+-  while (it != mOutputPorts.end()) {
+-    if ((*it)-&gt;getName() == name)
+-      return *it;
+-    ++it;
+-  }
+-
+-  Log(Model, Error) &lt;&lt; &quot;Output port name \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot; not found in \&quot;&quot;
+-                    &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-  return 0;
+-}
+-
+-const std::string&amp;
+-Model::getOutputPortName(unsigned i) const
+-{
+-  OpenFDMAssert(i &lt; mOutputPorts.size());
+-  return mOutputPorts[i]-&gt;getName();
+-}
+-
+-void
+-Model::setInputPortName(unsigned i, const std::string&amp; name)
+-{
+-  OpenFDMAssert(i &lt; mInputPorts.size());
+-  mInputPorts[i]-&gt;setName(name);
+-}
+-
+-void
+-Model::setOutputPort(unsigned i, const std::string&amp; name,
+-                     PortInterface* portInterface)
+-{
+-  OpenFDMAssert(i &lt; mOutputPorts.size());
+-
+-  NumericPortProvider* portProvider = new NumericPortProvider(this);
+-  portProvider-&gt;setPortInterface(portInterface);
+-  portProvider-&gt;setName(name);
+-  mOutputPorts[i] = portProvider;
+-}
+-
+-void
+-Model::setNumContinousStates(unsigned numContinousStates)
+-{
+-  mNumContinousStates = numContinousStates;
+-}
+-
+-void
+-Model::setNumDiscreteStates(unsigned numDiscreteStates)
+-{
+-  mNumDiscreteStates = numDiscreteStates;
+-}
+-
+-void
+-Model::setEnvironment(Environment* environment)
+-{
+-}
+-
+-void
+-Model::setEnabledUnconditional(bool enabled)
+-{
+-  if (mEnabled) {
+-    switch (mDisableMode) {
+-    case ResetHold:
+-      /// If disabled, the models output/state is initialized
+-      init();
+-      break;
+-    default:
+-      break;
+-    }
+-  } else {
+-    switch (mDisableMode) {
+-    case HoldReset:
+-      /// If disabled, the models output/state is just held. On reenable, the
+-      /// the model is initialized
+-      /// If disabled, the models output/state is initialized
+-      init();
+-      break;
+-    default:
+-      break;
+-    }
+-  }
+-
+-  mEnabled = enabled;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-08-03 12:56:09 UTC (rev 422)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-08-30 11:38:31 UTC (rev 423)
+@@ -6,326 +6,57 @@
+ #define OpenFDM_Model_H
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
+-#include &lt;list&gt;
+-#include &lt;algorithm&gt;
+ 
+ #include &quot;OpenFDMConfig.h&quot;
+ #include &quot;Assert.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Variant.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;SampleTime.h&quot;
+-#include &quot;TaskInfo.h&quot;
+-#include &quot;StateStream.h&quot;
+-#include &quot;Connection.h&quot;
+-#include &quot;Port.h&quot;
+-#include &quot;NumericPortProvider.h&quot;
+-#include &quot;NumericPortAcceptor.h&quot;
++#include &quot;LeafNode.h&quot;
++#include &quot;MatrixInputPort.h&quot;
++#include &quot;MatrixOutputPort.h&quot;
++#include &quot;RealInputPort.h&quot;
++#include &quot;RealOutputPort.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class ModelGroup;
+-class Environment;
+-class GroupInput;
+-class GroupOutput;
+-class System;
+-class Model;
++class DiscreteStateValueVector;
++class ContinousStateValueVector;
++class PortValueList;
++class ContinousStateValueVector;
+ 
+-class Input;
+-class Output;
+-class Interact;
+-class Joint;
+-class MobileRootJoint;
+-
+-class ModelVisitor;
+-class TaskInfo;
+-
+-class Node : public Object {
+-  OPENFDM_OBJECT(Node, Object);
++class Model : public LeafNode {
++  OPENFDM_OBJECT(Model, LeafNode);
+ public:
+-  // FIXME
+-  typedef std::list&lt;SharedPtr&lt;ModelGroup&gt; &gt; GroupPath;
+-
+-  // FIXME vector??
+-  typedef std::vector&lt;SharedPtr&lt;Node&gt; &gt; Path;
+-  typedef std::vector&lt;Path&gt; PathList;
+-
+-  Node(const std::string&amp; name);
+-  virtual ~Node(void);
+-
+-  /// Double dispatch helper for the system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
+-
+-  virtual const Model* toModel(void) const;
+-  virtual Model* toModel(void);
+-
+-  virtual const ModelGroup* toModelGroup(void) const;
+-  virtual ModelGroup* toModelGroup(void);
+-
+-  unsigned getNumParents(void) const;
+-  WeakPtr&lt;const ModelGroup&gt; getParent(unsigned idx) const;
+-  WeakPtr&lt;ModelGroup&gt; getParent(unsigned idx);
+-
+-  GroupPath getPath() OpenFDM_DEPRECATED;
+-  /// Returns the list of paths leading to this Node.
+-  PathList getParentPathList();
+-
+-  /// Returns the number of input properties.
+-  unsigned getNumInputPorts(void) const
+-  { return mInputPorts.size(); }
+-  unsigned getNumOutputPorts(void) const
+-  { return mOutputPorts.size(); }
+-
+-protected:
+-  // Sets the parent model.
+-  // FIXME: remove virtual here ...
+-  virtual unsigned addParent(ModelGroup* model);
+-  virtual void removeParent(unsigned idx);
+-
+-public:
+-  /// FIXME
+-  /// Sets the number of input properties.
+-  void setNumInputPorts(unsigned num);
+-  NumericPortAcceptor* getInputPort(unsigned i)
+-  {
+-    OpenFDMAssert(i &lt; mInputPorts.size());
+-    return mInputPorts[i];
+-  }
+-  void addInputPort(NumericPortAcceptor* port)
+-  {
+-    unsigned num = getNumInputPorts();
+-    setNumInputPorts(num+1);
+-    mInputPorts[num] = port;
+-  }
+-  void removeInputPort(NumericPortAcceptor* port)
+-  {
+-    InputPortVector::iterator i = std::find(mInputPorts.begin(),
+-                                            mInputPorts.end(), port);
+-    if (i == mInputPorts.end()) {
+-      Log(Model,Error) &lt;&lt; &quot;Trying to remove foreign port&quot; &lt;&lt; endl;
+-      return;
+-    }
+-    (*i)-&gt;invalidate();
+-    mInputPorts.erase(i);
+-  }
+-
+-  /// Sets the number of output properties.
+-  void setNumOutputPorts(unsigned num);
+-  NumericPortProvider* getOutputPort(unsigned i)
+-  {
+-    OpenFDMAssert(i &lt; mOutputPorts.size());
+-    return mOutputPorts[i];
+-  }
+-
+-  /// Convenience shortcuts
+-  void addOutputPort(NumericPortProvider* port)
+-  {
+-    unsigned num = getNumOutputPorts();
+-    setNumOutputPorts(num+1);
+-    mOutputPorts[num] = port;
+-  }
+-  void removeOutputPort(NumericPortProvider* port)
+-  {
+-    OutputPortVector::iterator i = std::find(mOutputPorts.begin(),
+-                                             mOutputPorts.end(), port);
+-    if (i == mOutputPorts.end()) {
+-      Log(Model,Error) &lt;&lt; &quot;Trying to remove foreign port&quot; &lt;&lt; endl;
+-      return;
+-    }
+-    (*i)-&gt;invalidate();
+-    mOutputPorts.erase(i);
+-  }
+-
+-protected:
+-  typedef std::vector&lt;SharedPtr&lt;NumericPortAcceptor&gt; &gt; InputPortVector;
+-  typedef std::vector&lt;SharedPtr&lt;NumericPortProvider&gt; &gt; OutputPortVector;
+-  InputPortVector mInputPorts;
+-  OutputPortVector mOutputPorts;
+-  friend class GroupInput;
+-  friend class GroupOutput;
+-
+-private:
+-  class PathListCollector;
+-
+-  typedef std::vector&lt;WeakPtr&lt;ModelGroup&gt; &gt; ParentList;
+-  ParentList mParents;
+-
+-  // FIXME
+-  friend class ModelGroup;
+-};
+-
+-
+-class Model : public Node {
+-  OPENFDM_OBJECT(Model, Node);
+-public:
+-  enum DisableMode {
+-    /// If disabled, the models output/state is just held.
+-    /// On reenable, the model just continues to work
+-    Hold,
+-    /// If disabled, the models output/state is just held.
+-    /// On reenable, the model is initialized
+-    HoldReset,
+-    /// If disabled, the models output/state is initialized
+-    ResetHold
+-  };
+-
+   Model(const std::string&amp; name);
+-  virtual ~Model(void);
++  virtual ~Model();
+ 
+-  /// Double dispatch helper for the system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++  virtual void accept(NodeVisitor&amp; visitor);
+ 
+-  virtual const Input* toInput(void) const;
+-  virtual Input* toInput(void);
++  // FIXME: May be we want to collapse all state values in one
++  // argument? May be it is sufficient to have a const and non const version??
++  // FIXME???
++  // const TaskInfo&amp; taskInfo
++  virtual void update(DiscreteStateValueVector&amp;, ContinousStateValueVector&amp;,
++                      const PortValueList&amp;) const { }
++  virtual void output(const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp;) const { }
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp;,
++                          ContinousStateValueVector&amp;) const { }
+ 
+-  virtual const Output* toOutput(void) const;
+-  virtual Output* toOutput(void);
+-
+-  virtual const Interact* toInteract(void) const;
+-  virtual Interact* toInteract(void);
+-
+-  /// Called on each system initialization.
+-  virtual bool init(void);
+-  /// Called when the outputs need to be prepared for the next step.
+-  /// Note that this is called *before* update() is called.
+-  virtual void output(const TaskInfo&amp; taskInfo /*const TaskSet&amp; ??*/);
+-  /// Called whenever discrete states need to be updated.
+-  virtual void update(const TaskInfo&amp; taskInfo /*const Task&amp; ??*/);
+-
+-  /// Convinience functions may make the virtuals protected ...
+-  void outputIfEnabled(const TaskInfo&amp; taskInfo)
+-  {
+-    /// FIXME: should that only be checked for discrete tasks???
+-    /// May be with a special list in System to know which ones need to recheck
+-    /// the enable ports ???
+-    setEnabled(mNextEnabled);
+-    if (mEnabled)
+-      output(taskInfo);
+-  }
+-  void updateIfEnabled(const TaskInfo&amp; taskInfo)
+-  {
+-    if (mEnabled)
+-      update(taskInfo);
+-    if (mEnablePortHandle.isConnected()) {
+-      /// FIXME bool!!!!
+-      mNextEnabled = 0.5 &lt; fabs(mEnablePortHandle.getRealValue());
+-    }
+-  }
+-
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+-
+-  virtual void setDiscreteState(const StateStream&amp; state);
+-  virtual void getDiscreteState(StateStream&amp; state) const;
+-
+-  /// Must return true if the model given in the argument must be scheduled
+-  /// before this one because of input data dependencies
+-  virtual bool dependsDirectOn(Model* model);
+-
+-  /// Return the number of continous states
+-  unsigned getNumContinousStates(void) const
+-  { return mNumContinousStates; }
+-  /// Return the number of discrete states
+-  unsigned getNumDiscreteStates(void) const
+-  { return mNumDiscreteStates; }
+-  /// Return if the outputs containe a direct dependency on an input
+-  bool getDirectFeedThrough(void) const
+-  { return mDirectFeedThrough; }
+-  /// Return if the outputs containe a direct dependency on an input
+-  bool getEnabled(void) const
+-  { return mEnabled; }
+-  void setEnabled(bool enabled)
+-  { if (mEnabled != enabled) setEnabledUnconditional(enabled); }
+-  DisableMode getDisableMode(void) const
+-  { return mDisableMode; }
+-  void setDisableMode(DisableMode disableMode)
+-  { mDisableMode = disableMode; }
+-
+-  bool addSampleTime(const SampleTime&amp; sampleTime)
+-  { return mSampleTimeSet.addSampleTime(sampleTime); }
+-  bool removeSampleTime(const SampleTime&amp; sampleTime)
+-  { return mSampleTimeSet.removeSampleTime(sampleTime); }
+-  const SampleTimeSet&amp; getSampleTimeSet(void) const
+-  { return mSampleTimeSet; }
+-  
+-
+-  /// Returns the name of the i-th input property.
+-  const std::string&amp; getInputPortName(unsigned i) const;
+-
+-  /// Sets the i-th input property.
+-  NumericPortAcceptor* getInputPort(const std::string&amp; name);
+-  NumericPortAcceptor* getEnablePort(void)
+-  { return mEnablePort; }
+-  using Node::getInputPort;
+-
+-  NumericPortProvider* getOutputPort(const std::string&amp; name);
+-  const std::string&amp; getOutputPortName(unsigned i) const;
+-  using Node::getOutputPort;
+-
+ protected:
+-  void setNumContinousStates(unsigned numContinousStates);
+-  void setNumDiscreteStates(unsigned numDiscreteStates);
+-  void setDirectFeedThrough(bool directFeedThrough)
+-  { mDirectFeedThrough = directFeedThrough; }
+-
+-  /// Sets the name of the i-th input property.
+-  void setInputPortName(unsigned i, const std::string&amp; name);
+-
+-  /// Sets the name of the i-th output property.
+-  void setOutputPort(unsigned i, const std::string&amp; name,
+-                     PortInterface* portInterface);
+-  /// the real used interface
+-  template&lt;typename M&gt;
+-  void setOutputPort(unsigned i, const std::string&amp; name, M* model,
+-                     const real_type&amp; (M::*getter)(void) const)
+-  { setOutputPort(i, name, new RealGetterPortInterface&lt;M&gt;(model, getter)); }
+-  template&lt;typename M&gt;
+-  void setOutputPort(unsigned i, const std::string&amp; name, M* model,
+-                     const Matrix&amp; (M::*getter)(void) const)
+-  { setOutputPort(i, name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
+-
+-  void addOutputPort(const std::string&amp; name, PortInterface* portInterface)
+-  {
+-    unsigned num = getNumOutputPorts();
+-    setNumOutputPorts(num+1);
+-    setOutputPort(num, name, portInterface);
+-  }
+-  template&lt;typename M&gt;
+-  void addOutputPort(const std::string&amp; name, M* model,
+-                     const real_type&amp; (M::*getter)(void) const)
+-  { addOutputPort(name, new RealGetterPortInterface&lt;M&gt;(model, getter)); }
+-  template&lt;typename M&gt;
+-  void addOutputPort(const std::string&amp; name, M* model,
+-                     const Matrix&amp; (M::*getter)(void) const)
+-  { addOutputPort(name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
+-
+-  // FIXME
+-  friend class System;
+-  virtual void setEnvironment(Environment* environment);
+-
+-private:
+-  void setEnabledUnconditional(bool enabled);
+-
+-  unsigned mNumContinousStates;
+-  unsigned mNumDiscreteStates;
+-  bool mDirectFeedThrough;
+-  /// True if the Model is enabled
+-  bool mEnabled;
+-  bool mNextEnabled;
+-  SharedPtr&lt;NumericPortAcceptor&gt; mEnablePort;
+-  RealPortHandle mEnablePortHandle;
+-  DisableMode mDisableMode;
+-  SampleTimeSet mSampleTimeSet;
+-
+-  // FIXME
+-  friend class ModelGroup;
++  MatrixOutputPort
++  newMatrixOutputPort(const std::string&amp; name, const Size&amp; size = Size(0, 0))
++  { return MatrixOutputPort(this, name, size); }
++  MatrixInputPort
++  newMatrixInputPort(const std::string&amp; name, const Size&amp; size = Size(0, 0))
++  { return MatrixInputPort(this, name, size); }
++  RealOutputPort
++  newRealOutputPort(const std::string&amp; name)
++  { return RealOutputPort(this, name); }
++  RealInputPort
++  newRealInputPort(const std::string&amp; name)
++  { return RealInputPort(this, name); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-03 12:56:09 UTC (rev 422)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-30 11:38:31 UTC (rev 423)
+@@ -5,6 +5,7 @@
+ #include &quot;NodeVisitor.h&quot;
+ 
+ #include &quot;LeafNode.h&quot;
++#include &quot;Model.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,4 +24,10 @@
+   apply(static_cast&lt;Node&amp;&gt;(leafNode));
+ }
+ 
++void
++NodeVisitor::apply(Model&amp; node)
++{
++  apply(static_cast&lt;LeafNode&amp;&gt;(node));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-03 12:56:09 UTC (rev 422)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-30 11:38:31 UTC (rev 423)
+@@ -19,14 +19,13 @@
+ public:
+   virtual ~NodeVisitor();
+ 
+-  virtual void apply(Node&amp; node);
++  virtual void apply(Node&amp;);
+   virtual void apply(GroupAcceptorNode&amp; node)
+   { apply((Node&amp;)node); }
+   virtual void apply(GroupProviderNode&amp; node)
+   { apply((Node&amp;)node); }
+-  virtual void apply(LeafNode&amp; node);
+-  virtual void apply(Model&amp; node)
+-  { apply((LeafNode&amp;)node); }
++  virtual void apply(LeafNode&amp;);
++  virtual void apply(Model&amp;);
+   virtual void apply(Body&amp; node)
+   { apply((LeafNode&amp;)node); }
+   virtual void apply(Group&amp; node)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000394.html">[OpenFDM-svn] r422 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000396.html">[OpenFDM-svn] r424 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#395">[ date ]</a>
+              <a href="thread.html#395">[ thread ]</a>
+              <a href="subject.html#395">[ subject ]</a>
+              <a href="author.html#395">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

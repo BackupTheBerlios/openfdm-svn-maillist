@@ -1,0 +1,198 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1032 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1032%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907280534.n6S5Y3QY030646%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000994.html">
+   <LINK REL="Next"  HREF="000996.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1032 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1032%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907280534.n6S5Y3QY030646%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1032 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jul 28 07:34:03 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000994.html">[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000996.html">[OpenFDM-svn] r1033 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#995">[ date ]</a>
+              <a href="thread.html#995">[ thread ]</a>
+              <a href="subject.html#995">[ subject ]</a>
+              <a href="author.html#995">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-28 07:34:00 +0200 (Tue, 28 Jul 2009)
+New Revision: 1032
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add a division by zero safe 1/x block.
+
+M    Makefile.am
+AM   SafeReciprocal.cpp
+AM   SafeReciprocal.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-27 05:10:43 UTC (rev 1031)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-28 05:34:00 UTC (rev 1032)
+@@ -216,6 +216,7 @@
+   MinModel.h \
+   Output.h \
+   Product.h \
++  SafeReciprocal.h \
+   Saturation.h \
+   SimpleDirectModel.h \
+   SimulationTime.h \
+@@ -251,6 +252,7 @@
+   MinModel.cpp \
+   Output.cpp \
+   Product.cpp \
++  SafeReciprocal.cpp \
+   Saturation.cpp \
+   SimpleDirectModel.cpp \
+   SimulationTime.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.cpp	2009-07-27 05:10:43 UTC (rev 1031)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.cpp	2009-07-28 05:34:00 UTC (rev 1032)
+@@ -0,0 +1,42 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;SafeReciprocal.h&quot;
++
++#include &quot;TypeInfo.h&quot;
++#include &quot;Variant.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(SafeReciprocal, SimpleDirectModel)
++  DEF_OPENFDM_PROPERTY(Real, Epsilon, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++SafeReciprocal::SafeReciprocal(const std::string&amp; name, const real_type&amp; eps) :
++  SimpleDirectModel(name),
++  mEpsilon(eps)
++{
++  addInputPort(&quot;input&quot;);
++}
++
++SafeReciprocal::~SafeReciprocal(void)
++{
++}
++
++void
++SafeReciprocal::output(Context&amp; context) const
++{
++  // FIXME, optimize, move that into a proper context ...
++  // For now make it work
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(1); ++j) {
++    for (unsigned i = 0; i &lt; sz(0); ++i) {
++      real_type value = context.getInputValue(0)(i, j);
++      real_type rvalue = copysign(real_type(1)/(fabs(value) + mEpsilon), value);
++      context.getOutputValue()(i, j) = rvalue;
++    }
++  }
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.h	2009-07-27 05:10:43 UTC (rev 1031)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.h	2009-07-28 05:34:00 UTC (rev 1032)
+@@ -0,0 +1,33 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_SafeReciprocal_H
++#define OpenFDM_SafeReciprocal_H
++
++#include &lt;string&gt;
++#include &quot;SimpleDirectModel.h&quot;
++
++namespace OpenFDM {
++
++class SafeReciprocal : public SimpleDirectModel {
++  OPENFDM_OBJECT(SafeReciprocal, SimpleDirectModel);
++public:
++  SafeReciprocal(const std::string&amp; name,
++                 const real_type&amp; epsilon = Limits&lt;real_type&gt;::safe_min());
++  virtual ~SafeReciprocal(void);
++
++  void output(Context&amp; context) const;
++
++  const real_type&amp; getEpsilon() const
++  { return mEpsilon; }
++  void setEpsilon(const real_type&amp; epsilon)
++  { mEpsilon = epsilon; }
++
++private:
++  real_type mEpsilon;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/SafeReciprocal.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000994.html">[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000996.html">[OpenFDM-svn] r1033 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#995">[ date ]</a>
+              <a href="thread.html#995">[ thread ]</a>
+              <a href="subject.html#995">[ subject ]</a>
+              <a href="author.html#995">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

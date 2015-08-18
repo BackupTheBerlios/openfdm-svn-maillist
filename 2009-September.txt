@@ -1,0 +1,298 @@
+From frohlich at mail.berlios.de  Sat Sep  5 15:53:00 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 5 Sep 2009 15:53:00 +0200
+Subject: [OpenFDM-svn] r1110 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200909051353.n85Dr0EQ004485@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-05 15:52:56 +0200 (Sat, 05 Sep 2009)
+New Revision: 1110
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp
+Log:
+Plug a memory leak.
+
+M    src/OpenFDM/LogStream.h
+M    src/OpenFDM/Logger.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h	2009-08-22 15:17:36 UTC (rev 1109)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h	2009-09-05 13:52:56 UTC (rev 1110)
+@@ -8,10 +8,11 @@
+ #include <iosfwd>
+ // FIXME: because of using std::endl;
+ #include <ostream>
++#include "Referenced.h"
+ 
+ namespace OpenFDM {
+ 
+-class Logger {
++class Logger : public Referenced {
+ public:
+   enum Category {
+     ArtBody          = 1,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp	2009-08-22 15:17:36 UTC (rev 1109)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp	2009-09-05 13:52:56 UTC (rev 1110)
+@@ -9,6 +9,7 @@
+ #include <sstream>
+ #include "Mutex.h"
+ #include "ScopeLock.h"
++#include "SharedPtr.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -66,7 +67,7 @@
+ Logger*
+ Logger::Instance(void)
+ {
+-  static Logger* ptr = 0;
++  static SharedPtr<Logger> ptr;
+   if (!ptr) {
+     static Mutex mutex;
+     ScopeLock scopeLock(mutex);
+
+
+
+From frohlich at mail.berlios.de  Sat Sep  5 23:38:34 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 5 Sep 2009 23:38:34 +0200
+Subject: [OpenFDM-svn] r1111 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200909052138.n85LcYDx029723@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-05 23:38:34 +0200 (Sat, 05 Sep 2009)
+New Revision: 1111
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+Log:
+Use tanh for the smoothSaturate implementation.
+
+M    Math.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-05 13:52:56 UTC (rev 1110)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-05 21:38:34 UTC (rev 1111)
+@@ -103,34 +103,23 @@
+ inline T
+ smoothSaturate(const T& val)
+ {
+-  return atan(val*Constants<T>::pi()/2)*2/Constants<T>::pi();
++  // The tanh function has values in [-1, 1].
++  // The slope at zero is 1. The two squares/roots make the edges sharper.
++  // An alernative implementation uses atan to get a saturation, but atan is
++  // less sharp at its edges, thus requires more squares/roots or the very
++  // expensive pow function.
++  // The tanh function appears to be much cheaper to compute.
++  return sqrt(sqrt(tanh(sqr(sqr(val)))));
+ }
+ 
+ // Saturate value between -saturate and saturate.
+-// template<typename T>
+-// inline T
+-// smoothSaturate(const T& val, const T& saturation)
+-// {
+-//   if (saturation <= Limits<T>::min())
+-//     return 0;
+-//   return saturation*smoothSaturate(val/saturation);
+-// }
+-
+-// Saturate value between -saturate and saturate.
+-// The higher the p value the sharper the edge.
+ template<typename T>
+ inline T
+-smoothSaturate(const T& val, const T& saturation, const T& p = T(10))
++smoothSaturate(const T& val, const T& saturation)
+ {
+   if (saturation <= Limits<T>::min())
+     return 0;
+-
+-  T sEpsP = pow(Limits<T>::epsilon(), T(1)/(T(2)*p));
+-  T absVal = fabs(val/saturation);
+-  if (absVal <= sEpsP)
+-    return val;
+-  T limitedVal = min(T(1), pow(smoothSaturate(pow(absVal, p)), T(1)/p));
+-  return saturation*sign(val)*limitedVal;
++  return saturation*smoothSaturate(val/saturation);
+ }
+ 
+ template<typename T>
+
+
+
+From frohlich at mail.berlios.de  Sun Sep  6 23:08:56 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 6 Sep 2009 23:08:56 +0200
+Subject: [OpenFDM-svn] r1112 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200909062108.n86L8uTX019703@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-06 23:08:56 +0200 (Sun, 06 Sep 2009)
+New Revision: 1112
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+Log:
+Add lost sign correction.
+
+M    Math.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-05 21:38:34 UTC (rev 1111)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-06 21:08:56 UTC (rev 1112)
+@@ -109,7 +109,7 @@
+   // less sharp at its edges, thus requires more squares/roots or the very
+   // expensive pow function.
+   // The tanh function appears to be much cheaper to compute.
+-  return sqrt(sqrt(tanh(sqr(sqr(val)))));
++  return sign(val)*sqrt(sqrt(tanh(sqr(sqr(val)))));
+ }
+ 
+ // Saturate value between -saturate and saturate.
+
+
+
+From frohlich at mail.berlios.de  Sun Sep  6 23:52:08 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 6 Sep 2009 23:52:08 +0200
+Subject: [OpenFDM-svn] r1113 - branches/OpenFDM-StateSeparation/src/JSBSim
+Message-ID: <200909062152.n86Lq8MW029428@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-06 23:52:08 +0200 (Sun, 06 Sep 2009)
+New Revision: 1113
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Fix missleading error message.
+
+M    JSBSimReader.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-09-06 21:08:56 UTC (rev 1112)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-09-06 21:52:08 UTC (rev 1113)
+@@ -2069,7 +2069,7 @@
+       TableData<3> data;
+       BreakPointVector lookup[3];
+       if (!readTable3D(element, data, lookup))
+-        return error("Cannot read 1D table data.");
++        return error("Cannot read 3D table data.");
+       
+       std::list<const XMLElement*> indeps
+         = element->getElements("independentVar");
+
+
+
+From frohlich at mail.berlios.de  Fri Sep 11 07:17:52 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 11 Sep 2009 07:17:52 +0200
+Subject: [OpenFDM-svn] r1114 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200909110517.n8B5Hq1s029781@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-11 07:17:51 +0200 (Fri, 11 Sep 2009)
+New Revision: 1114
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Transform.h
+Log:
+Add function to compute the center of grevity if a SpatialInertia
+
+M    Transform.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Transform.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Transform.h	2009-09-06 21:52:08 UTC (rev 1113)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Transform.h	2009-09-11 05:17:51 UTC (rev 1114)
+@@ -420,7 +420,39 @@
+   
+   return It2;
+ }
++OpenFDM_FORCE_INLINE SpatialInertia
++inertiaTo(const Vector3& p, const SpatialInertia& I)
++{
++  return inertiaFrom(-p, I);
++}
+ 
++OpenFDM_FORCE_INLINE Vector3
++centerOfGravity(const SpatialInertia& I)
++{
++  // Compute a position so that the inertia transformed to that position
++  // is a block diagonal matrix. From the transform fuctions above you can see
++  // that the left lower matrix block reads:
++  //  0 = T(I21) = I21 - I22*cross(p)
++  // Which means that the cross product matrix could be computed with
++  //  cross(p) = I22^(-1) * I21
++  // then read the values of p from the cross product matrix.
++  // FIXME: proof when I22^(-1) * I21 is such a skew symmetric cross matrix.
++
++  // The right lower diagnoal of the inertia matrix.
++  InertiaMatrix I22(I(3,3), I(4,3), I(5,3), I(4,4), I(5,4), I(5,5));
++  Matrix33Factors inv22(I22);
++  
++  // The left lower corner of the inertia matrix.
++  Matrix33 I21(I(3,0), I(3,1), I(3,2),
++               I(4,0), I(4,1), I(4,2),
++               I(5,0), I(5,1), I(5,2));
++  // The cross product matrix
++  Matrix33 cp = inv22.solve(I21);
++  
++  // And the resulting vector.
++  return Vector3(cp(2, 1), cp(0, 2), cp(1, 0));
++}
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+
+From frohlich at mail.berlios.de  Fri Sep 11 07:18:21 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 11 Sep 2009 07:18:21 +0200
+Subject: [OpenFDM-svn] r1115 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200909110518.n8B5ILkL030504@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-09-11 07:18:17 +0200 (Fri, 11 Sep 2009)
+New Revision: 1115
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Mark sortModelList static.
+
+M    System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-09-11 05:17:51 UTC (rev 1114)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-09-11 05:18:17 UTC (rev 1115)
+@@ -1267,7 +1267,7 @@
+     { return m0->dependsOn(*m1); }
+   };
+ 
+-  bool sortModelList(ModelInstanceDataList& modelInstanceDataList)
++  static bool sortModelList(ModelInstanceDataList& modelInstanceDataList)
+   {
+     ModelInstanceDataList sortedModelInstanceDataList;
+     tsort(sortedModelInstanceDataList, modelInstanceDataList,
+
+
+

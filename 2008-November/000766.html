@@ -1,0 +1,873 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r798 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r798%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811261932.mAQJWhOR021427%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000765.html">
+   <LINK REL="Next"  HREF="000767.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r798 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r798%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811261932.mAQJWhOR021427%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r798 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 26 20:32:43 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000765.html">[OpenFDM-svn] r797 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000767.html">[OpenFDM-svn] r799 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#766">[ date ]</a>
+              <a href="thread.html#766">[ thread ]</a>
+              <a href="subject.html#766">[ subject ]</a>
+              <a href="author.html#766">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-26 20:32:26 +0100 (Wed, 26 Nov 2008)
+New Revision: 798
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.h
+Log:
+Partly reactivate Summer, MinModel and MaxModel.
+
+M    OpenFDM/MaxModel.h
+M    OpenFDM/Summer.h
+M    OpenFDM/Makefile.am
+M    OpenFDM/MaxModel.cpp
+A    OpenFDM/SimpleDirectModel.h
+M    OpenFDM/MinModel.h
+M    OpenFDM/Summer.cpp
+M    OpenFDM/MinModel.cpp
+A    OpenFDM/SimpleDirectModel.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-26 19:32:26 UTC (rev 798)
+@@ -228,6 +228,7 @@
+   Saturation.h \
+   Sensor.h \
+   SimpleContact.h \
++  SimpleDirectModel.h \
+   SimpleGear.h \
+   SimulationTime.h \
+   Summer.h \
+@@ -254,18 +255,19 @@
+   Input.cpp \
+   Integrator.cpp \
+   LinearSpringDamper.cpp \
++  MaxModel.cpp \
++  MinModel.cpp \
+   Output.cpp \
+   Saturation.cpp \
++  SimpleDirectModel.cpp \
+   SimulationTime.cpp \
++  Summer.cpp \
+   UnaryFunction.cpp \
+   UnaryModel.cpp \
+   UnitConversion.cpp
+ 
+ #   DiscBrake.cpp \
+-#   MaxModel.cpp \
+-#   MinModel.cpp \
+ #   Product.cpp \
+-#   Summer.cpp \
+ #   Table.cpp \
+ #   TimeDerivative.cpp \
+ #   TransferFunction.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.cpp	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.cpp	2008-11-26 19:32:26 UTC (rev 798)
+@@ -11,79 +11,30 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(MaxModel, Model)
++BEGIN_OPENFDM_OBJECT_DEF(MaxModel, SimpleDirectModel)
+   DEF_OPENFDM_PROPERTY(Unsigned, NumMaxInputs, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MaxModel::MaxModel(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;Input 0&quot;);
+-  setInputPortName(1, &quot;Input 1&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;MaxModel::getMax);
+ }
+ 
+ MaxModel::~MaxModel(void)
+ {
+ }
+ 
+-bool
+-MaxModel::init(void)
+-{
+-  // Make sure it is invalid if sizes do not match.
+-  mMax.resize(0, 0);
+-
+-  mInputPorts.clear();
+-  unsigned n = getNumInputPorts();
+-  if (n == 0) {
+-      Log(Model, Error) &lt;&lt; &quot;No input ports for MaxModel \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
+-  }
+-  for (unsigned i = 0; i &lt; n; ++i) {
+-    MatrixPortHandle matrixPort = getInputPort(i)-&gt;toMatrixPortHandle();
+-    if (!matrixPort.isConnected()) {
+-      Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for MaxModel \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    mInputPorts.push_back(matrixPort);
+-
+-    Matrix a = matrixPort.getMatrixValue();
+-    if (i == 0) {
+-      mMax.resize(a);
+-    } else {
+-      if (size(mMax) != size(a)) {
+-        Log(Model, Error) &lt;&lt; &quot;Input port sizes for MaxModel \&quot;&quot;
+-                          &lt;&lt; getName() &lt;&lt; &quot;\&quot; do not match.&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-    }
+-  }
+-
+-  return Model::init();
+-}
+-
+ void
+-MaxModel::output(const TaskInfo&amp;)
++MaxModel::output(Context&amp; context) const
+ {
+-  // the input method guarantees that there is at least one input
+-  mMax = mInputPorts[0].getMatrixValue();
+-  for (unsigned i = 1; i &lt; mInputPorts.size(); ++i)
+-    mMax = LinAlg::max(mMax, mInputPorts[i].getMatrixValue());
++  if (!getNumInputPorts())
++    return;
++  context.getOutputValue() = context.getInputValue(0);
++  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i)
++    context.getOutputValue()
++      = LinAlg::max(context.getOutputValue(), context.getInputValue(i));
+ }
+ 
+-const Matrix&amp;
+-MaxModel::getMax(void) const
+-{
+-  return mMax;
+-}
+-
+ unsigned
+ MaxModel::getNumMaxInputs(void) const
+ {
+@@ -93,7 +44,7 @@
+ void
+ MaxModel::setNumMaxInputs(unsigned num)
+ {
+-  setNumInputPorts(num);
++//   setNumInputPorts(num);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.h	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MaxModel.h	2008-11-26 19:32:26 UTC (rev 798)
+@@ -7,28 +7,20 @@
+ 
+ #include &lt;string&gt;
+ 
+-#include &quot;Matrix.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;SimpleDirectModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class MaxModel : public Model {
+-  OPENFDM_OBJECT(MaxModel, Model);
++class MaxModel : public SimpleDirectModel {
++  OPENFDM_OBJECT(MaxModel, SimpleDirectModel);
+ public:
+   MaxModel(const std::string&amp; name);
+   virtual ~MaxModel(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const Matrix&amp; getMax(void) const;
+-
+   unsigned getNumMaxInputs(void) const;
+   void setNumMaxInputs(unsigned num);
+-
+-private:
+-  Matrix mMax;
+-  std::vector&lt;MatrixPortHandle&gt; mInputPorts;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.cpp	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.cpp	2008-11-26 19:32:26 UTC (rev 798)
+@@ -11,80 +11,30 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(MinModel, Model)
++BEGIN_OPENFDM_OBJECT_DEF(MinModel, SimpleDirectModel)
+   DEF_OPENFDM_PROPERTY(Unsigned, NumMinInputs, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MinModel::MinModel(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;Input 0&quot;);
+-  setInputPortName(1, &quot;Input 1&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;MinModel::getMin);
+ }
+ 
+ MinModel::~MinModel(void)
+ {
+ }
+ 
+-bool
+-MinModel::init(void)
+-{
+-  // Make sure it is invalid if sizes do not match.
+-  mMin.resize(0, 0);
+-
+-  mInputPorts2.clear();
+-
+-  unsigned n = getNumInputPorts();
+-  if (n == 0) {
+-      Log(Model, Error) &lt;&lt; &quot;No input ports for MinModel \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
+-  }
+-  for (unsigned i = 0; i &lt; n; ++i) {
+-    MatrixPortHandle matrixPort = getInputPort(i)-&gt;toMatrixPortHandle();
+-    if (!matrixPort.isConnected()) {
+-      Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for MinModel \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    mInputPorts2.push_back(matrixPort);
+-
+-    Matrix a = matrixPort.getMatrixValue();
+-    if (i == 0) {
+-      mMin.resize(a);
+-    } else {
+-      if (size(mMin) != size(a)) {
+-        Log(Model, Error) &lt;&lt; &quot;Input port sizes for MinModel \&quot;&quot;
+-                          &lt;&lt; getName() &lt;&lt; &quot;\&quot; do not match.&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-    }
+-  }
+-
+-  return Model::init();
+-}
+-
+ void
+-MinModel::output(const TaskInfo&amp;)
++MinModel::output(Context&amp; context) const
+ {
+-  // the input method guarantees that there is at least one input
+-  mMin = mInputPorts2[0].getMatrixValue();
+-  for (unsigned i = 1; i &lt; mInputPorts2.size(); ++i)
+-    mMin = LinAlg::min(mMin, mInputPorts2[i].getMatrixValue());
++  if (!getNumInputPorts())
++    return;
++  context.getOutputValue() = context.getInputValue(0);
++  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i)
++    context.getOutputValue()
++      = LinAlg::min(context.getOutputValue(), context.getInputValue(i));
+ }
+ 
+-const Matrix&amp;
+-MinModel::getMin(void) const
+-{
+-  return mMin;
+-}
+-
+ unsigned
+ MinModel::getNumMinInputs(void) const
+ {
+@@ -94,7 +44,7 @@
+ void
+ MinModel::setNumMinInputs(unsigned num)
+ {
+-  setNumInputPorts(num);
++//   setNumInputPorts(num);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.h	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MinModel.h	2008-11-26 19:32:26 UTC (rev 798)
+@@ -7,28 +7,20 @@
+ 
+ #include &lt;string&gt;
+ 
+-#include &quot;Matrix.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;SimpleDirectModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class MinModel : public Model {
+-  OPENFDM_OBJECT(MinModel, Model);
++class MinModel : public SimpleDirectModel {
++  OPENFDM_OBJECT(MinModel, SimpleDirectModel);
+ public:
+   MinModel(const std::string&amp; name);
+   virtual ~MinModel(void);
+-  
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+ 
+-  const Matrix&amp; getMin(void) const;
+-
++  virtual void output(Context&amp; context) const;
++  
+   unsigned getNumMinInputs(void) const;
+   void setNumMinInputs(unsigned num);
+-
+-private:
+-  Matrix mMin;
+-  std::vector&lt;MatrixPortHandle&gt; mInputPorts2;
+ };
+ 
+ } // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-26 19:32:26 UTC (rev 798)
+@@ -0,0 +1,146 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;SimpleDirectModel.h&quot;
++
++#include &quot;Matrix.h&quot;
++#include &quot;AbstractModel.h&quot;
++#include &quot;ModelContext.h&quot;
++
++namespace OpenFDM {
++
++SimpleDirectModel::Context::Context(const SimpleDirectModel* model,
++                                    const InputValueVector&amp; inputValues,
++                                    NumericPortValue* outputValue) :
++  mModel(model),
++  mInputValues(inputValues),
++  mOutputValue(outputValue)
++{
++}
++
++SimpleDirectModel::Context::~Context()
++{
++}
++    
++const SimpleDirectModel&amp;
++SimpleDirectModel::Context::getNode() const
++{
++  return *mModel;
++}
++    
++void
++SimpleDirectModel::Context::initOutput(const /*Init*/Task&amp;)
++{
++  mModel-&gt;output(*this);
++}
++
++void
++SimpleDirectModel::Context::output(const Task&amp;)
++{
++  mModel-&gt;output(*this);
++}
++
++void
++SimpleDirectModel::Context::update(const DiscreteTask&amp;)
++{
++}
++
++void
++SimpleDirectModel::Context::derivative(const Task&amp;)
++{
++}
++
++BEGIN_OPENFDM_OBJECT_DEF(SimpleDirectModel, AbstractModel)
++  END_OPENFDM_OBJECT_DEF
++
++SimpleDirectModel::SimpleDirectModel(const std::string&amp; name) :
++  AbstractModel(name),
++  mOutputPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0), false))
++{
++}
++
++SimpleDirectModel::~SimpleDirectModel()
++{
++}
++
++ModelContext*
++SimpleDirectModel::newModelContext(PortValueList&amp; portValueList) const
++{
++  if (mInputPorts.empty()) {
++    Log(Initialization, Info)
++      &lt;&lt; &quot;No input ports in models with multiple inputs!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  
++  NumericPortValue* outputPortValue = portValueList.getPortValue(mOutputPort);
++  if (!outputPortValue) {
++    Log(Initialization, Warning)
++      &lt;&lt; &quot;Output port value not connected for model \&quot;&quot; &lt;&lt; getName()
++      &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  InputValueVector inputValues;
++  
++  /// FIXME, hmm, this can be made generically on the port infos directly??
++  // May be some 'Simple pointwise model' type that just allows equal
++  // numeric ports in size and type??
++  
++  // Look into all ports and get the best size match.
++  Size sz = size(outputPortValue-&gt;getValue());
++  for (unsigned i = 0; i &lt; mInputPorts.size(); ++i) {
++    NumericPortValue* npv = portValueList.getPortValue(mInputPorts[i]);
++    inputValues.push_back(npv);
++    Size sz2 = size(npv-&gt;getValue());
++    // If the ports size is undefined, use the size variabe here.
++    for (unsigned j = 0; j &lt; 2; ++j) {
++      if (sz(j) == 0) {
++        sz(j) = sz2(j);
++      } else {
++        if (sz(j) != sz2(j)) {
++          Log(Initialization, Info)
++            &lt;&lt; &quot;Port size &quot; &lt;&lt; j &lt;&lt; &quot; does not match for model \&quot;&quot;
++            &lt;&lt; getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; std::endl;
++          return 0;
++        }
++      }
++    }
++  }
++  
++  // Ok, success in checking output and input ports, set them all.
++  if (!portValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Info) &lt;&lt; &quot;Port sizes do not match!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  for (unsigned i = 0; i &lt; mInputPorts.size(); ++i) {
++    if (!portValueList.setOrCheckPortSize(mInputPorts[i], sz)) {
++      Log(Initialization, Info) &lt;&lt; &quot;Port sizes do not match!&quot; &lt;&lt; std::endl;
++      return 0;
++    }
++  }
++  
++  SharedPtr&lt;Context&gt; context;
++  context = new Context(this, inputValues, outputPortValue);
++  /// FIXME, this is for legacy lport value stuff ...
++  for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
++    PortValue* portValue = portValueList.getPortValue(i);
++    if (!portValue) {
++      Log(Model, Error) &lt;&lt; &quot;No port value given for model \&quot;&quot; &lt;&lt; getName()
++                        &lt;&lt; &quot;\&quot; and port \&quot;&quot; &lt;&lt; getPort(i)-&gt;getName()
++                        &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return 0;
++    }
++    context-&gt;setPortValue(*getPort(i), portValue);
++  }
++  
++  /// FIXME, should not need to do that either ...
++  if (!context-&gt;allocStates()) {
++    Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++    return 0;
++  }
++  
++  return context.release();
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-26 19:32:26 UTC (rev 798)
+@@ -0,0 +1,84 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_SimpleDirectModel_H
++#define OpenFDM_SimpleDirectModel_H
++
++#include &lt;string&gt;
++
++#include &quot;Matrix.h&quot;
++#include &quot;AbstractModel.h&quot;
++#include &quot;ModelContext.h&quot;
++
++namespace OpenFDM {
++
++class SimpleDirectModel : public AbstractModel {
++  OPENFDM_OBJECT(SimpleDirectModel, AbstractModel);
++public:
++  SimpleDirectModel(const std::string&amp; name);
++  virtual ~SimpleDirectModel();
++
++  unsigned getNumInputPorts() const
++  { return mInputPorts.size(); }
++
++  class Context;
++  virtual ModelContext* newModelContext(PortValueList&amp; portValueList) const;
++  virtual void output(Context&amp; context) const = 0;
++
++  typedef std::vector&lt;SharedPtr&lt;const NumericPortValue&gt; &gt; InputValueVector;
++  class Context : public ModelContext {
++  public:
++    Context(const SimpleDirectModel* model, const InputValueVector&amp; inputValues,
++            NumericPortValue* outputValue);
++    virtual ~Context();
++    
++    virtual const SimpleDirectModel&amp; getNode() const;
++    
++    virtual void initOutput(const /*Init*/Task&amp;);
++    virtual void output(const Task&amp;);
++    virtual void update(const DiscreteTask&amp;);
++    virtual void derivative(const Task&amp;);
++    
++    const Matrix&amp; getInputValue(unsigned i)
++    {
++      OpenFDMAssert(i &lt; mInputValues.size());
++      return mInputValues[i]-&gt;getValue();
++    }
++    Matrix&amp; getOutputValue()
++    { return mOutputValue-&gt;getValue(); }
++
++  private:
++    SharedPtr&lt;const SimpleDirectModel&gt; mModel;
++    InputValueVector mInputValues;
++    SharedPtr&lt;NumericPortValue&gt; mOutputValue;
++  };
++
++// protected:
++  PortId addInputPort(const std::string&amp; name)
++  {
++    mInputPorts.push_back(new InputPortInfo(this, name, Size(0, 0), true));
++    return PortId(mInputPorts.back());
++  }
++  void removeInputPort(const PortId&amp; portId)
++  {
++    InputPortVector::iterator i = mInputPorts.begin();
++    while (i != mInputPorts.end()) {
++      if (portId != PortId(*i)) {
++        ++i;
++        continue;
++      }
++      (*i)-&gt;clear();
++      i = mInputPorts.erase(i);
++    }
++  }
++
++private:
++  typedef std::vector&lt;SharedPtr&lt;InputPortInfo&gt; &gt; InputPortVector;
++  InputPortVector mInputPorts;
++  SharedPtr&lt;OutputPortInfo&gt; mOutputPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.cpp	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.cpp	2008-11-26 19:32:26 UTC (rev 798)
+@@ -11,124 +11,64 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Summer, Model)
+-  DEF_OPENFDM_PROPERTY(Unsigned, NumSummands, Serialized)
++BEGIN_OPENFDM_OBJECT_DEF(Summer, SimpleDirectModel)
++//   DEF_OPENFDM_PROPERTY(Unsigned, NumSummands, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Summer::Summer(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;+&quot;);
+-  setInputPortName(1, &quot;+&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Summer::getSum);
+ }
+ 
+ Summer::~Summer(void)
+ {
+ }
+ 
+-bool
+-Summer::init(void)
+-{
+-  // Make sure it is invalid if sizes do not match.
+-  mSum.resize(0, 0);
+-
+-  mPositiveSummandPorts.clear();
+-  mNegativeSummandPorts.clear();
+-  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
+-    MatrixPortHandle matrixPort = getInputPort(i)-&gt;toMatrixPortHandle();
+-    if (!matrixPort.isConnected()) {
+-      Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for Summer \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    if (getInputPortName(i) == &quot;-&quot;) {
+-      mNegativeSummandPorts.push_back(matrixPort);
+-    } else {
+-      mPositiveSummandPorts.push_back(matrixPort);
+-    }
+-
+-    Matrix a = matrixPort.getMatrixValue();
+-    if (i == 0) {
+-      mSum.resize(a);
+-    } else {
+-      if (size(mSum) != size(a)) {
+-        Log(Model, Error) &lt;&lt; &quot;Input port sizes for Summer \&quot;&quot;
+-                          &lt;&lt; getName() &lt;&lt; &quot;\&quot; do not match.&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-    }
+-  }
+-
+-  return Model::init();
+-}
+-
+ void
+-Summer::output(const TaskInfo&amp;)
++Summer::output(Context&amp; context) const
+ {
+-  mSum.clear();
+-
+-  std::vector&lt;MatrixPortHandle&gt;::iterator it = mNegativeSummandPorts.begin();
+-  while (it != mNegativeSummandPorts.end()) {
+-    mSum -= (*it).getMatrixValue();
+-    ++it;
+-  }
+-  it = mPositiveSummandPorts.begin();
+-  while (it != mPositiveSummandPorts.end()) {
+-    mSum += (*it).getMatrixValue();
+-    ++it;
+-  }
+-
+-  Log(Model,Debug3) &lt;&lt; &quot;Output of Summer \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+-                    &lt;&lt; mSum &lt;&lt; endl;
++  if (!getNumInputPorts())
++    return;
++  context.getOutputValue() = context.getInputValue(0);
++  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i)
++    context.getOutputValue() += context.getInputValue(i);
+ }
+ 
+-const Matrix&amp;
+-Summer::getSum(void) const
+-{
+-  return mSum;
+-}
++// unsigned
++// Summer::getNumSummands(void) const
++// {
++//   return getNumInputPorts();
++// }
+ 
+-unsigned
+-Summer::getNumSummands(void) const
+-{
+-  return getNumInputPorts();
+-}
++// void
++// Summer::setNumSummands(unsigned num)
++// {
++//   unsigned oldnum = getNumSummands();
++//   setNumInputPorts(num);
++//   for (; oldnum &lt; num; ++oldnum)
++//     setInputPortName(oldnum, &quot;+&quot;);
++// }
+ 
+-void
+-Summer::setNumSummands(unsigned num)
+-{
+-  unsigned oldnum = getNumSummands();
+-  setNumInputPorts(num);
+-  for (; oldnum &lt; num; ++oldnum)
+-    setInputPortName(oldnum, &quot;+&quot;);
+-}
++// void
++// Summer::setInputSign(unsigned num, Sign sign)
++// {
++//   if (getNumSummands() &lt;= num)
++//     return;
++//   if (sign == Minus)
++//     setInputPortName(num, &quot;-&quot;);
++//   else
++//     setInputPortName(num, &quot;+&quot;);
++// }
+ 
+-void
+-Summer::setInputSign(unsigned num, Sign sign)
+-{
+-  if (getNumSummands() &lt;= num)
+-    return;
+-  if (sign == Minus)
+-    setInputPortName(num, &quot;-&quot;);
+-  else
+-    setInputPortName(num, &quot;+&quot;);
+-}
++// Summer::Sign
++// Summer::getInputSign(unsigned num) const
++// {
++//   if (getNumSummands() &lt;= num)
++//     return Plus;
++//   if (getInputPortName(num) == &quot;-&quot;)
++//     return Minus;
++//   else
++//     return Plus;
++// }
+ 
+-Summer::Sign
+-Summer::getInputSign(unsigned num) const
+-{
+-  if (getNumSummands() &lt;= num)
+-    return Plus;
+-  if (getInputPortName(num) == &quot;-&quot;)
+-    return Minus;
+-  else
+-    return Plus;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.h	2008-11-25 20:00:02 UTC (rev 797)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Summer.h	2008-11-26 19:32:26 UTC (rev 798)
+@@ -6,34 +6,24 @@
+ #define OpenFDM_Summer_H
+ 
+ #include &lt;string&gt;
++#include &quot;SimpleDirectModel.h&quot;
+ 
+-#include &quot;Matrix.h&quot;
+-#include &quot;Model.h&quot;
+-
+ namespace OpenFDM {
+ 
+-class Summer : public Model {
+-  OPENFDM_OBJECT(Summer, Model);
++class Summer : public SimpleDirectModel {
++  OPENFDM_OBJECT(Summer, SimpleDirectModel);
+ public:
+   Summer(const std::string&amp; name);
+   virtual ~Summer(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const Matrix&amp; getSum(void) const;
++//   unsigned getNumSummands(void) const;
++//   void setNumSummands(unsigned num);
+ 
+-  unsigned getNumSummands(void) const;
+-  void setNumSummands(unsigned num);
+-
+-  enum Sign { Plus, Minus };
+-  void setInputSign(unsigned num, Sign sign);
+-  Sign getInputSign(unsigned num) const;
+-
+-private:
+-  Matrix mSum;
+-  std::vector&lt;MatrixPortHandle&gt; mPositiveSummandPorts;
+-  std::vector&lt;MatrixPortHandle&gt; mNegativeSummandPorts;
++//   enum Sign { Plus, Minus };
++//   void setInputSign(unsigned num, Sign sign);
++//   Sign getInputSign(unsigned num) const;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000765.html">[OpenFDM-svn] r797 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000767.html">[OpenFDM-svn] r799 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#766">[ date ]</a>
+              <a href="thread.html#766">[ thread ]</a>
+              <a href="subject.html#766">[ subject ]</a>
+              <a href="author.html#766">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

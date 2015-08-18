@@ -1,0 +1,688 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r479 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r479%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809151944.m8FJiH6l024040%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000450.html">
+   <LINK REL="Next"  HREF="000452.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r479 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r479%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809151944.m8FJiH6l024040%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r479 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 15 21:44:17 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000450.html">[OpenFDM-svn] r478 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000452.html">[OpenFDM-svn] r480 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#451">[ date ]</a>
+              <a href="thread.html#451">[ thread ]</a>
+              <a href="subject.html#451">[ subject ]</a>
+              <a href="author.html#451">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-15 21:44:16 +0200 (Mon, 15 Sep 2008)
+New Revision: 479
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Implement better concept for dependency analysis.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -13,12 +13,17 @@
+ class AcceptorPortInfo : public PortInfo {
+ public:
+   AcceptorPortInfo(Node* node, const std::string&amp; name) :
+-    PortInfo(node, name) {}
++    PortInfo(node, name)
++  { }
++  virtual ~AcceptorPortInfo() {}
+ 
+   virtual AcceptorPortInfo* toAcceptorPortInfo()
+   { return this; }
+   virtual const AcceptorPortInfo* toAcceptorPortInfo() const
+   { return this; }
++
++  virtual bool getDirectInput() const
++  { return false; }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-15 19:44:16 UTC (rev 479)
+@@ -21,7 +21,7 @@
+ 
+ Delay::Delay(const std::string&amp; name) :
+   Model(name),
+-  mInputPort(newMatrixInputPort(&quot;input&quot;)),
++  mInputPort(newMatrixInputPort(&quot;input&quot;, true)),
+   mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
+   mDelay(0)
+ {
+@@ -67,15 +67,6 @@
+   discreteState[*mMatrixStateInfo].rotate(portValues[mInputPort]);
+ }
+ 
+-bool
+-Delay::dependsOn(const PortId&amp; in, const PortId&amp; out) const
+-{
+-  if (mDelay != 0)
+-    return false;
+-  return in == getPortId(mInputPort.getPortIndex())
+-    &amp;&amp; out == getPortId(mOutputPort.getPortIndex());
+-}
+-
+ unsigned
+ Delay::getDelay(void) const
+ {
+@@ -86,6 +77,7 @@
+ Delay::setDelay(unsigned delay)
+ {
+   mDelay = delay;
++  mInputPort.setDirectInput(mDelay == 0);
+ }
+ 
+ const Matrix&amp;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -28,8 +28,6 @@
+                       ContinousStateValueVector&amp;,
+                       const PortValueList&amp; portValues) const;
+ 
+-  virtual bool dependsOn(const PortId&amp; in, const PortId&amp; out) const;
+-
+   /// The delay number of timeslices
+   unsigned getDelay(void) const;
+   void setDelay(unsigned delay);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-09-15 19:44:16 UTC (rev 479)
+@@ -21,7 +21,7 @@
+ 
+ Gain::Gain(const std::string&amp; name) :
+   Model(name),
+-  mInputPort(newMatrixInputPort(&quot;input&quot;)),
++  mInputPort(newMatrixInputPort(&quot;input&quot;, true)),
+   mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
+   mGain(1)
+ {
+@@ -46,16 +46,6 @@
+   portValues[mOutputPort] = mGain*portValues[mInputPort];
+ }
+ 
+-bool
+-Gain::dependsOn(const PortId&amp; in, const PortId&amp; out) const
+-{
+-  if (in != getPortId(mInputPort.getPortIndex()))
+-    return false;
+-  if (out != getPortId(mOutputPort.getPortIndex()))
+-    return false;
+-  return true;
+-}
+-
+ const real_type&amp;
+ Gain::getGain(void) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -21,7 +21,6 @@
+   virtual void output(const DiscreteStateValueVector&amp;,
+                       const ContinousStateValueVector&amp;,
+                       PortValueList&amp; portValues) const;
+-  virtual bool dependsOn(const PortId&amp; in, const PortId&amp; out) const;
+ 
+   const real_type&amp; getGain(void) const;
+   void setGain(const real_type&amp; gain);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-15 19:44:16 UTC (rev 479)
+@@ -15,9 +15,9 @@
+ 
+ Integrator::Integrator(const std::string&amp; name = std::string()) :
+   Model(name),
+-  mInputPort(newMatrixInputPort(&quot;input&quot;)),
++  mInputPort(newMatrixInputPort(&quot;input&quot;, false)),
+   mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
+-  mInitialValuePort(newMatrixInputPort(&quot;initialValue&quot;))
++  mInitialValuePort(newMatrixInputPort(&quot;initialValue&quot;, true))
+ {
+   mMatrixStateInfo = new MatrixStateInfo;
+   addContinousStateInfo(mMatrixStateInfo);
+@@ -69,13 +69,6 @@
+   deriv[*mMatrixStateInfo] = portValues[mInputPort];
+ }
+ 
+-bool
+-Integrator::dependsOn(const PortId&amp;, const PortId&amp;) const
+-{
+-  // FIXME, make the initial value port depend here ...
+-  return false;
+-}
+-
+ void
+ Integrator::setInitialValue(const Matrix&amp; initialValue)
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -24,8 +24,6 @@
+   virtual void output(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; continousState, PortValueList&amp; portValues) const;
+   virtual void derivative(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; state, const PortValueList&amp; portValues, ContinousStateValueVector&amp; deriv) const;
+ 
+-  virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const;
+-
+   void setInitialValue(const Matrix&amp; initialValue);
+   const Matrix&amp; getInitialValue() const;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -35,9 +35,6 @@
+   virtual void init(DiscreteStateValueVector&amp;, ContinousStateValueVector&amp;) const // = 0;
+   { }
+ 
+-  // for dependency analysis
+-  virtual bool dependsOn(const PortId&amp; in, const PortId&amp; out) const = 0;
+-
+   unsigned getNumContinousStateValues() const
+   { return mContinousStateInfoVector.size(); }
+   const ContinousStateInfo* getContinousStateInfo(unsigned index) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -13,8 +13,9 @@
+ 
+ class MatrixInputPort {
+ public:
+-  MatrixInputPort(Node* node, const std::string&amp; name, const Size&amp; size) :
+-    mPort(new NumericAcceptorPortInfo(node, name, size))
++  MatrixInputPort(Node* node, const std::string&amp; name,
++                  const Size&amp; size, bool directInput) :
++    mPort(new NumericAcceptorPortInfo(node, name, size, directInput))
+   {}
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
+@@ -25,6 +26,10 @@
+   }
+   unsigned getPortIndex() const
+   { return mPort-&gt;getIndex(); }
++  bool getDirectInput() const
++  { return mPort-&gt;getDirectInput(); }
++  void setDirectInput(bool directInput) const
++  { mPort-&gt;setDirectInput(directInput); }
+ private:
+   SharedPtr&lt;NumericAcceptorPortInfo&gt; mPort;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -50,14 +50,15 @@
+   newMatrixOutputPort(const std::string&amp; name, const Size&amp; size = Size(0, 0))
+   { return MatrixOutputPort(this, name, size); }
+   MatrixInputPort
+-  newMatrixInputPort(const std::string&amp; name, const Size&amp; size = Size(0, 0))
+-  { return MatrixInputPort(this, name, size); }
++  newMatrixInputPort(const std::string&amp; name, bool directInput,
++                     const Size&amp; size = Size(0, 0))
++  { return MatrixInputPort(this, name, size, directInput); }
+   RealOutputPort
+   newRealOutputPort(const std::string&amp; name)
+   { return RealOutputPort(this, name); }
+   RealInputPort
+-  newRealInputPort(const std::string&amp; name)
+-  { return RealInputPort(this, name); }
++  newRealInputPort(const std::string&amp; name, bool directInput)
++  { return RealInputPort(this, name, directInput); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NumericAcceptorPortInfo.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -12,13 +12,21 @@
+ 
+ class NumericAcceptorPortInfo : public AcceptorPortInfo {
+ public:
+-  NumericAcceptorPortInfo(Node* node, const std::string&amp; name, const Size&amp; size) :
++  NumericAcceptorPortInfo(Node* node, const std::string&amp; name,
++                          const Size&amp; size, bool directInput) :
+     AcceptorPortInfo(node, name),
+-    mSize(size)
++    mSize(size),
++    mDirectInput(directInput)
+   { }
+ 
++  virtual bool getDirectInput() const
++  { return mDirectInput; }
++  void setDirectInput(bool directInput)
++  { mDirectInput = directInput; }
++
+ private:
+   Size mSize;
++  bool mDirectInput;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-15 19:44:16 UTC (rev 479)
+@@ -20,7 +20,7 @@
+ 
+ Output::Output(const std::string&amp; name, Output::Callback* callback) :
+   Model(name),
+-  mInputPort(newRealInputPort(&quot;input&quot;)),
++  mInputPort(newRealInputPort(&quot;input&quot;, true)),
+   mCallback(callback),
+   mOutputGain(1)
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -28,10 +28,6 @@
+   virtual void output(const DiscreteStateValueVector&amp;,
+                       const ContinousStateValueVector&amp;,
+                       PortValueList&amp; portValues) const;
+-  // FIXME: dependsOn semantic is broken. May be some kind of
+-  // needPortInOutput in the port info???
+-  virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const
+-  { return true; }
+ 
+   Callback* getCallback(void) const;
+   void setCallback(Callback* callback);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -80,6 +80,12 @@
+   {
+     setPortValue(port.getPortIndex(), new NumericPortValue(size));
+   }
++  const PortValue* getPortValue(unsigned idx) const
++  {
++    if (mPortValueVector.size() &lt;= idx)
++      return 0;
++    return mPortValueVector[idx];
++  }
+ 
+ protected:
+   PortValueVector mPortValueVector;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h	2008-09-15 19:44:16 UTC (rev 479)
+@@ -13,8 +13,8 @@
+ 
+ class RealInputPort {
+ public:
+-  RealInputPort(Node* node, const std::string&amp; name) :
+-    mPort(new NumericAcceptorPortInfo(node, name, Size(1, 1)))
++  RealInputPort(Node* node, const std::string&amp; name, bool directInput) :
++    mPort(new NumericAcceptorPortInfo(node, name, Size(1, 1), directInput))
+   {}
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
+@@ -25,6 +25,10 @@
+   }
+   unsigned getPortIndex() const
+   { return mPort-&gt;getIndex(); }
++  bool getDirectInput() const
++  { return mPort-&gt;getDirectInput(); }
++  void setDirectInput(bool directInput) const
++  { mPort-&gt;setDirectInput(directInput); }
+ private:
+   SharedPtr&lt;NumericAcceptorPortInfo&gt; mPort;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-15 15:46:10 UTC (rev 478)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-15 19:44:16 UTC (rev 479)
+@@ -220,6 +220,36 @@
+ //                        mPortValueList,
+ //                        mContinousStateDerivative); }
+ 
++  // Return true if this leaf directly depends on one of leafInstance outputs
++  bool dependsOn(const ModelContext* modelContext) const
++  {
++    unsigned numPorts = mModel-&gt;getNumPorts();
++    for (unsigned i = 0; i &lt; numPorts; ++i) {
++      const AcceptorPortInfo* acceptorPortInfo;
++      acceptorPortInfo = mModel-&gt;getPort(i)-&gt;toAcceptorPortInfo();
++      if (!acceptorPortInfo)
++        continue;
++      if (!acceptorPortInfo-&gt;getDirectInput())
++        continue;
++      const PortValue* portValue = getPortValueList().getPortValue(i);
++      if (!portValue)
++        continue;
++      unsigned otherNumPorts = modelContext-&gt;mModel-&gt;getNumPorts();
++      for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++        if (!modelContext-&gt;mModel-&gt;getPort(j)-&gt;toProviderPortInfo())
++          continue;
++
++        const PortValue* otherPortValue;
++        otherPortValue = modelContext-&gt;getPortValueList().getPortValue(j);
++        if (portValue != otherPortValue)
++          continue;
++
++        return true;
++      }
++    }
++    return false;
++  }
++
+ private:
+   ModelContext();
+   ModelContext(const ModelContext&amp;);
+@@ -234,6 +264,10 @@
+     mModelContext(new ModelContext(model))
+   { }
+ 
++  // Return true if this leaf directly depends on one of leafInstance outputs
++  bool dependsOn(const ModelInstance* modelInstance) const
++  { return mModelContext-&gt;dependsOn(modelInstance-&gt;mModelContext); }
++
+ // protected: // FIXME
+   virtual ModelContext&amp; getNodeContext()
+   { return *mModelContext; }
+@@ -302,10 +336,11 @@
+ 
+   class PortData : public WeakReferenced {
+   public:
+-    PortData(PortDataList* portDataList) : mParentPortDataList(portDataList) { }
+-    virtual ~PortData() {}
+-    virtual LeafPortData* toLeafPortData()
+-    { return 0; }
++    PortData(PortDataList* portDataList) :
++      mParentPortDataList(portDataList)
++    { }
++    virtual ~PortData()
++    { }
+     virtual ProxyPortData* toProxyPortData()
+     { return 0; }
+     virtual AcceptorPortData* toAcceptorPortData()
+@@ -314,6 +349,9 @@
+     { return 0; }
+     virtual bool connect(PortData*) = 0;
+ 
++    virtual void print()
++    { }
++
+     SharedPtr&lt;PortDataList&gt; getParentPortDataList() const
+     { return mParentPortDataList.lock(); }
+ 
+@@ -339,18 +377,9 @@
+     { }
+     virtual ~LeafPortData() {}
+ 
+-    virtual LeafPortData* toLeafPortData()
+-    { return this; }
+-    
+     const SharedPtr&lt;const PortInfo&gt;&amp; getPortInfo() const
+     { return mPortInfo; }
+ 
+-    virtual bool isConnected(LeafPortData*)
+-    { return false; }
+-
+-    virtual void print()
+-    { }
+-
+   private:
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+   };
+@@ -377,16 +406,6 @@
+       return acceptorPortData-&gt;connectToProvider(this);
+     }
+ 
+-    virtual bool isConnected(LeafPortData* portData)
+-    {
+-      if (!portData)
+-        return false;
+-      AcceptorPortData* acceptorPortData = portData-&gt;toAcceptorPortData();
+-      if (!acceptorPortData)
+-        return false;
+-      return acceptorPortData-&gt;isConnectedToProvider(this);
+-    }
+-
+     virtual void print()
+     {
+       std::cout &lt;&lt; &quot;  Provider Port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+@@ -440,23 +459,6 @@
+       return true;
+     }
+ 
+-    virtual bool isConnected(LeafPortData* portData)
+-    {
+-      if (!portData)
+-        return false;
+-      ProviderPortData* providerPortData = portData-&gt;toProviderPortData();
+-      if (!providerPortData)
+-        return false;
+-      return isConnectedToProvider(providerPortData);
+-    }
+-
+-    bool isConnectedToProvider(ProviderPortData* providerPortData)
+-    {
+-      if (!providerPortData)
+-        return false;
+-      return providerPortData == _providerPortData.lock();
+-    }
+-
+     virtual void print()
+     {
+       std::cout &lt;&lt; &quot;  Acceptor Port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+@@ -540,8 +542,7 @@
+     {
+       ProxyPortData* proxyPortData;
+       proxyPortData = new ProxyPortData(this, portData);
+-      // FIXME
+-//       mPortDataVector.push_back(proxyPortData);
++      mPortDataVector.push_back(proxyPortData);
+       return proxyPortData;
+     }
+     
+@@ -557,6 +558,7 @@
+     
+     bool allocAndConnectProviderPortValues()
+     {
++      // FIXME: move that into the PortData stuff
+       for (unsigned i = 0; i &lt; getNode().getNumPorts(); ++i) {
+         const ProviderPortInfo* providerPortInfo;
+         providerPortInfo = getNode().getPort(i)-&gt;toProviderPortInfo();
+@@ -596,32 +598,8 @@
+     void setPortValue(unsigned i, PortValue* portValue)
+     { mNodeInstance-&gt;getPortValueList().setPortValue(i, portValue); }
+ 
+-    // Return true if this leaf directly depends on one of leafInstance outputs
+-    bool dependsOn(PortDataList* portDataList)
+-    {
+-      for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
+-        for (unsigned j = 0; j &lt; portDataList-&gt;mPortDataVector.size(); ++j) {
+-          if (!mPortDataVector[i]-&gt;isConnected(portDataList-&gt;mPortDataVector[j]))
+-            continue;
+-          PortId inPortId = getNode().getPortId(i);
+-          
+-          // FIXME, may be other concept:
+-          // make Model return a list of 'direct feedthrough ports'?
+-          for (unsigned k = 0; k &lt; mPortDataVector.size(); ++k) {
+-            PortId outPortId = getNode().getPortId(k);
+-            // FIXME ugly
+-            const Node* node = &amp;(mNodeInstance-&gt;getNode());
+-            const LeafNode* leafNode = dynamic_cast&lt;const LeafNode*&gt;(node);
+-            if (leafNode &amp;&amp; leafNode-&gt;dependsOn(inPortId, outPortId))
+-              return true;
+-          }
+-        }
+-      }
+-      return false;
+-    }
+-
+     /// The vector of per port connect information
+-    typedef std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt; PortDataVector;
++    typedef std::vector&lt;SharedPtr&lt;PortData&gt; &gt; PortDataVector;
+     PortDataVector mPortDataVector;
+     
+     /// The NodeInstance having some way to reference the
+@@ -816,9 +794,11 @@
+   // The Models list, worthwhile for sorting
+   typedef std::list&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelInstanceList;
+   ModelInstanceList _modelInstanceList;
++  // The mechanical system list, also for sorting
+   typedef std::list&lt;SharedPtr&lt;MechanicInstance&gt; &gt; MechanicInstanceList;
+   MechanicInstanceList _mechanicInstanceList;
+-//   typedef std::list&lt;SharedPtr&lt;RootJointInstance&gt; &gt; RootJointInstanceList;
++  // The list of root nodes in the mechanicla system. Will be a starting point
++  // for sorting the tree of mechanical models downwards
+   typedef std::list&lt;SharedPtr&lt;MechanicInstance&gt; &gt; RootJointInstanceList;
+   RootJointInstanceList _rootJointInstanceList;
+ 
+@@ -847,11 +827,7 @@
+            i != sortedModelInstanceList.end();
+            ++i) {
+ 
+-        PortDataHelper::PortDataList* portDataListMI
+-          = _portDataListMap[modelInstance];
+-        PortDataHelper::PortDataList* portDataListI = _portDataListMap[*i];
+-
+-        if (!portDataListI-&gt;dependsOn(portDataListMI))
++        if (!(*i)-&gt;dependsOn(modelInstance))
+           continue;
+         sortedModelInstanceList.insert(i, modelInstance);
+         break;
+@@ -865,6 +841,21 @@
+   typedef std::vector&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelContextList;
+ 
+   bool
++  allocPortData()
++  {
++    PortDataListMap::const_iterator i;
++    for (i = _portDataListMap.begin(); i != _portDataListMap.end(); ++i) {
++      PortDataHelper::PortDataList* portDataList = i-&gt;second;
++      if (!portDataList)
++        continue;
++      if (!portDataList-&gt;allocAndConnectProviderPortValues()) {
++        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
++  }
++
++  bool
+   getModelContextList(ModelContextList&amp; modelContexts)
+   {
+     modelContexts.resize(0);
+@@ -877,16 +868,6 @@
+ 
+     ModelContextList::const_iterator j;
+     for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+-      PortDataHelper::PortDataList* portDataList = _portDataListMap[*j];
+-      if (!portDataList)
+-        continue;
+-      if (!portDataList-&gt;allocAndConnectProviderPortValues()) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-    }
+-
+-    for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+       if (!(*j)-&gt;getNodeContext().alloc()) {
+         Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
+         return false;
+@@ -977,6 +958,8 @@
+   LeafInstanceCollector nodeInstanceCollector;
+   topGroup-&gt;accept(nodeInstanceCollector);
+   
++  nodeInstanceCollector.allocPortData();
++
+   nodeInstanceCollector.sortModelList();
+ 
+   nodeInstanceCollector.print();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000450.html">[OpenFDM-svn] r478 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000452.html">[OpenFDM-svn] r480 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#451">[ date ]</a>
+              <a href="thread.html#451">[ thread ]</a>
+              <a href="subject.html#451">[ subject ]</a>
+              <a href="author.html#451">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

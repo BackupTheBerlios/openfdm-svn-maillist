@@ -1,0 +1,143 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r263 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r263%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200603111924.k2BJOO8w015454%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000241.html">
+   <LINK REL="Next"  HREF="000243.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r263 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r263%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200603111924.k2BJOO8w015454%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r263 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Mar 11 20:24:24 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000241.html">[OpenFDM-svn] r262 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000243.html">[OpenFDM-svn] r264 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#242">[ date ]</a>
+              <a href="thread.html#242">[ thread ]</a>
+              <a href="subject.html#242">[ subject ]</a>
+              <a href="author.html#242">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-03-11 20:24:15 +0100 (Sat, 11 Mar 2006)
+New Revision: 263
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/CartesianActuatorFrame.h
+Log:
+Simplyfy the actuator equations
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/CartesianActuatorFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CartesianActuatorFrame.h	2006-03-11 19:23:15 UTC (rev 262)
++++ trunk/OpenFDM/src/OpenFDM/CartesianActuatorFrame.h	2006-03-11 19:24:15 UTC (rev 263)
+@@ -26,9 +26,7 @@
+     Frame(name),
+ //     mJointMatrix(Matrix6N::zeros()), /// ??? ... see LinAlg checkout ...
+     mOutboardInertia(SpatialInertia::zeros()),
+-    mOutboardForce(Vector6::zeros()),
+-    mPAlpha(Vector6::zeros()),
+-    mJointForce(VectorN::zeros()),
++    mJointAccel(VectorN::zeros()),
+     mArticulationDirty(true),
+     mJointVelDotDirty(true),
+     mSpVelDotDirty(true),
+@@ -64,8 +62,8 @@
+                            &lt;&lt; &quot;\&quot;: Fix your model!&quot; &lt;&lt; endl;
+         mJointVelDot.clear();
+       } else {
+-        Vector6 tmp = mOutboardInertia*getParentSpAccel() + mPAlpha;
+-        mJointVelDot = hIh.solve(mJointForce - trans(mJointMatrix)*tmp);
++        Vector6 tmp = mOutboardInertia*getParentSpAccel();
++        mJointVelDot = mJointAccel - hIh.solve(trans(mJointMatrix)*tmp);
+       }
+       mJointVelDotDirty = false;
+     }
+@@ -80,7 +78,7 @@
+     // Store the outboard values since we will need them later in velocity
+     // derivative computations
+     mOutboardInertia = outI;
+-    mOutboardForce = outF;
++    mJointAccel = jointAccel;
+     // Make sure we have the correct internal state
+     mJointVelDotDirty = true;
+     mArticulationDirty = false;
+@@ -89,11 +87,7 @@
+     Matrix6N Ih = outI*mJointMatrix;
+     hIh = trans(mJointMatrix)*Ih;
+ 
+-    mPAlpha = mOutboardForce + mOutboardInertia*getHdot();
+-
+-    mJointForce = trans(mJointMatrix)*(Ih*jointAccel + mPAlpha);
+-
+-    artF = mPAlpha;
++    artF = outF + mOutboardInertia*getHdot();
+     artI = outI;
+ 
+     if (hIh.singular()) {
+@@ -104,7 +98,7 @@
+     }
+     
+     // Project away the directions handled with this current joint
+-    artF -= Ih*hIh.solve(trans(mJointMatrix)*mPAlpha - mJointForce);
++    artF += Ih*mJointAccel;
+     artI -= SpatialInertia(Ih*hIh.solve(trans(Ih)));
+ 
+     return true;
+@@ -142,12 +136,8 @@
+ 
+   /// The articulated intertia of the outboard frame, 
+   SpatialInertia mOutboardInertia;
+-  /// The articulated force of the outboard frame, 
+-  Vector6 mOutboardForce;
+   /// The joint internal force in joint generalized coordinates
+-  VectorN mJointForce;
+-  /// Some intermediate value we will need later
+-  Vector6 mPAlpha;
++  VectorN mJointAccel;
+   /// The decomposition of the inertia matrix projected to joint coordinates
+   MatrixFactorsNN hIh;
+   /// This is true if the state has changed but the articulated intertia and
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000241.html">[OpenFDM-svn] r262 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000243.html">[OpenFDM-svn] r264 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#242">[ date ]</a>
+              <a href="thread.html#242">[ thread ]</a>
+              <a href="subject.html#242">[ subject ]</a>
+              <a href="author.html#242">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

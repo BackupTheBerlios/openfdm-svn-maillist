@@ -1,0 +1,190 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r277 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r277%20-%20trunk/flightgear&In-Reply-To=%3C200605271242.k4RCgG3j013082%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000254.html">
+   <LINK REL="Next"  HREF="000256.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r277 - trunk/flightgear</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r277%20-%20trunk/flightgear&In-Reply-To=%3C200605271242.k4RCgG3j013082%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r277 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Sat May 27 14:42:16 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000254.html">[OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000256.html">[OpenFDM-svn] r278 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#255">[ date ]</a>
+              <a href="thread.html#255">[ thread ]</a>
+              <a href="subject.html#255">[ subject ]</a>
+              <a href="author.html#255">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-05-27 14:42:03 +0200 (Sat, 27 May 2006)
+New Revision: 277
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Other part of the port connectoin rework
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-05-27 12:41:29 UTC (rev 276)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-05-27 12:42:03 UTC (rev 277)
+@@ -10,7 +10,6 @@
+ #include &lt;Main/globals.hxx&gt;
+ #include &lt;Main/fg_props.hxx&gt;
+ 
+-#include &lt;JSBSim/LegacyJSBSimReader.h&gt;
+ #include &lt;JSBSim/JSBSimReader.h&gt;
+ #include &lt;OpenFDM/Units.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+@@ -300,33 +299,24 @@
+   reader.addAircraftPath(aircraftDir);
+   reader.addEnginePath(engineDir);
+   reader.loadAircraft(aircraftFile);
+-  if (!reader.getErrorState()) {
+-    mData-&gt;vehicle = reader.getVehicle();
+-  } else {
+-    // Try to read JSBSim legacy files.
+-    LegacyJSBSimReader legReader;
+-    legReader.addAircraftPath(aircraftDir);
+-    legReader.addEnginePath(engineDir);
+-    legReader.loadAircraft(aircraftFile);
+-    if (legReader.getErrorState()) {
+-      SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() cannot read aircraft!&quot;);
+-
+-      SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() Error messages from JSBSim reader:&quot;);
+-      ReaderWriter::StringList errors = reader.getErrors();
+-      ReaderWriter::StringList::const_iterator it;
+-      for (it = errors.begin(); it != errors.end(); ++it) {
+-        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+-      }
+-
+-      SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() Error messages from legacy JSBSim reader:&quot;);
+-      errors = legReader.getErrors();
+-      for (it = errors.begin(); it != errors.end(); ++it) {
+-        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+-      }
+-      return;
++  if (reader.getErrorState()) {
++    SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() cannot read aircraft!&quot;);
++    
++    SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() Error messages from JSBSim reader:&quot;);
++    ReaderWriter::StringList errors = reader.getErrors();
++    ReaderWriter::StringList::const_iterator it;
++    for (it = errors.begin(); it != errors.end(); ++it) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+     }
+-    mData-&gt;vehicle = legReader.getVehicle();
++    
++    SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() Error messages from legacy JSBSim reader:&quot;);
++    errors = reader.getErrors();
++    for (it = errors.begin(); it != errors.end(); ++it) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++    }
++    return;
+   }
++  mData-&gt;vehicle = reader.getVehicle();
+ 
+   Vehicle* vehicle = mData-&gt;vehicle;
+   mData-&gt;ground = new FGGround(this);
+@@ -338,7 +328,10 @@
+   common_init();
+ 
+   // Hmm, twice ??
+-  vehicle-&gt;init();
++  if (!vehicle-&gt;init()) {
++    mData-&gt;vehicle = 0;
++    return;
++  }
+ 
+   MobileRootJoint* mobileRootJoint = vehicle-&gt;getMobileRootJoint();
+   // Check the position
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2006-05-27 12:41:29 UTC (rev 276)
++++ trunk/flightgear/FGPropertyAdapter.h	2006-05-27 12:42:03 UTC (rev 277)
+@@ -224,7 +224,7 @@
+ class FGRealPortReflector :
+     public SGRawValue&lt;double&gt; {
+ public:
+-  FGRealPortReflector(Port* port, unsigned index = 1u) :
++  FGRealPortReflector(NumericPortProvider* port, unsigned index = 1u) :
+     mPort(port), mIndex(index)
+   {}
+ 
+@@ -237,15 +237,15 @@
+     if (!mPort)
+       return 0;
+     if (mIndex == 1) {
+-      const Port* port = mPort;
+-      RealPortHandle realPortHandle = const_cast&lt;Port*&gt;(port)-&gt;toRealPortHandle();
++      NumericPortProvider* port = mPort;
++      RealPortHandle realPortHandle = port-&gt;getPortInterface()-&gt;toRealPortInterface();
+       if (realPortHandle.isConnected())
+         return realPortHandle.getRealValue();
+       else
+         return 0;
+     } else {
+-      const Port* port = mPort;
+-      MatrixPortHandle matrixPortHandle = const_cast&lt;Port*&gt;(port)-&gt;toMatrixPortHandle();
++      NumericPortProvider* port = mPort;
++      MatrixPortHandle matrixPortHandle = port-&gt;getPortInterface()-&gt;toMatrixPortInterface();
+       if (matrixPortHandle.isConnected()) {
+         Matrix m = matrixPortHandle.getMatrixValue();
+         unsigned r = mIndex % rows(m) + 1;
+@@ -265,7 +265,7 @@
+ 
+ private:
+   unsigned mIndex;
+-  WeakPtr&lt;Port&gt; mPort;
++  WeakPtr&lt;NumericPortProvider&gt; mPort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000254.html">[OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000256.html">[OpenFDM-svn] r278 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#255">[ date ]</a>
+              <a href="thread.html#255">[ thread ]</a>
+              <a href="subject.html#255">[ subject ]</a>
+              <a href="author.html#255">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

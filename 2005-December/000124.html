@@ -1,0 +1,995 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r140 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r140%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512291443.jBTEhkdp029226%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000123.html">
+   <LINK REL="Next"  HREF="000125.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r140 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r140%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512291443.jBTEhkdp029226%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r140 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Dec 29 15:43:46 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000123.html">[OpenFDM-svn] r139 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000125.html">[OpenFDM-svn] r141 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#124">[ date ]</a>
+              <a href="thread.html#124">[ thread ]</a>
+              <a href="subject.html#124">[ subject ]</a>
+              <a href="author.html#124">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-29 15:43:32 +0100 (Thu, 29 Dec 2005)
+New Revision: 140
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/StateStream.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.h
+Log:
+Replace the state set/get methods with a more
+compact class approach.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -79,25 +79,15 @@
+ }
+ 
+ void
+-DiscreteIntegrator::setDiscreteState(const Vector&amp; state, unsigned offset)
++DiscreteIntegrator::setDiscreteState(const StateStream&amp; state)
+ {
+-  // FIXME reshape ...
+-  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
+-    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
+-      mIntegralState(i, j) = state(offset + i + (j-1)*rows(mIntegralState));
+-    }
+-  }
++  state.readSubState(mIntegralState);
+ }
+ 
+ void
+-DiscreteIntegrator::getDiscreteState(Vector&amp; state, unsigned offset) const
++DiscreteIntegrator::getDiscreteState(StateStream&amp; state) const
+ {
+-  // FIXME reshape ...
+-  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
+-    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
+-      state(offset + i + (j-1)*rows(mIntegralState)) = mIntegralState(i, j);
+-    }
+-  }
++  state.writeSubState(mIntegralState);
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -20,8 +20,8 @@
+   virtual void output(const TaskInfo&amp;);
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+-  virtual void setDiscreteState(const Vector&amp; state, unsigned offset);
+-  virtual void getDiscreteState(Vector&amp; state, unsigned offset) const;
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
+ 
+   const Matrix&amp; getInitialValue(void) const;
+   void setInitialValue(const Matrix&amp; value);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -54,29 +54,19 @@
+ }
+ 
+ void
+-Integrator::setState(const Vector&amp; state, unsigned offset)
++Integrator::setState(const StateStream&amp; state)
+ {
+-  // FIXME reshape ...
+-  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
+-    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
+-      mIntegralState(i, j) = state(offset + i + (j-1)*rows(mIntegralState));
+-    }
+-  }
++  state.readSubState(mIntegralState);
+ }
+ 
+ void
+-Integrator::getState(Vector&amp; state, unsigned offset) const
++Integrator::getState(StateStream&amp; state) const
+ {
+-  // FIXME reshape ...
+-  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
+-    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
+-      state(offset + i + (j-1)*rows(mIntegralState)) = mIntegralState(i, j);
+-    }
+-  }
++  state.writeSubState(mIntegralState);
+ }
+ 
+ void
+-Integrator::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
++Integrator::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+ 
+@@ -85,12 +75,7 @@
+   const Matrix&amp; input = mh.getMatrixValue();
+   OpenFDMAssert(size(input) == size(mIntegralState));
+ 
+-  // FIXME reshape ...
+-  for (unsigned j = 1; j &lt;= cols(input); ++j) {
+-    for (unsigned i = 1; i &lt;= rows(input); ++i) {
+-      stateDeriv(offset + i + (j-1)*rows(input)) = input(i, j);
+-    }
+-  }
++  stateDeriv.writeSubState(input);
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -19,9 +19,9 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+   const Matrix&amp; getInitialValue(void) const;
+   void setInitialValue(const Matrix&amp; value);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-29 14:43:32 UTC (rev 140)
+@@ -114,6 +114,7 @@
+   Sensor.h \
+   SimpleContact.h \
+   SimpleGear.h \
++  StateStream.h \
+   Summer.h \
+   System.h \
+   Table.h \
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -125,40 +125,29 @@
+ }
+ 
+ void
+-MobileRootJoint::setState(const Vector&amp; state, unsigned offset)
++MobileRootJoint::setState(const StateStream&amp; state)
+ {
+-  mFrame-&gt;setOrientation(Vector4(state(offset+1), state(offset+2),
+-                                 state(offset+3), state(offset+4)));
+-  mFrame-&gt;setPosition(Vector3(state(offset+5), state(offset+6), state(offset+7)));
+-  mFrame-&gt;setRelVel(Vector6(state(offset+8), state(offset+9), state(offset+10),
+-                            state(offset+11), state(offset+12), state(offset+13)));
++  Quaternion q;
++  state.readSubState(q);
++  mFrame-&gt;setOrientation(q);
++  Vector3 p;
++  state.readSubState(p);
++  mFrame-&gt;setPosition(p);
++  Vector6 v;
++  state.readSubState(v);
++  mFrame-&gt;setRelVel(v);
+ }
+ 
+ void
+-MobileRootJoint::getState(Vector&amp; state, unsigned offset) const
++MobileRootJoint::getState(StateStream&amp; state) const
+ {
+-  Quaternion q = mFrame-&gt;getOrientation();
+-  state(offset+1) = q(1);
+-  state(offset+2) = q(2);
+-  state(offset+3) = q(3);
+-  state(offset+4) = q(4);
+-  
+-  Vector3 p = mFrame-&gt;getPosition();
+-  state(offset+5) = p(1);
+-  state(offset+6) = p(2);
+-  state(offset+7) = p(3);
+-  
+-  Vector6 v = mFrame-&gt;getRelVel();
+-  state(offset+8) = v(1);
+-  state(offset+9) = v(2);
+-  state(offset+10) = v(3);
+-  state(offset+11) = v(4);
+-  state(offset+12) = v(5);
+-  state(offset+13) = v(6);
++  state.writeSubState(mFrame-&gt;getOrientation());
++  state.writeSubState(mFrame-&gt;getPosition());
++  state.writeSubState(mFrame-&gt;getRelVel());
+ }
+ 
+ void
+-MobileRootJoint::getStateDeriv(Vector&amp; state, unsigned offset)
++MobileRootJoint::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+   Quaternion q = mFrame-&gt;getOrientation();
+   Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
+@@ -169,22 +158,9 @@
+   // That is if |q| &lt; 1 add a little radial component outward,
+   // if |q| &gt; 1 add a little radial component inward
+   Vector4 qderiv = derivative(q, angVel) + 0.1*(normalize(q) - q);
+-  state(offset+1) = qderiv(1);
+-  state(offset+2) = qderiv(2);
+-  state(offset+3) = qderiv(3);
+-  state(offset+4) = qderiv(4);
+-  
+-  state(offset+5) = vel(1);
+-  state(offset+6) = vel(2);
+-  state(offset+7) = vel(3);
+-  
+-  Vector6 accel = mFrame-&gt;getRelVelDot();
+-  state(offset+8)  = accel(1);
+-  state(offset+9)  = accel(2);
+-  state(offset+10) = accel(3);
+-  state(offset+11) = accel(4);
+-  state(offset+12) = accel(5);
+-  state(offset+13) = accel(6);
++  stateDeriv.writeSubState(qderiv);
++  stateDeriv.writeSubState(vel);
++  stateDeriv.writeSubState(mFrame-&gt;getRelVelDot());
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -52,13 +52,13 @@
+ 
+   /** Plugin function for the state propagation.
+    */
+-  virtual void setState(const Vector&amp; state, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
+   /** Plugin function for the state propagation.
+    */
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
++  virtual void getState(StateStream&amp; state) const;
+   /** Plugin function for the state propagation.
+    */
+-  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
++  virtual void getStateDeriv(StateStream&amp; state);
+ 
+   /// The commonly used gravity model from the environment class
+   /// It is initialized at the init() call
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -90,27 +90,27 @@
+ }
+ 
+ void
+-Model::setState(const Vector&amp; state, unsigned offset)
++Model::setState(const StateStream&amp; state)
+ {
+ }
+ 
+ void
+-Model::getState(Vector&amp; state, unsigned offset) const
++Model::getState(StateStream&amp; state) const
+ {
+ }
+ 
+ void
+-Model::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
++Model::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+ }
+ 
+ void
+-Model::setDiscreteState(const Vector&amp; state, unsigned offset)
++Model::setDiscreteState(const StateStream&amp; state)
+ {
+ }
+ 
+ void
+-Model::getDiscreteState(Vector&amp; state, unsigned offset) const
++Model::getDiscreteState(StateStream&amp; state) const
+ {
+ }
+ 
+@@ -118,13 +118,17 @@
+ Model::evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+ {
+   /// FIXME Hmm, may be different ...
+-  setState(v, 0);
++  StateStream stateStream(v);
++  setState(v);
++
+   TaskInfo taskInfo;
+   taskInfo.setTime(t);
+   taskInfo.addSampleTime(SampleTime::Continous);
+   output(taskInfo);
+-  out.resize(getNumContinousStates());
+-  getStateDeriv(out, 0);
++
++  stateStream.reset();
++  getStateDeriv(stateStream);
++  out = stateStream.getState();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -17,6 +17,7 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;SampleTime.h&quot;
+ #include &quot;TaskInfo.h&quot;
++#include &quot;StateStream.h&quot;
+ #include &quot;Port.h&quot;
+ 
+ namespace OpenFDM {
+@@ -62,12 +63,12 @@
+   /// Called whenever discrete states need to be updated.
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+-  virtual void setDiscreteState(const Vector&amp; state, unsigned offset);
+-  virtual void getDiscreteState(Vector&amp; state, unsigned offset) const;
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
+ 
+   /// FIXME Hmm, may be different ...
+   /// May move into System ...
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -235,82 +235,57 @@
+ }
+ 
+ void
+-ModelGroup::setState(const Vector&amp; state, unsigned offset)
++ModelGroup::setState(const StateStream&amp; state)
+ {
+-  OpenFDMAssert(offset + getNumContinousStates() &lt;= rows(state));
+-
+   ModelList::iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+     unsigned nStates = (*it)-&gt;getNumContinousStates();
+-    if (0 &lt; nStates) {
+-      OpenFDMAssert(offset + nStates &lt;= rows(state));
+-      (*it)-&gt;setState(state, offset);
+-      offset += nStates;
+-    }
++    if (0 &lt; nStates)
++      (*it)-&gt;setState(state);
+   }
+ }
+ 
+ void
+-ModelGroup::getState(Vector&amp; state, unsigned offset) const
++ModelGroup::getState(StateStream&amp; state) const
+ {
+-  OpenFDMAssert(offset + getNumContinousStates() &lt;= rows(state));
+-
+   ModelList::const_iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+     unsigned nStates = (*it)-&gt;getNumContinousStates();
+-    if (0 &lt; nStates) {
+-      OpenFDMAssert(offset + nStates &lt;= rows(state));
+-      (*it)-&gt;getState(state, offset);
+-      offset += nStates;
+-    }
++    if (0 &lt; nStates)
++      (*it)-&gt;getState(state);
+   }
+ }
+ 
+ void
+-ModelGroup::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
++ModelGroup::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  OpenFDMAssert(offset + getNumContinousStates() &lt;= rows(stateDeriv));
+-
+   ModelList::iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+     unsigned nStates = (*it)-&gt;getNumContinousStates();
+-    if (0 &lt; nStates) {
+-      OpenFDMAssert(offset + nStates &lt;= rows(stateDeriv));
+-      (*it)-&gt;getStateDeriv(stateDeriv, offset);
+-      offset += nStates;
+-    }
++    if (0 &lt; nStates)
++      (*it)-&gt;getStateDeriv(stateDeriv);
+   }
+ }
+ 
+ void
+-ModelGroup::setDiscreteState(const Vector&amp; state, unsigned offset)
++ModelGroup::setDiscreteState(const StateStream&amp; state)
+ {
+-  OpenFDMAssert(offset + getNumDiscreteStates() &lt;= rows(state));
+-
+   ModelList::iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+     unsigned nStates = (*it)-&gt;getNumDiscreteStates();
+-    if (0 &lt; nStates) {
+-      OpenFDMAssert(offset + nStates &lt;= rows(state));
+-      (*it)-&gt;setDiscreteState(state, offset);
+-      offset += nStates;
+-    }
++    if (0 &lt; nStates)
++      (*it)-&gt;setDiscreteState(state);
+   }
+ }
+ 
+ void
+-ModelGroup::getDiscreteState(Vector&amp; state, unsigned offset) const
++ModelGroup::getDiscreteState(StateStream&amp; state) const
+ {
+-  OpenFDMAssert(offset + getNumDiscreteStates() &lt;= rows(state));
+-
+   ModelList::const_iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+     unsigned nStates = (*it)-&gt;getNumDiscreteStates();
+-    if (0 &lt; nStates) {
+-      OpenFDMAssert(offset + nStates &lt;= rows(state));
+-      (*it)-&gt;getDiscreteState(state, offset);
+-      offset += nStates;
+-    }
++    if (0 &lt; nStates)
++      (*it)-&gt;getDiscreteState(state);
+   }
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -54,12 +54,12 @@
+   /// Called whenever discrete states need to be updated.
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+-  virtual void setDiscreteState(const Vector&amp; state, unsigned offset);
+-  virtual void getDiscreteState(Vector&amp; state, unsigned offset) const;
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
+ 
+   /// make them public
+   using Model::setNumInputPorts;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -115,24 +115,27 @@
+ }
+ 
+ void
+-PrismaticJoint::setState(const Vector&amp; state, unsigned offset)
++PrismaticJoint::setState(const StateStream&amp; state)
+ {
+-  mPrismaticJointFrame-&gt;setJointPos(state(offset+1));
+-  mPrismaticJointFrame-&gt;setJointVel(state(offset+2));
++  CartesianJointFrame&lt;1&gt;::VectorN v;
++  state.readSubState(v);
++  mPrismaticJointFrame-&gt;setJointPos(v(1));
++  state.readSubState(v);
++  mPrismaticJointFrame-&gt;setJointVel(v(1));
+ }
+ 
+ void
+-PrismaticJoint::getState(Vector&amp; state, unsigned offset) const
++PrismaticJoint::getState(StateStream&amp; state) const
+ {
+-  state(offset+1) = mPrismaticJointFrame-&gt;getJointPos();
+-  state(offset+2) = mPrismaticJointFrame-&gt;getJointVel();
++  state.writeSubState(mPrismaticJointFrame-&gt;getJointPos());
++  state.writeSubState(mPrismaticJointFrame-&gt;getJointVel());
+ }
+ 
+ void
+-PrismaticJoint::getStateDeriv(Vector&amp; state, unsigned offset)
++PrismaticJoint::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  state(offset+1) = mPrismaticJointFrame-&gt;getJointVel();
+-  state(offset+2) = mPrismaticJointFrame-&gt;getJointVelDot()(1);
++  stateDeriv.writeSubState(mPrismaticJointFrame-&gt;getJointVel());
++  stateDeriv.writeSubState(mPrismaticJointFrame-&gt;getJointVelDot());
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -85,9 +85,9 @@
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+   /** The direct joint interaction force
+    */
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -128,24 +128,27 @@
+ }
+ 
+ void
+-RevoluteActuator::setState(const Vector&amp; state, unsigned offset)
++RevoluteActuator::setState(const StateStream&amp; state)
+ {
+-  mRevoluteActuatorFrame-&gt;setJointPos(state(offset+1));
+-  mRevoluteActuatorFrame-&gt;setJointVel(state(offset+2));
++  CartesianActuatorFrame&lt;1&gt;::VectorN v;
++  state.readSubState(v);
++  mRevoluteActuatorFrame-&gt;setJointPos(v(1));
++  state.readSubState(v);
++  mRevoluteActuatorFrame-&gt;setJointVel(v(1));
+ }
+ 
+ void
+-RevoluteActuator::getState(Vector&amp; state, unsigned offset) const
++RevoluteActuator::getState(StateStream&amp; state) const
+ {
+-  state(offset+1) = mRevoluteActuatorFrame-&gt;getJointPos();
+-  state(offset+2) = mRevoluteActuatorFrame-&gt;getJointVel();
++  state.writeSubState(mRevoluteActuatorFrame-&gt;getJointPos());
++  state.writeSubState(mRevoluteActuatorFrame-&gt;getJointVel());
+ }
+ 
+ void
+-RevoluteActuator::getStateDeriv(Vector&amp; state, unsigned offset)
++RevoluteActuator::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  state(offset+1) = mRevoluteActuatorFrame-&gt;getJointVel();
+-  state(offset+2) = mRevoluteActuatorFrame-&gt;getJointVelDot()(1);
++  stateDeriv.writeSubState(mRevoluteActuatorFrame-&gt;getJointVel());
++  stateDeriv.writeSubState(mRevoluteActuatorFrame-&gt;getJointVelDot());
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -83,9 +83,9 @@
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; state);
+ 
+   /// The maximum movement of the controler
+   real_type mMaxVel;
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -112,24 +112,27 @@
+ }
+ 
+ void
+-RevoluteJoint::setState(const Vector&amp; state, unsigned offset)
++RevoluteJoint::setState(const StateStream&amp; state)
+ {
+-  mRevoluteJointFrame-&gt;setJointPos(state(offset+1));
+-  mRevoluteJointFrame-&gt;setJointVel(state(offset+2));
++  CartesianJointFrame&lt;1&gt;::VectorN v;
++  state.readSubState(v);
++  mRevoluteJointFrame-&gt;setJointPos(v(1));
++  state.readSubState(v);
++  mRevoluteJointFrame-&gt;setJointVel(v(1));
+ }
+ 
+ void
+-RevoluteJoint::getState(Vector&amp; state, unsigned offset) const
++RevoluteJoint::getState(StateStream&amp; state) const
+ {
+-  state(offset+1) = mRevoluteJointFrame-&gt;getJointPos();
+-  state(offset+2) = mRevoluteJointFrame-&gt;getJointVel();
++  state.writeSubState(mRevoluteJointFrame-&gt;getJointPos());
++  state.writeSubState(mRevoluteJointFrame-&gt;getJointVel());
+ }
+ 
+ void
+-RevoluteJoint::getStateDeriv(Vector&amp; state, unsigned offset)
++RevoluteJoint::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  state(offset+1) = mRevoluteJointFrame-&gt;getJointVel();
+-  state(offset+2) = mRevoluteJointFrame-&gt;getJointVelDot()(1);
++  stateDeriv.writeSubState(mRevoluteJointFrame-&gt;getJointVel());
++  stateDeriv.writeSubState(mRevoluteJointFrame-&gt;getJointVelDot());
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -85,9 +85,9 @@
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+   /** The direct joint interaction force
+    */
+
+Added: trunk/OpenFDM/src/OpenFDM/StateStream.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/StateStream.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/StateStream.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -0,0 +1,107 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_StateStream_H
++#define OpenFDM_StateStream_H
++
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++
++namespace OpenFDM {
++
++class StateStream {
++public:
++  StateStream(unsigned nStates) : mOffset(0), mState(nStates)
++  { }
++  StateStream(const Vector&amp; state) : mOffset(0), mState(state)
++  { }
++  ~StateStream(void)
++  {
++    OpenFDMAssert(mOffset == rows(mState));
++  }
++
++  void setState(const Vector&amp; state)
++  { mState = state; mOffset = 0; }
++  const Vector&amp; getState(void) const
++  {
++    OpenFDMAssert(mOffset == rows(mState));
++    return mState;
++  }
++
++  /// Reset the offset to 0
++  void reset(void)
++  { mOffset = 0; }
++
++  /// Debgging functions
++  bool isAtEnd(void) const
++  { return mOffset == rows(mState); }
++  bool stillSpaceFor(unsigned nStates) const
++  { return mOffset + nStates &lt;= rows(mState); }
++
++  OpenFDM_FORCE_INLINE
++  void readSubState(real_type&amp; value) const
++  {
++    OpenFDMAssert(mOffset + 1 &lt;= rows(mState));
++    value = mState(++mOffset);
++  }
++  template&lt;typename Impl, LinAlg::size_type m, LinAlg::size_type n&gt;
++  OpenFDM_FORCE_INLINE
++  void readSubState(LinAlg::MatrixLValue&lt;Impl,m,n&gt;&amp; value) const
++  {
++    LinAlg::size_type r = rows(value);
++    LinAlg::size_type c = cols(value);
++    OpenFDMAssert(mOffset + r*c &lt;= rows(mState));
++    Impl&amp; valueImpl = value.asImpl();
++    for (LinAlg::size_type j = 1; j &lt;= c; ++j) 
++      for (LinAlg::size_type i = 1; i &lt;= r; ++i)
++        valueImpl(i, j) = mState(++mOffset);
++  }
++  template&lt;typename Impl, LinAlg::size_type n&gt;
++  OpenFDM_FORCE_INLINE
++  void readSubState(LinAlg::MatrixLValue&lt;Impl,n,1&gt;&amp; value) const
++  {
++    LinAlg::size_type r = rows(value);
++    OpenFDMAssert(mOffset + r &lt;= rows(mState));
++    Impl&amp; valueImpl = value.asImpl();
++    for (LinAlg::size_type i = 1; i &lt;= r; ++i)
++      valueImpl(i) = mState(++mOffset);
++  }
++
++  OpenFDM_FORCE_INLINE
++  void writeSubState(real_type value)
++  {
++    OpenFDMAssert(mOffset + 1 &lt;= rows(mState));
++    mState(++mOffset) = value;
++  }
++  template&lt;typename Impl, LinAlg::size_type m, LinAlg::size_type n&gt;
++  OpenFDM_FORCE_INLINE
++  void writeSubState(const LinAlg::MatrixRValue&lt;Impl,m,n&gt;&amp; value)
++  {
++    LinAlg::size_type r = rows(value);
++    LinAlg::size_type c = cols(value);
++    OpenFDMAssert(mOffset + r*c &lt;= rows(mState));
++    const Impl&amp; valueImpl = value.asImpl();
++    for (LinAlg::size_type j = 1; j &lt;= c; ++j) 
++      for (LinAlg::size_type i = 1; i &lt;= r; ++i)
++        mState(++mOffset) = valueImpl(i, j);
++  }
++  template&lt;typename Impl, LinAlg::size_type n&gt;
++  OpenFDM_FORCE_INLINE
++  void writeSubState(const LinAlg::MatrixRValue&lt;Impl,n,1&gt;&amp; value)
++  {
++    LinAlg::size_type r = rows(value);
++    OpenFDMAssert(mOffset + r &lt;= rows(mState));
++    const Impl&amp; valueImpl = value.asImpl();
++    for (LinAlg::size_type i = 1; i &lt;= r; ++i)
++      mState(++mOffset) = valueImpl(i);
++  }
++
++private:
++  mutable unsigned mOffset;
++  Vector mState;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/StateStream.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -6,6 +6,7 @@
+ #include &quot;Model.h&quot;
+ #include &quot;Property.h&quot;
+ #include &quot;Vector.h&quot;
++#include &quot;Environment.h&quot;
+ #include &quot;LogStream.h&quot;
+ #include &quot;ODESolver.h&quot;
+ #include &quot;ExplicitEuler.h&quot;
+@@ -13,8 +14,6 @@
+ #include &quot;Newton.h&quot;
+ #include &quot;System.h&quot;
+ 
+-#include &quot;ModelVisitor.h&quot;
+-
+ namespace OpenFDM {
+ 
+ System::System(const std::string&amp; name) :
+@@ -134,37 +133,6 @@
+   return true;
+ }
+ 
+-class StateGetModelVisitor : public ModelVisitor {
+-public:
+-  StateGetModelVisitor(unsigned nStates) : mState(nStates), mOffset(0u)
+-  {}
+-  virtual void apply(Model&amp; model)
+-  {
+-    OpenFDMAssert(mOffset + model.getNumContinousStates() &lt;= mState.size());
+-    model.getState(mState, mOffset);
+-    mOffset += model.getNumContinousStates();
+-  }
+-
+-  virtual void apply(ModelGroup&amp; modelGroup)
+-  {
+-    traverse(modelGroup);
+-  }
+-  virtual void apply(Interact&amp; interact)
+-  {
+-//     traverse(interact);
+-  }
+-  virtual void apply(MultiBodySystem&amp; multiBodySystem)
+-  {
+-    traverse(multiBodySystem);
+-  }
+-
+-  const Vector&amp; getState(void) const
+-  { return mState; }
+-private:
+-  Vector mState;
+-  unsigned mOffset;
+-};
+-
+ bool
+ System::simulate(real_type tEnd)
+ {
+@@ -175,8 +143,9 @@
+   // outside this method, we need to read that state and set it into the
+   // timestepper. The timestepper needs to take care if it needs to be
+   // restarted. So just set it here.
+-  Vector state(getNumContinousStates());
+-  getState(state, 0);
++  StateStream stateStream(getNumContinousStates());
++  getState(stateStream);
++  Vector state = stateStream.getState();
+   // Exact check is currect here, the user does not have to fiddle with
+   // the state during simulation, if the state changes despite of that,
+   // Just spend that extra effort.
+@@ -309,10 +278,11 @@
+   output(taskInfo);
+ 
+   // Get the current state
+-  Vector state(getNumContinousStates());
+-  getState(state, 0);
++  StateStream stateStream(getNumContinousStates());
++  getState(stateStream);
++  Vector state = stateStream.getState();
+ 
+-  Vector trimState = state;
++  Vector trimState = stateStream.getState();
+   // Buld up the trim function
+   TrimFunction trimFunction(*this, trimState);
+ 
+@@ -321,9 +291,11 @@
+   real_type rtol = 1e-8;
+   bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
+   if (ret) {
+-    setState(trimState, 0);
++    stateStream.setState(trimState);
++    setState(stateStream);
+   } else {
+-    setState(state, 0);
++    stateStream.setState(state);
++    setState(stateStream);
+   }
+ 
+   return ret;
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2005-12-29 14:43:32 UTC (rev 140)
+@@ -162,15 +162,15 @@
+ }
+ 
+ void
+-DiscreteTransferFunction::setDiscreteState(const Vector&amp; state, unsigned offset)
++DiscreteTransferFunction::setDiscreteState(const StateStream&amp; state)
+ {
+-  mState = state(Range(offset+1, offset+rows(mState)));
++  state.readSubState(mState);
+ }
+ 
+ void
+-DiscreteTransferFunction::getDiscreteState(Vector&amp; state, unsigned offset) const
++DiscreteTransferFunction::getDiscreteState(StateStream&amp; state) const
+ {
+-  state(Range(offset+1, offset+rows(mState))) = mState;
++  state.writeSubState(mState);
+ }
+ 
+ const real_type&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.h	2005-12-28 23:51:39 UTC (rev 139)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.h	2005-12-29 14:43:32 UTC (rev 140)
+@@ -39,8 +39,8 @@
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+   /// This one can have discrete states
+-  virtual void setDiscreteState(const Vector&amp; state, unsigned offset);
+-  virtual void getDiscreteState(Vector&amp; state, unsigned offset) const;
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
+ 
+   const real_type&amp; getOutput(void) const;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000123.html">[OpenFDM-svn] r139 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000125.html">[OpenFDM-svn] r141 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#124">[ date ]</a>
+              <a href="thread.html#124">[ thread ]</a>
+              <a href="subject.html#124">[ subject ]</a>
+              <a href="author.html#124">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

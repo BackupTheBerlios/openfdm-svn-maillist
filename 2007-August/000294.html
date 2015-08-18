@@ -1,0 +1,200 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r318 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r318%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200708110615.l7B6FkIc015509%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000293.html">
+   <LINK REL="Next"  HREF="000295.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r318 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r318%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200708110615.l7B6FkIc015509%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r318 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 11 08:15:46 CEST 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000293.html">[OpenFDM-svn] r317 - trunk/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000295.html">[OpenFDM-svn] r319 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#294">[ date ]</a>
+              <a href="thread.html#294">[ thread ]</a>
+              <a href="subject.html#294">[ subject ]</a>
+              <a href="author.html#294">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-08-11 08:15:45 +0200 (Sat, 11 Aug 2007)
+New Revision: 318
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Change number of state values handling.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-11 06:15:45 UTC (rev 318)
+@@ -319,15 +319,8 @@
+ void
+ Model::setParent(ModelGroup* model)
+ {
+-  if (mParentModel) {
+-    mParentModel-&gt;adjustNumDiscreteStates(0, getNumDiscreteStates());
+-    mParentModel-&gt;adjustNumContinousStates(0, getNumContinousStates());
+-  }
+   mParentModel = model;
+-  if (mParentModel) {
+-    mParentModel-&gt;adjustNumDiscreteStates(getNumDiscreteStates(), 0);
+-    mParentModel-&gt;adjustNumContinousStates(getNumContinousStates(), 0);
+-  } else {
++  if (!mParentModel) {
+     unsigned num = getNumInputPorts();
+     for (unsigned i = 0; i &lt; num; ++i)
+       mInputPorts[i]-&gt;removeAllConnections();
+@@ -340,18 +333,12 @@
+ void
+ Model::setNumContinousStates(unsigned numContinousStates)
+ {
+-  if (mParentModel)
+-    mParentModel-&gt;adjustNumContinousStates(numContinousStates,
+-                                           mNumContinousStates);
+   mNumContinousStates = numContinousStates;
+ }
+ 
+ void
+ Model::setNumDiscreteStates(unsigned numDiscreteStates)
+ {
+-  if (mParentModel)
+-    mParentModel-&gt;adjustNumDiscreteStates(numDiscreteStates,
+-                                          mNumDiscreteStates);
+   mNumDiscreteStates = numDiscreteStates;
+ }
+ 
+@@ -388,24 +375,4 @@
+   mEnabled = enabled;
+ }
+ 
+-void
+-Model::adjustNumContinousStates(unsigned newCount, unsigned oldCount)
+-{
+-  unsigned numContinousStates = getNumContinousStates();
+-  OpenFDMAssert(oldCount &lt;= numContinousStates);
+-  numContinousStates -= oldCount;
+-  numContinousStates += newCount;
+-  setNumContinousStates(numContinousStates);
+-}
+-
+-void
+-Model::adjustNumDiscreteStates(unsigned newCount, unsigned oldCount)
+-{
+-  unsigned numDiscreteStates = getNumDiscreteStates();
+-  OpenFDMAssert(oldCount &lt;= numDiscreteStates);
+-  numDiscreteStates -= oldCount;
+-  numDiscreteStates += newCount;
+-  setNumDiscreteStates(numDiscreteStates);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-11 06:15:45 UTC (rev 318)
+@@ -57,9 +57,9 @@
+   Model(const std::string&amp; name);
+   virtual ~Model(void);
+ 
+-  /// Double dispatch helper for the multibody system visitor
++  /// Double dispatch helper for the system visitor
+   virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
++  /// Double dispatch helper for the system visitor
+ //   virtual void accept(ConstModelVisitor&amp; visitor) const;
+ 
+   /// Hmm ...
+@@ -264,10 +264,6 @@
+ private:
+   void setEnabledUnconditional(bool enabled);
+ 
+-  /// FIXME: use visitor for that
+-  void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+-  void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+-
+   WeakPtr&lt;ModelGroup&gt; mParentModel;
+   unsigned mNumContinousStates;
+   unsigned mNumDiscreteStates;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-11 06:15:45 UTC (rev 318)
+@@ -112,16 +112,24 @@
+ 
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+-  // build up the lists of stateful models
++  // build up the lists of stateful models and count the number of states
++  unsigned numContinousStates = 0;
++  unsigned numDiscreteStates = 0;
+   ModelList2::const_iterator mit;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit-&gt;model-&gt;getNumContinousStates())
++    if (mit-&gt;model-&gt;getNumContinousStates()) {
+       mContinousModelList.push_back(mit-&gt;model);
+-    if (mit-&gt;model-&gt;getNumDiscreteStates())
++      numContinousStates += mit-&gt;model-&gt;getNumContinousStates();
++    }
++    if (mit-&gt;model-&gt;getNumDiscreteStates()) {
+       mDiscreteModelList.push_back(mit-&gt;model);
++      numDiscreteStates += mit-&gt;model-&gt;getNumDiscreteStates();
++    }
+     ++mit;
+   }
++  setNumContinousStates(numContinousStates);
++  setNumDiscreteStates(numDiscreteStates);
+ 
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000293.html">[OpenFDM-svn] r317 - trunk/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000295.html">[OpenFDM-svn] r319 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#294">[ date ]</a>
+              <a href="thread.html#294">[ thread ]</a>
+              <a href="subject.html#294">[ subject ]</a>
+              <a href="author.html#294">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,225 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1098%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142158.n7ELw44P005833%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001055.html">
+   <LINK REL="Next"  HREF="001057.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1098%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142158.n7ELw44P005833%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 14 23:58:04 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001055.html">[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001057.html">[OpenFDM-svn] r1099 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1056">[ date ]</a>
+              <a href="thread.html#1056">[ thread ]</a>
+              <a href="subject.html#1056">[ subject ]</a>
+              <a href="author.html#1056">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-14 23:58:04 +0200 (Fri, 14 Aug 2009)
+New Revision: 1098
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h
+Log:
+Correctly disconnect pid ports.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp	2009-08-14 21:49:42 UTC (rev 1097)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp	2009-08-14 21:58:04 UTC (rev 1098)
+@@ -75,12 +75,15 @@
+   if (mKIGroupInput) {
+     getGroup()-&gt;removeChild(mKIGroupInput);
+     mKIGroupInput = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKIConnect) {
++    getGroup()-&gt;removeConnect(mKIConnect);
++    mKIConnect = 0;
++  }
+   mKIConstant = new ConstModel(&quot;ki&quot;, ki);
+   getGroup()-&gt;addChild(mKIConstant);
+-  getGroup()-&gt;connect(mKIConstant-&gt;getPort(&quot;output&quot;),
+-                      mKIProduct-&gt;getInputPort(1));
++  mKIConnect = getGroup()-&gt;connect(mKIConstant-&gt;getPort(&quot;output&quot;),
++                                   mKIProduct-&gt;getInputPort(1));
+ }
+ 
+ const Port*
+@@ -89,13 +92,16 @@
+   if (mKIConstant) {
+     getGroup()-&gt;removeChild(mKIConstant);
+     mKIConstant = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKIConnect) {
++    getGroup()-&gt;removeConnect(mKIConnect);
++    mKIConnect = 0;
++  }
+   mKIGroupInput = new GroupInput(&quot;ki&quot;);
+   getGroup()-&gt;addChild(mKIConstant);
+   mKIGroupInput-&gt;setExternalPortName(&quot;ki&quot;);
+-  getGroup()-&gt;connect(mKIGroupInput-&gt;getPort(&quot;output&quot;),
+-                      mKIProduct-&gt;getInputPort(1));
++  mKIConnect = getGroup()-&gt;connect(mKIGroupInput-&gt;getPort(&quot;output&quot;),
++                                   mKIProduct-&gt;getInputPort(1));
+   
+   return getGroup()-&gt;getPort(mKIGroupInput-&gt;getExternalPortIndex());
+ }
+@@ -106,12 +112,15 @@
+   if (mKPGroupInput) {
+     getGroup()-&gt;removeChild(mKPGroupInput);
+     mKPGroupInput = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKPConnect) {
++    getGroup()-&gt;removeConnect(mKPConnect);
++    mKPConnect = 0;
++  }
+   mKPConstant = new ConstModel(&quot;kp&quot;, kp);
+   getGroup()-&gt;addChild(mKPConstant);
+-  getGroup()-&gt;connect(mKPConstant-&gt;getPort(&quot;output&quot;),
+-                      mKPProduct-&gt;getInputPort(1));
++  mKPConnect = getGroup()-&gt;connect(mKPConstant-&gt;getPort(&quot;output&quot;),
++                                   mKPProduct-&gt;getInputPort(1));
+ }
+ 
+ const Port*
+@@ -120,13 +129,16 @@
+   if (mKPConstant) {
+     getGroup()-&gt;removeChild(mKPConstant);
+     mKPConstant = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKPConnect) {
++    getGroup()-&gt;removeConnect(mKPConnect);
++    mKPConnect = 0;
++  }
+   mKPGroupInput = new GroupInput(&quot;kp&quot;);
+   getGroup()-&gt;addChild(mKPConstant);
+   mKPGroupInput-&gt;setExternalPortName(&quot;kp&quot;);
+-  getGroup()-&gt;connect(mKPGroupInput-&gt;getPort(&quot;output&quot;),
+-                      mKPProduct-&gt;getInputPort(1));
++  mKPConnect = getGroup()-&gt;connect(mKPGroupInput-&gt;getPort(&quot;output&quot;),
++                                   mKPProduct-&gt;getInputPort(1));
+ 
+   return getGroup()-&gt;getPort(mKPGroupInput-&gt;getExternalPortIndex());
+ }
+@@ -137,12 +149,15 @@
+   if (mKDGroupInput) {
+     getGroup()-&gt;removeChild(mKDGroupInput);
+     mKDGroupInput = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKDConnect) {
++    getGroup()-&gt;removeConnect(mKDConnect);
++    mKDConnect = 0;
++  }
+   mKDConstant = new ConstModel(&quot;kd&quot;, kd);
+   getGroup()-&gt;addChild(mKDConstant);
+-  getGroup()-&gt;connect(mKDConstant-&gt;getPort(&quot;output&quot;),
+-                      mKDProduct-&gt;getInputPort(1));
++  mKDConnect = getGroup()-&gt;connect(mKDConstant-&gt;getPort(&quot;output&quot;),
++                                   mKDProduct-&gt;getInputPort(1));
+ }
+ 
+ const Port*
+@@ -151,13 +166,16 @@
+   if (mKDConstant) {
+     getGroup()-&gt;removeChild(mKDConstant);
+     mKDConstant = 0;
+-    // FIXME disconnect ...
+   }
++  if (mKDConnect) {
++    getGroup()-&gt;removeConnect(mKDConnect);
++    mKDConnect = 0;
++  }
+   mKDGroupInput = new GroupInput(&quot;kd&quot;);
+   getGroup()-&gt;addChild(mKDConstant);
+   mKDGroupInput-&gt;setExternalPortName(&quot;kd&quot;);
+-  getGroup()-&gt;connect(mKDGroupInput-&gt;getPort(&quot;output&quot;),
+-                      mKDProduct-&gt;getInputPort(1));
++  mKDConnect = getGroup()-&gt;connect(mKDGroupInput-&gt;getPort(&quot;output&quot;),
++                                   mKDProduct-&gt;getInputPort(1));
+ 
+   return getGroup()-&gt;getPort(mKDGroupInput-&gt;getExternalPortIndex());
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h	2009-08-14 21:49:42 UTC (rev 1097)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h	2009-08-14 21:58:04 UTC (rev 1098)
+@@ -6,6 +6,7 @@
+ #define OpenFDM_JSBSimPID_H
+ 
+ #include &quot;JSBSimFCSComponent.h&quot;
++#include &lt;OpenFDM/Connect.h&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/GroupInput.h&gt;
+ #include &lt;OpenFDM/Product.h&gt;
+@@ -32,14 +33,17 @@
+ private:
+   SharedPtr&lt;ConstModel&gt; mKIConstant;
+   SharedPtr&lt;GroupInput&gt; mKIGroupInput;
++  SharedPtr&lt;Connect&gt; mKIConnect;
+   SharedPtr&lt;Product&gt; mKIProduct;
+ 
+   SharedPtr&lt;ConstModel&gt; mKPConstant;
+   SharedPtr&lt;GroupInput&gt; mKPGroupInput;
++  SharedPtr&lt;Connect&gt; mKPConnect;
+   SharedPtr&lt;Product&gt; mKPProduct;
+ 
+   SharedPtr&lt;ConstModel&gt; mKDConstant;
+   SharedPtr&lt;GroupInput&gt; mKDGroupInput;
++  SharedPtr&lt;Connect&gt; mKDConnect;
+   SharedPtr&lt;Product&gt; mKDProduct;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001055.html">[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001057.html">[OpenFDM-svn] r1099 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1056">[ date ]</a>
+              <a href="thread.html#1056">[ thread ]</a>
+              <a href="subject.html#1056">[ subject ]</a>
+              <a href="author.html#1056">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

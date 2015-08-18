@@ -1,0 +1,519 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r90 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r90%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512081955.jB8JtOMd000080%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000073.html">
+   <LINK REL="Next"  HREF="000075.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r90 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r90%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512081955.jB8JtOMd000080%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r90 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Dec  8 20:55:24 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000073.html">[OpenFDM-svn] r89 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000075.html">[OpenFDM-svn] r91 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#74">[ date ]</a>
+              <a href="thread.html#74">[ thread ]</a>
+              <a href="subject.html#74">[ subject ]</a>
+              <a href="author.html#74">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-08 20:55:06 +0100 (Thu, 08 Dec 2005)
+New Revision: 90
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+Log:
+Convert UnaryFunctionModel
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-08 07:14:33 UTC (rev 89)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-08 19:55:06 UTC (rev 90)
+@@ -485,18 +485,18 @@
+ Port*
+ LegacyJSBSimReader::addInverterModel(const std::string&amp; name, Port* in)
+ {
+-  Gain *gain = new Gain(name + &quot; Inverter&quot;);
+-  gain-&gt;getInputPort(0)-&gt;connect(in);
+-  gain-&gt;setGain(-1);
+-  addFCSModel(gain);
+-  return gain-&gt;getOutputPort(0);
++  UnaryFunctionModel *unary
++    = new UnaryFunctionModel(name + &quot; Inverter&quot;, UnaryFunctionModel::Minus);
++  unary-&gt;getInputPort(0)-&gt;connect(in);
++  addFCSModel(unary);
++  return unary-&gt;getOutputPort(0);
+ }
+ 
+ Port*
+ LegacyJSBSimReader::addAbsModel(const std::string&amp; name, Port* in)
+ {
+   UnaryFunctionModel *unary
+-    = new UnaryFunctionModel(name + &quot; Abs&quot;, new AbsExpressionImpl);
++    = new UnaryFunctionModel(name + &quot; Abs&quot;, UnaryFunctionModel::Abs);
+   unary-&gt;getInputPort(0)-&gt;connect(in);
+   addFCSModel(unary);
+   return unary-&gt;getOutputPort(0);
+@@ -853,13 +853,15 @@
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Steering Output&quot;,
+                          &quot;/gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
+ 
+-          UnaryFunctionModel *unary
+-            = new UnaryFunctionModel(name + &quot; Degree Conversion&quot;,
+-                                     new UnitToSiExpressionImpl(uDegree));
+-          unary-&gt;getInputPort(0)-&gt;connect(gain-&gt;getOutputPort(0));
+-          addFCSModel(unary);
+ 
+-          sg-&gt;getInputPort(&quot;steeringAngle&quot;)-&gt;connect(unary-&gt;getOutputPort(0));
++          UnitConversionModel* unitConv
++            = new UnitConversionModel(name + &quot; Degree Conversion&quot;,
++                                      UnitConversionModel::UnitToSi,
++                                      uDegree);
++          unitConv-&gt;getInputPort(0)-&gt;connect(gain-&gt;getOutputPort(0));
++          addFCSModel(unitConv);
++
++          sg-&gt;getInputPort(&quot;steeringAngle&quot;)-&gt;connect(unitConv-&gt;getOutputPort(0));
+         }
+         
+         if (brake == &quot;LEFT&quot;) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-08 07:14:33 UTC (rev 89)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-08 19:55:06 UTC (rev 90)
+@@ -119,6 +119,8 @@
+ 
+ class RealPortHandle {
+ public:
++  RealPortHandle(void)
++  { }
+   RealPortHandle(RealPortInterface* realPortInterface) :
+     mRealPortInterface(realPortInterface)
+   { }
+@@ -132,6 +134,8 @@
+ 
+ class MatrixPortHandle {
+ public:
++  MatrixPortHandle(void)
++  { }
+   MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
+     mMatrixPortInterface(matrixPortInterface)
+   { }
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-12-08 07:14:33 UTC (rev 89)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-12-08 19:55:06 UTC (rev 90)
+@@ -11,14 +11,126 @@
+ 
+ namespace OpenFDM {
+ 
+-UnaryFunctionModel::UnaryFunctionModel(const std::string&amp; name,
+-                                       UnaryExpressionImpl&lt;real_type&gt;* expression) :
++class UnaryFunctionModelImpl :
++    public Referenced {
++public:
++  void setRealPortHandle(const RealPortHandle&amp; realPortHandle)
++  { mRealPortHandle = realPortHandle; }
++  virtual ~UnaryFunctionModelImpl(void) {}
++  virtual real_type getValue(void) = 0;
++protected:
++  RealPortHandle mRealPortHandle;
++};
++
++/// Implementations of various similar functions.
++class AbsUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return fabs(mRealPortHandle.getRealValue()); }
++};
++
++class AcosUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return acos(mRealPortHandle.getRealValue()); }
++};
++
++class AsinUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return asin(mRealPortHandle.getRealValue()); }
++};
++
++class AtanUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return atan(mRealPortHandle.getRealValue()); }
++};
++
++class CeilUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return ceil(mRealPortHandle.getRealValue()); }
++};
++
++class CosUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return cos(mRealPortHandle.getRealValue()); }
++};
++
++class ExpUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return exp(mRealPortHandle.getRealValue()); }
++};
++
++class FloorUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return floor(mRealPortHandle.getRealValue()); }
++};
++
++class LogUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return log(mRealPortHandle.getRealValue()); }
++};
++
++class Log10UnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return log10(mRealPortHandle.getRealValue()); }
++};
++
++class MinusUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return -mRealPortHandle.getRealValue(); }
++};
++
++class SqrUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { real_type v = mRealPortHandle.getRealValue(); return v*v; }
++};
++
++class SqrtUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return sqrt(mRealPortHandle.getRealValue()); }
++};
++
++class TanUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return tan(mRealPortHandle.getRealValue()); }
++};
++
++UnaryFunctionModel::UnaryFunctionModel(const std::string&amp; name, Type type) :
+   Model(name),
+-  mUnaryExpression(expression)
++  mType(type)
+ {
++  setType(type);
++
+   setDirectFeedThrough(true);
+ 
+   setNumInputPorts(1);
++  setInputPortName(0, &quot;input&quot;);
+   
+   setNumOutputPorts(1);
+   setOutputPort(0, &quot;output&quot;, this, &amp;UnaryFunctionModel::getFunctionValue);
+@@ -31,17 +143,17 @@
+ bool
+ UnaryFunctionModel::init(void)
+ {
+-  OpenFDMAssert(mUnaryExpression);
+-  mUnaryExpression-&gt;setInputProperty(getInputPort(0)-&gt;getProperty());
+-  OpenFDMAssert(mUnaryExpression-&gt;isValid());
+-  return mUnaryExpression-&gt;isValid();
++  OpenFDMAssert(mImpl);
++  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++  mImpl-&gt;setRealPortHandle(getInputPort(0)-&gt;toRealPortHandle());
++  return getInputPort(0)-&gt;isConnected();
+ }
+ 
+ void
+ UnaryFunctionModel::output(const TaskInfo&amp;)
+ {
+   // Evaluate the expression.
+-  mFunctionValue = mUnaryExpression-&gt;getValue();
++  mFunctionValue = mImpl-&gt;getValue();
+ }
+ 
+ const real_type&amp;
+@@ -50,4 +162,127 @@
+   return mFunctionValue;
+ }
+ 
++void
++UnaryFunctionModel::setType(UnaryFunctionModel::Type type)
++{
++  switch (type) {
++  case Abs:
++    mImpl = new AbsUnaryFunctionModelImpl;
++    break;
++  case Acos:
++    mImpl = new AcosUnaryFunctionModelImpl;
++    break;
++  case Asin:
++    mImpl = new AsinUnaryFunctionModelImpl;
++    break;
++  case Atan:
++    mImpl = new AtanUnaryFunctionModelImpl;
++    break;
++  case Ceil:
++    mImpl = new CeilUnaryFunctionModelImpl;
++    break;
++  case Cos:
++    mImpl = new CosUnaryFunctionModelImpl;
++    break;
++  case Exp:
++    mImpl = new ExpUnaryFunctionModelImpl;
++    break;
++  case Floor:
++    mImpl = new FloorUnaryFunctionModelImpl;
++    break;
++  case Log:
++    mImpl = new LogUnaryFunctionModelImpl;
++    break;
++  case Log10:
++    mImpl = new Log10UnaryFunctionModelImpl;
++    break;
++  case Minus:
++    mImpl = new MinusUnaryFunctionModelImpl;
++    break;
++  case Sqr:
++    mImpl = new SqrUnaryFunctionModelImpl;
++    break;
++  case Sqrt:
++    mImpl = new SqrtUnaryFunctionModelImpl;
++    break;
++  case Tan:
++    mImpl = new TanUnaryFunctionModelImpl;
++    break;
++  default:
++    break;
++  }
++}
++
++UnaryFunctionModel::Type
++UnaryFunctionModel::getType(void) const
++{
++}
++
++
++
++UnitConversionModel::UnitConversionModel(const std::string&amp; name,
++                                         Type type, Unit unit) :
++  Model(name),
++  mType(type),
++  mUnit(unit)
++{
++  setDirectFeedThrough(true);
++
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;input&quot;);
++  
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;output&quot;, this, &amp;UnitConversionModel::getFunctionValue);
++}
++
++UnitConversionModel::~UnitConversionModel(void)
++{
++}
++
++bool
++UnitConversionModel::init(void)
++{
++}
++
++void
++UnitConversionModel::output(const TaskInfo&amp;)
++{
++  real_type value = getInputPort(0)-&gt;toRealPortHandle().getRealValue();
++  if (mType == UnitToSi) {
++    mValue = convertTo(mUnit, value);
++  } else {
++    mValue = convertFrom(mUnit, value);
++  }
++}
++
++const real_type&amp;
++UnitConversionModel::getFunctionValue(void) const
++{
++  return mValue;
++}
++
++void
++UnitConversionModel::setType(UnitConversionModel::Type type)
++{
++  mType = type;
++}
++
++UnitConversionModel::Type
++UnitConversionModel::getType(void) const
++{
++  return mType;
++}
++
++void
++UnitConversionModel::setUnit(Unit unit)
++{
++  mUnit = unit;
++}
++
++Unit
++UnitConversionModel::getUnit(void) const
++{
++  return mUnit;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2005-12-08 07:14:33 UTC (rev 89)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2005-12-08 19:55:06 UTC (rev 90)
+@@ -15,12 +15,30 @@
+ 
+ namespace OpenFDM {
+ 
++class UnaryFunctionModelImpl;
++
+ /// Class representing a model with exactly one input.
+ class UnaryFunctionModel :
+     public Model {
+ public:
+-  UnaryFunctionModel(const std::string&amp; name,
+-                     UnaryExpressionImpl&lt;real_type&gt;* expression);
++  enum Type {
++    Abs,
++    Acos,
++    Asin,
++    Atan,
++    Ceil,
++    Cos,
++    Exp,
++    Floor,
++    Log,
++    Log10,
++    Minus,
++    Sqr,
++    Sqrt,
++    Tan
++  };
++
++  UnaryFunctionModel(const std::string&amp; name, Type type);
+   virtual ~UnaryFunctionModel(void);
+ 
+   virtual bool init(void);
+@@ -28,12 +46,43 @@
+ 
+   const real_type&amp; getFunctionValue(void) const;
+ 
++  void setType(Type type);
++  Type getType(void) const;
++
+ private:
+-  shared_ptr&lt;UnaryExpressionImpl&lt;real_type&gt; &gt; mUnaryExpression;
+-
++  shared_ptr&lt;UnaryFunctionModelImpl&gt; mImpl;
++  Type mType;
+   real_type mFunctionValue;
+ };
+ 
++class UnitConversionModel :
++    public Model {
++public:
++  enum Type {
++    UnitToSi,
++    SiToUnit
++  };
++
++  UnitConversionModel(const std::string&amp; name, Type type, Unit unit);
++  virtual ~UnitConversionModel(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp;);
++
++  const real_type&amp; getFunctionValue(void) const;
++
++  void setType(Type type);
++  Type getType(void) const;
++
++  void setUnit(Unit unit);
++  Unit getUnit(void) const;
++
++private:
++  Type mType;
++  Unit mUnit;
++  real_type mValue;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000073.html">[OpenFDM-svn] r89 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000075.html">[OpenFDM-svn] r91 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#74">[ date ]</a>
+              <a href="thread.html#74">[ thread ]</a>
+              <a href="subject.html#74">[ subject ]</a>
+              <a href="author.html#74">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

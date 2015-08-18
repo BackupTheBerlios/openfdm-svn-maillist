@@ -1,0 +1,207 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r472 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r472%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809130925.m8D9P49x007499%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000443.html">
+   <LINK REL="Next"  HREF="000445.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r472 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r472%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809130925.m8D9P49x007499%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r472 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 13 11:25:04 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000443.html">[OpenFDM-svn] r471 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000445.html">[OpenFDM-svn] r473 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#444">[ date ]</a>
+              <a href="thread.html#444">[ thread ]</a>
+              <a href="subject.html#444">[ subject ]</a>
+              <a href="author.html#444">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-13 11:25:03 +0200 (Sat, 13 Sep 2008)
+New Revision: 472
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Use the Output model to do that prints.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-13 09:13:04 UTC (rev 471)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-13 09:25:03 UTC (rev 472)
+@@ -18,9 +18,10 @@
+ {
+ }
+ 
+-Output::Output(const std::string&amp; name) :
++Output::Output(const std::string&amp; name, Output::Callback* callback) :
+   Model(name),
+   mInputPort(newRealInputPort(&quot;input&quot;)),
++  mCallback(callback),
+   mOutputGain(1)
+ {
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h	2008-09-13 09:13:04 UTC (rev 471)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.h	2008-09-13 09:25:03 UTC (rev 472)
+@@ -12,7 +12,13 @@
+ class Output : public Model {
+   OPENFDM_OBJECT(Output, Model);
+ public:
+-  Output(const std::string&amp; name);
++  class Callback : public WeakReferenced {
++  public:
++    virtual ~Callback();
++    virtual void setValue(real_type value) = 0;
++  };
++
++  Output(const std::string&amp; name, Callback* callback = 0);
+   virtual ~Output(void);
+   
+   /// Double dispatch helper for the system visitor
+@@ -27,12 +33,6 @@
+   virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const
+   { return true; }
+ 
+-  class Callback : public WeakReferenced {
+-  public:
+-    virtual ~Callback();
+-    virtual void setValue(real_type value) = 0;
+-  };
+-
+   Callback* getCallback(void) const;
+   void setCallback(Callback* callback);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-13 09:13:04 UTC (rev 471)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-13 09:25:03 UTC (rev 472)
+@@ -40,6 +40,7 @@
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/Delay.h&gt;
++#include &lt;OpenFDM/Output.h&gt;
+ 
+ #include &lt;OpenFDM/Group.h&gt;
+ 
+@@ -76,22 +77,6 @@
+ /// FIXME: IMO THIS MUST WORK THIS WAY
+ ///
+ 
+-class Print : public Model {
+-public:
+-  Print(const std::string&amp; name) :
+-    Model(name),
+-    mInputPort(newRealInputPort(&quot;input&quot;))
+-  { }
+-  virtual void output(const DiscreteStateValueVector&amp;,
+-                      const ContinousStateValueVector&amp;,
+-                      PortValueList&amp; portValues) const
+-  { std::cout &lt;&lt; portValues[mInputPort] &lt;&lt; std::endl; }
+-  virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const
+-  { return false; }
+-private:
+-  RealInputPort mInputPort;
+-};
+-
+ class LeafInstance : public WeakReferenced {
+ public:
+   struct LeafPortData;
+@@ -668,22 +653,28 @@
+ 
+ using namespace OpenFDM;
+ 
++class PrintOutput : public Output::Callback {
++public:
++  virtual void setValue(real_type value)
++  { std::cout &lt;&lt; value &lt;&lt; std::endl; }
++};
++
+ int main()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+   Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;));
+   Group::NodeId integrator1 = group-&gt;addChild(new Integrator(&quot;I1&quot;));
+   Group::NodeId integrator2 = group-&gt;addChild(new Integrator(&quot;I2&quot;));
+-  Group::NodeId print = group-&gt;addChild(new Print(&quot;P&quot;));
++  Group::NodeId output = group-&gt;addChild(new Output(&quot;O&quot;, new PrintOutput));
+   Group::NodeId delay = group-&gt;addChild(new Delay(&quot;D&quot;));
+-  Group::NodeId printDelay = group-&gt;addChild(new Print(&quot;PD&quot;));
++  Group::NodeId outputDelay = group-&gt;addChild(new Output(&quot;OD&quot;, new PrintOutput));
+ 
+   group-&gt;connect(integrator1, &quot;output&quot;, integrator2, &quot;input&quot;);
+   group-&gt;connect(integrator2, &quot;output&quot;, gain, &quot;input&quot;);
+   group-&gt;connect(gain, &quot;output&quot;, integrator1, &quot;input&quot;);
+-  group-&gt;connect(integrator2, &quot;output&quot;, print, &quot;input&quot;);
++  group-&gt;connect(integrator2, &quot;output&quot;, output, &quot;input&quot;);
+   group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
+-  group-&gt;connect(delay, &quot;output&quot;, printDelay, &quot;input&quot;);
++  group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+ 
+   //FIXME: broken naming
+ //   Group::NodeId groupOutputNode = group-&gt;addAcceptorPort();
+@@ -694,10 +685,10 @@
+   Group::NodeId child0 = topGroup-&gt;addChild(group);
+   Group::NodeId child1 = topGroup-&gt;addChild(group);
+ 
+-  Group::NodeId print0 = topGroup-&gt;addChild(new Print(&quot;P2&quot;));
+-  topGroup-&gt;connect(child0, 0, print0, 0);
+-  Group::NodeId print1 = topGroup-&gt;addChild(new Print(&quot;P3&quot;));
+-  topGroup-&gt;connect(child1, 0, print1, 0);
++  Group::NodeId output0 = topGroup-&gt;addChild(new Output(&quot;O2&quot;, new PrintOutput));
++  topGroup-&gt;connect(child0, 0, output0, 0);
++  Group::NodeId output1 = topGroup-&gt;addChild(new Output(&quot;O3&quot;, new PrintOutput));
++  topGroup-&gt;connect(child1, 0, output1, 0);
+ 
+   /////////////////////////////////////////////////
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000443.html">[OpenFDM-svn] r471 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000445.html">[OpenFDM-svn] r473 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#444">[ date ]</a>
+              <a href="thread.html#444">[ thread ]</a>
+              <a href="subject.html#444">[ subject ]</a>
+              <a href="author.html#444">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

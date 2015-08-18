@@ -1,0 +1,209 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r323 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r323%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200709290855.l8T8tSEr025371%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r323 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r323%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200709290855.l8T8tSEr025371%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r323 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 29 10:55:28 CEST 2007</I>
+    <P><UL>
+        
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#299">[ date ]</a>
+              <a href="thread.html#299">[ thread ]</a>
+              <a href="subject.html#299">[ subject ]</a>
+              <a href="author.html#299">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-09-29 10:55:27 +0200 (Sat, 29 Sep 2007)
+New Revision: 323
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/System.h
+Log:
+Move environment initialization to into System::init.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -28,6 +28,7 @@
+ class Environment;
+ class GroupInput;
+ class GroupOutput;
++class System;
+ 
+ class Input;
+ class Output;
+@@ -294,6 +295,8 @@
+                      const Matrix&amp; (M::*getter)(void) const)
+   { addOutputPort(name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
+ 
++  // FIXME
++  friend class System;
+   virtual void setEnvironment(Environment* environment);
+ 
+ // private:
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-09-29 08:55:27 UTC (rev 323)
+@@ -153,7 +153,6 @@
+ 
+   // Update the number of states.
+   model-&gt;setParent(this);
+-  model-&gt;setEnvironment(mEnvironment);
+ 
+   // add to the model list.
+   mModels.push_back(model);
+@@ -197,7 +196,6 @@
+ 
+   // remove the backreference to this group
+   // this also updates the number of states
+-  model-&gt;setEnvironment(0);
+   model-&gt;setParent(0);
+ 
+   // remove from the model list.
+@@ -252,17 +250,6 @@
+   return mConnections[i];
+ }
+ 
+-void
+-ModelGroup::setEnvironment(Environment* environment)
+-{
+-  mEnvironment = environment;
+-  ModelList::iterator i = mModels.begin();
+-  while (i != mModels.end()) {
+-    (*i)-&gt;setEnvironment(environment);
+-    ++i;
+-  }
+-}
+-
+ Model::Path
+ ModelGroup::getGroupPath() /* FIXME const*/
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -9,7 +9,6 @@
+ 
+ #include &quot;Object.h&quot;
+ #include &quot;Model.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;NumericPortProxy.h&quot;
+ 
+ namespace OpenFDM {
+@@ -51,15 +50,10 @@
+   Connection* getConnection(unsigned i);
+   const Connection* getConnection(unsigned i) const;
+ 
+-  virtual void setEnvironment(Environment* environment);
+-
+   /// Returns the path of this ModelGroup. In contrast to getPath this returns
+   /// the path including the current ModelGroup.
+   Path getGroupPath() /* FIXME const*/;
+ 
+-protected:
+-  SharedPtr&lt;Environment&gt; mEnvironment;
+-
+ private:
+ 
+   typedef std::vector&lt;SharedPtr&lt;Model&gt; &gt; ModelList;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-09-29 08:55:27 UTC (rev 323)
+@@ -110,12 +110,19 @@
+   ModelCollectVisitor modelCollectVisitor;
+   accept(modelCollectVisitor);
+ 
++  // sett the environment, FIXME move somewhere into task
++  ModelList2::const_iterator mit;
++  mit = modelCollectVisitor.modelList.begin();
++  while (mit != modelCollectVisitor.modelList.end()) {
++    mit-&gt;model-&gt;setEnvironment(mEnvironment);
++    ++mit;
++  }
++ 
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+   // build up the lists of stateful models and count the number of states
+   unsigned numContinousStates = 0;
+   unsigned numDiscreteStates = 0;
+-  ModelList2::const_iterator mit;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+     if (mit-&gt;model-&gt;getNumContinousStates()) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/System.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -8,6 +8,7 @@
+ #include &lt;string&gt;
+ 
+ #include &quot;ModelGroup.h&quot;
++#include &quot;Environment.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -94,6 +95,8 @@
+   ModelList mDiscreteModelList;
+   ModelList mContinousModelList;
+ 
++  SharedPtr&lt;Environment&gt; mEnvironment;
++
+   /// The actual simulation time for the system
+   real_type mTime;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#299">[ date ]</a>
+              <a href="thread.html#299">[ thread ]</a>
+              <a href="subject.html#299">[ subject ]</a>
+              <a href="author.html#299">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

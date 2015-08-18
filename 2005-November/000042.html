@@ -1,0 +1,1028 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r55 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/LinAlg
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r55%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM%20OpenFDM/LinAlg&In-Reply-To=%3C200511061221.jA6CLJWZ026974%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000041.html">
+   <LINK REL="Next"  HREF="000043.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r55 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/LinAlg</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r55%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM%20OpenFDM/LinAlg&In-Reply-To=%3C200511061221.jA6CLJWZ026974%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r55 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/LinAlg">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Nov  6 13:21:19 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000041.html">[OpenFDM-svn] r54 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000043.html">[OpenFDM-svn] r56 - in trunk/OpenFDM/src/OpenFDM: . LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#42">[ date ]</a>
+              <a href="thread.html#42">[ thread ]</a>
+              <a href="subject.html#42">[ subject ]</a>
+              <a href="author.html#42">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-06 13:21:01 +0100 (Sun, 06 Nov 2005)
+New Revision: 55
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+   trunk/OpenFDM/src/OpenFDM/LineActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/LineActuator.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Container.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Add some sneak preview what will be possible with
+the multibody system. ... works only with that FA-18
+:<i>)
+</I>
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-06 12:21:01 UTC (rev 55)
+@@ -35,6 +35,9 @@
+ #include &lt;OpenFDM/UnaryFunctionModel.h&gt;
+ #include &lt;OpenFDM/Units.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
++#include &lt;OpenFDM/WheelContact.h&gt;
++#include &lt;OpenFDM/LineActuator.h&gt;
++#include &lt;OpenFDM/DiscBrake.h&gt;
+ 
+ #include &lt;OpenFDM/ReaderWriter.h&gt;
+ #include &lt;OpenFDM/XML/Tablereader.h&gt;
+@@ -388,7 +391,40 @@
+     } else if (propName == &quot;fdm/jsbsim/gear/gear-pos-norm&quot;) {
+       return lookupJSBExpression(&quot;gear/gear-cmd-norm&quot;);
+ 
++    } else if (propName == &quot;controls/gear/brake-parking&quot;) {
++      prop = addInputModel(&quot;Parking Brake Input&quot;,
++                           &quot;controls/gear/brake-parking&quot;);
+ 
++    } else if (propName == &quot;fdm/jsbsim/gear/right-brake-pos-norm&quot;) {
++      Property pilotBr = addInputModel(&quot;Right Brake Input&quot;,
++                                       &quot;controls/gear/brake-right&quot;);
++      Property copilotBr = addInputModel(&quot;Right Copilot Brake Input&quot;,
++                                         &quot;controls/gear/copilot-brake-right&quot;);
++
++      Property parkBr = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++
++      // FIXME: we don't have a max model ...
++      MaxExpressionImpl* mex = new MaxExpressionImpl;
++      mex-&gt;addInputProperty(pilotBr);
++      mex-&gt;addInputProperty(copilotBr);
++      mex-&gt;addInputProperty(parkBr);
++      prop = Property(mex);
++
++    } else if (propName == &quot;fdm/jsbsim/gear/left-brake-pos-norm&quot;) {
++      Property pilotBr = addInputModel(&quot;Left Brake Input&quot;,
++                                       &quot;controls/gear/brake-left&quot;);
++      Property copilotBr = addInputModel(&quot;Left Copilot Brake Input&quot;,
++                                         &quot;controls/gear/copilot-brake-left&quot;);
++
++      Property parkBr = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++
++      // FIXME: we don't have a max model ...
++      MaxExpressionImpl* mex = new MaxExpressionImpl;
++      mex-&gt;addInputProperty(pilotBr);
++      mex-&gt;addInputProperty(copilotBr);
++      mex-&gt;addInputProperty(parkBr);
++      prop = Property(mex);
++
+     } else if (propName.substr(0, 19) == &quot;fdm/jsbsim/fcs/mag-&quot;) {
+       // Special absolute modules for fcs/mag-*
+       // remove the 'mag-' substring here and use that as input for the
+@@ -397,10 +433,6 @@
+       Property in = lookupJSBExpression(name);
+       prop = addAbsModel(propName.substr(15), in);
+ 
+-
+-
+-//     } else if (propName == &quot;fdm/jsbsim/&quot;) {
+-//       prop = addInputModel(&quot; Input&quot;, &quot;&quot;);
+     }
+ 
+     if (prop.isValid())
+@@ -674,6 +706,56 @@
+   return true;
+ }
+ 
++void
++LegacyJSBSimReader::attachWheel(const std::string&amp; name, const Vector3&amp; pos,
++                                const std::string&amp; brake,
++                                const std::string&amp; numStr, real_type wheelDiam,
++                                real_type tireSpring, real_type tireDamp,
++                                RigidBody* parent)
++{
++  RigidBody* wheel = new RigidBody(name + &quot; Wheel&quot;);
++  InertiaMatrix wheelInertia(10, 0, 0, 100, 0, 10);
++  wheel-&gt;addMultiBodyModel(new Mass(SpatialInertia(wheelInertia, 50)));
++  parent-&gt;addChildFrame(wheel);
++  
++  RevoluteJoint* wj = new RevoluteJoint(name + &quot; Wheel Joint&quot;);
++  parent-&gt;addMultiBodyModel(wj, 0);
++  wheel-&gt;addMultiBodyModel(wj, 1);
++  wj-&gt;setJointAxis(Vector3(0, 1, 0));
++  wj-&gt;setPosition(pos);
++  wj-&gt;setOrientation(Quaternion::unit());
++  wj-&gt;setJointPos(0);
++  wj-&gt;setJointVel(0);
++
++  // Add an brake force
++  DiscBrake* brakeF = new DiscBrake(name + &quot; Brake Force&quot;);
++  brakeF-&gt;setFrictionConstant(-1e4);
++  if (brake == &quot;LEFT&quot;) {
++    Property prop = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
++    brakeF-&gt;setInputPort(0, prop);
++  } else if (brake == &quot;RIGHT&quot;) {
++    Property prop = lookupJSBExpression(&quot;gear/right-brake-pos-norm&quot;);
++    brakeF-&gt;setInputPort(0, prop);
++  }
++  wj-&gt;setLineForce(brakeF);
++  
++  WheelContact* wc = new WheelContact(name + &quot; Wheel Contact&quot;,
++                                      mVehicle-&gt;getEnvironment());
++  wc-&gt;setWheelRadius(0.5*wheelDiam);
++  wc-&gt;setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
++  wc-&gt;setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
++  wc-&gt;setFrictionCoeficient(0.9);
++  wheel-&gt;addMultiBodyModel(wc);
++  
++  Property prop = wj-&gt;getOutputPort(0);
++  addOutputModel(prop, &quot;Wheel &quot; + numStr + &quot; Position&quot;,
++                 &quot;gear/gear[&quot; + numStr + &quot;]/wheel-position-rad&quot;);
++  SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
++  c-&gt;setInputProperty(prop);
++  addOutputModel(Property(c), &quot;Wheel &quot; + numStr + &quot; Position Deg&quot;,
++                 &quot;gear/gear[&quot; + numStr + &quot;]/wheel-position-deg&quot;);
++}
++
+ bool
+ LegacyJSBSimReader::convertUndercarriage(const std::string&amp; data)
+ {
+@@ -761,23 +843,11 @@
+         }
+         
+         if (brake == &quot;LEFT&quot;) {
+-          MaxExpressionImpl* mex = new MaxExpressionImpl;
+-          Property prop = lookupJSBExpression(&quot;/controls/gear/brake-left&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-left&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++          Property prop = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
++          sg-&gt;setInputPort(&quot;brakeCommand&quot;, prop);
+         } else if (brake == &quot;RIGHT&quot;) {
+-          MaxExpressionImpl* mex = new MaxExpressionImpl;
+-          Property prop = lookupJSBExpression(&quot;/controls/gear/brake-right&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-right&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-          mex-&gt;addInputProperty(prop);
+-          sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++          Property prop = lookupJSBExpression(&quot;gear/right-brake-pos-norm&quot;);
++          sg-&gt;setInputPort(&quot;brakeCommand&quot;, prop);
+         }
+         
+         mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(sg);
+@@ -822,21 +892,26 @@
+               &gt;&gt; wheelDiam
+               &gt;&gt; tireSpring &gt;&gt; tireDamp;
+ 
++      // Well this is come hardcoding, but as a demo built from within the
++      // legacy JSBSim format this is ok :)
+ 
++      // This is the movable part of the strut, doing the compression
+       RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
+       mVehicle-&gt;getTopBody()-&gt;addChildFrame(arm);
+       arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
+ 
++      // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+       mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(rj, 0);
+       arm-&gt;addMultiBodyModel(rj, 1);
+       rj-&gt;setJointAxis(Vector3(0, 1, 0));
+       rj-&gt;setJointPos(0);
+       rj-&gt;setJointVel(0);
+-      rj-&gt;setPosition(structToBody(compressJointPos)
+-                      + Vector3(0, 0, 0.5*wheelDiam));
++      rj-&gt;setPosition(structToBody(compressJointPos));
+       rj-&gt;setOrientation(Quaternion::unit());
+ 
++      // Well, we use an air spring for that. It is directly in the
++      // revolute joint. That is wring, but at the moment aprioriate.
+       AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
+       aoDamp-&gt;setPullPressure(pullPress);
+       aoDamp-&gt;setPushPressure(pushPress);
+@@ -847,34 +922,10 @@
+       aoDamp-&gt;setMaxDamperConstant(maxDamp);
+       rj-&gt;setLineForce(aoDamp);
+ 
+-      SimpleGear* sg = new SimpleGear(name, mVehicle-&gt;getEnvironment());
+-      arm-&gt;addMultiBodyModel(sg);
+-//       sg-&gt;setPosition(Vector3(-armLength, 0, 0.5*wheelDiam));
+-      sg-&gt;setPosition(Vector3(-armLength, 0, 0));
+-      sg-&gt;setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
+-      sg-&gt;setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
+-      sg-&gt;setFrictionCoeficient(0.9);
++      // Attach a wheel to that strut part.
++      attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
++                  tireSpring, tireDamp, arm);
+ 
+-      if (brake == &quot;LEFT&quot;) {
+-        MaxExpressionImpl* mex = new MaxExpressionImpl;
+-        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-left&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-left&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
+-      } else if (brake == &quot;RIGHT&quot;) {
+-        MaxExpressionImpl* mex = new MaxExpressionImpl;
+-        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-right&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-right&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
+-      }
+-
+       Property prop = rj-&gt;getOutputPort(0);
+       addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
+@@ -883,8 +934,8 @@
+       addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+ 
+-    } else if (uctype == &quot;AC_CLG&quot;) { 
+-      std::string name, brake;
++    } else if (uctype == &quot;AC_CLG&quot;) {
++      std::string name, brake, steer;
+       Vector3 compressJointPos;
+       real_type pullPress;
+       real_type pushPress;
+@@ -907,18 +958,71 @@
+               &gt;&gt; minDamp
+               &gt;&gt; maxDamp
+               &gt;&gt; wheelDiam
+-              &gt;&gt; tireSpring &gt;&gt; tireDamp;
++              &gt;&gt; tireSpring &gt;&gt; tireDamp
++              &gt;&gt; steer;
+ 
++      // Well this is come hardcoding, but as a demo built from within the
++      // legacy JSBSim format this is ok :)
++
++      // Model steering here ...
++      // normally we connect the compressible part to the top level body, but
++      // in case of steering this is no longer true.
++      RigidBody* strutParent = mVehicle-&gt;getTopBody();
++      if (steer == &quot;STEERABLE&quot;) {
++        // A new part modelling the steering
++        RigidBody* steer = new RigidBody(name + &quot; Steer&quot;);
++        strutParent-&gt;addChildFrame(steer);
++
++        // connect that via a revolute joint to the toplevel body.
++        // Note the 0.05m below, most steering wheels have some kind of
++        // castering auto line up behavour. That is doe with this 0.05m.
++        RevoluteJoint* sj = new RevoluteJoint(name + &quot; Steer Joint&quot;);
++        strutParent-&gt;addMultiBodyModel(sj, 0);
++        steer-&gt;addMultiBodyModel(sj, 1);
++        sj-&gt;setJointAxis(Vector3(0, 0, 1));
++        sj-&gt;setJointPos(0);
++        sj-&gt;setJointVel(0);
++        sj-&gt;setPosition(structToBody(compressJointPos)
++                        + Vector3(0.05, 0, 0));
++        sj-&gt;setOrientation(Quaternion::unit());
++
++        // Add an actuator trying to interpret the steering command
++        LineActuator* steerAct = new LineActuator(name + &quot; Steering Actuator&quot;);
++        Property prop = lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;);
++        steerAct-&gt;setInputPort(0, prop);
++        steerAct-&gt;setProportionalGain(-1e6);
++        steerAct-&gt;setDerivativeGain(-1e3);
++        sj-&gt;setLineForce(steerAct);
++        
++        strutParent = steer;
++        
++        // Prepare outputs
++        prop = sj-&gt;getOutputPort(0);
++        addOutputModel(prop, &quot;Steering &quot; + numStr + &quot; Position&quot;,
++                       &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
++        SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
++        c-&gt;setInputProperty(prop);
++        addOutputModel(Property(c), &quot;Steering &quot; + numStr + &quot; Position Deg&quot;,
++                     &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
++      }
++
++
++      // Now the compressible part of the strut
+       RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
+-      mVehicle-&gt;getTopBody()-&gt;addChildFrame(arm);
++      strutParent-&gt;addChildFrame(arm);
+       arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
+ 
++      // This time it is a prismatic joint
+       PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
+-      mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(pj, 0);
++      strutParent-&gt;addMultiBodyModel(pj, 0);
+       arm-&gt;addMultiBodyModel(pj, 1);
+       pj-&gt;setJointAxis(Vector3(0, 0, -1));
+-      pj-&gt;setPosition(structToBody(compressJointPos) + Vector3(0, 0, 0.5*wheelDiam));
++      if (strutParent == mVehicle-&gt;getTopBody())
++        pj-&gt;setPosition(structToBody(compressJointPos));
++      else
++        pj-&gt;setPosition(Vector3(-0.05, 0, 0));
+ 
++      // With an air spring
+       AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
+       aoDamp-&gt;setPullPressure(pullPress);
+       aoDamp-&gt;setPushPressure(pushPress);
+@@ -929,33 +1033,11 @@
+       aoDamp-&gt;setMaxDamperConstant(maxDamp);
+       pj-&gt;setLineForce(aoDamp);
+ 
+-      SimpleGear* sg = new SimpleGear(name, mVehicle-&gt;getEnvironment());
+-      arm-&gt;addMultiBodyModel(sg);
+-      sg-&gt;setPosition(Vector3(0, 0, 0));
+-      sg-&gt;setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
+-      sg-&gt;setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
+-      sg-&gt;setFrictionCoeficient(0.9);
++      // Attach a wheel to that strut part.
++      attachWheel(name, Vector3::zeros(), brake, numStr, wheelDiam,
++                  tireSpring, tireDamp, arm);
+ 
+-      if (brake == &quot;LEFT&quot;) {
+-        MaxExpressionImpl* mex = new MaxExpressionImpl;
+-        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-left&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-left&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
+-      } else if (brake == &quot;RIGHT&quot;) {
+-        MaxExpressionImpl* mex = new MaxExpressionImpl;
+-        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-right&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-right&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
+-        mex-&gt;addInputProperty(prop);
+-        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
+-      }
+-
++      // Prepare some outputs ...
+       Property prop = pj-&gt;getOutputPort(0);
+       addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
+@@ -970,6 +1052,7 @@
+       datastr &gt;&gt; name &gt;&gt; x &gt;&gt; y &gt;&gt; z &gt;&gt; k &gt;&gt; d &gt;&gt; fs &gt;&gt; fd &gt;&gt; rr
+               &gt;&gt; type &gt;&gt; brake &gt;&gt; sa &gt;&gt; retract;
+ 
++      // Very simple contact force. Penalty method.
+       SimpleContact* sc = new SimpleContact(name, mVehicle-&gt;getEnvironment());
+       sc-&gt;setPosition(structToBody(Vector3(x, y, z)));
+ 
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2005-11-06 12:21:01 UTC (rev 55)
+@@ -166,6 +166,12 @@
+   bool convertDocument(const XMLDocument* jsbDoc);
+   /// converts the METRICS data
+   bool convertMetrics(const std::string&amp; data);
++  /// Helper for convertUndercarriage
++  void attachWheel(const std::string&amp; name, const Vector3&amp; pos,
++                   const std::string&amp; brake,
++                   const std::string&amp; numStr, real_type wheelDiam,
++                   real_type tireSpring, real_type tireDamp,
++                   RigidBody* parent);
+   /// converts the UNDERCARRIAGE data
+   bool convertUndercarriage(const std::string&amp; data);
+   /// converts the FLIGHT_CONTROL or AUTOPILOT elements
+
+Added: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,42 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;DiscBrake.h&quot;
++
++namespace OpenFDM {
++
++DiscBrake::DiscBrake(const std::string&amp; name) :
++  LineForce(name),
++  mFrictionConstant(-1)
++{
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;brakePressure&quot;);
++}
++
++DiscBrake::~DiscBrake(void)
++{
++}
++
++void
++DiscBrake::output(const TaskInfo&amp; taskInfo)
++{
++  real_type brakeInput = getInputPort(0).getValue().toReal();
++  setForce(getVel()*(-1e1 + brakeInput*mFrictionConstant));
++}
++
++real_type
++DiscBrake::getFrictionConstant(void) const
++{
++  return mFrictionConstant;
++}
++
++void
++DiscBrake::setFrictionConstant(real_type frictionConstant)
++{
++  mFrictionConstant = frictionConstant;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,32 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_DiscBrake_H
++#define OpenFDM_DiscBrake_H
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineForce.h&quot;
++
++namespace OpenFDM {
++
++/// Linear spring damper model
++class DiscBrake :
++    public LineForce {
++public:
++  DiscBrake(const std::string&amp; name);
++  virtual ~DiscBrake(void);
++
++  virtual void output(const TaskInfo&amp; taskInfo);
++
++  real_type getFrictionConstant(void) const;
++  void setFrictionConstant(real_type frictionConstant);
++
++private:
++  real_type mFrictionConstant;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-11-06 12:21:01 UTC (rev 55)
+@@ -37,7 +37,7 @@
+ 
+ Vector6
+ FreeJoint::computeRelAccel(const SpatialInertia&amp; artI,
+-                            const Vector6&amp; artF)
++                           const Vector6&amp; artF)
+ {
+   RigidBody* topBody = getOutboardGroup()-&gt;toRigidBody();
+   if (!topBody)
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Container.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Container.h	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Container.h	2005-11-06 12:21:01 UTC (rev 55)
+@@ -1101,11 +1101,11 @@
+   }
+   OpenFDM_FORCE_INLINE
+   SymMatrix6(T S11,
+-              T S21, T S22,
+-              T S31, T S32, T S33,
+-              T S41, T S42, T S43, T S44,
+-              T S51, T S52, T S53, T S54, T S55,
+-              T S61, T S62, T S63, T S64, T S65, T S66)
++             T S21, T S22,
++             T S31, T S32, T S33,
++             T S41, T S42, T S43, T S44,
++             T S51, T S52, T S53, T S54, T S55,
++             T S61, T S62, T S63, T S64, T S65, T S66)
+   {
+     (*this)(1,1) = S11;
+     (*this)(2,1) = S21; (*this)(2,2) = S22;
+
+Added: trunk/OpenFDM/src/OpenFDM/LineActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineActuator.cpp	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/LineActuator.cpp	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,56 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineActuator.h&quot;
++
++namespace OpenFDM {
++
++LineActuator::LineActuator(const std::string&amp; name) :
++  LineForce(name),
++  mProportionalGain(1),
++  mDerivativeGain(0)
++{
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;targetPosition&quot;);
++}
++
++LineActuator::~LineActuator(void)
++{
++}
++
++void
++LineActuator::output(const TaskInfo&amp; taskInfo)
++{
++  real_type posInput = getInputPort(0).getValue().toReal();
++  real_type displacement = getPosition() - posInput;
++  setForce(mProportionalGain*displacement + getVel()*mDerivativeGain);
++}
++
++real_type
++LineActuator::getProportionalGain(void) const
++{
++  return mProportionalGain;
++}
++
++void
++LineActuator::setProportionalGain(real_type proportionalGain)
++{
++  mProportionalGain = proportionalGain;
++}
++
++real_type
++LineActuator::getDerivativeGain(void) const
++{
++  return mDerivativeGain;
++}
++
++void
++LineActuator::setDerivativeGain(real_type derivativeGain)
++{
++  mDerivativeGain = derivativeGain;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LineActuator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/LineActuator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineActuator.h	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/LineActuator.h	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,36 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LineActuator_H
++#define OpenFDM_LineActuator_H
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineForce.h&quot;
++
++namespace OpenFDM {
++
++/// Linear spring damper model
++class LineActuator :
++    public LineForce {
++public:
++  LineActuator(const std::string&amp; name);
++  virtual ~LineActuator(void);
++
++  virtual void output(const TaskInfo&amp; taskInfo);
++
++  real_type getProportionalGain(void) const;
++  void setProportionalGain(real_type proportionalGain);
++
++  real_type getDerivativeGain(void) const;
++  void setDerivativeGain(real_type derivativeGain);
++
++private:
++  real_type mProportionalGain;
++  real_type mDerivativeGain;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LineActuator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-06 12:21:01 UTC (rev 55)
+@@ -40,6 +40,7 @@
+   DefaultGround.h \
+   DefaultPlanet.h \
+   DirectForce.h \
++  DiscBrake.h \
+   DiscreteIntegrator.h \
+   DoPri5.h \
+   Environment.h \
+@@ -69,6 +70,7 @@
+   LinAlg/IO.h \
+   LinAlg/Misc.h \
+   LinAlg/Proxy.h \
++  LineActuator.h \
+   LinearSpring.h \
+   LineForce.h \
+   LogStream.h \
+@@ -115,6 +117,7 @@
+   Vector.h \
+   Vehicle.h \
+   Visitor.h \
++  WheelContact.h \
+   Wind.h \
+   XML/Tablereader.h \
+   XML/XMLReader.h
+@@ -135,6 +138,7 @@
+   DefaultGround.cpp \
+   DefaultPlanet.cpp \
+   DirectForce.cpp \
++  DiscBrake.cpp \
+   DiscreteIntegrator.cpp \
+   DoPri5.cpp \
+   Environment.cpp \
+@@ -152,8 +156,9 @@
+   Input.cpp \
+   Integrator.cpp \
+   ImplicitEuler.cpp \
++  LineActuator.cpp \
++  LinearSpring.cpp \
+   LineForce.cpp \
+-  LinearSpring.cpp \
+   Logger.cpp \
+   Mass.cpp \
+   MidpointRule.cpp \
+@@ -183,5 +188,6 @@
+   Units.cpp \
+   Variant.cpp \
+   Vehicle.cpp \
++  WheelContact.cpp \
+   XML/Tablereader.cpp \
+   XML/XMLReader.cpp
+
+Added: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,175 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Environment.h&quot;
++#include &quot;WheelContact.h&quot;
++
++namespace OpenFDM {
++
++WheelContact::WheelContact(const std::string&amp; name, Environment* env)
++  : ExternalForce(name)
++{
++  mWheelRadius = 0.3;
++  mSpringConstant = 0;
++  mSpringDamping = 0;
++  mFrictionCoeficient = 0.8;
++
++  mEnvironment = env;
++
++  // FIXME??
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++}
++
++WheelContact::~WheelContact(void)
++{
++}
++
++void
++WheelContact::output(const TaskInfo&amp; taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) &lt;&lt; &quot;WheelContact::output(): \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
++    getGround(0 /*FIXME*/);
++  }
++}
++
++void
++WheelContact::computeForce(void)
++{
++  // FIXME: check all signs here, I get the feeling that we have
++  // just even much minuses here instead of exactly the right ones ...
++  const Frame* frame = getParentFrame(0);
++  OpenFDMAssert(frame);
++  if (!frame) {
++    applyForce(Vector6::zeros());
++    return;
++  }
++
++  // Transform the plane equation to the local frame.
++  Plane lp = frame-&gt;planeFromRef(mGroundVal.plane);
++  
++  // Get the intersection length.
++  real_type distHubGround = fabs(lp.getDist(Vector3::zeros()));
++  real_type compressLength = mWheelRadius - distHubGround;
++  
++  // Don't bother if we do not intersect the ground.
++  if (compressLength &lt; 0) {
++    applyForce(Vector6::zeros());
++    return;
++  }
++
++  Vector3 contactPoint = distHubGround*lp.getNormal();
++  
++  // The velocity of the ground patch in the current frame.
++  Vector6 groundVel = frame-&gt;motionFromRef(mGroundVal.vel);
++  // Now get the relative velocity of the ground wrt the hub
++  Vector6 relVel = - groundVel;
++//   Log(Model,Error) &lt;&lt; trans(frame-&gt;getRelVel()) &lt;&lt; &quot; &quot;
++//                    &lt;&lt; trans(groundVel) &lt;&lt; &quot; &quot;
++//                    &lt;&lt; trans(frame-&gt;motionToParent(relVel)) &lt;&lt; endl;
++
++
++  // The velocity perpandicular to the plane.
++  // Positive when the contact spring is compressed,
++  // negative when decompressed.
++  real_type compressVel = - lp.scalarProjectToNormal(relVel.getLinear());
++  
++  // Get the plane normal force.
++  real_type normForce = computeNormalForce(compressLength, compressVel);
++  // The normal force cannot get negative here.
++  normForce = max(static_cast&lt;real_type&gt;(0), normForce);
++  
++  // Get a transform from the current frames coordinates into
++  // wheel coordinates.
++  // The wheel coordinates x asxis is defined by the forward orientation
++  // of the wheel, the z axis points perpandicular to the ground
++  // plane downwards.
++  Vector3 forward = normalize(cross(Vector3::unit(2), lp.getNormal()));
++  Vector3 side = normalize(cross(lp.getNormal(), forward));
++
++  // Transformed velocity to the ground plane
++  Vector2 wheelVel(dot(forward, relVel.getLinear()),
++                   dot(side, relVel.getLinear()));
++
++  // The wheel rotation speed wrt ground
++  Vector3 rotVel = relVel.getAngular();
++  real_type omegaR = rotVel(2) * distHubGround;
++
++//   Log(Model,Error) &lt;&lt; trans(groundVel) &lt;&lt; &quot; &quot;
++//                    &lt;&lt; trans(wheelVel) &lt;&lt; &quot; &quot;
++//                    &lt;&lt; omegaR &lt;&lt; &quot; &quot;
++//                    &lt;&lt; compressLength &lt;&lt; &quot; &quot;
++//                    &lt;&lt; distHubGround &lt;&lt; endl;
++
++
++
++  // Get the friction force.
++  Vector2 fricForce = computeFrictionForce(normForce, wheelVel,
++                                           omegaR, mGroundVal.friction);
++  
++  // The resulting force is the sum of both.
++  // The minus sign is because of the direction of the surface normal.
++  Vector3 force = fricForce(1)*forward + fricForce(2)*side
++    - normForce*lp.getNormal();
++  
++  // We don't have an angular moment.
++  applyForce(forceFrom(contactPoint, force));
++}
++
++real_type
++WheelContact::computeNormalForce(real_type compressLen, real_type compressVel) const
++{
++  return compressLen*mSpringConstant
++    - mSpringDamping*min(compressVel, static_cast&lt;real_type&gt;(0));
++}
++
++Vector2
++WheelContact::computeFrictionForce(real_type normForce, const Vector2&amp; vel,
++                                   real_type omegaR, real_type friction) const
++{
++  // We just get the wheel slip directly here
++  real_type wheelSlip = vel(1)+omegaR;
++  
++  // The slip angle is the angle between the 'velocity vector' and 
++  // the wheel forward direction.
++  real_type slipAngle = rad2deg*atan2(vel(2), fabs(vel(1)));
++  if (10*fabs(vel(2)) &lt; fabs(slipAngle))
++    slipAngle = 10*vel(2);
++  
++  Vector2 slip(wheelSlip, slipAngle);
++//   if (1 &lt; norm(slip))
++//     slip = normalize(slip);
++  if (1 &lt; fabs(wheelSlip))
++    slip(1) = sign(wheelSlip);
++  if (1 &lt; fabs(slipAngle))
++    slip(2) = sign(slipAngle);
++  
++  // The friction force for fast movement.
++  return (-friction*mFrictionCoeficient*normForce)*slip;
++}
++
++void
++WheelContact::getGround(real_type t)
++{
++  const Frame* frame = getParentFrame(0);
++  OpenFDMAssert(frame);
++  if (!frame)
++    return;
++
++  // Get the position of the contact in the reference system.
++  Vector3 pos = frame-&gt;posToRef(Vector3::zeros());
++  // Query for the ground parameters at this point.
++  mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/WheelContact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.h	2005-11-05 16:10:23 UTC (rev 54)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.h	2005-11-06 12:21:01 UTC (rev 55)
+@@ -0,0 +1,70 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WheelContact_H
++#define OpenFDM_WheelContact_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Ground.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++class WheelContact
++  : public ExternalForce {
++public:
++  WheelContact(const std::string&amp; name, Environment* env);
++  virtual ~WheelContact(void);
++
++  virtual void output(const TaskInfo&amp;);
++
++  virtual void computeForce(void);
++
++  // Compute the plane normal force.
++  virtual real_type
++  computeNormalForce(real_type compressLen, real_type compressVel) const;
++
++  // Compute the friction force.
++  virtual Vector2
++  computeFrictionForce(real_type normForce, const Vector2&amp; vel,
++                       real_type omegaR, real_type friction) const;
++
++  void setWheelRadius(real_type wheelRadius)
++  { mWheelRadius = wheelRadius; }
++  real_type getWheelRadius(void) const
++  { return mWheelRadius; }
++
++  void setSpringConstant(real_type springConstant)
++  { mSpringConstant = springConstant; }
++  real_type getSpringConstant(void) const
++  { return mSpringConstant; }
++
++  void setSpringDamping(real_type springDamping)
++  { mSpringDamping = springDamping; }
++  real_type getSpringDamping(void) const
++  { return mSpringDamping; }
++
++  void setFrictionCoeficient(real_type frictionCoeficient)
++  { mFrictionCoeficient = frictionCoeficient; }
++  real_type getFrictionCoeficient(void) const
++  { return mFrictionCoeficient; }
++private:
++  void getGround(real_type t);
++
++  GroundValues mGroundVal;
++  shared_ptr&lt;Environment&gt; mEnvironment;
++
++  real_type mWheelRadius;
++  real_type mSpringConstant;
++  real_type mSpringDamping;
++  real_type mFrictionCoeficient;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/WheelContact.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000041.html">[OpenFDM-svn] r54 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000043.html">[OpenFDM-svn] r56 - in trunk/OpenFDM/src/OpenFDM: . LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#42">[ date ]</a>
+              <a href="thread.html#42">[ thread ]</a>
+              <a href="subject.html#42">[ subject ]</a>
+              <a href="author.html#42">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

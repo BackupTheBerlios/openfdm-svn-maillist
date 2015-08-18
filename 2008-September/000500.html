@@ -1,0 +1,1324 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r528 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r528%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809280743.m8S7hfZk025684%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000499.html">
+   <LINK REL="Next"  HREF="000501.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r528 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r528%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809280743.m8S7hfZk025684%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r528 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 28 09:43:41 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000499.html">[OpenFDM-svn] r527 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000501.html">[OpenFDM-svn] r529 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#500">[ date ]</a>
+              <a href="thread.html#500">[ thread ]</a>
+              <a href="subject.html#500">[ subject ]</a>
+              <a href="author.html#500">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-28 09:43:39 +0200 (Sun, 28 Sep 2008)
+New Revision: 528
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move System (mostly) to regular implementation files.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-09-28 07:19:55 UTC (rev 527)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-09-28 07:43:39 UTC (rev 528)
+@@ -0,0 +1,82 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_AbstractNodeInstance_H
++#define OpenFDM_AbstractNodeInstance_H
++
++#include &lt;string&gt;
++#include &quot;AbstractNodeContext.h&quot;
++#include &quot;Assert.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;SharedPtr.h&quot;
++#include &quot;WeakReferenced.h&quot;
++
++namespace OpenFDM {
++
++/// An Abstract NodeInstance represents an effective model node in a ready
++/// to run System. You can access the Nodes Ports values for example.
++/// This class is meant to show up in the user interface of this simulation.
++class AbstractNodeInstance : public WeakReferenced {
++public:
++  AbstractNodeInstance(const NodePath&amp; nodePath) :
++    mNodePath(nodePath)
++  { OpenFDMAssert(!nodePath.empty()); }
++  virtual ~AbstractNodeInstance()
++  { }
++
++  /// The actual Node this AbstractNodeInstance stems from
++  const Node&amp; getNode() const
++  { return getNodeContext().getNode(); }
++
++  const NodePath&amp; getNodePath() const { return mNodePath; }
++
++//   /// Set the sample times this node will run on
++//   void setSampleTimeSet(const SampleTimeSet&amp; sampleTimeSet)
++//   { mSampleTimeSet = sampleTimeSet; }
++//   /// Get the sample times this node will run on
++//   const SampleTimeSet&amp; getSampleTimeSet() const
++//   { return mSampleTimeSet; }
++
++  PortValueList&amp; getPortValueList()
++  { return getNodeContext().getPortValueList(); }
++  const PortValueList&amp; getPortValueList() const
++  { return getNodeContext().getPortValueList(); }
++
++  std::string getNodeNamePath() const
++  {
++    if (mNodePath.empty())
++      return std::string();
++    std::string path = mNodePath.front()-&gt;getName();
++    NodePath::const_iterator i = mNodePath.begin();
++    if (i != mNodePath.end()) {
++      for (++i; i != mNodePath.end(); ++i) {
++        path += '/';
++        path += (*i)-&gt;getName();
++      }
++    }
++    return path;
++  }
++
++protected:
++  AbstractNodeInstance() {}
++
++  /// The node context that belongs to this instance.
++  virtual AbstractNodeContext&amp; getNodeContext() = 0;
++  virtual const AbstractNodeContext&amp; getNodeContext() const = 0;
++
++private:
++  AbstractNodeInstance(const AbstractNodeInstance&amp;);
++  AbstractNodeInstance&amp; operator=(const AbstractNodeInstance&amp;);
++
++//   /// The sample times this node will run on
++//   SampleTimeSet mSampleTimeSet;
++
++  NodePath mNodePath;
++};
++
++typedef std::list&lt;SharedPtr&lt;AbstractNodeInstance&gt; &gt; NodeInstanceList;
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-28 07:19:55 UTC (rev 527)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-28 07:43:39 UTC (rev 528)
+@@ -9,6 +9,7 @@
+ 
+ OpenFDMCoreHEADERS = \
+   AbstractNodeContext.h \
++  AbstractNodeInstance.h \
+   AbstractSystem.h \
+   AcceptorPortInfo.h \
+   Assert.h \
+@@ -155,6 +156,7 @@
+   RootJoint.cpp \
+   SampleTime.cpp \
+   StateValue.cpp \
++  System.cpp \
+   Time.cpp \
+   Unit.cpp \
+   Variant.cpp
+@@ -164,7 +166,6 @@
+ #   ImplicitEuler.cpp \
+ #   Newton.cpp \
+ #   ReaderWriter.cpp \
+-#   System.cpp \
+ #   TaskInfo.cpp \
+ #
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-09-28 07:19:55 UTC (rev 527)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-09-28 07:43:39 UTC (rev 528)
+@@ -5,770 +5,63 @@
+ #include &quot;System.h&quot;
+ 
+ #include &quot;Object.h&quot;
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Environment.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;ODESolver.h&quot;
+-#include &quot;ExplicitEuler.h&quot;
+-#include &quot;Function.h&quot;
+-#include &quot;Newton.h&quot;
+-#include &quot;ModelVisitor.h&quot;
+-#include &quot;Planet.h&quot;
+-#include &quot;MobileRootJoint.h&quot;
++#include &quot;AbstractSystem.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(System, ModelGroup)
++BEGIN_OPENFDM_OBJECT_DEF(System, Object)
+   END_OPENFDM_OBJECT_DEF
+ 
+-struct ModelListEntry {
+-  SharedPtr&lt;Model&gt; model;
+-  Node::Path nodePath;
+-  SampleTimeSet sampleTimeSet;  
+-};
+-
+-typedef std::list&lt;ModelListEntry&gt; ModelList2;
+-
+-class ModelCollectVisitor :
+-    public ModelVisitor {
+-public:
+-  virtual ~ModelCollectVisitor(void)
+-  { }
+-  virtual void apply(Model&amp; model)
+-  {
+-    ModelListEntry entry;
+-    entry.model = &model;
+-    entry.nodePath = getNodePath();
+-    entry.sampleTimeSet = model.getSampleTimeSet();
+-    if (entry.sampleTimeSet.isInherited()) {
+-      SampleTimeSet::const_iterator it;
+-      for (it = sampleTimeSet.begin(); it != sampleTimeSet.end(); ++it)
+-        entry.sampleTimeSet.addSampleTime(*it);
+-    }
+-
+-    SampleTimeSet::const_iterator it;
+-    for (it = entry.sampleTimeSet.begin();
+-         it != entry.sampleTimeSet.end(); ++it)
+-      allSampleTimeSet.addSampleTime(*it);
+-
+-    modelList.push_back(entry);
+-  }
+-  virtual void apply(ModelGroup&amp; modelGroup)
+-  {
+-    SampleTimeSet savedSet = sampleTimeSet;
+-    if (modelGroup.getSampleTimeSet().isInherited()) {
+-      SampleTimeSet::const_iterator it;
+-      for (it = modelGroup.getSampleTimeSet().begin();
+-           it != modelGroup.getSampleTimeSet().end(); ++it)
+-        sampleTimeSet.addSampleTime(*it);
+-    } else {
+-      sampleTimeSet = modelGroup.getSampleTimeSet();
+-    }
+-    traverse(modelGroup);
+-    sampleTimeSet = savedSet;
+-  }
+-
+-  ModelList2 modelList;
+-  SampleTimeSet sampleTimeSet;
+-  SampleTimeSet allSampleTimeSet;
+-};
+-
+-System::System(const std::string&amp; name) :
+-  ModelGroup(name),
+-  mTime(0),
+-  mNumContinousStates(0),
+-  mNumDiscreteStates(0)
++System::System(const std::string&amp; name, Node* node) :
++  Object(name),
++  mNode(node)
+ {
+-  setTimestepper(new ExplicitEuler);
+-  mEnvironment = new Environment;
+-  addSampleTime(SampleTime::Continous);
+ }
+ 
+-System::~System(void)
++System::~System()
+ {
+ }
+ 
+ void
+-System::accept(ModelVisitor&amp; visitor)
++System::setNode(Node* node)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  clear();
++  mNode = node;
+ }
+ 
+-static bool
+-sortModels(ModelList2&amp; mModels);
++/// FIXME: here should System::init be
+ 
+-static void
+-fillTaskInfo(TaskInfo&amp; taskInfo, const ModelList2&amp; modelList);
+-
+-bool
+-System::init(void)
+-{
+-  // Reset the task scheduling stuff
+-  mContinousModelList.clear();
+-  mDiscreteModelList.clear();
+-  mDiscreteTaskList.clear();
+-  mCurrentTaskNum = 0u;
+-  mCurrentSliceTime = 0;
+-
+-  // For now let init sort them and now build tasks from that
+-  ModelCollectVisitor modelCollectVisitor;
+-  accept(modelCollectVisitor);
+-
+-  // sett the environment, FIXME move somewhere into task
+-  ModelList2::const_iterator mit;
+-  mit = modelCollectVisitor.modelList.begin();
+-  while (mit != modelCollectVisitor.modelList.end()) {
+-    mit-&gt;model-&gt;setEnvironment(mEnvironment);
+-    ++mit;
+-  }
+- 
+-  OpenFDM::sortModels(modelCollectVisitor.modelList);
+-
+-  // Compute the basic time slice, that is the greatest time that hits all
+-  // discrete sample times boundaries we have in this system
+-  real_type gcd = 0;
+-  real_type scm = 0;
+-  real_type minSampleTime = Limits&lt;real_type&gt;::max();
+-  SampleTimeSet sampleTimes = modelCollectVisitor.allSampleTimeSet;
+-  SampleTimeSet::const_iterator it;
+-  for (it = sampleTimes.begin(); it != sampleTimes.end(); ++it) {
+-    if (!it-&gt;isDiscrete())
+-      continue;
+-
+-    real_type sampleTime = it-&gt;getSampleTime();
+-    OpenFDMAssert(0 &lt; sampleTime);
+-    minSampleTime = min(minSampleTime, sampleTime);
+-    if (0 &lt; gcd) {
+-      gcd = greatestCommonDivisor(gcd, sampleTime);
+-      scm = scm*sampleTime/greatestCommonDivisor(scm, sampleTime);
+-    } else {
+-      gcd = sampleTime;
+-      scm = sampleTime;
+-    }
+-  }
+-
+-  // Now that we know the basic sample time, build the job schedules
+-  Log(Schedule, Info) &lt;&lt; &quot;Basic time is: &quot; &lt;&lt; gcd &lt;&lt; endl;
+-  if (100*gcd &lt; minSampleTime)
+-    Log(Schedule, Warning) &lt;&lt; &quot;Basic sample time is less than 100 times &quot;
+-      &quot;smaller than the smallest submodels sample time&quot; &lt;&lt; endl;
+-
+-  // We do not have any discrete sample time, just do continous scheduling
+-  if (gcd &lt;= 0)
+-    return true;
+-
+-  // Check if we can handle that schedule within the bounds of our data types
+-  // If it does not, the time slices are choosen too bad for realtime
+-  // simulations anyway
+-  real_type stepsPerCycle = floor(scm/gcd + 0.5);
+-  if (Limits&lt;unsigned&gt;::max() &lt;= stepsPerCycle) {
+-    Log(Schedule, Error) &lt;&lt; &quot;Too many basic steps for our datatypes.\n&quot;
+-      &quot;You propably want to use sample times fitting together.\n&quot;
+-      &quot;Aborting!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  
+-  // Alloc enough empty task infos.
+-  mDiscreteTaskList.assign((unsigned)stepsPerCycle, TaskInfo());
+-  // Put a TaskInfo entry into the list for all time schedules required
+-  for (it = sampleTimes.begin(); it != sampleTimes.end(); ++it) {
+-    if (!it-&gt;isDiscrete())
+-      continue;
+-
+-    unsigned increment = unsigned(floor(it-&gt;getSampleTime()/gcd + 0.5));
+-    for (unsigned i = 0; i &lt; mDiscreteTaskList.size(); i += increment)
+-      mDiscreteTaskList[i].addSampleTime(*it);
+-  }
+-  // FIXME: combine this step with the one above
+-  TaskList cTL;
+-  for (unsigned i = 0; i &lt; mDiscreteTaskList.size(); ++i) {
+-    if (!mDiscreteTaskList[i].getSampleTimeSet().empty())
+-      cTL.push_back(mDiscreteTaskList[i]);
+-    cTL.back().setSliceSize(cTL.back().getSliceSize() + gcd);
+-    cTL.back().setNumBasicSteps(cTL.back().getNumBasicSteps() + 1);
+-  }
+-  mDiscreteTaskList.swap(cTL);
+-
+-  // Now precompute the list of models to be updated on each task
+-  for (unsigned i = 0; i &lt; mDiscreteTaskList.size(); ++i)
+-    fillTaskInfo(mDiscreteTaskList[i], modelCollectVisitor.modelList);
+-
+-  mPerTimestepTask = TaskInfo();
+-  mPerTimestepTask.addSampleTime(SampleTime::PerTimestep);
+-  fillTaskInfo(mPerTimestepTask, modelCollectVisitor.modelList);
+-
+-  mContinousTask = TaskInfo();
+-  mContinousTask.addSampleTime(SampleTime::Continous);
+-  fillTaskInfo(mContinousTask, modelCollectVisitor.modelList);
+-
+-  mit = modelCollectVisitor.modelList.begin();
+-  while (mit != modelCollectVisitor.modelList.end()) {
+-    if (!mit-&gt;model-&gt;init()) {
+-      Log(Schedule, Error) &lt;&lt; &quot;Error initializing Model \&quot;&quot;
+-                           &lt;&lt; mit-&gt;model-&gt;getName() &lt;&lt; &quot;\&quot;.\n&quot;
+-                           &lt;&lt; &quot;Aborting!&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-    ++mit;
+-  }
+-
+-  // build up the lists of stateful models and count the number of states
+-  unsigned numContinousStates = 0;
+-  unsigned numDiscreteStates = 0;
+-  mit = modelCollectVisitor.modelList.begin();
+-  while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit-&gt;model-&gt;getNumContinousStates()) {
+-      mContinousModelList.push_back(mit-&gt;model);
+-      numContinousStates += mit-&gt;model-&gt;getNumContinousStates();
+-    }
+-    if (mit-&gt;model-&gt;getNumDiscreteStates()) {
+-      mDiscreteModelList.push_back(mit-&gt;model);
+-      numDiscreteStates += mit-&gt;model-&gt;getNumDiscreteStates();
+-    }
+-    ++mit;
+-  }
+-  setNumContinousStates(numContinousStates);
+-  setNumDiscreteStates(numDiscreteStates);
+-
+-  // Just a verbose print here ...
+-  Log(Schedule, Info) &lt;&lt; &quot;gcd of sample times is: &quot; &lt;&lt; gcd
+-                   &lt;&lt; &quot;, scm of sample times is: &quot; &lt;&lt; scm &lt;&lt; endl;
+-  for (unsigned i = 0; i &lt; mDiscreteTaskList.size(); ++i)
+-    Log(Schedule, Info) &lt;&lt; &quot;Task # &quot; &lt;&lt; i &lt;&lt; &quot;: # basicSteps &quot;
+-                     &lt;&lt; mDiscreteTaskList[i].getNumBasicSteps()
+-                     &lt;&lt; &quot;, sliceSize &quot;
+-                     &lt;&lt; mDiscreteTaskList[i].getSliceSize()
+-                     &lt;&lt; &quot;, sample times &quot;
+-                     &lt;&lt; mDiscreteTaskList[i].getSampleTimeSet() &lt;&lt; endl;
+-
+-  // At the moment we need a timestepper, else the time does not get
+-  // incremented
+-  if (!mTimestepper) {
+-    Log(Schedule, Error) &lt;&lt; &quot;Timestepping method is unset.\nAborting!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  mTimestepper-&gt;setTime(0);
+-  mTime = 0;
+-  mTimestepper-&gt;setStepsize(gcd);
+-  return true;
+-}
+-
+ void
+-System::output(const TaskInfo&amp; taskInfo)
++System::clear()
+ {
+-  taskInfo.output();
++  mAbstractSystem = 0;
++  mNodeInstanceList.clear();
+ }
+ 
+-void
+-System::update(const TaskInfo&amp; taskInfo)
+-{
+-  taskInfo.update();
+-}
+-
+-void
+-System::setState(const StateStream&amp; state)
+-{
+-  ModelList::iterator it;
+-  for (it = mContinousModelList.begin(); it != mContinousModelList.end(); ++it)
+-    (*it)-&gt;setState(state);
+-}
+-
+-void
+-System::getState(StateStream&amp; state) const
+-{
+-  ModelList::const_iterator it;
+-  for (it = mContinousModelList.begin(); it != mContinousModelList.end(); ++it)
+-    (*it)-&gt;getState(state);
+-}
+-
+-void
+-System::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-  ModelList::iterator it;
+-  for (it = mContinousModelList.begin(); it != mContinousModelList.end(); ++it)
+-    (*it)-&gt;getStateDeriv(stateDeriv);
+-}
+-
+-void
+-System::setDiscreteState(const StateStream&amp; state)
+-{
+-  ModelList::iterator it;
+-  for (it = mDiscreteModelList.begin(); it != mDiscreteModelList.end(); ++it)
+-    (*it)-&gt;setDiscreteState(state);
+-}
+-
+-void
+-System::getDiscreteState(StateStream&amp; state) const
+-{
+-  ModelList::const_iterator it;
+-  for (it = mDiscreteModelList.begin(); it != mDiscreteModelList.end(); ++it)
+-    (*it)-&gt;getDiscreteState(state);
+-}
+-
++/// Simulate the system until the time tEnd
+ bool
+-System::simulate(real_type tEnd)
++System::simulate(const real_type&amp; t)
+ {
+-  // Check if we need an ODE timestepper.
+-  bool continousStates = 0 &lt; getNumContinousStates();
+-
+-  // Since it is possible to change the models states in a non physical way
+-  // outside this method, we need to read that state and set it into the
+-  // timestepper. The timestepper needs to take care if it needs to be
+-  // restarted. So just set it here.
+-  StateStream stateStream(getNumContinousStates());
+-  getState(stateStream);
+-  Vector state = stateStream.getState();
+-  // Exact check is currect here, the user does not have to fiddle with
+-  // the state during simulation, if the state changes despite of that,
+-  // Just spend that extra effort.
+-  if (state != mTimestepper-&gt;getState()) {
+-    mTimestepper-&gt;setState(state);
+-    evalFunction(mTimestepper-&gt;getTime(), mTimestepper-&gt;getState(), state);
+-  }
+-
+-  while (getTime() &lt; tEnd) {
+-    // This is the maximum time we can step in this loop
+-    real_type loopTEnd = tEnd;
+-
+-    // Check if we have discrete systems with any discrete slice time
+-    if (mDiscreteTaskList.empty()) {
+-      // Leave it to the timestepping algorithm,
+-      // to choose the size of the steps
+-      loopTEnd = tEnd;
+-    } else {
+-      // need that  ...
+-      mDiscreteTaskList[mCurrentTaskNum].setTime(getTime());
+-      
+-      if (mCurrentSliceTime == 0) {
+-        const TaskInfo&amp; taskInfo = mDiscreteTaskList[mCurrentTaskNum];
+-        Log(Schedule, Info) &lt;&lt; &quot;Computing discrete output for Task # &quot;
+-                         &lt;&lt; mCurrentTaskNum &lt;&lt; &quot;: # basicSteps &quot;
+-                         &lt;&lt; taskInfo.getNumBasicSteps() &lt;&lt; &quot;, sliceSize &quot;
+-                         &lt;&lt; taskInfo.getSliceSize() &lt;&lt; &quot;, sample times &quot;
+-                         &lt;&lt; taskInfo.getSampleTimeSet() &lt;&lt; endl;
+-      
+-        output(mDiscreteTaskList[mCurrentTaskNum]);
+-        update(mDiscreteTaskList[mCurrentTaskNum]);
+-      }
+-
+-      // Take the minimum of the current discrete tasks end and the given
+-      // end time, take care of roundoff
+-      real_type taskTEnd = mTime - mCurrentSliceTime
+-        + mDiscreteTaskList[mCurrentTaskNum].getSliceSize();
+-      if (equal(taskTEnd, tEnd, 100) || taskTEnd &lt;= tEnd) {
+-        loopTEnd = taskTEnd;
+-        mCurrentSliceTime = 0;
+-        ++mCurrentTaskNum;
+-        if (mDiscreteTaskList.size() &lt;= mCurrentTaskNum)
+-          mCurrentTaskNum = 0;
+-      } else {
+-        loopTEnd = tEnd;
+-        mCurrentSliceTime += tEnd - getTime();
+-      }
+-    }
+-
+-    if (!continousStates) {
+-      mTime = loopTEnd;
+-
+-      Log(Schedule, Info) &lt;&lt; &quot;Preparing Models: continous output step&quot; &lt;&lt; endl;
+-      mContinousTask.setTime(getTime());
+-      output(mContinousTask);
+-
+-    } else {
+-      // Do the pre integration output round
+-      Log(Schedule, Info) &lt;&lt; &quot;Preparing Models: pre integration step&quot; &lt;&lt; endl;
+-      mPerTimestepTask.setTime(getTime());
+-      output(mPerTimestepTask);
+-      update(mPerTimestepTask);
+-
+-      Log(Schedule, Info) &lt;&lt; &quot;Integration: from time &quot;
+-                          &lt;&lt; mTimestepper-&gt;getTime()
+-                          &lt;&lt; &quot; up to time &quot; &lt;&lt; loopTEnd
+-                          &lt;&lt; &quot; dt = &quot; &lt;&lt; loopTEnd - mTimestepper-&gt;getTime()
+-                          &lt;&lt; endl;
+-      // FIXME: check for errors
+-      mTimestepper-&gt;integrate(loopTEnd);
+-      mTime = mTimestepper-&gt;getTime();
+-      Log(Schedule, Info) &lt;&lt; &quot;Integration: finished&quot; &lt;&lt; endl;
+-      // Croase end check when it is too late, we might do stiffness
+-      // detection at least within dopri in an other way ...
+-      if (!isFinite(mTimestepper-&gt;getState())) {
+-        Log(TimeStep, Warning) &lt;&lt; &quot;Found infinite values in continous state &quot;
+-          &quot;vector. Consider using an other timestepping method or make your &quot;
+-          &quot;model less stiff. Aborting!&quot; &lt;&lt; endl;
+-        return false;
+-      }
+-
+-      // It set's the current state into the models and computes the
+-      // accelerations for the mechanical system
+-      evalFunction(mTimestepper-&gt;getTime(), mTimestepper-&gt;getState(), state);
+-    }
+-
+-    if (equal(mTime, tEnd, 10))
+-      mTime = tEnd;
+-  }
+-
++  if (mAbstractSystem)
++    return false;
++  mAbstractSystem-&gt;outputAt(t);
+   return true;
+ }
+ 
+-class TrimCollectorVisitor :
+-    public ModelVisitor {
+-public:
+-  TrimCollectorVisitor(unsigned nStates) :
+-    mStateStream(nStates)
+-  { }
+-  virtual ~TrimCollectorVisitor(void)
+-  { }
+-  virtual void apply(Model&amp; model)
+-  { model.getStateDeriv(mStateStream); }
+-  virtual void apply(ModelGroup&amp; modelGroup)
+-  { traverse(modelGroup); }
+-  virtual void apply(MobileRootJoint&amp; mobileRootJoint)
+-  {
+-    mGeodPos = mobileRootJoint.getGeodPosition();
+-    mGeodOr = mobileRootJoint.getGeodOrientation();
+-    mVel = mobileRootJoint.getRelVel();
+-    mVelDot = mobileRootJoint.getRelVelDot();
+-    mPosDot = mobileRootJoint.getPosDot();
+-    mQDot = mobileRootJoint.getQDot();
+-    mMobileRootJoint = &mobileRootJoint;
+-  }
+-  Geodetic mGeodPos;
+-  Quaternion mGeodOr;
+-  Vector6 mVel;
+-  Vector6 mVelDot;
+-  Vector3 mPosDot;
+-  Vector4 mQDot;
+-  StateStream mStateStream;
+-  MobileRootJoint* mMobileRootJoint;
+-};
+-
+-class TrimFunction :
+-    public Function {
+-public:
+-  TrimFunction(System&amp; system) :
+-    mSystem(system)
+-  {
+-    unsigned nStates = mSystem.getNumContinousStates();
+-    TrimCollectorVisitor tcv(nStates);
+-    mSystem.accept(tcv);
+-    mGeodPos = tcv.mGeodPos;
+-    mGeodOr = tcv.mGeodOr;
+-    mVel = tcv.mVel;
+-    mVelDot = tcv.mVelDot;
+-    mPosDot = tcv.mPosDot;
+-    mQDot = tcv.mQDot;
+-  }
+-  virtual unsigned inSize(void) const
+-  { return mSystem.getNumContinousStates(); }
+-  virtual unsigned outSize(void) const
+-  { return mSystem.getNumContinousStates() + 6; }
+-  virtual void eval(real_type t, const Vector&amp; v, Vector&amp; out)
+-  {
+-    unsigned nStates = mSystem.getNumContinousStates();
+-    Vector deriv(nStates);
+-    mSystem.evalFunction(t, v, deriv);
+-
+-    TrimCollectorVisitor tcv(nStates + 6);
+-    mSystem.accept(tcv);
+-    Vector3 eo = mGeodOr.getEuler();
+-    Vector3 en = tcv.mGeodOr.getEuler();
+-
+-    /// 3 dof for the position
+-    real_type tmp = 1e6*(mGeodPos.longitude - tcv.mGeodPos.longitude);
+-    tcv.mStateStream.writeSubState(tmp);
+-    tmp = 1e6*(mGeodPos.latitude - tcv.mGeodPos.latitude);
+-    tcv.mStateStream.writeSubState(tmp);
+-    tmp = smoothDeadBand(mGeodPos.altitude - tcv.mGeodPos.altitude, real_type(10));
+-    tcv.mStateStream.writeSubState(tmp);
+-
+-    // The orientation
+-    tmp = 1e2*smoothDeadBand(eo(0) - en(0), 20*deg2rad);
+-    tcv.mStateStream.writeSubState(tmp);
+-    tmp = 1e2*smoothDeadBand(eo(1) - en(1), 20*deg2rad);
+-    tcv.mStateStream.writeSubState(tmp);
+-    tmp = 1e2*(eo(2) - en(2));
+-    tcv.mStateStream.writeSubState(tmp);
+-
+-//     tcv.mStateStream.writeSubState(1e2*norm(tcv.mQDot) + norm(tcv.mPosDot - mPosDot));
+-    tcv.mStateStream.writeSubState(1e8*tcv.mQDot);
+-    tcv.mStateStream.writeSubState(tcv.mPosDot - mPosDot);
+-    tcv.mStateStream.writeSubState(1e6*tcv.mVelDot);
+-
+-    out = tcv.mStateStream.getState();
+-  }
+-// private:
+-  System&amp; mSystem;
+-  Geodetic mGeodPos;
+-  Quaternion mGeodOr;
+-  Vector6 mVel;
+-  Vector6 mVelDot;
+-  Vector3 mPosDot;
+-  Vector4 mQDot;
+-};
+-
+-class AltitudeFinderTrimFunction :
+-    public Function {
+-public:
+-  AltitudeFinderTrimFunction(System&amp; system, real_type range) :
+-    mSystem(system),
+-    mRange(range)
+-  {
+-    unsigned nStates = mSystem.getNumContinousStates();
+-    TrimCollectorVisitor tcv(nStates);
+-    mSystem.accept(tcv);
+-    mGeodPos = tcv.mGeodPos;
+-    mGeodOr = tcv.mGeodOr;
+-    mVel = tcv.mVel;
+-    mVelDot = tcv.mVelDot;
+-    mMobileRootJoint = tcv.mMobileRootJoint;
+-  }
+-  virtual unsigned inSize(void) const
+-  { return 1; }
+-  virtual unsigned outSize(void) const
+-  { return 7; }
+-  virtual void eval(real_type t, const Vector&amp; v, Vector&amp; out)
+-  {
+-    Geodetic geod = mGeodPos;
+-    geod.altitude = mGeodPos.altitude - mRange*0.5 + v(0);
+-    mMobileRootJoint-&gt;setGeodPosition(geod);
+-    
+-    unsigned nStates = mSystem.getNumContinousStates();
+-    StateStream vv(nStates);
+-    mSystem.getState(vv);
+-    Vector deriv(nStates);
+-    mSystem.evalFunction(t, vv.getState(), deriv);
+-
+-    TrimCollectorVisitor tcv(nStates + 6);
+-    mSystem.accept(tcv);
+-
+-    /// The line search algorithm sees that the gravitation
+-    /// is less in higher regions, thus we need to add a 'minimum altitude'
+-    /// criterion
+-    out.resize(7, 1);
+-    out(Range(0, 5)) = tcv.mVelDot;
+-//     out(6) = 1e-1*v(0);
+-    out(6) = smoothDeadBand(v(0), mRange);
+-    
+-//     Log(Model,Error) &lt;&lt; trans(v) &lt;&lt; endl;
+-//     Log(Model,Error) &lt;&lt; trans(out) &lt;&lt; endl;
+-//     Log(Model,Error) &lt;&lt; mGeodPos &lt;&lt; geod &lt;&lt; endl &lt;&lt; endl;
+-  }
+-// private:
+-  System&amp; mSystem;
+-  real_type mRange;
+-  Geodetic mGeodPos;
+-  Quaternion mGeodOr;
+-  Vector6 mVel;
+-  Vector6 mVelDot;
+-  MobileRootJoint* mMobileRootJoint;
+-};
+-
++/// Bring the system in an equilibrum state near the current state ...
+ bool
+ System::trim(void)
+ {
+-  // need to prepare the System especially for the per step tasks
+-  TaskInfo taskInfo = mDiscreteTaskList[0];
+-//   taskInfo.setTime(getTime());
+-  taskInfo.addSampleTime(SampleTime::Continous);
+-  taskInfo.addSampleTime(SampleTime::PerTimestep);
+-  output(taskInfo);
+-  output(mPerTimestepTask);
+-  output(mContinousTask);
+-
+-  /// First try to find an altitude where the acceleration is minimal,
+-  /// this is most likely a good starting point for the subsequent total trim
+-  real_type range = 20;
+-  AltitudeFinderTrimFunction altTrim(*this, range);
+-
+-  // Buld up the trim function
+-  TrimFunction trimFunction(*this);
+-
+-  Vector altV(1);
+-  altV(0) = 0;
+-  Vector dk(1);
+-  dk(0) = 1;
+-  Vector res = LineSearch(altTrim, getTime(), altV, dk, range, 1e-3);
+-  altTrim.eval(getTime(), res, dk /*dummy*/);
+-  output(taskInfo);
+-
+-  trimFunction.mGeodPos.altitude = altTrim.mGeodPos.altitude;
+-
+-  // Get the current state
+-  StateStream stateStream(getNumContinousStates());
+-  getState(stateStream);
+-  Vector state = stateStream.getState();
+-
+-  Vector trimState = stateStream.getState();
+-
+-  // Try to find a minimum
+-  real_type atol = 1e-10;
+-  real_type rtol = 1e-13;
+-//   bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
+-  bool ret = LevenbergMarquart(trimFunction, getTime(), trimState, atol, rtol);
+-  if (ret) {
+-    Log(Model, Debug) &lt;&lt; &quot;Trim did converge&quot; &lt;&lt; endl;
+-    stateStream.setState(trimState);
+-    setState(stateStream);
+-  } else {
+-    Log(Model, Warning) &lt;&lt; &quot;Trim did NOT converge&quot; &lt;&lt; endl;
+-    stateStream.setState(state);
+-    setState(stateStream);
+-  }
+-
+-  return ret;
++  return false;
+ }
+ 
+-void
+-System::setTimestepper(ODESolver* timestepper)
++/// Return the current simulation time, convenience function
++real_type
++System::getTime(void) const
+ {
+-  real_type t = 0;
+-  if (mTimestepper) {
+-    mTimestepper-&gt;setSystem(0);
+-    t = mTimestepper-&gt;getTime();
+-  }
+-  mTimestepper = timestepper;
+-  if (mTimestepper) {
+-    mTimestepper-&gt;setSystem(this);
+-    mTimestepper-&gt;setTime(t);
+-  }
++  if (!mAbstractSystem)
++    return Limits&lt;real_type&gt;::quiet_NaN();
++  return mAbstractSystem-&gt;getTime();
+ }
+ 
+-void
+-System::evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+-{
+-  /// FIXME Hmm, may be different ...
+-  StateStream stateStream(v);
+-  setState(v);
+-
+-  mContinousTask.setTime(t);
+-  output(mContinousTask);
+-
+-  stateStream.reset();
+-  getStateDeriv(stateStream);
+-  out = stateStream.getState();
+-}
+-
+-void
+-System::evalJacobian(real_type t, const Vector&amp; v, Matrix&amp; jac)
+-{
+-  unsigned nStates = getNumContinousStates();
+-
+-  // Create space ...
+-  // FIXME
+-  jac.resize(nStates, nStates);
+-
+-  // Get the function value at the current position.
+-  Vector fv(nStates);
+-  evalFunction(t, v, fv);
+-
+-  real_type sqrteps = 1e4*sqrt(Limits&lt;real_type&gt;::epsilon());
+-
+-  Vector tmpv = v;
+-  Vector tmpfv(nStates);
+-  for (unsigned i = 0; i &lt; nStates; ++i) {
+-    tmpv(i) += sqrteps;
+-
+-    // Evaluate then function ...
+-    evalFunction(t, tmpv, tmpfv);
+-
+-    // ... and compute the differencequotient to approximate the derivative.
+-    jac(Range(0, nStates-1), i) = (1/sqrteps)*(tmpfv-fv);
+-
+-    // Restore the original value.
+-    tmpv(i) = v(i);
+-  }
+-}
+-
+-void
+-System::setNumContinousStates(unsigned numContinousStates)
+-{
+-  mNumContinousStates = numContinousStates;
+-}
+-
+-void
+-System::setNumDiscreteStates(unsigned numDiscreteStates)
+-{
+-  mNumDiscreteStates = numDiscreteStates;
+-}
+-
+-
+-// FIXME make a member of TaskInfo
+-static void
+-fillTaskInfo(TaskInfo&amp; taskInfo, const ModelList2&amp; modelList)
+-{
+-  ModelList2::const_iterator it;
+-  it = modelList.begin();
+-  while (it != modelList.end()) {
+-    if (nonZeroIntersection(taskInfo.getSampleTimeSet(), it-&gt;sampleTimeSet))
+-      taskInfo.appendModel(it-&gt;model);
+-    ++it;
+-  }
+-}
+-
+-static bool
+-appendModel(ModelList2&amp; mModels, Model* firstModel, ModelListEntry model,
+-            ModelList2&amp; newList)
+-{
+-  if (model.model-&gt;dependsDirectOn(firstModel)) {
+-    Log(Model,Error) &lt;&lt; &quot;Detected circular dependency starting from Model \&quot;&quot;
+-                     &lt;&lt; firstModel-&gt;getName() &lt;&lt; &quot;\&quot; to Model \&quot;&quot;
+-                     &lt;&lt; model.model-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-  }
+-
+-  ModelList2::iterator it = mModels.begin();
+-  while (it != mModels.end()) {
+-    if (model.model-&gt;dependsDirectOn(it-&gt;model)) {
+-      // We need to store that one here since the iterator possibly invalidates
+-      // during the next append dependency call
+-      ModelListEntry tmpModel = *it;
+-      mModels.erase(it);
+-      
+-      // Now recurse into that model.
+-      if (!appendModel(mModels, firstModel, tmpModel, newList))
+-        return false;
+-
+-      // the iterator is most likely invalid ...
+-      it = mModels.begin();
+-    } else
+-      ++it;
+-  }
+-  newList.push_back(model);
+-  return true;
+-}
+-
+-static bool
+-sortModels(ModelList2&amp; mModels)
+-{
+-  // TODO: use better sort algorithm.
+-  /// erhm, FIXME: This is a horrible sort thing!!!
+-  ModelList2 newList;
+-  while (!mModels.empty()) {
+-    ModelListEntry tmpModel = mModels.front();
+-    mModels.erase(mModels.begin());
+-
+-    if (!appendModel(mModels, tmpModel.model, tmpModel, newList))
+-      return false;
+-  }
+-  // Now the new ordered list is the current one.
+-  mModels.swap(newList);
+-
+-  // print the schedule ...
+-  Log(Schedule,Info) &lt;&lt; &quot;Model Schedule:&quot; &lt;&lt; endl;
+-  ModelList2::const_iterator it;
+-  it = mModels.begin();
+-  while (it != mModels.end()) {
+-    Node::Path::const_iterator ni;
+-    for (ni = it-&gt;nodePath.begin(); ni != it-&gt;nodePath.end(); ++ni)
+-      Log(Schedule,Info) &lt;&lt; &quot;/&quot; &lt;&lt; (*ni)-&gt;getName();
+-    Log(Schedule,Info) &lt;&lt; &quot;/&quot; &lt;&lt; it-&gt;model-&gt;getName() &lt;&lt; &quot; &quot;
+-                       &lt;&lt; it-&gt;sampleTimeSet &lt;&lt; endl;
+-    ++it;
+-  }
+-
+-  return true;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-09-28 07:19:55 UTC (rev 527)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-09-28 07:43:39 UTC (rev 528)
+@@ -7,114 +7,47 @@
+ 
+ #include &lt;string&gt;
+ 
+-#include &quot;ModelGroup.h&quot;
+-#include &quot;Environment.h&quot;
++#include &quot;AbstractNodeInstance.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;Object.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-/// The System is the top \ref Model node.
+-/// It is derived from the \ref ModelGroup and additionally provides
+-/// algorithms to simulate and trim the whole system.
++/// The System is the top \ref Node for a simulation system.
++/// Provides algorithms to simulate and trim the whole system.
+ 
+-class TaskInfo;
++class AbstractSystem;
+ 
+-class ODESolver;
+-
+-class System : public ModelGroup {
+-  OPENFDM_OBJECT(System, ModelGroup);
++class System : public Object {
++  OPENFDM_OBJECT(System, Object);
+ public:
+-  /// Constructor, we need a name
+-  System(const std::string&amp; name);
+-  virtual ~System(void);
++  System(const std::string&amp; name, Node* node = 0);
++  virtual ~System();
+ 
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++  SharedPtr&lt;Node&gt; getNode() { return mNode; }
++  SharedPtr&lt;const Node&gt; getNode() const { return mNode; }
++  void setNode(Node* node);
+ 
+-  /// Set the system to its initial state
+-  virtual bool init(void);
++  bool init();
++  void clear();
+ 
+-  /// Note that this is called *before* update() is called.
+-  virtual void output(const TaskInfo&amp; taskInfo);
+-  /// Called whenever discrete states need to be updated.
+-  virtual void update(const TaskInfo&amp; taskInfo);
+-
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+-
+-  virtual void setDiscreteState(const StateStream&amp; state);
+-  virtual void getDiscreteState(StateStream&amp; state) const;
+-
+   /// Simulate the system until the time tEnd
+-  bool simulate(real_type tEnd);
++  bool simulate(const real_type&amp; t);
+ 
+-  /// Bring the system in an equilibrum state near the current state
+-  /// ...
++  /// Bring the system in an equilibrum state near the current state ...
+   bool trim(void);
+ 
+   /// Return the current simulation time, convenience function
+-  real_type getTime(void) const
+-  { return mTime; }
++  real_type getTime(void) const;
+ 
+-  /// Sets a timestepping algorithm for use with this system.
+-  void setTimestepper(ODESolver* timestepper);
+-  /// Return a const reference to the timestepping algorithm
+-  const ODESolver* getTimestepper(void) const { return mTimestepper; }
+-  /// Return a reference to the timestepping algorithm
+-  ODESolver* getTimestepper(void) { return mTimestepper; }
++  const NodeInstanceList&amp; getNodeInstanceList() const
++  { return mNodeInstanceList; }
+ 
+-  /// FIXME Hmm, may be different ...
+-  /// May move into System ...
+-  void evalFunction(real_type t, const Vector&amp; v, Vector&amp; out);
+-  /// Compute the jacobian
+-  /// The default implementation computes a numeric approximation by finite
+-  /// differences
+-  void evalJacobian(real_type t, const Vector&amp; state, Matrix&amp; jac);
+-
+-  Environment* getEnvironment(void) const
+-  { return mEnvironment; }
+-
+-  /// Return the number of continous states
+-  unsigned getNumContinousStates(void) const
+-  { return mNumContinousStates; }
+-  /// Return the number of discrete states
+-  unsigned getNumDiscreteStates(void) const
+-  { return mNumDiscreteStates; }
+-
+-protected:
+-  void setNumContinousStates(unsigned numContinousStates);
+-  void setNumDiscreteStates(unsigned numDiscreteStates);
+-
+ private:
+-  /// The timestepper used to get time discrete approximate solutions to the
+-  /// continous system
+-  SharedPtr&lt;ODESolver&gt; mTimestepper;
++  SharedPtr&lt;Node&gt; mNode;
+ 
+-  /// Hmm, need to think about this...
+-  typedef std::vector&lt;TaskInfo&gt; TaskList;
+-
+-  TaskInfo mPerTimestepTask;
+-  TaskInfo mContinousTask;
+-
+-  TaskList mDiscreteTaskList;
+-  unsigned mCurrentTaskNum;
+-  real_type mCurrentSliceTime;
+-
+-  typedef std::vector&lt;SharedPtr&lt;Model&gt; &gt; ModelList;
+-  ModelList mDiscreteModelList;
+-  ModelList mContinousModelList;
+-
+-  SharedPtr&lt;Environment&gt; mEnvironment;
+-
+-  /// The actual simulation time for the system
+-  real_type mTime;
+-
+-  /// The number of states in the whole System,
+-  /// might move into something like IntegrationGroup
+-  unsigned mNumContinousStates;
+-  unsigned mNumDiscreteStates;
++  SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
++  NodeInstanceList mNodeInstanceList;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-28 07:19:55 UTC (rev 527)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-28 07:43:39 UTC (rev 528)
+@@ -34,6 +34,7 @@
+ #include &lt;OpenFDM/Interval.h&gt;
+ 
+ #include &lt;OpenFDM/AbstractSystem.h&gt;
++#include &lt;OpenFDM/System.h&gt;
+ 
+ #include &lt;OpenFDM/BoolStateInfo.h&gt;
+ #include &lt;OpenFDM/RealStateInfo.h&gt;
+@@ -110,70 +111,8 @@
+ /// there must be a PortData like structure that is only built during simulation
+ /// model initialization.
+ 
+-/// An Abstract NodeInstance represents an effective model node in a ready
+-/// to run System. You can access the Nodes Ports values for example.
+-/// This class is meant to show up in the user interface of this simulation.
+-class AbstractNodeInstance : public WeakReferenced {
+-public:
+-  AbstractNodeInstance(const NodePath&amp; nodePath) :
+-    mNodePath(nodePath)
+-  { OpenFDMAssert(!nodePath.empty()); }
+-  virtual ~AbstractNodeInstance()
+-  { }
+ 
+-  /// The actual Node this AbstractNodeInstance stems from
+-  const Node&amp; getNode() const
+-  { return getNodeContext().getNode(); }
+ 
+-  const NodePath&amp; getNodePath() const { return mNodePath; }
+-
+-//   /// Set the sample times this node will run on
+-//   void setSampleTimeSet(const SampleTimeSet&amp; sampleTimeSet)
+-//   { mSampleTimeSet = sampleTimeSet; }
+-//   /// Get the sample times this node will run on
+-//   const SampleTimeSet&amp; getSampleTimeSet() const
+-//   { return mSampleTimeSet; }
+-
+-  PortValueList&amp; getPortValueList()
+-  { return getNodeContext().getPortValueList(); }
+-  const PortValueList&amp; getPortValueList() const
+-  { return getNodeContext().getPortValueList(); }
+-
+-  std::string getNodeNamePath() const
+-  {
+-    if (mNodePath.empty())
+-      return std::string();
+-    std::string path = mNodePath.front()-&gt;getName();
+-    NodePath::const_iterator i = mNodePath.begin();
+-    if (i != mNodePath.end()) {
+-      for (++i; i != mNodePath.end(); ++i) {
+-        path += '/';
+-        path += (*i)-&gt;getName();
+-      }
+-    }
+-    return path;
+-  }
+-
+-protected:
+-  AbstractNodeInstance() {}
+-
+-  /// The node context that belongs to this instance.
+-  virtual AbstractNodeContext&amp; getNodeContext() = 0;
+-  virtual const AbstractNodeContext&amp; getNodeContext() const = 0;
+-
+-private:
+-  AbstractNodeInstance(const AbstractNodeInstance&amp;);
+-  AbstractNodeInstance&amp; operator=(const AbstractNodeInstance&amp;);
+-
+-//   /// The sample times this node will run on
+-//   SampleTimeSet mSampleTimeSet;
+-
+-  NodePath mNodePath;
+-};
+-
+-typedef std::list&lt;SharedPtr&lt;AbstractNodeInstance&gt; &gt; NodeInstanceList;
+-
+-
+ ////////////////////////////////////////////////////////////////////////////
+ 
+ /// This one will not show up in any execution list, but will be used
+@@ -1107,82 +1046,27 @@
+   SharedPtr&lt;ContinousTask&gt; mContinousTask;
+ };
+ 
+-class System : public Object {
+-public:
+-  System(const std::string&amp; name, Node* node = 0) :
+-    Object(name),
+-    mNode(node)
+-  { }
+-
+-  SharedPtr&lt;Node&gt; getNode()
+-  { return mNode; }
+-  SharedPtr&lt;const Node&gt; getNode() const
+-  { return mNode; }
+-  void setNode(Node* node)
+-  {
+-    clear();
+-    mNode = node;
+-  }
+-
+-  bool init()
+-  {
+-    if (!mNode)
+-      return false;
+-
+-    // Build up the lists required to run the model.
+-    NodeInstanceCollector nodeInstanceCollector;
+-    mNode-&gt;accept(nodeInstanceCollector);
+-    
+-    mAbstractSystem = nodeInstanceCollector.buildSystem();
+-    if (!mAbstractSystem)
+-      return false;
+-
+-    // Have something to run in our hands.
+-    // Not get the information required to reflect the system to the user.
+-    mNodeInstanceList.swap(nodeInstanceCollector._nodeInstanceList);
+-
+-    return true;
+-  }
+-
+-  void clear()
+-  {
+-    mAbstractSystem = 0;
+-    mNodeInstanceList.clear();
+-  }
+-
+-  /// Simulate the system until the time tEnd
+-  bool simulate(const real_type&amp; t)
+-  {
+-    if (mAbstractSystem)
+-      return false;
+-    mAbstractSystem-&gt;outputAt(t);
+-    return true;
+-  }
+-
+-  /// Bring the system in an equilibrum state near the current state ...
+-  bool trim(void)
+-  {
++bool
++System::init()
++{
++  if (!mNode)
+     return false;
+-  }
++  
++  // Build up the lists required to run the model.
++  NodeInstanceCollector nodeInstanceCollector;
++  mNode-&gt;accept(nodeInstanceCollector);
++  
++  mAbstractSystem = nodeInstanceCollector.buildSystem();
++  if (!mAbstractSystem)
++    return false;
++  
++  // Have something to run in our hands.
++  // Not get the information required to reflect the system to the user.
++  mNodeInstanceList.swap(nodeInstanceCollector._nodeInstanceList);
++  
++  return true;
++}
+ 
+-  /// Return the current simulation time, convenience function
+-  real_type getTime(void) const
+-  {
+-    if (!mAbstractSystem)
+-      return Limits&lt;real_type&gt;::quiet_NaN();
+-    return mAbstractSystem-&gt;getTime();
+-  }
+-
+-  const NodeInstanceList&amp; getNodeInstanceList() const
+-  { return mNodeInstanceList; }
+-
+-private:
+-  SharedPtr&lt;Node&gt; mNode;
+-
+-  SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
+-  NodeInstanceList mNodeInstanceList;
+-};
+-
+ } // namespace OpenFDM
+ 
+ using namespace OpenFDM;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000499.html">[OpenFDM-svn] r527 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000501.html">[OpenFDM-svn] r529 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#500">[ date ]</a>
+              <a href="thread.html#500">[ thread ]</a>
+              <a href="subject.html#500">[ subject ]</a>
+              <a href="author.html#500">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,529 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r562 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r562%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810051315.m95DFVJv020656%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000532.html">
+   <LINK REL="Next"  HREF="000534.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r562 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r562%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810051315.m95DFVJv020656%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r562 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct  5 15:15:31 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000532.html">[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000534.html">[OpenFDM-svn] r563 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#533">[ date ]</a>
+              <a href="thread.html#533">[ thread ]</a>
+              <a href="subject.html#533">[ subject ]</a>
+              <a href="author.html#533">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-05 15:15:30 +0200 (Sun, 05 Oct 2008)
+New Revision: 562
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Dump first attemp to execute continous systems.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2008-10-05 13:13:43 UTC (rev 561)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2008-10-05 13:15:30 UTC (rev 562)
+@@ -28,9 +28,17 @@
+   {
+     // Cry if we cannot do anything!
+     OpenFDMAssert(!getValidityInterval().empty());
++
++//     if (equal(getTime(), getValidityInterval().getEnd())
++//     continousUpdate(tEnd);
++
+     // update until our requested end time is in the current interval.
+-    while (needUpdate(t))
+-      update(t);
++    while (needUpdate(t)) {
++      discreteUpdate();
++
++      real_type tEnd = min(getValidityInterval().getEnd(), t);
++      continousUpdate(tEnd);
++    }
+     if (t != mTime)
+       output(t);
+   }
+@@ -46,13 +54,20 @@
+                        &lt;&lt; mValidityInterval.getEnd() &lt;&lt; std::endl;
+   }
+ 
+-  void update(const real_type&amp; tEndHint)
++  void discreteUpdate()
+   {
+-    updateImplementation(tEndHint);
++    discreteUpdateImplementation();
+     Log(Schedule,Info) &lt;&lt; &quot;Updated to time Interval from t = &quot;
+                        &lt;&lt; mValidityInterval.getBegin() &lt;&lt; &quot; to t = &quot;
+                        &lt;&lt; mValidityInterval.getEnd() &lt;&lt; std::endl;
+   }
++  void continousUpdate(const real_type&amp; tEnd)
++  {
++    continousUpdateImplementation(tEnd);
++    Log(Schedule,Info) &lt;&lt; &quot;Updated to time Interval from t = &quot;
++                       &lt;&lt; mValidityInterval.getBegin() &lt;&lt; &quot; to t = &quot;
++                       &lt;&lt; mValidityInterval.getEnd() &lt;&lt; std::endl;
++  }
+   void output(const real_type&amp; t)
+   {
+     OpenFDMAssert(getValidityInterval().contains(t));
+@@ -60,6 +75,16 @@
+     outputImplementation(mTime);
+     Log(Schedule,Info) &lt;&lt; &quot;Output for time t =  &quot; &lt;&lt; t &lt;&lt; std::endl;
+   }
++
++  /// FIXME: make that non virtual, but keep that up to date in the
++  /// implementation.
++  /// Hmm that interval concept is better????
++//   virtual real_type getNextDiscreteSampleHit() const
++//   {
++//     // Hmm, is this not enough for the sample hits??
++//     return mValidityInterval.getEnd();
++//   }
++
+ protected:
+ 
+   void setValidityInterval(const TimeInterval&amp; validityInterval)
+@@ -69,7 +94,8 @@
+ 
+   bool needUpdate(const real_type&amp; t) const
+   { return getValidityInterval().isStrictlyLeftOf(t); }
+-  virtual void updateImplementation(const real_type&amp; tEndHint) = 0;
++  virtual void discreteUpdateImplementation() = 0;
++  virtual void continousUpdateImplementation(const real_type&amp; tEnd) = 0;
+ 
+   virtual void outputImplementation(const real_type&amp; t) = 0;
+ 
+@@ -78,12 +104,90 @@
+   real_type mTime;
+ };
+ 
+-// FIXME: dump them here for now. Will be required later ...
+ class EnabledSystem : public AbstractSystem {
++public:
++  enum EnableMode {
++    /// If disabled, the models output/state is just held.
++    /// On reenable, the model just continues to work
++    Hold,
++    /// If disabled, the models output/state is just held.
++    /// On reenable, the model is initialized
++    HoldReset,
++    /// If disabled, the models output/state is initialized
++    ResetHold
++  };
++
++  EnableMode getEnableMode(void) const
++  { return mEnableMode; }
++  void setEnableMode(EnableMode enableMode)
++  { mEnableMode = enableMode; }
++
++  void setSystem(AbstractSystem* system)
++  { mAbstractSystem = system; }
++  AbstractSystem* getSystem() const
++  { return mAbstractSystem; }
++
++  void setPortValue(NumericPortValue* portValue)
++  { mEnablePort = portValue; }
++  NumericPortValue* getPortValue() const
++  { return mEnablePort; }
++
++protected:
++  virtual void initImplementation(const real_type&amp; t)
++  {
++    mEnabledState = getEnableInput();
++    mAbstractSystem-&gt;init(t);
++  }
++  virtual void discreteUpdateImplementation()
++  {
++    if (getEnableInput()) {
++      if (mEnabledState) {
++      } else {
++        if (mEnableMode == HoldReset) {
++          mAbstractSystem-&gt;init(getTime());
++        }       
++      }
++      mEnabledState = true;
++      mAbstractSystem-&gt;discreteUpdate();
++    } else {
++      if (mEnabledState) {
++        if (mEnableMode == ResetHold) {
++          mAbstractSystem-&gt;init(getTime());
++        }
++      } else {
++      }
++      mEnabledState = false;
++    }
++  }
++  virtual void continousUpdateImplementation(const real_type&amp; tEnd)
++  {
++    if (!mEnabledState)
++      return;
++    mAbstractSystem-&gt;continousUpdate(tEnd);
++  }
++  virtual void outputImplementation(const real_type&amp; t)
++  {
++    if (!mEnabledState)
++      return;
++    mAbstractSystem-&gt;output(t);
++  }
++
++  bool getEnableInput() const
++  { return 0.5 &lt; abs(mEnablePort-&gt;getValue()(0, 0)); }
++
++private:
++  SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
++
++  SharedPtr&lt;NumericPortValue&gt; mEnablePort;
++  bool mEnabledState;
++  EnableMode mEnableMode;
+ };
+ 
+ class GroupedSystem : public AbstractSystem {
+ public:
++  // FIXME: that 'nextSampleTime can be computed during the discreteUpdate
++  // step ...
++
+   unsigned getNumChildren() const
+   { return mAbstractSystemList.size(); }
+   AbstractSystem* getChild(unsigned index)
+@@ -116,19 +220,27 @@
+       (*i)-&gt;init(t);
+     }
+   }
+-  virtual void updateImplementation(const real_type&amp; tEndHint)
++  virtual void continousUpdateImplementation(const real_type&amp; tEnd)
+   {
++//     // initially set to all
++//     TimeInterval validityInterval = TimeInterval::all();
++//     AbstractSystemList::const_iterator i;
++//     for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i) {
++//       (*i)-&gt;update(tEndHint);
++//       if (validityInterval.getBegin() &lt; (*i)-&gt;getValidityInterval().getBegin())
++//         validityInterval.setBegin((*i)-&gt;getValidityInterval().getBegin());
++//       if ((*i)-&gt;getValidityInterval().getEnd() &lt; validityInterval.getEnd())
++//         validityInterval.setEnd((*i)-&gt;getValidityInterval().getEnd());
++//     }
++//     setValidityInterval(validityInterval);
++  }
++  virtual void discreteUpdateImplementation()
++  {
+     // initially set to all
+-    TimeInterval validityInterval = TimeInterval::all();
+-    AbstractSystemList::const_iterator i;
+-    for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i) {
+-      (*i)-&gt;update(tEndHint);
+-      if (validityInterval.getBegin() &lt; (*i)-&gt;getValidityInterval().getBegin())
+-        validityInterval.setBegin((*i)-&gt;getValidityInterval().getBegin());
+-      if ((*i)-&gt;getValidityInterval().getEnd() &lt; validityInterval.getEnd())
+-        validityInterval.setEnd((*i)-&gt;getValidityInterval().getEnd());
+-    }
+-    setValidityInterval(validityInterval);
++//     AbstractSystemList::const_iterator i;
++//     for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i) {
++//       (*i)-&gt;update();
++//     }
+   }
+   virtual void outputImplementation(const real_type&amp; t)
+   {
+@@ -141,7 +253,6 @@
+   AbstractSystemList mAbstractSystemList;
+ };
+ 
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-05 13:13:43 UTC (rev 561)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-05 13:15:30 UTC (rev 562)
+@@ -12,7 +12,11 @@
+ #include &quot;NodeInstance.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;RootJoint.h&quot;
++#include &quot;Task.h&quot;
+ 
++#include &quot;Function.h&quot;
++#include &quot;ExplicitEuler.h&quot;
++
+ namespace OpenFDM {
+ 
+ 
+@@ -47,6 +51,164 @@
+ /// FIXME: IMO THIS MUST WORK THIS WAY
+ ///
+ 
++class ContinousSystemFunction : public Function {
++public:
++  virtual size_type inSize(void) const
++  { return mContinousTask-&gt;getNumStates(); }
++  virtual size_type outSize(void) const
++  { return mContinousTask-&gt;getNumStates(); }
++  virtual void eval(value_type t, const invector_type&amp; v, outvector_type&amp; out)
++  {
++    mContinousTask-&gt;setStateValue(v);
++    mContinousTask-&gt;output(t);
++    mContinousTask-&gt;derivative();
++    mContinousTask-&gt;getStateDerivative(out);
++  }
++  SharedPtr&lt;ContinousTask&gt; mContinousTask;
++};
++
++class DiscreteSystem : public AbstractSystem {
++  struct TimeSlice;
++public:
++  DiscreteSystem(const real_type&amp; basicSampleTime, unsigned numSteps) :
++    mCycleTime(basicSampleTime*numSteps),
++    mBasicSampleTime(basicSampleTime)
++  {
++    DiscreteTask *discreteTask = new DiscreteTask(basicSampleTime);
++    TimeSlice timeSlice;
++    timeSlice.mTaskIndex.push_back(0);
++    mDiscreteTaskList.push_back(discreteTask);
++    mList.push_back(timeSlice);
++
++    mContinousTask = new ContinousTask;
++    mInitTask = new InitTask;
++
++    mContinousSystemFunction = new ContinousSystemFunction;
++    mContinousSystemFunction-&gt;mContinousTask = mContinousTask;
++
++    mODESolver = new ExplicitEuler;
++    mODESolver-&gt;setFunction(mContinousSystemFunction);
++  }
++
++  void appendModelContext(unsigned stride, ModelContext* modelContext)
++  {
++    // The init task contains them all
++    mInitTask-&gt;mModelContextList[0].push_back(modelContext);
++    // FIXME: decide which ones where ...
++    mDiscreteTaskList[0]-&gt;mModelContextList.push_back(modelContext);
++    mContinousTask-&gt;mModelContextList[0].push_back(modelContext);
++    mContinousTask-&gt;appendStateValuesFromLeafContext(*modelContext);
++  }
++
++protected:
++  virtual void initImplementation(const real_type&amp; t)
++  {
++    mInitTask-&gt;init(t);
++
++    if (mList.empty())
++      return;
++
++    mList.front().mSampleHit = t;
++
++    // Set the state into the ode solver
++    Vector v;
++    mContinousTask-&gt;getStateValue(v);
++    mODESolver-&gt;setState(v);
++    mODESolver-&gt;setTime(t);
++  }
++
++  virtual void discreteUpdateImplementation()
++  {
++    if (mList.empty())
++      return;
++    // std::rotate(...) ... nein - ist ineffizient ...
++    discreteUpdate(mList.front());
++    // FIXME: do something that does not creep away ...
++    mList.front().mSampleHit += mCycleTime;
++    discreteOutput(mList.front());
++
++    // FIXME:
++    real_type startTime = getValidityInterval().getEnd();
++    real_type endTime = mBasicSampleTime + getValidityInterval().getEnd();
++    // Note that this implicitly sets the value of the next sample hit to the
++    // end of this validity interval.
++    setValidityInterval(TimeInterval(startTime, endTime));
++  }
++  void discreteUpdate(const TimeSlice&amp; timeSlice)
++  {
++    for (unsigned i = 0; i &lt; timeSlice.mTaskIndex.size(); ++i) {
++      unsigned index = timeSlice.mTaskIndex[i];
++      mDiscreteTaskList[index]-&gt;update(timeSlice.mSampleHit);
++    }
++  }
++  // FIXME ???
++  void discreteOutput(const TimeSlice&amp; timeSlice)
++  {
++    for (unsigned i = 0; i &lt; timeSlice.mTaskIndex.size(); ++i) {
++      unsigned index = timeSlice.mTaskIndex[i];
++      mDiscreteTaskList[index]-&gt;output(timeSlice.mSampleHit);
++    }
++  }
++
++  virtual void continousUpdateImplementation(const real_type&amp; tEnd)
++  {
++    mODESolver-&gt;integrate(tEnd);
++  }
++  real_type getNextDiscreteSampleHit() const
++  {
++    OpenFDMAssert(getNextDiscreteSampleHitAlternate() == getValidityInterval().getEnd());
++    return getValidityInterval().getEnd();
++  }
++  real_type getNextDiscreteSampleHitAlternate() const
++  {
++    if (mList.empty())
++      return Limits&lt;real_type&gt;::max_value();
++    return mList.front().mSampleHit;
++  }
++
++  virtual void outputImplementation(const real_type&amp; t)
++  {
++    if (mContinousTask)
++      mContinousTask-&gt;output(t);
++  }
++
++private:
++  struct TimeSlice {
++    /// The list of task indices that must be executed at this sample hit
++    std::vector&lt;unsigned&gt; mTaskIndex;
++    /// The time of the next sample hit
++    real_type mSampleHit;
++    /// Helps to get less drifting time values:
++    /// mCycleOffset*mCycleTime is the time offset of this slice in a complete
++    /// cycle of all slices ...
++    //const real_type mCycleOffset;
++  };
++
++  /// The time for all timeslices in the system.
++  /// Used to increment the sample hit times ...
++  /// FIXME
++  const real_type mCycleTime;
++  const real_type mBasicSampleTime;
++
++  /// The Task responsible for initializing the model contexts.
++  /// Contains all node contexts in execution order.
++  /// All other tasks just contain their relevant subsets.
++  SharedPtr&lt;InitTask&gt; mInitTask;
++  /// All discrete Tasks in this System.
++  std::vector&lt;SharedPtr&lt;DiscreteTask&gt; &gt; mDiscreteTaskList;
++  /// The time slice sorted list of tasks to execute on each update.
++  /// Past each update this list is rotated by one entry.
++  std::list&lt;TimeSlice&gt; mList;
++  /// The continous task that is used to compute continous outputs.
++  /// (should! FIXME) Contains only those tasks that change on continous output.
++  SharedPtr&lt;ContinousTask&gt; mContinousTask;
++  SharedPtr&lt;ContinousSystemFunction&gt; mContinousSystemFunction;
++  SharedPtr&lt;ODESolver&gt; mODESolver;
++};
++
++////////////////////////////////////////////////////////////////////
++
++// Just here so that I do not care for intationation order for now ...
+ class System::NodeInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+@@ -502,15 +664,19 @@
+     if (!allocModels())
+       return 0;
+ 
+-    // FIXME is here just for curiousity :)
++    // Now the system is ready for state initialization and execution
++    // Build up te abstract system and return that
++
++    // For the first cut, assume many things like basic step size and such ...
++    SharedPtr&lt;DiscreteSystem&gt; discreteSystem;
++    discreteSystem = new DiscreteSystem(0.01, 1);
++
+     ModelInstanceList::const_iterator i;
+     for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
+-      (*i)-&gt;getNodeContext().init(*reinterpret_cast&lt;Task*&gt;(0));
+-      (*i)-&gt;getNodeContext().output(*reinterpret_cast&lt;Task*&gt;(0));
++      discreteSystem-&gt;appendModelContext(1, &amp;(*i)-&gt;getNodeContext());
+     }
+ 
+-    // FIXME:
+-    return new GroupedSystem;
++    return discreteSystem.release();
+   }
+ 
+ protected:
+@@ -635,7 +801,7 @@
+   mAbstractSystem = nodeInstanceCollector.buildSystem();
+   if (!mAbstractSystem)
+     return false;
+-  
++
+   // Have something to run in our hands.
+   // Not get the information required to reflect the system to the user.
+   NodeInstanceList::iterator i;
+@@ -645,6 +811,9 @@
+     mNodeInstanceList.push_back(*i);
+   }
+   
++  // Hmm, really here???
++  mAbstractSystem-&gt;init(0);
++
+   return true;
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-05 13:13:43 UTC (rev 561)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-05 13:15:30 UTC (rev 562)
+@@ -74,8 +74,8 @@
+ 
+ int main()
+ {
+-//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildGroupExample());
+-  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildGroupExample());
++//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+ 
+   if (!system-&gt;init())
+     return 1;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000532.html">[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000534.html">[OpenFDM-svn] r563 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#533">[ date ]</a>
+              <a href="thread.html#533">[ thread ]</a>
+              <a href="subject.html#533">[ subject ]</a>
+              <a href="author.html#533">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

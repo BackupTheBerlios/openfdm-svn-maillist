@@ -1,0 +1,190 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1117 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1117%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200910132026.n9DKQZ4n029711%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001074.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1117 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1117%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200910132026.n9DKQZ4n029711%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1117 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct 13 22:26:35 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001074.html">[OpenFDM-svn] r1116 - in branches/OpenFDM-StateSeparation/src:	OpenFDM builder test
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1075">[ date ]</a>
+              <a href="thread.html#1075">[ thread ]</a>
+              <a href="subject.html#1075">[ subject ]</a>
+              <a href="author.html#1075">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-10-13 22:26:34 +0200 (Tue, 13 Oct 2009)
+New Revision: 1117
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp
+Log:
+Cleanup.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h	2009-10-13 19:13:13 UTC (rev 1116)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LogStream.h	2009-10-13 20:26:34 UTC (rev 1117)
+@@ -53,23 +53,28 @@
+   static void setCategoryDisable(Category category);
+   static void setPriority(Priority priority);
+ 
+-  static inline bool
+-  getStaticEnabled(Category category, Priority priority)
++  static std::ostream* getStaticStream(Category category, Priority priority)
+   {
+ #if defined(NDEBUG) || defined(_NDEBUG)
+     // In the NDEBUG case, give the compilers optimizer a chance to
+-    // completely remove the code.
++    // completely remove some code.
+     if (Debug &lt;= priority)
+-      return false;
++      return 0;
+ #endif
+-    return Instance()-&gt;getEnabled(category, priority);
++    return Instance()-&gt;getStream(category, priority);
+   }
+ 
+-  static std::ostream&amp; getStream(Priority priority);
+-
+ protected:
+   static Logger* Instance(void);
+-  bool getEnabled(Category category, Priority priority);
++  std::ostream* getStream(Category category, Priority priority);
++  bool getEnabled(Category category, Priority priority)
++  {
++    if (priority == Error)
++      return true;
++    if (!(category &amp; mCategory))
++      return false;
++    return priority &lt;= mPriority;
++  }
+ 
+ private:
+   Logger(std::ostream* stream = 0);
+@@ -79,9 +84,9 @@
+   int mPriority;
+ };
+ 
+-#define Log(category, priority) \
+-if (Logger::getStaticEnabled(Logger::category, Logger::priority)) \
+-  Logger::getStream(Logger::priority)
++#define Log(cat, pri) \
++if (std::ostream* stream = Logger::getStaticStream(Logger::cat, Logger::pri)) \
++  *stream
+ 
+ } // namespace OpenFDM
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp	2009-10-13 19:13:13 UTC (rev 1116)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Logger.cpp	2009-10-13 20:26:34 UTC (rev 1117)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich
+  *
+  */
+ 
+@@ -52,18 +52,6 @@
+   logger-&gt;mPriority = priority;
+ }
+ 
+-std::ostream&amp;
+-Logger::getStream(Logger::Priority priority)
+-{
+-  Logger* logger = Instance();
+-  if (logger-&gt;mStream)
+-    return *logger-&gt;mStream;
+-  else if (Info &lt;= priority)
+-    return std::cout;
+-  else
+-    return std::cerr;
+-}
+-
+ Logger*
+ Logger::Instance(void)
+ {
+@@ -79,14 +67,18 @@
+   return ptr;
+ }
+ 
+-bool
+-Logger::getEnabled(Logger::Category category, Logger::Priority priority)
++std::ostream*
++Logger::getStream(Category category, Logger::Priority priority)
+ {
+-  if (priority == Error)
+-    return true;
+-  if (!(category &amp; mCategory))
+-    return false;
+-  return priority &lt;= mPriority;
++  if (!getEnabled(category, priority))
++    return 0;
++
++  if (mStream)
++    return mStream;
++  else if (Info &lt;= priority)
++    return &amp;std::cout;
++  else
++    return &amp;std::cerr;
+ }
+ 
+ Logger::Logger(std::ostream* stream) :
+@@ -98,7 +90,7 @@
+   unsigned value = atou(std::getenv(&quot;OPENFDM_DEBUG_PRIORITY&quot;));
+   if (value)
+     mPriority = value;
+-      
++
+   value = atou(std::getenv(&quot;OPENFDM_DEBUG_CATEGORY&quot;));
+   if (value)
+     mCategory = value;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001074.html">[OpenFDM-svn] r1116 - in branches/OpenFDM-StateSeparation/src:	OpenFDM builder test
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1075">[ date ]</a>
+              <a href="thread.html#1075">[ thread ]</a>
+              <a href="subject.html#1075">[ subject ]</a>
+              <a href="author.html#1075">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

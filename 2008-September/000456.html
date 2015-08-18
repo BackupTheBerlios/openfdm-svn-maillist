@@ -1,0 +1,299 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r484 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r484%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809170515.m8H5FaJ9002563%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000455.html">
+   <LINK REL="Next"  HREF="000457.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r484 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r484%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809170515.m8H5FaJ9002563%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r484 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Sep 17 07:15:36 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000455.html">[OpenFDM-svn] r483 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000457.html">[OpenFDM-svn] r485 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#456">[ date ]</a>
+              <a href="thread.html#456">[ thread ]</a>
+              <a href="subject.html#456">[ subject ]</a>
+              <a href="author.html#456">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-17 07:15:33 +0200 (Wed, 17 Sep 2008)
+New Revision: 484
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Hmm, are these tasks??
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-16 19:43:15 UTC (rev 483)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-17 05:15:33 UTC (rev 484)
+@@ -193,8 +193,10 @@
+   SharedPtr&lt;NodeContext&gt; mNodeContext;
+ };
+ 
++class Task;
++class DiscreteTask;
++class ContinousTask;
+ 
+-
+ //// This one is used to execute the simulation system
+ class ModelContext : public LeafContext {
+ public:
+@@ -209,9 +211,9 @@
+   { return mModel-&gt;alloc(*this); }
+   void init()
+   { mModel-&gt;init(mDiscreteState, mContinousState); }
+-  void output()
++  void output(const Task&amp;)
+   { mModel-&gt;output(mDiscreteState, mContinousState, mPortValueList); }
+-  void update()
++  void update(const DiscreteTask&amp;)
+   { mModel-&gt;update(mDiscreteState, mContinousState, mPortValueList); }
+ 
+ //   void derivative()
+@@ -258,8 +260,34 @@
+   SharedPtr&lt;const Model&gt; mModel;
+ };
+ 
+-typedef std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; ModelContextList;
++class ModelContextList : public std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; {
++public:
++  typedef std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; list_type;
+ 
++  bool alloc() const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      if (!(*i)-&gt;alloc())
++        return false;
++    return true;
++  }
++  void init() const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;init();
++  }
++  void output(const Task&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;output(task);
++  }
++  void update(const DiscreteTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;update(task);
++  }
++};
++
+ class ModelInstance : public NodeInstance {
+ public:
+   ModelInstance(const Model* model) :
+@@ -298,6 +326,26 @@
+   void init()
+   { mMechanicNode-&gt;init(mDiscreteState, mContinousState); }
+ 
++  void velocities(const ContinousTask&amp;)
++  { mMechanicNode-&gt;velocity(mContinousState, mPortValueList); }
++  void articulation(const ContinousTask&amp;)
++  { mMechanicNode-&gt;articulation(mContinousState, mPortValueList); }
++  void accelerations(const ContinousTask&amp;)
++  { }
++
++
++//   virtual void derivative(const ContinousStateValueVector&amp;,
++//                           const PortValueList&amp;,
++//                           ContinousStateValueVector&amp;) const
++ 
++//   void outputVelocities()
++//   { }
++//   void outputAcceperation()
++//   { }
++
++//   void update()
++//   { }
++
+   SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
+ 
+ private:
+@@ -306,8 +354,40 @@
+   MechanicContext&amp; operator=(const MechanicContext&amp;);
+ };
+ 
+-typedef std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; MechanicContextList;
++class MechanicContextList : public std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; {
++public:
++  typedef std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; list_type;
+ 
++  bool alloc() const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      if (!(*i)-&gt;alloc())
++        return false;
++    return true;
++  }
++  void init() const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;init();
++  }
++  void velocities(const ContinousTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;velocities(task);
++  }
++  void articulation(const ContinousTask&amp; task) const
++  {
++    // Note that this list is traversed from the mechanic leafs to the root
++    for (list_type::const_reverse_iterator i = rbegin(); i != rend(); ++i)
++      (*i)-&gt;articulation(task);
++  }
++  void accelerations(const ContinousTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;accelerations(task);
++  }
++};
++
+ class MechanicInstance : public NodeInstance {
+ public:
+   MechanicInstance(const MechanicNode* mechanicNode) :
+@@ -902,7 +982,7 @@
+     // FIXME is here just for curiousity :)
+     for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+       (*j)-&gt;getNodeContext().init();
+-      (*j)-&gt;getNodeContext().output();
++      (*j)-&gt;getNodeContext().output(*reinterpret_cast&lt;Task*&gt;(0));
+     }
+ 
+     modelContexts.swap(modelContextList);
+@@ -937,6 +1017,84 @@
+   NodeIdStack _nodeIdStack;
+ };
+ 
++
++
++
++class Task : public Referenced {
++public:
++
++  void setTime(const real_type&amp; time)
++  { mTime = time; }
++  const real_type&amp; getTime() const
++  { return mTime; }
++
++private:
++  real_type mTime;
++};
++
++class ContinousTask : public Task {
++public:
++
++  void output() const
++  {
++    // The model outputs before mechanical state propagation
++    mModelContextList[0].output(*this);
++    // Now the mechanical state propagation
++    mMechanicContextList.velocities(*this);
++    // The model outputs before mechanical force propagation
++    mModelContextList[1].output(*this);
++    // Now the mechanical force propagation
++    mMechanicContextList.articulation(*this);
++    // The model outputs before mechanical acceleration propagation
++    mModelContextList[2].output(*this);
++    // Now the mechanical acceleration propagation
++    mMechanicContextList.accelerations(*this);
++    // The model outputs past mechanical acceleration propagation
++    mModelContextList[3].output(*this);
++  }
++
++  void derivative() const
++  {
++    // FIXME
++//     for (unsigned i = 0; i &lt; 4; ++i)
++//       mModelContextList[2].derivative(*this);
++//     mMechanicContextList.derivative(*this);
++  }
++
++  ModelContextList mModelContextList[4];
++  MechanicContextList mMechanicContextList;
++};
++
++class DiscreteTask : public Task {
++public:
++  DiscreteTask(const real_type&amp; stepsize) : mStepsize(stepsize)
++  { }
++
++  const real_type&amp; getStepsize() const
++  { return mStepsize; }
++
++  void update()
++  {
++    mModelContextList.update(*this);
++    // FIXME
++//     mMechanicContextList.update(*this);
++  }
++
++  ModelContextList mModelContextList;
++  MechanicContextList mMechanicContextList;
++
++private:
++  real_type mStepsize;
++};
++
++typedef std::list&lt;SharedPtr&lt;DiscreteTask&gt; &gt; DiscreteTaskList;
++
++class TaskScheduler {
++public:
++  DiscreteTaskList mDiscreteTaskList;
++  SharedPtr&lt;ContinousTask&gt; mContinousTask;
++};
++
+ class System : public Object {
+ public:
+   System(const std::string&amp; name, Node* node = 0) :
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000455.html">[OpenFDM-svn] r483 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000457.html">[OpenFDM-svn] r485 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#456">[ date ]</a>
+              <a href="thread.html#456">[ thread ]</a>
+              <a href="subject.html#456">[ subject ]</a>
+              <a href="author.html#456">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

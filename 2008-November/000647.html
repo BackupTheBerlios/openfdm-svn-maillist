@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r678 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r678%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811081232.mA8CWu8q024746%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000646.html">
+   <LINK REL="Next"  HREF="000648.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r678 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r678%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811081232.mA8CWu8q024746%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r678 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Nov  8 13:32:56 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000646.html">[OpenFDM-svn] r677 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000648.html">[OpenFDM-svn] r679 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#647">[ date ]</a>
+              <a href="thread.html#647">[ thread ]</a>
+              <a href="subject.html#647">[ subject ]</a>
+              <a href="author.html#647">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-08 13:32:55 +0100 (Sat, 08 Nov 2008)
+New Revision: 678
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Change the way port values are distributed and connected.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-07 15:29:29 UTC (rev 677)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-08 12:32:55 UTC (rev 678)
+@@ -238,20 +238,69 @@
+     mBasicSampleTime(SampleTime::getContinous())
+   { }
+ 
++  struct PortData;
++
++  struct PortConnectSet : public Referenced {
++    bool setPortValue(PortValue* portValue)
++    {
++      while (!mParentPortData.empty()) {
++        SharedPtr&lt;PortData&gt; portData = mParentPortData.back().lock();
++        mParentPortData.pop_back();
++        if (!portData-&gt;setPortValue(portValue))
++          return false;
++      }
++      return true;
++    }
++    std::vector&lt;WeakPtr&lt;PortData&gt; &gt; mParentPortData;
++  };
++
+   struct PortData : public WeakReferenced {
+   public:
+     PortData(AbstractNodeInstance* nodeInstance, const PortInfo* portInfo) :
+       mNodeInstance(nodeInstance),
++      mPortValueCreator(true),
+       mPortInfo(portInfo)
+-    { }
+-    virtual ~PortData()
+-    { }
++    {
++      getOrCreatePortConnectSet();
++    }
+ 
++    void setPortConnectSet(PortConnectSet* portSet)
++    {
++      OpenFDMAssert(portSet);
++      if (portSet == mPortConnectSet)
++        return;
++      if (!mPortConnectSet) {
++        mPortConnectSet = portSet;
++        mPortConnectSet-&gt;mParentPortData.push_back(this);
++        return;
++      }
++      // Merge the port sets together ...
++      while (!mPortConnectSet-&gt;mParentPortData.empty()) {
++        SharedPtr&lt;PortData&gt; portData = mPortConnectSet-&gt;mParentPortData.back().lock();
++        mPortConnectSet-&gt;mParentPortData.pop_back();
++        if (portData == this)
++          continue;
++        portData-&gt;mPortConnectSet = portSet;
++        portSet-&gt;mParentPortData.push_back(portData);
++      }
++      mPortConnectSet = portSet;
++      mPortConnectSet-&gt;mParentPortData.push_back(this);
++    }
++
++    PortConnectSet* getOrCreatePortConnectSet()
++    {
++      if (mPortConnectSet)
++        return mPortConnectSet;
++      setPortConnectSet(new PortConnectSet);
++      return mPortConnectSet;
++    }
++
+     bool addPortData(PortData* portData)
+     {
+       if (getPortInfo()-&gt;getMaxConnects() &lt;= mConnectedPorts.size())
+         return false;
+       mConnectedPorts.push_back(portData);
++      setPortConnectSet(portData-&gt;getOrCreatePortConnectSet());
+       return true;
+     }
+ 
+@@ -262,20 +311,21 @@
+       if (!portData-&gt;addPortData(this))
+         return false;
+       mConnectedPorts.push_back(portData);
++      setPortConnectSet(portData-&gt;getOrCreatePortConnectSet());
+       return true;
+     }
+ 
+     const SharedPtr&lt;const PortInfo&gt;&amp; getPortInfo() const
+     { return mPortInfo; }
+ 
+-    bool setLocalPortValue(PortValue* portValue)
++    bool setPortValue(PortValue* portValue)
+     {
+       if (!getPortInfo())
+         return false;
+       if (!mNodeInstance)
+         return false;
+       Log(Schedule, Debug3)
+-        &lt;&lt; &quot;setLocalPortValue for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
++        &lt;&lt; &quot;setPortValue for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+         &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+       // FIXME: move the set port value and accept port value into one call
+       if (!getPortInfo()-&gt;acceptPortValue(portValue))
+@@ -284,54 +334,32 @@
+       return true;
+     }
+ 
+-    bool setConnectedPortValues(PortValue* portValue)
++    void setProxyPortData(PortData* proxyPortData)
+     {
+-      Log(Schedule, Debug3)
+-        &lt;&lt; &quot;setConnectedPortValues for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+-        &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+-      for (unsigned i = 0; i &lt; mConnectedPorts.size(); ++i) {
+-        SharedPtr&lt;PortData&gt; portData = mConnectedPorts[i].lock();
+-        if (!portData)
+-          return false;
+-        if (!portData-&gt;setProxyPortValue(portValue))
+-          return false;
+-      }
+-      return setLocalPortValue(portValue);
++      mPortValueCreator = false;
++      setPortConnectSet(proxyPortData-&gt;getOrCreatePortConnectSet());
+     }
+ 
+-    bool setProxyPortValue(PortValue* portValue)
++    bool createPortValue()
+     {
+-      Log(Schedule, Debug3)
+-        &lt;&lt; &quot;setProxyPortValues for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+-        &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+-      SharedPtr&lt;PortData&gt; portData = mProxyPortData.lock();
+-      if (portData) {
+-        if (!portData-&gt;setConnectedPortValues(portValue))
+-          return false;
+-      }
+-      return setLocalPortValue(portValue);
+-    }
+-
+-    void setProxyPortData(PortData* proxyPortData)
+-    { mProxyPortData = proxyPortData; }
+-
+-    virtual bool createPortValue()
+-    {
++      if (!mPortValueCreator)
++        return true;
+       if (mNodeInstance-&gt;getPortValue(*getPortInfo()))
+         return true;
+-      if (mProxyPortData.lock())
+-        return true;
+       SharedPtr&lt;PortValue&gt; portValue = getPortInfo()-&gt;newValue();
+       if (!portValue)
+         return true; // FIXME
+-      return setConnectedPortValues(portValue);
++      if (!mPortConnectSet-&gt;setPortValue(portValue))
++        return false;
++      return true;
+     }
+ 
+   private:
++    bool mPortValueCreator;
+     SharedPtr&lt;AbstractNodeInstance&gt; mNodeInstance;
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+     std::vector&lt;WeakPtr&lt;PortData&gt; &gt; mConnectedPorts;
+-    WeakPtr&lt;PortData&gt; mProxyPortData;
++    SharedPtr&lt;PortConnectSet&gt; mPortConnectSet;
+   };
+ 
+   // Return true if this leaf directly depends on one of leafInstance outputs
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000646.html">[OpenFDM-svn] r677 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000648.html">[OpenFDM-svn] r679 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#647">[ date ]</a>
+              <a href="thread.html#647">[ thread ]</a>
+              <a href="subject.html#647">[ subject ]</a>
+              <a href="author.html#647">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

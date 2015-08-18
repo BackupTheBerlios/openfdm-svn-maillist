@@ -1,0 +1,195 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r635 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r635%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810191802.m9JI2tkv028753%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000603.html">
+   <LINK REL="Next"  HREF="000605.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r635 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r635%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810191802.m9JI2tkv028753%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r635 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct 19 20:02:55 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000603.html">[OpenFDM-svn] r634 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000605.html">[OpenFDM-svn] r636 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#604">[ date ]</a>
+              <a href="thread.html#604">[ thread ]</a>
+              <a href="subject.html#604">[ subject ]</a>
+              <a href="author.html#604">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-19 20:02:55 +0200 (Sun, 19 Oct 2008)
+New Revision: 635
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+Log:
+Factor out some common code.
+
+M    src/OpenFDM/MobileRootJoint.cpp
+M    src/OpenFDM/MechanicContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-19 12:03:02 UTC (rev 634)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-19 18:02:55 UTC (rev 635)
+@@ -20,9 +20,46 @@
+ 
+ struct FrameData {
+   // Stores some values persistent accross velocity/articulation/acceleration
++  // The relative position of the joint wrt the parent frame.
++  Vector3 mRelPosition;
++  // The relative orientation of the joint wrt the parent frame.
++  Rotation mRelOrientation;
++  // The relative velocity of the joint wrt the parent frame.
++  Vector6 mRelVelocity;
++  // The derivative of the relative velosity in the current frame
++  Vector6 mRelVelocityDot;
++
++  // The parents spatial velocity in this frames coordinates
+   Vector6 mParentSpVel;
++  // The derivative of the joint axis function?? See Featherstone ...
+   Vector6 mHDot;
+-  Vector6 mRelVelDot;
++
++
++  void setVelocity(const MechanicLinkValue&amp; parentLink,
++                   const Vector3&amp; relPos, const Quaternion&amp; relOr,
++                   const Vector6&amp; relVel)
++  {
++    mRelPosition = relPos;
++    mRelOrientation = relOr;
++    mRelVelocity = relVel;
++    mParentSpVel = motionTo(mRelPosition, mRelOrientation,
++                            parentLink.mSpatialVelocity);
++    mHDot = Vector6(cross(mParentSpVel.getAngular(), relVel.getAngular()),
++                    cross(mParentSpVel.getAngular(), relVel.getLinear()) +
++                    cross(mParentSpVel.getLinear(), relVel.getAngular()));
++  }
++  void setVelocity(const Vector3&amp; parentAngularVel,
++                   const Vector3&amp; relPos, const Quaternion&amp; relOr,
++                   const Vector6&amp; relVel)
++  {
++    mRelPosition = relPos;
++    mRelOrientation = relOr;
++    mRelVelocity = relVel;
++    mParentSpVel = angularMotionTo(relPos, mRelOrientation, parentAngularVel);
++    mHDot = Vector6(cross(mParentSpVel.getAngular(), relVel.getAngular()),
++                    cross(mParentSpVel.getAngular(), relVel.getLinear()) +
++                    cross(mParentSpVel.getLinear(), relVel.getAngular()));
++  }
+ };
+ 
+ class MechanicContext : public LeafContext {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-19 12:03:02 UTC (rev 634)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-19 18:02:55 UTC (rev 635)
+@@ -49,24 +49,18 @@
+ void
+ MobileRootJoint::velocity(const Task&amp;,
+                           const ContinousStateValueVector&amp; continousState,
+-                          PortValueList&amp; portValues, FrameData&amp; context) const
++                          PortValueList&amp; portValues, FrameData&amp; frameData) const
+ {
+   Vector3 position = continousState[*mPositionStateInfo];
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+-  Vector6 parentSpatialVelocity = angularMotionTo(position, orientation,
+-                                                  getAngularBaseVelocity());
++  frameData.setVelocity(getAngularBaseVelocity(),
++                        position, orientation, velocity);
+ 
+-  context.mParentSpVel = parentSpatialVelocity;
+-  Vector6 pivel = parentSpatialVelocity;
+-  context.mHDot = Vector6(cross(pivel.getAngular(), velocity.getAngular()),
+-                          cross(pivel.getAngular(), velocity.getLinear()) + 
+-                          cross(pivel.getLinear(), velocity.getAngular()));
+-
+   portValues[mMechanicLink].mPosition = position;
+   portValues[mMechanicLink].mOrientation = orientation;
+-  portValues[mMechanicLink].mSpatialVelocity = velocity + parentSpatialVelocity;
++  portValues[mMechanicLink].mSpatialVelocity = velocity + frameData.mParentSpVel;
+ }
+ 
+ void
+@@ -78,7 +72,8 @@
+ 
+ void
+ MobileRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                              PortValueList&amp; portValues, FrameData&amp; context) const
++                              PortValueList&amp; portValues,
++                              FrameData&amp; frameData) const
+ {
+   // Assumption: body is small compared to the distance to the planets
+   // center of mass. That means gravity could be considered equal for the
+@@ -97,8 +92,8 @@
+ 
+   // FIXME
+ //   mRelVelDot = grav - solve(inertia, force) - getParentSpAccel() - getHdot();
+-  Vector6 acceleration = grav - solve(inertia, force) - parentSpAccel - context.mHDot;
+-  context.mRelVelDot = acceleration;
++  Vector6 acceleration = grav - solve(inertia, force) - parentSpAccel - frameData.mHDot;
++  frameData.mRelVelocityDot = acceleration;
+ 
+   portValues[mMechanicLink].mSpatialAcceleration = acceleration;
+ }
+@@ -123,9 +118,9 @@
+   Vector3 angVel = velocity.getAngular();
+   Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
+ 
+-  derivatives[*mPositionStateInfo] = pDot; 
++  derivatives[*mPositionStateInfo] = pDot;
+   derivatives[*mOrientationStateInfo] = qderiv;
+-  derivatives[*mVelocityStateInfo] = context.mRelVelDot;
++  derivatives[*mVelocityStateInfo] = context.mRelVelocityDot;
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000603.html">[OpenFDM-svn] r634 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000605.html">[OpenFDM-svn] r636 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#604">[ date ]</a>
+              <a href="thread.html#604">[ thread ]</a>
+              <a href="subject.html#604">[ subject ]</a>
+              <a href="author.html#604">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

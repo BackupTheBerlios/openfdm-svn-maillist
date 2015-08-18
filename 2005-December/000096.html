@@ -1,0 +1,816 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r112 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r112%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512231536.jBNFaX8R018110%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000095.html">
+   <LINK REL="Next"  HREF="000097.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r112 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r112%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512231536.jBNFaX8R018110%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r112 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Dec 23 16:36:33 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000095.html">[OpenFDM-svn] r111 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000097.html">[OpenFDM-svn] r113 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#96">[ date ]</a>
+              <a href="thread.html#96">[ thread ]</a>
+              <a href="subject.html#96">[ subject ]</a>
+              <a href="author.html#96">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-23 16:36:24 +0100 (Fri, 23 Dec 2005)
+New Revision: 112
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+   trunk/OpenFDM/src/OpenFDM/RootFrame.h
+   trunk/OpenFDM/src/OpenFDM/Vehicle.h
+Log:
+Split MultiBodySystem out of RootFrame.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-23 15:36:24 UTC (rev 112)
+@@ -85,6 +85,7 @@
+   ModelGroup.h \
+   ModelVisitor.h \
+   MultiBodyModel.h \
++  MultiBodySystem.h \
+   Newton.h \
+   Object.h \
+   ODESolver.h \
+@@ -174,6 +175,7 @@
+   Model.cpp \
+   ModelGroup.cpp \
+   MultiBodyModel.cpp \
++  MultiBodySystem.cpp \
+   Newton.cpp \
+   Object.cpp \
+   ODESolver.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2005-12-23 15:36:24 UTC (rev 112)
+@@ -8,6 +8,7 @@
+ #include &quot;Model.h&quot;
+ #include &quot;ModelGroup.h&quot;
+ #include &quot;RigidBody.h&quot;
++#include &quot;MultiBodySystem.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -21,6 +22,8 @@
+   { apply((Model&amp;)modelGroup); }
+   virtual void apply(Interact&amp; interact)
+   { apply((Model&amp;)interact); }
++  virtual void apply(MultiBodySystem&amp; multiBodySystem)
++  { apply((Model&amp;)multiBodySystem); }
+ protected:
+   /// Call this in the apply(ModelGroup&amp;) method if you want to
+   /// traverse downward
+
+Added: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-23 15:36:24 UTC (rev 112)
+@@ -0,0 +1,280 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;Visitor.h&quot;
++#include &quot;ModelVisitor.h&quot;
++#include &quot;Mass.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;MultiBodySystem.h&quot;
++
++namespace OpenFDM {
++
++class ForwardDynamicsVisitor
++  : public Visitor {
++public:
++  virtual void apply(RigidBody&amp; body)
++  {
++    // Note the order. First compute the articulated values on each child.
++    traverse(body);
++    // Past that, do it on this current rigid body.
++    body.computeArtValues();
++  }
++};
++
++class AccelerationPropagationVisitor
++  : public Visitor {
++public:
++  virtual void apply(RigidBody&amp; body)
++  {
++    body.computeAccel();
++    // Note the order. First compute the acceleration and than traverse
++    // to the children.
++    traverse(body);
++  }
++};
++
++class SetStateVisitor
++  : public Visitor {
++public:
++  SetStateVisitor(const Vector&amp; state)
++    : mState(state), mOffset(0u)
++  { }
++  virtual void apply(MultiBodyModel&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
++    abNode.setState(mState, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++  virtual void apply(Interact&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
++    abNode.setState(mState, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++private:
++  Vector mState;
++  unsigned mOffset;
++  real_type mTime;
++};
++
++class GetStateVisitor
++  : public ConstVisitor {
++public:
++  GetStateVisitor(unsigned size)
++    : mState(size), mOffset(0u)
++  { }
++  virtual void apply(const MultiBodyModel&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
++    abNode.getState(mState, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++  virtual void apply(const Interact&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
++    abNode.getState(mState, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++  const Vector&amp; getState(void) const
++  { return mState; }
++private:
++  Vector mState;
++  unsigned mOffset;
++};
++
++class GetStateDerivVisitor
++  : public Visitor {
++public:
++  GetStateDerivVisitor(unsigned size)
++    : mStateDeriv(size), mOffset(0u)
++  { }
++  virtual void apply(MultiBodyModel&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
++    abNode.getStateDeriv(mStateDeriv, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++  virtual void apply(Interact&amp; abNode)
++  {
++    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
++    abNode.getStateDeriv(mStateDeriv, mOffset);
++    mOffset += abNode.getNumContinousStates();
++  }
++  const Vector&amp; getStateDeriv(void) const
++  { return mStateDeriv; }
++private:
++  Vector mStateDeriv;
++  unsigned mOffset;
++};
++
++class OutputVisitor
++  : public Visitor {
++public:
++  OutputVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
++  { }
++  virtual void apply(MultiBodyModel&amp; abNode)
++  {
++    abNode.output(mTaskInfo);
++  }
++  virtual void apply(Interact&amp; abNode)
++  {
++    abNode.output(mTaskInfo);
++  }
++private:
++  const TaskInfo&amp; mTaskInfo;
++};
++
++class UpdateVisitor
++  : public Visitor {
++public:
++  UpdateVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
++  { }
++  virtual void apply(MultiBodyModel&amp; abNode)
++  {
++    abNode.update(mTaskInfo);
++  }
++  virtual void apply(Interact&amp; abNode)
++  {
++    abNode.update(mTaskInfo);
++  }
++private:
++  const TaskInfo&amp; mTaskInfo;
++};
++
++class StateCountVisitor
++  : public ConstVisitor {
++public:
++  StateCountVisitor(void)
++    : mOffset(0u)
++  { }
++  virtual void apply(const MultiBodyModel&amp; abNode)
++  {
++    mOffset += abNode.getNumContinousStates();
++  }
++  virtual void apply(const Interact&amp; abNode)
++  {
++    mOffset += abNode.getNumContinousStates();
++  }
++  unsigned getStateCount(void) const
++  { return mOffset; }
++private:
++  unsigned mOffset;
++};
++
++MultiBodySystem::MultiBodySystem(RootFrame* rootFrame) :
++  Model(&quot;multibodymodel&quot;),
++  mRootFrame(rootFrame)
++{
++  // FIXME
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++}
++
++MultiBodySystem::~MultiBodySystem(void)
++{
++}
++
++void
++MultiBodySystem::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
++void
++MultiBodySystem::setEvalState(const Vector&amp; state)
++{
++  // First we need to inject the current state into the tree of parts.
++  setState(state, 0);
++
++  // Compute the external and interaction forces.
++  // FIXME:Output-&gt;continous states ...
++
++  // Compute forward dynamics, that is the articulated forces and inertia.
++  ForwardDynamicsVisitor fwdVisitor;
++  mRootFrame-&gt;accept(fwdVisitor);
++
++  // Then compute the articulated inertias and forces.
++  AccelerationPropagationVisitor apVisitor;
++  mRootFrame-&gt;accept(apVisitor);
++}
++
++void
++MultiBodySystem::computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv)
++{
++  setEvalState(state);
++
++  // And finally extract the derivative vector from the tree.
++  GetStateDerivVisitor gsdv(getNumContinousStates());
++  mRootFrame-&gt;accept(gsdv);
++  deriv = gsdv.getStateDeriv();
++}
++
++void
++MultiBodySystem::setState(const Vector&amp; state, unsigned offset)
++{
++  SetStateVisitor ssv(state(Range(offset+1, offset+getNumContinousStates())));
++  mRootFrame-&gt;accept(ssv);
++}
++
++void
++MultiBodySystem::getState(Vector&amp; state, unsigned offset) const
++{
++  GetStateVisitor gsv(getNumContinousStates());
++  mRootFrame-&gt;accept(gsv);
++  state(Range(offset+1, offset+getNumContinousStates())) = gsv.getState();
++}
++
++void
++MultiBodySystem::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
++{
++  // Compute the external and interaction forces.
++  // FIXME:Output-&gt;continous states ...
++
++  // Compute forward dynamics, that is the articulated forces and inertia.
++  ForwardDynamicsVisitor fwdVisitor;
++  mRootFrame-&gt;accept(fwdVisitor);
++
++  // Then compute the articulated inertias and forces.
++  AccelerationPropagationVisitor apVisitor;
++  mRootFrame-&gt;accept(apVisitor);
++
++  // And finally extract the derivative vector from the tree.
++  GetStateDerivVisitor gsdv(getNumContinousStates());
++  mRootFrame-&gt;accept(gsdv);
++  stateDeriv(Range(offset+1, offset+getNumContinousStates()))
++    = gsdv.getStateDeriv();
++}
++
++bool
++MultiBodySystem::init(void)
++{
++  StateCountVisitor gsc;
++  mRootFrame-&gt;accept(gsc);
++  setNumContinousStates(gsc.getStateCount());
++  return true;
++}
++
++void
++MultiBodySystem::output(const TaskInfo&amp; taskInfo)
++{
++  OutputVisitor ov(taskInfo);
++  mRootFrame-&gt;accept(ov);
++}
++
++void
++MultiBodySystem::update(const TaskInfo&amp; taskInfo)
++{
++  UpdateVisitor uv(taskInfo);
++  mRootFrame-&gt;accept(uv);
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-23 15:36:24 UTC (rev 112)
+@@ -0,0 +1,55 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MultiBodySystem_H
++#define OpenFDM_MultiBodySystem_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;Joint.h&quot;
++#include &quot;RootFrame.h&quot;
++
++namespace OpenFDM {
++
++class MultiBodySystem :
++    public Model {
++public:
++  MultiBodySystem(RootFrame* rootFrame);
++  virtual ~MultiBodySystem(void);
++
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
++  /** Sets the state of this multibody system from the state vector state.
++   */
++  void setEvalState(const Vector&amp; state);
++  /** Sets the state of this multibody system from the state vector state
++      and returns the time derivative in deriv.
++   */
++  void computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv);
++  
++  virtual void setState(const Vector&amp; state, unsigned offset);
++  virtual void getState(Vector&amp; state, unsigned offset) const;
++  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp; taskInfo);
++  virtual void update(const TaskInfo&amp; taskInfo);
++private:
++  /// At the moment each MultiBodySystem has its own root frame,
++  /// In the future just store the root joint and reference a common root frame
++  SharedPtr&lt;RootFrame&gt; mRootFrame;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-12-23 15:36:24 UTC (rev 112)
+@@ -2,173 +2,11 @@
+  *
+  */
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+ #include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Visitor.h&quot;
+ #include &quot;RootFrame.h&quot;
+-#include &quot;Mass.h&quot;
+-#include &quot;Force.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class ForwardDynamicsVisitor
+-  : public Visitor {
+-public:
+-  virtual void apply(RigidBody&amp; body)
+-  {
+-    // Note the order. First compute the articulated values on each child.
+-    traverse(body);
+-    // Past that, do it on this current rigid body.
+-    body.computeArtValues();
+-  }
+-};
+-
+-class AccelerationPropagationVisitor
+-  : public Visitor {
+-public:
+-  virtual void apply(RigidBody&amp; body)
+-  {
+-    body.computeAccel();
+-    // Note the order. First compute the acceleration and than traverse
+-    // to the children.
+-    traverse(body);
+-  }
+-};
+-
+-class SetStateVisitor
+-  : public Visitor {
+-public:
+-  SetStateVisitor(const Vector&amp; state)
+-    : mState(state), mOffset(0u)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.setState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.setState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-private:
+-  Vector mState;
+-  unsigned mOffset;
+-  real_type mTime;
+-};
+-
+-class GetStateVisitor
+-  : public ConstVisitor {
+-public:
+-  GetStateVisitor(unsigned size)
+-    : mState(size), mOffset(0u)
+-  { }
+-  virtual void apply(const MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.getState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(const Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.getState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  const Vector&amp; getState(void) const
+-  { return mState; }
+-private:
+-  Vector mState;
+-  unsigned mOffset;
+-};
+-
+-class GetStateDerivVisitor
+-  : public Visitor {
+-public:
+-  GetStateDerivVisitor(unsigned size)
+-    : mStateDeriv(size), mOffset(0u)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
+-    abNode.getStateDeriv(mStateDeriv, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
+-    abNode.getStateDeriv(mStateDeriv, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  const Vector&amp; getStateDeriv(void) const
+-  { return mStateDeriv; }
+-private:
+-  Vector mStateDeriv;
+-  unsigned mOffset;
+-};
+-
+-class OutputVisitor
+-  : public Visitor {
+-public:
+-  OutputVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    abNode.output(mTaskInfo);
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    abNode.output(mTaskInfo);
+-  }
+-private:
+-  const TaskInfo&amp; mTaskInfo;
+-};
+-
+-class UpdateVisitor
+-  : public Visitor {
+-public:
+-  UpdateVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    abNode.update(mTaskInfo);
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    abNode.update(mTaskInfo);
+-  }
+-private:
+-  const TaskInfo&amp; mTaskInfo;
+-};
+-
+-class StateCountVisitor
+-  : public ConstVisitor {
+-public:
+-  StateCountVisitor(void)
+-    : mOffset(0u)
+-  { }
+-  virtual void apply(const MultiBodyModel&amp; abNode)
+-  {
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(const Interact&amp; abNode)
+-  {
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  unsigned getStateCount(void) const
+-  { return mOffset; }
+-private:
+-  unsigned mOffset;
+-};
+-
+ RootFrame::RootFrame(const std::string&amp; name)
+   : FreeFrame(name)
+ {
+@@ -178,106 +16,4 @@
+ {
+ }
+ 
+-
+-MultiBodySystem::MultiBodySystem(RootFrame* rootFrame) :
+-  Model(&quot;multibodymodel&quot;),
+-  mRootFrame(rootFrame)
+-{
+-  // FIXME
+-  addSampleTime(SampleTime::PerTimestep);
+-  addSampleTime(SampleTime::Continous);
+-}
+-
+-MultiBodySystem::~MultiBodySystem(void)
+-{
+-}
+-
+-void
+-MultiBodySystem::setEvalState(const Vector&amp; state)
+-{
+-  // First we need to inject the current state into the tree of parts.
+-  setState(state, 0);
+-
+-  // Compute the external and interaction forces.
+-  // FIXME:Output-&gt;continous states ...
+-
+-  // Compute forward dynamics, that is the articulated forces and inertia.
+-  ForwardDynamicsVisitor fwdVisitor;
+-  mRootFrame-&gt;accept(fwdVisitor);
+-
+-  // Then compute the articulated inertias and forces.
+-  AccelerationPropagationVisitor apVisitor;
+-  mRootFrame-&gt;accept(apVisitor);
+-}
+-
+-void
+-MultiBodySystem::computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv)
+-{
+-  setEvalState(state);
+-
+-  // And finally extract the derivative vector from the tree.
+-  GetStateDerivVisitor gsdv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsdv);
+-  deriv = gsdv.getStateDeriv();
+-}
+-
+-void
+-MultiBodySystem::setState(const Vector&amp; state, unsigned offset)
+-{
+-  SetStateVisitor ssv(state(Range(offset+1, offset+getNumContinousStates())));
+-  mRootFrame-&gt;accept(ssv);
+-}
+-
+-void
+-MultiBodySystem::getState(Vector&amp; state, unsigned offset) const
+-{
+-  GetStateVisitor gsv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsv);
+-  state(Range(offset+1, offset+getNumContinousStates())) = gsv.getState();
+-}
+-
+-void
+-MultiBodySystem::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
+-{
+-  // Compute the external and interaction forces.
+-  // FIXME:Output-&gt;continous states ...
+-
+-  // Compute forward dynamics, that is the articulated forces and inertia.
+-  ForwardDynamicsVisitor fwdVisitor;
+-  mRootFrame-&gt;accept(fwdVisitor);
+-
+-  // Then compute the articulated inertias and forces.
+-  AccelerationPropagationVisitor apVisitor;
+-  mRootFrame-&gt;accept(apVisitor);
+-
+-  // And finally extract the derivative vector from the tree.
+-  GetStateDerivVisitor gsdv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsdv);
+-  stateDeriv(Range(offset+1, offset+getNumContinousStates()))
+-    = gsdv.getStateDeriv();
+-}
+-
+-bool
+-MultiBodySystem::init(void)
+-{
+-  StateCountVisitor gsc;
+-  mRootFrame-&gt;accept(gsc);
+-  setNumContinousStates(gsc.getStateCount());
+-  return true;
+-}
+-
+-void
+-MultiBodySystem::output(const TaskInfo&amp; taskInfo)
+-{
+-  OutputVisitor ov(taskInfo);
+-  mRootFrame-&gt;accept(ov);
+-}
+-
+-void
+-MultiBodySystem::update(const TaskInfo&amp; taskInfo)
+-{
+-  UpdateVisitor uv(taskInfo);
+-  mRootFrame-&gt;accept(uv);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.h	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.h	2005-12-23 15:36:24 UTC (rev 112)
+@@ -24,31 +24,6 @@
+   virtual ~RootFrame(void);
+ };
+ 
+-class MultiBodySystem :
+-    public Model {
+-public:
+-  MultiBodySystem(RootFrame* rootFrame);
+-  virtual ~MultiBodySystem(void);
+-
+-  /** Sets the state of this multibody system from the state vector state.
+-   */
+-  void setEvalState(const Vector&amp; state);
+-  /** Sets the state of this multibody system from the state vector state
+-      and returns the time derivative in deriv.
+-   */
+-  void computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv);
+-  
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
+-  virtual void update(const TaskInfo&amp; taskInfo);
+-private:
+-  SharedPtr&lt;RootFrame&gt; mRootFrame;
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.h	2005-12-23 13:38:44 UTC (rev 111)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.h	2005-12-23 15:36:24 UTC (rev 112)
+@@ -13,6 +13,7 @@
+ #include &quot;Frame.h&quot;
+ #include &quot;FreeJoint.h&quot;
+ #include &quot;RootFrame.h&quot;
++#include &quot;MultiBodySystem.h&quot;
+ #include &quot;Planet.h&quot;
+ #include &quot;ODESolver.h&quot;
+ #include &quot;Environment.h&quot;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000095.html">[OpenFDM-svn] r111 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000097.html">[OpenFDM-svn] r113 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#96">[ date ]</a>
+              <a href="thread.html#96">[ thread ]</a>
+              <a href="subject.html#96">[ subject ]</a>
+              <a href="author.html#96">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

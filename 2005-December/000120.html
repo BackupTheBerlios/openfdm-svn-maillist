@@ -1,0 +1,810 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r136 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r136%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512281057.jBSAvBkK015054%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000119.html">
+   <LINK REL="Next"  HREF="000121.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r136 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r136%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512281057.jBSAvBkK015054%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r136 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Dec 28 11:57:11 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000119.html">[OpenFDM-svn] r135 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000121.html">[OpenFDM-svn] r137 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#120">[ date ]</a>
+              <a href="thread.html#120">[ thread ]</a>
+              <a href="subject.html#120">[ subject ]</a>
+              <a href="author.html#120">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-28 11:57:02 +0100 (Wed, 28 Dec 2005)
+New Revision: 136
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+Removed:
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+   trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+   trunk/OpenFDM/src/OpenFDM/Vehicle.h
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+Rename FreeJoint to MobileRootJoint
+
+
+Deleted: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-28 10:57:02 UTC (rev 136)
+@@ -1,190 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Gravity.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;RootFrame.h&quot;
+-#include &quot;MobileRootJointFrame.h&quot;
+-#include &quot;FreeJoint.h&quot;
+-
+-namespace OpenFDM {
+-
+-FreeJoint::FreeJoint(const std::string&amp; name)
+-  : Joint(name),
+-    mFrame(new MobileRootJointFrame(name))
+-{
+-  setNumContinousStates(13);
+-  addSampleTime(SampleTime::Continous);
+-}
+-
+-FreeJoint::~FreeJoint(void)
+-{
+-}
+-
+-bool
+-FreeJoint::init(void)
+-{
+-  Environment* environment = getEnvironment();
+-  if (!environment) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get environment pointer! Most propably the&quot;
+-      &quot; Model is not put together correctly!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mGravity = environment-&gt;getGravity();
+-  if (!mGravity) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get gravity model!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  Frame* rootFrame = environment-&gt;getRootFrame();
+-  if (!rootFrame) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get rootFrame model!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  recheckTopology();
+-
+-  return Joint::init();
+-}
+-
+-void
+-FreeJoint::recheckTopology(void)
+-{
+-  // Hmm, works for the first cut, but rethink what happens with strange
+-  // attach reattach sequences ...
+-  RigidBody* rigidBody = getOutboardBody();
+-  if (!rigidBody)
+-    return;
+-  // check if already done
+-  if (mFrame != rigidBody-&gt;getFrame())
+-    rigidBody-&gt;setFrame(mFrame);
+-
+-  // Check if we are attached to some rigid body ...
+-  rigidBody = getInboardBody();
+-  if (rigidBody) {
+-    Frame* frame = rigidBody-&gt;getFrame();
+-    if (frame &amp;&amp; !frame-&gt;isParentFrame(mFrame))
+-      frame-&gt;addChildFrame(mFrame);
+-  } else {
+-    Environment* environment = getEnvironment();
+-    if (environment) {
+-      Frame* rootFrame = environment-&gt;getRootFrame();
+-      if (rootFrame)
+-        rootFrame-&gt;addChildFrame(mFrame);
+-    }
+-  }
+-}
+-
+-void
+-FreeJoint::setRelVel(const Vector6&amp; vel)
+-{
+-  mFrame-&gt;setRelVel(vel);
+-}
+-
+-void
+-FreeJoint::setLinearRelVel(const Vector3&amp; vel)
+-{
+-  mFrame-&gt;setLinearRelVel(vel);
+-}
+-
+-void
+-FreeJoint::setAngularRelVel(const Vector3&amp; vel)
+-{
+-  mFrame-&gt;setAngularRelVel(vel);
+-}
+-
+-void
+-FreeJoint::setRefPosition(const Vector3&amp; p)
+-{
+-  mFrame-&gt;setRefPosition(p);
+-}
+-
+-void
+-FreeJoint::setRefOrientation(const Quaternion&amp; o)
+-{
+-  mFrame-&gt;setRefOrientation(o);
+-}
+-
+-void
+-FreeJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                             const SpatialInertia&amp; outI,
+-                             const Vector6&amp; outF)
+-{
+-  artI.clear();
+-  artF.clear();
+-
+-  Log(ArtBody, Debug) &lt;&lt; &quot;FreeJoint::computeRelVelDot():\n&quot; &lt;&lt; outI &lt;&lt; endl;
+-  mFrame-&gt;jointArticulation(outF, outI, mGravity);
+-}
+-
+-void
+-FreeJoint::setState(const Vector&amp; state, unsigned offset)
+-{
+-  mFrame-&gt;setOrientation(Vector4(state(offset+1), state(offset+2),
+-                                 state(offset+3), state(offset+4)));
+-  mFrame-&gt;setPosition(Vector3(state(offset+5), state(offset+6), state(offset+7)));
+-  mFrame-&gt;setRelVel(Vector6(state(offset+8), state(offset+9), state(offset+10),
+-                            state(offset+11), state(offset+12), state(offset+13)));
+-}
+-
+-void
+-FreeJoint::getState(Vector&amp; state, unsigned offset) const
+-{
+-  Quaternion q = mFrame-&gt;getOrientation();
+-  state(offset+1) = q(1);
+-  state(offset+2) = q(2);
+-  state(offset+3) = q(3);
+-  state(offset+4) = q(4);
+-  
+-  Vector3 p = mFrame-&gt;getPosition();
+-  state(offset+5) = p(1);
+-  state(offset+6) = p(2);
+-  state(offset+7) = p(3);
+-  
+-  Vector6 v = mFrame-&gt;getRelVel();
+-  state(offset+8) = v(1);
+-  state(offset+9) = v(2);
+-  state(offset+10) = v(3);
+-  state(offset+11) = v(4);
+-  state(offset+12) = v(5);
+-  state(offset+13) = v(6);
+-}
+-
+-void
+-FreeJoint::getStateDeriv(Vector&amp; state, unsigned offset)
+-{
+-  Quaternion q = mFrame-&gt;getOrientation();
+-  Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
+-  Vector3 vel = mFrame-&gt;rotToParent(mFrame-&gt;getRelVel().getLinear());
+-
+-  // Compute the derivative term originating from the angular velocity.
+-  // Correction term to keep the quaternion normalized.
+-  // That is if |q| &lt; 1 add a little radial component outward,
+-  // if |q| &gt; 1 add a little radial component inward
+-  Vector4 qderiv = derivative(q, angVel) + 0.1*(normalize(q) - q);
+-  state(offset+1) = qderiv(1);
+-  state(offset+2) = qderiv(2);
+-  state(offset+3) = qderiv(3);
+-  state(offset+4) = qderiv(4);
+-  
+-  state(offset+5) = vel(1);
+-  state(offset+6) = vel(2);
+-  state(offset+7) = vel(3);
+-  
+-  Vector6 accel = mFrame-&gt;getRelVelDot();
+-  state(offset+8)  = accel(1);
+-  state(offset+9)  = accel(2);
+-  state(offset+10) = accel(3);
+-  state(offset+11) = accel(4);
+-  state(offset+12) = accel(5);
+-  state(offset+13) = accel(6);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-28 10:57:02 UTC (rev 136)
+@@ -1,73 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_FreeJoint_H
+-#define OpenFDM_FreeJoint_H
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;Environment.h&quot;
+-
+-namespace OpenFDM {
+-
+-class MobileRootJointFrame;
+-
+-class FreeJoint
+-  : public Joint {
+-public:
+-  FreeJoint(const std::string&amp; name);
+-  virtual ~FreeJoint(void);
+-
+-  virtual bool init(void);
+-
+-  virtual void recheckTopology(void);
+-
+-  /// Set the relative velocity.
+-  void setRelVel(const Vector6&amp; vel);
+-  /// Set the relative velocity.
+-  void setLinearRelVel(const Vector3&amp; vel);
+-  /// Set the relative velocity.
+-  void setAngularRelVel(const Vector3&amp; vel);
+-
+-  /// Set the reference position.
+-  void setRefPosition(const Vector3&amp; p);
+-  /// Set the reference orientation.
+-  void setRefOrientation(const Quaternion&amp; o);
+-
+-private:
+-  /** Plugin function for the articulated body algorithm.
+-   */
+-  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF);
+-
+-
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
+-
+-  /// The commonly used gravity model from the environment class
+-  /// It is initialized at the init() call
+-  SharedPtr&lt;const Gravity&gt; mGravity;
+-
+-  /// The frame of the mobile root
+-  SharedPtr&lt;MobileRootJointFrame&gt; mFrame;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-28 10:57:02 UTC (rev 136)
+@@ -52,7 +52,7 @@
+   Expression.h \
+   Force.h \
+   Frame.h \
+-  FreeJoint.h \
++  MobileRootJoint.h \
+   Function.h \
+   Gain.h \
+   Gravity.h \
+@@ -158,7 +158,7 @@
+   Expression.cpp \
+   Force.cpp \
+   Frame.cpp \
+-  FreeJoint.cpp \
++  MobileRootJoint.cpp \
+   Function.cpp \
+   Gain.cpp \
+   Gravity.cpp \
+
+Copied: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp (from rev 135, trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-28 10:57:02 UTC (rev 136)
+@@ -0,0 +1,190 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Gravity.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;RootFrame.h&quot;
++#include &quot;MobileRootJointFrame.h&quot;
++#include &quot;MobileRootJoint.h&quot;
++
++namespace OpenFDM {
++
++MobileRootJoint::MobileRootJoint(const std::string&amp; name)
++  : Joint(name),
++    mFrame(new MobileRootJointFrame(name))
++{
++  setNumContinousStates(13);
++  addSampleTime(SampleTime::Continous);
++}
++
++MobileRootJoint::~MobileRootJoint(void)
++{
++}
++
++bool
++MobileRootJoint::init(void)
++{
++  Environment* environment = getEnvironment();
++  if (!environment) {
++    Log(Model,Error) &lt;&lt; &quot;Can not get environment pointer! Most propably the&quot;
++      &quot; Model is not put together correctly!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mGravity = environment-&gt;getGravity();
++  if (!mGravity) {
++    Log(Model,Error) &lt;&lt; &quot;Can not get gravity model!&quot; &lt;&lt; endl;
++    return false;
++  }
++  Frame* rootFrame = environment-&gt;getRootFrame();
++  if (!rootFrame) {
++    Log(Model,Error) &lt;&lt; &quot;Can not get rootFrame model!&quot; &lt;&lt; endl;
++    return false;
++  }
++  recheckTopology();
++
++  return Joint::init();
++}
++
++void
++MobileRootJoint::recheckTopology(void)
++{
++  // Hmm, works for the first cut, but rethink what happens with strange
++  // attach reattach sequences ...
++  RigidBody* rigidBody = getOutboardBody();
++  if (!rigidBody)
++    return;
++  // check if already done
++  if (mFrame != rigidBody-&gt;getFrame())
++    rigidBody-&gt;setFrame(mFrame);
++
++  // Check if we are attached to some rigid body ...
++  rigidBody = getInboardBody();
++  if (rigidBody) {
++    Frame* frame = rigidBody-&gt;getFrame();
++    if (frame &amp;&amp; !frame-&gt;isParentFrame(mFrame))
++      frame-&gt;addChildFrame(mFrame);
++  } else {
++    Environment* environment = getEnvironment();
++    if (environment) {
++      Frame* rootFrame = environment-&gt;getRootFrame();
++      if (rootFrame)
++        rootFrame-&gt;addChildFrame(mFrame);
++    }
++  }
++}
++
++void
++MobileRootJoint::setRelVel(const Vector6&amp; vel)
++{
++  mFrame-&gt;setRelVel(vel);
++}
++
++void
++MobileRootJoint::setLinearRelVel(const Vector3&amp; vel)
++{
++  mFrame-&gt;setLinearRelVel(vel);
++}
++
++void
++MobileRootJoint::setAngularRelVel(const Vector3&amp; vel)
++{
++  mFrame-&gt;setAngularRelVel(vel);
++}
++
++void
++MobileRootJoint::setRefPosition(const Vector3&amp; p)
++{
++  mFrame-&gt;setRefPosition(p);
++}
++
++void
++MobileRootJoint::setRefOrientation(const Quaternion&amp; o)
++{
++  mFrame-&gt;setRefOrientation(o);
++}
++
++void
++MobileRootJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
++                             const SpatialInertia&amp; outI,
++                             const Vector6&amp; outF)
++{
++  artI.clear();
++  artF.clear();
++
++  Log(ArtBody, Debug) &lt;&lt; &quot;MobileRootJoint::computeRelVelDot():\n&quot; &lt;&lt; outI &lt;&lt; endl;
++  mFrame-&gt;jointArticulation(outF, outI, mGravity);
++}
++
++void
++MobileRootJoint::setState(const Vector&amp; state, unsigned offset)
++{
++  mFrame-&gt;setOrientation(Vector4(state(offset+1), state(offset+2),
++                                 state(offset+3), state(offset+4)));
++  mFrame-&gt;setPosition(Vector3(state(offset+5), state(offset+6), state(offset+7)));
++  mFrame-&gt;setRelVel(Vector6(state(offset+8), state(offset+9), state(offset+10),
++                            state(offset+11), state(offset+12), state(offset+13)));
++}
++
++void
++MobileRootJoint::getState(Vector&amp; state, unsigned offset) const
++{
++  Quaternion q = mFrame-&gt;getOrientation();
++  state(offset+1) = q(1);
++  state(offset+2) = q(2);
++  state(offset+3) = q(3);
++  state(offset+4) = q(4);
++  
++  Vector3 p = mFrame-&gt;getPosition();
++  state(offset+5) = p(1);
++  state(offset+6) = p(2);
++  state(offset+7) = p(3);
++  
++  Vector6 v = mFrame-&gt;getRelVel();
++  state(offset+8) = v(1);
++  state(offset+9) = v(2);
++  state(offset+10) = v(3);
++  state(offset+11) = v(4);
++  state(offset+12) = v(5);
++  state(offset+13) = v(6);
++}
++
++void
++MobileRootJoint::getStateDeriv(Vector&amp; state, unsigned offset)
++{
++  Quaternion q = mFrame-&gt;getOrientation();
++  Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
++  Vector3 vel = mFrame-&gt;rotToParent(mFrame-&gt;getRelVel().getLinear());
++
++  // Compute the derivative term originating from the angular velocity.
++  // Correction term to keep the quaternion normalized.
++  // That is if |q| &lt; 1 add a little radial component outward,
++  // if |q| &gt; 1 add a little radial component inward
++  Vector4 qderiv = derivative(q, angVel) + 0.1*(normalize(q) - q);
++  state(offset+1) = qderiv(1);
++  state(offset+2) = qderiv(2);
++  state(offset+3) = qderiv(3);
++  state(offset+4) = qderiv(4);
++  
++  state(offset+5) = vel(1);
++  state(offset+6) = vel(2);
++  state(offset+7) = vel(3);
++  
++  Vector6 accel = mFrame-&gt;getRelVelDot();
++  state(offset+8)  = accel(1);
++  state(offset+9)  = accel(2);
++  state(offset+10) = accel(3);
++  state(offset+11) = accel(4);
++  state(offset+12) = accel(5);
++  state(offset+13) = accel(6);
++}
++
++} // namespace OpenFDM
+
+Copied: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h (from rev 135, trunk/OpenFDM/src/OpenFDM/FreeJoint.h)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2005-12-28 10:57:02 UTC (rev 136)
+@@ -0,0 +1,73 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MobileRootJoint_H
++#define OpenFDM_MobileRootJoint_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;Joint.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++class MobileRootJointFrame;
++
++class MobileRootJoint
++  : public Joint {
++public:
++  MobileRootJoint(const std::string&amp; name);
++  virtual ~MobileRootJoint(void);
++
++  virtual bool init(void);
++
++  virtual void recheckTopology(void);
++
++  /// Set the relative velocity.
++  void setRelVel(const Vector6&amp; vel);
++  /// Set the relative velocity.
++  void setLinearRelVel(const Vector3&amp; vel);
++  /// Set the relative velocity.
++  void setAngularRelVel(const Vector3&amp; vel);
++
++  /// Set the reference position.
++  void setRefPosition(const Vector3&amp; p);
++  /// Set the reference orientation.
++  void setRefOrientation(const Quaternion&amp; o);
++
++private:
++  /** Plugin function for the articulated body algorithm.
++   */
++  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
++                                 const SpatialInertia&amp; outI,
++                                 const Vector6&amp; outF);
++
++
++  /** Plugin function for the state propagation.
++   */
++  virtual void setState(const Vector&amp; state, unsigned offset);
++  /** Plugin function for the state propagation.
++   */
++  virtual void getState(Vector&amp; state, unsigned offset) const;
++  /** Plugin function for the state propagation.
++   */
++  virtual void getStateDeriv(Vector&amp; state, unsigned offset);
++
++  /// The commonly used gravity model from the environment class
++  /// It is initialized at the init() call
++  SharedPtr&lt;const Gravity&gt; mGravity;
++
++  /// The frame of the mobile root
++  SharedPtr&lt;MobileRootJointFrame&gt; mFrame;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-28 10:57:02 UTC (rev 136)
+@@ -53,7 +53,7 @@
+   }
+ 
+   // Compute forward dynamics, that is the articulated forces and inertia.
+-  mFreeJoint-&gt;interactWith(mFreeJoint-&gt;getInboardBody());
++  mMobileRootJoint-&gt;interactWith(mMobileRootJoint-&gt;getInboardBody());
+ 
+   // Hmm, just works now ... FIXME
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+@@ -100,8 +100,8 @@
+   if (this == interact-&gt;getParent())
+     return;
+   // FIXME incorporate that somehow into the depencencies ...
+-  if (dynamic_cast&lt;FreeJoint*&gt;(interact)) {
+-    mFreeJoint = dynamic_cast&lt;FreeJoint*&gt;(interact);
++  if (dynamic_cast&lt;MobileRootJoint*&gt;(interact)) {
++    mMobileRootJoint = dynamic_cast&lt;MobileRootJoint*&gt;(interact);
+   }
+   addModel(interact);
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-28 10:57:02 UTC (rev 136)
+@@ -14,7 +14,7 @@
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
+-#include &quot;FreeJoint.h&quot;
++#include &quot;MobileRootJoint.h&quot;
+ #include &quot;RootFrame.h&quot;
+ #include &quot;ModelGroup.h&quot;
+ 
+@@ -43,7 +43,7 @@
+   void removeInteract(Interact* interact);
+ private:
+   /// That is the root for now ...
+-  SharedPtr&lt;FreeJoint&gt; mFreeJoint;
++  SharedPtr&lt;MobileRootJoint&gt; mMobileRootJoint;
+ 
+   /// A list of RigidBody objects in this MultiBodySystem
+   typedef std::vector&lt;SharedPtr&lt;RigidBody&gt; &gt; RigidBodyList;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2005-12-28 10:57:02 UTC (rev 136)
+@@ -8,7 +8,7 @@
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Force.h&quot;
+ #include &quot;RigidBody.h&quot;
+-#include &quot;FreeJoint.h&quot;
++#include &quot;MobileRootJoint.h&quot;
+ #include &quot;Planet.h&quot;
+ #include &quot;Wind.h&quot;
+ #include &quot;ExplicitEuler.h&quot;
+@@ -27,8 +27,8 @@
+ {
+   mTopBody = new RigidBody(&quot;Topmost rigid body&quot;);
+ 
+-  mFreeJoint = new FreeJoint(&quot;Mobile vehicle base&quot;);
+-  mTopBody-&gt;setInboardJoint(mFreeJoint);
++  mMobileRootJoint = new MobileRootJoint(&quot;Mobile vehicle base&quot;);
++  mTopBody-&gt;setInboardJoint(mMobileRootJoint);
+ 
+   mSystem = new System(&quot;Top Vehicle System&quot;);
+ 
+@@ -109,7 +109,7 @@
+ void
+ Vehicle::setCartPosition(const Vector3&amp; pos)
+ {
+-  mFreeJoint-&gt;setRefPosition(pos);/*FIXME*/
++  mMobileRootJoint-&gt;setRefPosition(pos);/*FIXME*/
+ }
+ 
+ Geodetic
+@@ -145,7 +145,7 @@
+ void
+ Vehicle::setCartOrientation(const Quaternion&amp; o)
+ {
+-  mFreeJoint-&gt;setRefOrientation(o);/*FIXME*/
++  mMobileRootJoint-&gt;setRefOrientation(o);/*FIXME*/
+ }
+ 
+ Quaternion
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.h	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.h	2005-12-28 10:57:02 UTC (rev 136)
+@@ -11,7 +11,7 @@
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Force.h&quot;
+ #include &quot;Frame.h&quot;
+-#include &quot;FreeJoint.h&quot;
++#include &quot;MobileRootJoint.h&quot;
+ #include &quot;RootFrame.h&quot;
+ #include &quot;MultiBodySystem.h&quot;
+ #include &quot;Planet.h&quot;
+@@ -77,10 +77,10 @@
+ 
+   /** Get the vehicle base node.
+    */
+-  const FreeJoint* getFreeJoint(void) const
+-  { return mFreeJoint; }
+-  FreeJoint* getFreeJoint(void)
+-  { return mFreeJoint; }
++  const MobileRootJoint* getMobileRootJoint(void) const
++  { return mMobileRootJoint; }
++  MobileRootJoint* getMobileRootJoint(void)
++  { return mMobileRootJoint; }
+ 
+   const ModelGroup* getModelGroup(void) const
+   { return mModelGroup; }
+@@ -124,7 +124,7 @@
+ 
+ private:
+   SharedPtr&lt;RigidBody&gt; mTopBody;
+-  SharedPtr&lt;FreeJoint&gt; mFreeJoint;
++  SharedPtr&lt;MobileRootJoint&gt; mMobileRootJoint;
+   SharedPtr&lt;MultiBodySystem&gt; mMultiBodySystem;
+ 
+   SharedPtr&lt;ModelGroup&gt; mModelGroup;
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2005-12-28 10:50:23 UTC (rev 135)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2005-12-28 10:57:02 UTC (rev 136)
+@@ -22,7 +22,7 @@
+ #include &lt;OpenFDM/Planet.h&gt;
+ #include &lt;OpenFDM/DefaultPlanet.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
+-#include &lt;OpenFDM/FreeJoint.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/AeroForce.h&gt;
+ #include &lt;OpenFDM/SimpleContact.h&gt;
+ #include &lt;OpenFDM/SimpleGear.h&gt;
+@@ -623,9 +623,9 @@
+   Quaternion q = Quaternion::fromAngleAxis(heading, Vector3::unit(3));
+   vehicle-&gt;setGeodOrientation(q);
+ 
+-  vehicle-&gt;getFreeJoint()-&gt;setRelVel(Vector6::zeros());
++  vehicle-&gt;getMobileRootJoint()-&gt;setRelVel(Vector6::zeros());
+   Vector3 vel(convertFrom(uFeetPSecond, 23900.0), 0, 0);
+-  vehicle-&gt;getFreeJoint()-&gt;setLinearRelVel(vel);
++  vehicle-&gt;getMobileRootJoint()-&gt;setLinearRelVel(vel);
+   vehicle-&gt;getTopBody()-&gt;addMultiBodyModel(new Mass(&quot;Testmass&quot;, SpatialInertia(InertiaMatrix(100,0,0,100,0,100), 100), &quot;Mass&quot;));
+ 
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000119.html">[OpenFDM-svn] r135 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000121.html">[OpenFDM-svn] r137 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#120">[ date ]</a>
+              <a href="thread.html#120">[ thread ]</a>
+              <a href="subject.html#120">[ subject ]</a>
+              <a href="author.html#120">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

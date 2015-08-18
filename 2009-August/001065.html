@@ -1,0 +1,431 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1107 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1107%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908211905.n7LJ5aui009347%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001064.html">
+   <LINK REL="Next"  HREF="001066.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1107 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1107%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908211905.n7LJ5aui009347%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1107 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 21 21:05:36 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001064.html">[OpenFDM-svn] r1106 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="001066.html">[OpenFDM-svn] r1108 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1065">[ date ]</a>
+              <a href="thread.html#1065">[ thread ]</a>
+              <a href="subject.html#1065">[ subject ]</a>
+              <a href="author.html#1065">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-21 21:05:35 +0200 (Fri, 21 Aug 2009)
+New Revision: 1107
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add comparisons and logical operations.
+
+AM   OpenFDM/ComparisonOperator.h
+M    OpenFDM/Makefile.am
+AM   OpenFDM/LogicalOperator.cpp
+AM   OpenFDM/ComparisonOperator.cpp
+AM   OpenFDM/LogicalOperator.h
+M    OpenFDM/BinaryFunction.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -12,6 +12,7 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(BinaryFunction, SimpleDirectModel)
++  DEF_OPENFDM_PROPERTY(Unsigned, Type, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ BinaryFunction::BinaryFunction(const std::string&amp; name, Type type) :
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.cpp	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.cpp	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -0,0 +1,76 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich
++ *
++ */
++
++#include &quot;ComparisonOperator.h&quot;
++
++#include &quot;ModelContext.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;TypeInfo.h&quot;
++#include &quot;Variant.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(ComparisonOperator, SimpleDirectModel)
++  DEF_OPENFDM_PROPERTY(Unsigned, Type, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++ComparisonOperator::ComparisonOperator(const std::string&amp; name, Type type) :
++  SimpleDirectModel(name),
++  mType(type)
++{
++  setNumInputPorts(2);
++}
++
++ComparisonOperator::~ComparisonOperator(void)
++{
++}
++
++void
++ComparisonOperator::output(Context&amp; context) const
++{
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(1); ++j) {
++    for (unsigned i = 0; i &lt; sz(0); ++i) {
++      real_type input0 = context.getInputValue(0)(i, j);
++      real_type input1 = context.getInputValue(1)(i, j);
++      switch (mType) {
++      case Equal:
++        context.getOutputValue()(i, j) = (input0 == input1);
++        break;
++      case NotEqual:
++        context.getOutputValue()(i, j) = (input0 != input1);
++        break;
++      case Less:
++        context.getOutputValue()(i, j) = (input0 &lt; input1);
++        break;
++      case LessEqual:
++        context.getOutputValue()(i, j) = (input0 &lt;= input1);
++        break;
++      case Greater:
++        context.getOutputValue()(i, j) = (input0 &gt; input1);
++        break;
++      case GreaterEqual:
++        context.getOutputValue()(i, j) = (input0 &gt;= input1);
++        break;
++      default:
++        OpenFDMAssert(false);
++        break;
++      }
++    }
++  }
++}
++
++void
++ComparisonOperator::setType(const ComparisonOperator::Type&amp; type)
++{
++  mType = type;
++}
++
++const ComparisonOperator::Type&amp;
++ComparisonOperator::getType(void) const
++{
++  return mType;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.h	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.h	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -0,0 +1,39 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ComparisonOperator_H
++#define OpenFDM_ComparisonOperator_H
++
++#include &lt;string&gt;
++#include &quot;SimpleDirectModel.h&quot;
++
++namespace OpenFDM {
++
++class ComparisonOperator : public SimpleDirectModel {
++  OPENFDM_OBJECT(ComparisonOperator, SimpleDirectModel);
++public:
++  enum Type {
++    Equal,
++    NotEqual,
++    Less,
++    LessEqual,
++    Greater,
++    GreaterEqual
++  };
++
++  ComparisonOperator(const std::string&amp; name, Type type);
++  virtual ~ComparisonOperator(void);
++
++  virtual void output(Context&amp; context) const;
++
++  void setType(const Type&amp; type);
++  const Type&amp; getType(void) const;
++
++private:
++  Type mType;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/ComparisonOperator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.cpp	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.cpp	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -0,0 +1,95 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich
++ *
++ */
++
++#include &quot;LogicalOperator.h&quot;
++
++#include &quot;ModelContext.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;TypeInfo.h&quot;
++#include &quot;Variant.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(LogicalOperator, SimpleDirectModel)
++  DEF_OPENFDM_PROPERTY(Unsigned, Type, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++LogicalOperator::LogicalOperator(const std::string&amp; name, Type type) :
++  SimpleDirectModel(name),
++  mType(type)
++{
++  setType(type);
++}
++
++LogicalOperator::~LogicalOperator(void)
++{
++}
++
++void
++LogicalOperator::output(Context&amp; context) const
++{
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(1); ++j) {
++    for (unsigned i = 0; i &lt; sz(0); ++i) {
++      switch (mType) {
++      case LogicalNOT:
++        {
++          real_type input0 = context.getInputValue(0)(i, j);
++          context.getOutputValue()(i, j) = !bool(input0);
++        }
++        break;
++        
++      default:
++        {
++          real_type input0 = context.getInputValue(0)(i, j);
++          real_type input1 = context.getInputValue(1)(i, j);
++          switch (mType) {
++          case LogicalAND:
++            context.getOutputValue()(i, j) = (bool(input0) &amp;&amp; bool(input1));
++            break;
++          case LogicalOR:
++            context.getOutputValue()(i, j) = (bool(input0) || bool(input1));
++            break;
++          case LogicalNAND:
++            context.getOutputValue()(i, j) = !(bool(input0) &amp;&amp; bool(input1));
++            break;
++          case LogicalNOR:
++            context.getOutputValue()(i, j) = !(bool(input0) || bool(input1));
++            break;
++          case LogicalXOR:
++            context.getOutputValue()(i, j) = (bool(input0) ^ bool(input1));
++            break;
++          default:
++            OpenFDMAssert(false);
++            break;
++          }
++        }
++        break;
++      }
++    }
++  }
++}
++
++void
++LogicalOperator::setType(const LogicalOperator::Type&amp; type)
++{
++  mType = type;
++  switch (mType) {
++  case LogicalNOT:
++    setNumInputPorts(1);
++    break;
++    
++  default:
++    setNumInputPorts(2);
++    break;
++  }
++}
++
++const LogicalOperator::Type&amp;
++LogicalOperator::getType(void) const
++{
++  return mType;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.h	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.h	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -0,0 +1,39 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LogicalOperator_H
++#define OpenFDM_LogicalOperator_H
++
++#include &lt;string&gt;
++#include &quot;SimpleDirectModel.h&quot;
++
++namespace OpenFDM {
++
++class LogicalOperator : public SimpleDirectModel {
++  OPENFDM_OBJECT(LogicalOperator, SimpleDirectModel);
++public:
++  enum Type {
++    LogicalAND,
++    LogicalOR,
++    LogicalNAND,
++    LogicalNOR,
++    LogicalXOR,
++    LogicalNOT
++  };
++
++  LogicalOperator(const std::string&amp; name, Type type);
++  virtual ~LogicalOperator(void);
++
++  virtual void output(Context&amp; context) const;
++
++  void setType(const Type&amp; type);
++  const Type&amp; getType(void) const;
++
++private:
++  Type mType;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/LogicalOperator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-08-20 16:25:32 UTC (rev 1106)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-08-21 19:05:35 UTC (rev 1107)
+@@ -202,6 +202,7 @@
+   Bias.h \
+   BinaryFunction.h \
+   BreakPointLookup.h \
++  ComparisonOperator.h \
+   ConstModel.h \
+   DeadBand.h \
+   Delay.h \
+@@ -212,6 +213,7 @@
+   Input.h \
+   Integrator.h \
+   LinearSpringDamper.h \
++  LogicalOperator.h \
+   MachNumber.h \
+   MatrixConcat.h \
+   MatrixSplit.h \
+@@ -238,6 +240,7 @@
+   Bias.cpp \
+   BinaryFunction.cpp \
+   BreakPointLookup.cpp \
++  ComparisonOperator.cpp \
+   ConstModel.cpp \
+   DeadBand.cpp \
+   Delay.cpp \
+@@ -248,6 +251,7 @@
+   Input.cpp \
+   Integrator.cpp \
+   LinearSpringDamper.cpp \
++  LogicalOperator.cpp \
+   MachNumber.cpp \
+   MatrixConcat.cpp \
+   MatrixSplit.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001064.html">[OpenFDM-svn] r1106 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="001066.html">[OpenFDM-svn] r1108 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1065">[ date ]</a>
+              <a href="thread.html#1065">[ thread ]</a>
+              <a href="subject.html#1065">[ subject ]</a>
+              <a href="author.html#1065">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

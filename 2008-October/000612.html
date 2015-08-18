@@ -1,0 +1,210 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r643 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r643%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810210525.m9L5P4RC020044%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000611.html">
+   <LINK REL="Next"  HREF="000613.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r643 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r643%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810210525.m9L5P4RC020044%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r643 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct 21 07:25:04 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000611.html">[OpenFDM-svn] r642 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000613.html">[OpenFDM-svn] r644 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#612">[ date ]</a>
+              <a href="thread.html#612">[ thread ]</a>
+              <a href="subject.html#612">[ subject ]</a>
+              <a href="author.html#612">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-21 07:25:03 +0200 (Tue, 21 Oct 2008)
+New Revision: 643
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move mechanic playground into mechanic.cpp
+
+M    src/test/structure.cpp
+A    src/test/mechanic.cpp
+M    src/test/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-10-21 05:21:33 UTC (rev 642)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-10-21 05:25:03 UTC (rev 643)
+@@ -2,7 +2,7 @@
+ 
+ # define some util programs
+ # bin_PROGRAMS = tiretestrig
+-bin_PROGRAMS = structure
++bin_PROGRAMS = structure mechanic
+ 
+ # define some unit tests
+ #check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+@@ -18,6 +18,9 @@
+ quattest_SOURCES = quattest.cpp
+ quattest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++mechanic_SOURCES = mechanic.cpp
++mechanic_LDADD = ../OpenFDM/libOpenFDM.la
++
+ structure_SOURCES = structure.cpp
+ structure_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-10-21 05:21:33 UTC (rev 642)
++++ branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-10-21 05:25:03 UTC (rev 643)
+@@ -0,0 +1,47 @@
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/SystemOutput.h&gt;
++
++using namespace OpenFDM;
++
++Node* buildSimpleMechanicExample()
++{
++  /// sensible test cases:
++  /// drop: gravity
++  /// throw: just this test with a different start condition
++  /// harmonic oszilator: compare with 2nd order linear system
++  /// arrow: see if the tip stays in front
++  /// satellit: coriolis
++  /// paris pendulum: coriolis
++
++  SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
++  Group::NodeId rootJoint = group-&gt;addChild(new MobileRootJoint(&quot;Root Joint&quot;));
++  Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
++  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
++
++  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
++  group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
++
++  return group.release();
++}
++
++int main()
++{
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildSimpleMechanicExample());
++
++  system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;system.h5&quot;));
++
++  if (!system-&gt;init())
++    return 1;
++
++  system-&gt;simulate(10);
++
++  return 0;
++}
++
++// Kabelbaum &lt;-&gt; PortBundle ??? Original Kabelbaum == Cabel Bundle
++// Oder Cable Set &lt;-&gt; Port Set???
++
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-21 05:21:33 UTC (rev 642)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-21 05:25:03 UTC (rev 643)
+@@ -6,9 +6,6 @@
+ #include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/LibraryNode.h&gt;
+ #include &lt;OpenFDM/LibraryModel.h&gt;
+-#include &lt;OpenFDM/Mass.h&gt;
+-#include &lt;OpenFDM/MobileRootJoint.h&gt;
+-#include &lt;OpenFDM/RigidBody.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+ 
+@@ -183,27 +180,6 @@
+   return group.release();
+ }
+ 
+-Node* buildSimpleMechanicExample()
+-{
+-  /// sensible test cases:
+-  /// drop: gravity
+-  /// throw: just this test with a different start condition
+-  /// harmonic oszilator: compare with 2nd order linear system
+-  /// arrow: see if the tip stays in front
+-  /// satellit: coriolis
+-  /// paris pendulum: coriolis
+-
+-  SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+-  Group::NodeId rootJoint = group-&gt;addChild(new MobileRootJoint(&quot;Root Joint&quot;));
+-  Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
+-  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
+-
+-  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
+-  group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
+-
+-  return group.release();
+-}
+-
+ int main()
+ {
+   // Check a self referencing gain model, to see if cyclic loops
+@@ -223,10 +199,9 @@
+     return EXIT_FAILURE;
+ 
+ 
+-//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+-  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildSimpleMechanicExample());
+ 
+   system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;system.h5&quot;));
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000611.html">[OpenFDM-svn] r642 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000613.html">[OpenFDM-svn] r644 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#612">[ date ]</a>
+              <a href="thread.html#612">[ thread ]</a>
+              <a href="subject.html#612">[ subject ]</a>
+              <a href="author.html#612">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

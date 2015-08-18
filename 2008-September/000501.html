@@ -1,0 +1,177 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r529 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r529%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809280802.m8S82egY026744%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000500.html">
+   <LINK REL="Next"  HREF="000502.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r529 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r529%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809280802.m8S82egY026744%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r529 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 28 10:02:40 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000500.html">[OpenFDM-svn] r528 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000502.html">[OpenFDM-svn] r530 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#501">[ date ]</a>
+              <a href="thread.html#501">[ thread ]</a>
+              <a href="subject.html#501">[ subject ]</a>
+              <a href="author.html#501">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-28 10:02:40 +0200 (Sun, 28 Sep 2008)
+New Revision: 529
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Clean up preliminary system setup a bit ...
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-28 07:43:39 UTC (rev 528)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-28 08:02:40 UTC (rev 529)
+@@ -843,6 +843,35 @@
+   typedef std::list&lt;SharedPtr&lt;PortDataHelper::PortDataList&gt; &gt; PortDataListList;
+   PortDataListList _portDataListList;
+ 
++  // Here the miracle occurs.
++  // The collected simulation nodes are packed into something that can be used
++  // to simulate the system.
++  AbstractSystem* buildSystem()
++  {
++    // Allocates and distributes the PortValues, is required for the sort
++    // steps below
++    if (!allocPortValues())
++      return 0;
++    // The model instances are sorted to match the direct input property
++    if (!sortModelList())
++      return 0;
++    // Now that they are sorted, allocate the port sizes and with that
++    // knowledge the state values.
++    if (!allocModels())
++      return 0;
++
++    // FIXME is here just for curiousity :)
++    ModelInstanceList::const_iterator i;
++    for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
++      (*i)-&gt;getNodeContext().init();
++      (*i)-&gt;getNodeContext().output(*reinterpret_cast&lt;Task*&gt;(0));
++    }
++
++    // FIXME:
++    return new GroupedSystem;
++  }
++
++protected:
+   // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+@@ -893,27 +922,6 @@
+     return true;
+   }
+ 
+-  // Here the miracle occurs.
+-  // The collected simulation nodes are packed into something that can be used
+-  // to simulate the system.
+-  AbstractSystem* buildSystem()
+-  {
+-    // Allocates and distributes the PortValues, is required for the sort
+-    // steps below
+-    if (!allocPortValues())
+-      return 0;
+-    // The model instances are sorted to match the direct input property
+-    if (!sortModelList())
+-      return 0;
+-
+-    ModelInstanceList modelContextList;
+-    getModelContextList(modelContextList);
+-    // ...
+-
+-    // FIXME:
+-    return new GroupedSystem;
+-  }
+-
+   bool
+   allocPortValues()
+   {
+@@ -927,32 +935,16 @@
+     return true;
+   }
+ 
+-  bool
+-  getModelContextList(ModelInstanceList&amp; modelContexts)
++  bool allocModels()
+   {
+-    modelContexts.resize(0);
+-
+-    ModelInstanceList modelContextList;
+     ModelInstanceList::const_iterator i;
+-    for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i)
+-      modelContextList.push_back((*i));
+-
+-    ModelInstanceList::const_iterator j;
+-    for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+-      if (!(*j)-&gt;getNodeContext().alloc()) {
++    for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
++      if (!(*i)-&gt;getNodeContext().alloc()) {
+         Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
+-                             &lt;&lt; (*j)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++                             &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+         return false;
+       }
+     }
+-
+-    // FIXME is here just for curiousity :)
+-    for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+-      (*j)-&gt;getNodeContext().init();
+-      (*j)-&gt;getNodeContext().output(*reinterpret_cast&lt;Task*&gt;(0));
+-    }
+-
+-    modelContexts.swap(modelContextList);
+     return true;
+   }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000500.html">[OpenFDM-svn] r528 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000502.html">[OpenFDM-svn] r530 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#501">[ date ]</a>
+              <a href="thread.html#501">[ thread ]</a>
+              <a href="subject.html#501">[ subject ]</a>
+              <a href="author.html#501">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

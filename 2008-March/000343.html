@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r370 - in trunk/OpenFDM/src: OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r370%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20test&In-Reply-To=%3C200803072032.m27KWo74011226%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000342.html">
+   <LINK REL="Next"  HREF="000344.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r370 - in trunk/OpenFDM/src: OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r370%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20test&In-Reply-To=%3C200803072032.m27KWo74011226%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r370 - in trunk/OpenFDM/src: OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Mar  7 21:32:50 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000342.html">[OpenFDM-svn] r369 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000344.html">[OpenFDM-svn] r371 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#343">[ date ]</a>
+              <a href="thread.html#343">[ thread ]</a>
+              <a href="subject.html#343">[ subject ]</a>
+              <a href="author.html#343">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-03-07 21:32:49 +0100 (Fri, 07 Mar 2008)
+New Revision: 370
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/Newton.cpp
+   trunk/OpenFDM/src/OpenFDM/Planet.cpp
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+   trunk/OpenFDM/src/test/harmonic.cpp
+Log:
+Compile fixes.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -79,8 +79,8 @@
+   real_type pushDispRatio = pushDisp/maxDisp;
+   
+   
+-  pullDispRatio = max(min(pullDispRatio, 0.95), 0.0);
+-  pushDispRatio = max(min(pushDispRatio, 0.95), 0.0);
++  pullDispRatio = max(min(pullDispRatio, real_type(0.95)), real_type(0.0));
++  pushDispRatio = max(min(pushDispRatio, real_type(0.95)), real_type(0.0));
+   
+   real_type pullPressure = mPullPressure/(1-pow(pullDispRatio, mGamma));
+   real_type pushPressure = mPushPressure/(1-pow(pushDispRatio, mGamma));
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -68,15 +68,17 @@
+   // with this sigma the model is already very crisp and reaches the
+   // maximum force relatively fast, thus we do not need to make it even faster
+   // with higher speeds
+-//   vel = saturate(vel, 1.0);
+-  vel = smoothSaturate(vel, 1.0);
++//   vel = saturate(vel, real_type(1));
++  vel = smoothSaturate(vel, real_type(1));
+   // the time derivative of the friction state
+   mZDeriv = vel - sigma*fabs(vel)*mZ;
+   // this is to limit the stiffness of this model
+-//   mZDeriv = saturate(mZDeriv, 10.0);
+-  mZDeriv = smoothSaturate(mZDeriv, 10.0);
++//   mZDeriv = saturate(mZDeriv, real_type(10));
++  mZDeriv = smoothSaturate(mZDeriv, real_type(10));
+   // now the output force, modulate with the brake input
+-  mForce = -interpolate(brakeInput, 0.0, mMinForce, 1.0, mMaxForce)*sigma*mZ;
++  mForce = -interpolate(brakeInput,
++                        real_type(0), mMinForce,
++                        real_type(1), mMaxForce)*sigma*mZ;
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Newton.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Newton.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/Newton.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -370,7 +370,7 @@
+       converged = norm1(g) &lt; atol;
+       Log(NewtonMethod, Debug) &lt;&lt; &quot;||g||_1 = &quot; &lt;&lt; norm1(g) &lt;&lt; endl;
+ 
+-      mu = mu * max(1.0/3, 1-pow(2*rho-1, 3));
++      mu = mu * max(real_type(1)/3, 1-pow(2*rho-1, real_type(3)));
+       nu = 2;
+ 
+     } else {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Planet.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Planet.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/Planet.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -25,16 +25,18 @@
+ Geocentric
+ Planet::toGeoc(const Vector3&amp; cart) const
+ {
+-  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0) ? 0 : atan2(cart(1), cart(0));
++  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0)
++    ? real_type(0) : atan2(cart(1), cart(0));
+   real_type nxy = sqrt(cart(0)*cart(0)+cart(1)*cart(1));
+-  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0) ? 0 : atan2(cart(2), nxy);
++  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0)
++    ? real_type(0) : atan2(cart(2), nxy);
+   return Geocentric(lat, lon, norm(cart));
+ }
+ 
+ Vector3
+ Planet::toCart(const Geocentric&amp; geoc) const
+ {
+-  real_type slat = std::sin(geoc.latitude);
++  real_type slat = sin(geoc.latitude);
+   real_type clat = cos(geoc.latitude);
+   real_type slon = sin(geoc.longitude);
+   real_type clon = cos(geoc.longitude);
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -189,7 +189,8 @@
+ //   Vector2 slip(wheelSlip, slipAngle);
+ //   if (1 &lt; norm(slip))
+ //     slip = normalize(slip);
+-  Vector2 slip(smoothSaturate(wheelSlip, 1.0), smoothSaturate(slipAngle, 1.0));
++  Vector2 slip(smoothSaturate(wheelSlip, real_type(1)),
++               smoothSaturate(slipAngle, real_type(1)));
+   
+   // The friction force for fast movement.
+   Vector2 fricForce = (-friction*mFrictionCoef*normForce)*slip;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -481,7 +481,7 @@
+     tcv.mStateStream.writeSubState(tmp);
+     tmp = 1e6*(mGeodPos.latitude - tcv.mGeodPos.latitude);
+     tcv.mStateStream.writeSubState(tmp);
+-    tmp = smoothDeadBand(mGeodPos.altitude - tcv.mGeodPos.altitude, 10.0);
++    tmp = smoothDeadBand(mGeodPos.altitude - tcv.mGeodPos.altitude, real_type(10));
+     tcv.mStateStream.writeSubState(tmp);
+ 
+     // The orientation
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -149,7 +149,8 @@
+ //   Vector2 slip(wheelSlip, slipAngle);
+ //   if (1 &lt; norm(slip))
+ //     slip = normalize(slip);
+-  Vector2 slip(smoothSaturate(wheelSlip, 1.0), smoothSaturate(slipAngle, 1.0));
++  Vector2 slip(smoothSaturate(wheelSlip, real_type(1)),
++               smoothSaturate(slipAngle, real_type(1)));
+   
+   // The friction force for fast movement.
+   return (-friction*mFrictionCoeficient*normForce)*slip;
+
+Modified: trunk/OpenFDM/src/test/harmonic.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/harmonic.cpp	2008-03-04 17:29:50 UTC (rev 369)
++++ trunk/OpenFDM/src/test/harmonic.cpp	2008-03-07 20:32:49 UTC (rev 370)
+@@ -22,7 +22,7 @@
+   real_type omega = 2;
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
+-  system-&gt;addSampleTime(0.01);
++  system-&gt;addSampleTime(real_type(0.01));
+   system-&gt;setTimestepper(new DoPri5);
+   
+   Integrator* integrator0 = new Integrator(&quot;Acceleration Integrator&quot;);
+@@ -89,7 +89,7 @@
+   SharedPtr&lt;ErrorCollectorCallback&gt; posErrorCallback;
+   posErrorCallback = new ErrorCollectorCallback;
+   output-&gt;setCallback(posErrorCallback);
+-  output-&gt;addSampleTime(0.1);
++  output-&gt;addSampleTime(real_type(0.1));
+   system-&gt;addModel(output);
+   Connection::connect(output-&gt;getInputPort(0), summer0-&gt;getOutputPort(0));
+ 
+@@ -108,7 +108,7 @@
+   SharedPtr&lt;ErrorCollectorCallback&gt; velErrorCallback;
+   velErrorCallback = new ErrorCollectorCallback;
+   output-&gt;setCallback(velErrorCallback);
+-  output-&gt;addSampleTime(0.1);
++  output-&gt;addSampleTime(real_type(0.1));
+   system-&gt;addModel(output);
+   Connection::connect(output-&gt;getInputPort(0), summer1-&gt;getOutputPort(0));
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000342.html">[OpenFDM-svn] r369 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000344.html">[OpenFDM-svn] r371 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#343">[ date ]</a>
+              <a href="thread.html#343">[ thread ]</a>
+              <a href="subject.html#343">[ subject ]</a>
+              <a href="author.html#343">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

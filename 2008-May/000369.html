@@ -1,0 +1,205 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r396%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231312.m4NDC3jh012724%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000368.html">
+   <LINK REL="Next"  HREF="000370.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r396%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231312.m4NDC3jh012724%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri May 23 15:12:03 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000368.html">[OpenFDM-svn] r395 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000370.html">[OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#369">[ date ]</a>
+              <a href="thread.html#369">[ thread ]</a>
+              <a href="subject.html#369">[ subject ]</a>
+              <a href="author.html#369">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-05-23 15:12:03 +0200 (Fri, 23 May 2008)
+New Revision: 396
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Connection.cpp
+Log:
+Use lock and shared pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.cpp	2008-05-23 13:11:42 UTC (rev 395)
++++ trunk/OpenFDM/src/OpenFDM/Connection.cpp	2008-05-23 13:12:03 UTC (rev 396)
+@@ -25,91 +25,93 @@
+ Port::ConnectResult
+ Connection::setPortProvider(PortProvider* portProvider)
+ {
+-  if (mPortProvider &amp;&amp; portProvider)
++  if (mPortProvider.lock() &amp;&amp; portProvider)
+     return Port::AlreadyConnected;
+ 
+   if (!portProvider) {
+-    if (mPortAcceptor &amp;&amp; mPortProvider) {
+-      mPortAcceptor-&gt;disconnect(mPortProvider);
++    if (mPortAcceptor.lock() &amp;&amp; mPortProvider.lock()) {
++      mPortAcceptor.lock()-&gt;disconnect(mPortProvider.lock());
+     } else {
+       // FIXME
+ //       modelGroup-&gt;removeConnection(this);
+     }
+-    mPortProvider = 0;
++    mPortProvider.clear();
+     return Port::Success;
+   }
+ 
+   SharedPtr&lt;Node&gt; providerModel = portProvider-&gt;getModel().lock();
+   if (!providerModel)
+     return Port::StalePort;
+-  if (!providerModel-&gt;getParent(0))
++  if (!providerModel-&gt;getParent(0).lock())
+     return Port::IsolatedModel;
+ 
+   // if the other side is not yet connected, we are ok here
+-  if (!mPortAcceptor) {
++  if (!mPortAcceptor.lock()) {
+     mPortProvider = portProvider;
+-    ModelGroup* modelGroup = providerModel-&gt;getParent(0);
++    SharedPtr&lt;ModelGroup&gt; modelGroup = providerModel-&gt;getParent(0).lock();
+     modelGroup-&gt;addConnection(this);
+     return Port::Success;
+   }
+ 
+-  SharedPtr&lt;Node&gt; acceptorModel = mPortAcceptor-&gt;getModel().lock();
+-  if (acceptorModel-&gt;getParent(0) != providerModel-&gt;getParent(0)) {
+-    mPortProvider = 0;
++  SharedPtr&lt;Node&gt; acceptorModel = mPortAcceptor.lock()-&gt;getModel().lock();
++  if (acceptorModel-&gt;getParent(0).lock() != providerModel-&gt;getParent(0).lock()) {
++    mPortProvider.clear();
+     return Port::DifferentGroups;
+   }
+ 
+   mPortProvider = portProvider;
+-  Port::ConnectResult result = mPortAcceptor-&gt;connect(mPortProvider);
++  Port::ConnectResult result = mPortAcceptor.lock()-&gt;connect(mPortProvider.lock());
+   if (result == Port::Success)
+     return result;
+-  mPortProvider = 0;
++  mPortProvider.clear();
+   return result;
+ }
+ 
+ Port::ConnectResult
+ Connection::setPortAcceptor(PortAcceptor* portAcceptor)
+ {
+-  if (mPortAcceptor &amp;&amp; portAcceptor)
++  if (mPortAcceptor.lock() &amp;&amp; portAcceptor)
+     return Port::AlreadyConnected;
+ 
+   if (!portAcceptor) {
+-    if (mPortAcceptor &amp;&amp; mPortProvider) {
+-      mPortAcceptor-&gt;disconnect(mPortProvider);
++    if (mPortAcceptor.lock() &amp;&amp; mPortProvider.lock()) {
++      mPortAcceptor.lock()-&gt;disconnect(mPortProvider.lock());
+     } else {
+       // FIXME
+ //       modelGroup-&gt;removeConnection(this);
+     }
+-    mPortAcceptor = 0;
++    mPortAcceptor.clear();
+     return Port::Success;
+   }
+     
+   SharedPtr&lt;Node&gt; acceptorModel = portAcceptor-&gt;getModel().lock();
+   if (!acceptorModel)
+     return Port::StalePort;
+-  if (!acceptorModel-&gt;getParent(0))
++  SharedPtr&lt;Node&gt; acceptorParent = acceptorModel-&gt;getParent(0).lock(); 
++  if (!acceptorParent)
+     return Port::IsolatedModel;
+ 
+   // if the other side is not yet connected, we are ok here
+-  if (!mPortProvider) {
++  if (!mPortProvider.lock()) {
+     mPortAcceptor = portAcceptor;
+-    ModelGroup* modelGroup = acceptorModel-&gt;getParent(0);
++    SharedPtr&lt;ModelGroup&gt; modelGroup = acceptorModel-&gt;getParent(0).lock();
+     modelGroup-&gt;addConnection(this);
+ 
+     return Port::Success;
+   }
+ 
+-  SharedPtr&lt;Node&gt; providerModel = mPortProvider-&gt;getModel().lock();
+-  if (acceptorModel-&gt;getParent(0) != providerModel-&gt;getParent(0)) {
+-    mPortAcceptor = 0;
++  SharedPtr&lt;Node&gt; providerModel = mPortProvider.lock()-&gt;getModel().lock();
++  SharedPtr&lt;Node&gt; providerParent = providerModel-&gt;getParent(0).lock(); 
++  if (acceptorParent != providerParent) {
++    mPortAcceptor.clear();
+     return Port::DifferentGroups;
+   }
+ 
+   mPortAcceptor = portAcceptor;
+-  Port::ConnectResult result = mPortAcceptor-&gt;connect(mPortProvider);
++  Port::ConnectResult result = portAcceptor-&gt;connect(mPortProvider.lock());
+   if (result == Port::Success)
+     return result;
+-  mPortAcceptor = 0;
++  mPortAcceptor.clear();
+   return result;
+ }
+ 
+@@ -181,8 +183,8 @@
+   SharedPtr&lt;PortAcceptor&gt; portAcceptor = mPortAcceptor.lock();
+   if (portProvider &amp;&amp; portAcceptor)
+     portAcceptor-&gt;disconnect(portProvider);
+-  mPortProvider = 0;
+-  mPortAcceptor = 0;
++  mPortProvider.clear();
++  mPortAcceptor.clear();
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000368.html">[OpenFDM-svn] r395 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000370.html">[OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#369">[ date ]</a>
+              <a href="thread.html#369">[ thread ]</a>
+              <a href="subject.html#369">[ subject ]</a>
+              <a href="author.html#369">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,2166 @@
+From frohlich at mail.berlios.de  Tue Dec  4 21:22:11 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 4 Dec 2007 21:22:11 +0100
+Subject: [OpenFDM-svn] r339 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712042022.lB4KMBjB017446@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-04 21:22:09 +0100 (Tue, 04 Dec 2007)
+New Revision: 339
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/CowPtr.h
+Log:
+Make it compile.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/CowPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-11-29 20:03:17 UTC (rev 338)
++++ trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-12-04 20:22:09 UTC (rev 339)
+@@ -37,7 +37,7 @@
+     // That can not happen, since a reference in an other thread would
+     // cause a reference count > 1 what means that we cannot use
+     // the shared copy anyway and we have already made a copy anyway.
+-    if (shared(mPtr))
++    if (mPtr.isShared())
+       mPtr = new T(*mPtr);
+     return mPtr;
+   }
+
+
+
+From frohlich at mail.berlios.de  Thu Dec  6 07:17:01 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 6 Dec 2007 07:17:01 +0100
+Subject: [OpenFDM-svn] r340 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712060617.lB66H1BL002477@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-06 07:17:00 +0100 (Thu, 06 Dec 2007)
+New Revision: 340
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Make Weak referenced thread safe.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2007-12-04 20:22:09 UTC (rev 339)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2007-12-06 06:17:00 UTC (rev 340)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_WeakPtr_H
+ #define OpenFDM_WeakPtr_H
+ 
++// #include "OpenFDMConfig.h"
+ #include "WeakReferenced.h"
+ 
+ namespace OpenFDM {
+@@ -17,7 +18,7 @@
+ public:
+   WeakPtr(void)
+   { }
+-  WeakPtr(T* ptr)
++  WeakPtr(T* ptr) // OpenFDM_DEPRECATED
+   { assign(ptr); }
+   WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
+   { }
+@@ -36,27 +37,29 @@
+   template<typename U>
+   WeakPtr& operator=(const WeakPtr<U>& p)
+   { assign(p.ptr()); return *this; }
+-  WeakPtr& operator=(T* p)
++  WeakPtr& operator=(T* p) // OpenFDM_DEPRECATED
+   { assign(p); return *this; }
+   WeakPtr& operator=(const WeakPtr& p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
+   SharedPtr<T> lock(void) const
+   {
+-    T* p = ptr();
+-    if (Referenced::count(p))
+-      return SharedPtr<T>(p);
+-    else
++    if (!mWeakDataPtr)
+       return SharedPtr<T>();
++    ScopeLock scopeLock(mWeakDataPtr->mutex);
++    T* p = static_cast<T*>(mWeakDataPtr->object);
++    if (!Referenced::count(p))
++      return SharedPtr<T>();
++    return SharedPtr<T>(p);
+   }
+ 
+-  T* operator->(void) const
++  T* operator->(void) const // OpenFDM_DEPRECATED
+   { return ptr(); }
+ 
+-  T& operator*(void) const
++  T& operator*(void) const // OpenFDM_DEPRECATED
+   { return *ptr(); }
+ 
+-  operator T*(void) const
++  operator T*(void) const // OpenFDM_DEPRECATED
+   { return ptr(); }
+ 
+ private:
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2007-12-04 20:22:09 UTC (rev 339)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2007-12-06 06:17:00 UTC (rev 340)
+@@ -5,7 +5,9 @@
+ #ifndef OpenFDM_WeakReferenced_H
+ #define OpenFDM_WeakReferenced_H
+ 
++#include "Mutex.h"
+ #include "Referenced.h"
++#include "ScopeLock.h"
+ #include "SharedPtr.h"
+ 
+ namespace OpenFDM {
+@@ -21,7 +23,7 @@
+   WeakReferenced(const WeakReferenced&) : mWeakDataPtr(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+-  { mWeakDataPtr->object = 0; }
++  { ScopeLock scopeLock(mWeakDataPtr->mutex); mWeakDataPtr->object = 0; }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced& operator=(const WeakReferenced&)
+@@ -33,6 +35,7 @@
+   /// reference which is zeroed out on destruction of the current object
+   struct WeakData : public Referenced {
+     WeakData(WeakReferenced* o) : object(o) {}
++    Mutex mutex;
+     WeakReferenced* object;
+   private:
+     WeakData(void);
+
+
+
+From frohlich at mail.berlios.de  Fri Dec  7 16:51:37 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 7 Dec 2007 16:51:37 +0100
+Subject: [OpenFDM-svn] r341 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712071551.lB7Fpb18002434@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-07 16:51:37 +0100 (Fri, 07 Dec 2007)
+New Revision: 341
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Cleanup thread safe weak refs.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2007-12-06 06:17:00 UTC (rev 340)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2007-12-07 15:51:37 UTC (rev 341)
+@@ -51,6 +51,9 @@
+   operator T*(void) const
+   { return _ptr; }
+ 
++  T* release()
++  { T* tmp = _ptr; _ptr = 0; Referenced::put(tmp); return tmp; }
++
+   bool isShared(void) const
+   { return Referenced::shared(_ptr); }
+   unsigned getNumRefs(void) const
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2007-12-06 06:17:00 UTC (rev 340)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2007-12-07 15:51:37 UTC (rev 341)
+@@ -5,7 +5,7 @@
+ #ifndef OpenFDM_WeakPtr_H
+ #define OpenFDM_WeakPtr_H
+ 
+-// #include "OpenFDMConfig.h"
++#include "OpenFDMConfig.h"
+ #include "WeakReferenced.h"
+ 
+ namespace OpenFDM {
+@@ -44,13 +44,10 @@
+ 
+   SharedPtr<T> lock(void) const
+   {
+-    if (!mWeakDataPtr)
+-      return SharedPtr<T>();
+-    ScopeLock scopeLock(mWeakDataPtr->mutex);
+-    T* p = static_cast<T*>(mWeakDataPtr->object);
+-    if (!Referenced::count(p))
+-      return SharedPtr<T>();
+-    return SharedPtr<T>(p);
++    SharedPtr<T> sharedPtr;
++    if (mWeakDataPtr)
++       mWeakDataPtr->get(sharedPtr);
++    return sharedPtr;
+   }
+ 
+   T* operator->(void) const // OpenFDM_DEPRECATED
+@@ -63,12 +60,9 @@
+   { return ptr(); }
+ 
+ private:
+-  T* ptr(void) const
++  T* ptr(void) const // OpenFDM_DEPRECATED
+   {
+-    if (mWeakDataPtr)
+-      return static_cast<T*>(mWeakDataPtr->object);
+-    else
+-      return 0;
++    return lock().release();
+   }
+ 
+   void assign(T* p)
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2007-12-06 06:17:00 UTC (rev 340)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2007-12-07 15:51:37 UTC (rev 341)
+@@ -17,13 +17,15 @@
+ 
+ class WeakReferenced : public Referenced {
+ public:
++  /// Note that object construction is atomic anyway.
++  /// This way we do not need to guard setting the mWeakDataPtr variable
+   WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
+   {}
+-  /// Do not copy the weak backward references ...
++  // Do not copy the weak backward references ...
+   WeakReferenced(const WeakReferenced&) : mWeakDataPtr(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+-  { ScopeLock scopeLock(mWeakDataPtr->mutex); mWeakDataPtr->object = 0; }
++  { mWeakDataPtr->clear(); }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced& operator=(const WeakReferenced&)
+@@ -33,14 +35,31 @@
+   /// Support for weak references, not increasing the reference count
+   /// that is done through that small helper class which holds an uncounted
+   /// reference which is zeroed out on destruction of the current object
+-  struct WeakData : public Referenced {
+-    WeakData(WeakReferenced* o) : object(o) {}
+-    Mutex mutex;
+-    WeakReferenced* object;
++  class WeakData : public Referenced {
++  public:
++    WeakData(WeakReferenced* object) : mObject(object) {}
++    template<typename T>
++    void get(SharedPtr<T>& sharedPtr)
++    {
++      ScopeLock scopeLock(mMutex);
++      if (Referenced::count(mObject)) {
++        sharedPtr = static_cast<T*>(mObject);
++      } else {
++        sharedPtr = 0;
++      }
++    }
++    void clear()
++    {
++      ScopeLock scopeLock(mMutex);
++      mObject = 0;
++    }
+   private:
+     WeakData(void);
+     WeakData(const WeakData&);
+     WeakData& operator=(const WeakData&);
++
++    Mutex mMutex;
++    WeakReferenced* mObject;
+   };
+ 
+   SharedPtr<WeakData> mWeakDataPtr;
+
+
+
+From frohlich at mail.berlios.de  Sat Dec  8 09:25:14 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 8 Dec 2007 09:25:14 +0100
+Subject: [OpenFDM-svn] r342 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200712080825.lB88PEsd014088@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-08 09:25:13 +0100 (Sat, 08 Dec 2007)
+New Revision: 342
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+   trunk/OpenFDM/src/OpenFDM/Connection.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Overhaul the visitor system.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -1597,7 +1597,7 @@
+ JSBSimReader::readFunctionInputs(const XMLElement* operationTag,
+                                  const std::string& name)
+ {
+-  Model::Path path = mVehicle->getMultiBodySystem()->getGroupPath();
++  Node::GroupPath path = mVehicle->getMultiBodySystem()->getGroupPath();
+   std::list<PortProvider*> inputs;
+   std::list<const XMLElement*> args = operationTag->getElements();
+   std::list<const XMLElement*>::const_iterator ait;
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -177,7 +177,7 @@
+ 
+ PortProvider*
+ JSBSimReaderBase::lookupJSBExpression(const std::string& name,
+-                                      const Model::Path& path,
++                                      const Node::GroupPath& path,
+                                       bool recheckAeroProp)
+ {
+   // Convert to something being able to look up
+@@ -219,7 +219,7 @@
+   SharedPtr<Node> model = pa->getModel().lock();
+   if (!model)
+     return false;
+-  Model::Path path = model->getPath();
++  Node::GroupPath path = model->getPath();
+   PortProvider* pp = lookupJSBExpression(name, path, recheckAeroProp);
+   return Port::Success == Connection::connect(pp, pa);
+ }
+@@ -281,7 +281,7 @@
+ 
+ PortProvider*
+ JSBSimReaderBase::createAndScheduleInput(const std::string& propName,
+-                                         const Model::Path& path)
++                                         const Node::GroupPath& path)
+ {
+   // This routine checks if the given propName is a special JSBSim
+   // input property. If so, it schedules and registers a discrete input model.
+@@ -480,7 +480,7 @@
+ 
+ PortProvider*
+ JSBSimReaderBase::createAndScheduleAeroProp(const std::string& propName,
+-                                            const Model::Path& path)
++                                            const Node::GroupPath& path)
+ {
+   // This routine checks if the given propName is a aerodynamic reference
+   // point property. If so, it schedules and registers a discrete input model.
+@@ -737,7 +737,7 @@
+ 
+ PortProvider*
+ JSBSimReaderBase::addConstModel(const std::string& name, real_type value,
+-                                const Model::Path& path)
++                                const Node::GroupPath& path)
+ {
+   Matrix m(1, 1);
+   m(0, 0) = 0;
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2007-12-08 08:25:13 UTC (rev 342)
+@@ -38,7 +38,7 @@
+ 
+ class PortProviderSet {
+   struct PathPort {
+-    Model::Path modelPath;
++    Node::GroupPath modelPath;
+     SharedPtr<PortProvider> portProvider;
+   };
+ public:
+@@ -56,7 +56,7 @@
+     mPortProviderList.push_back(pathPort);
+   }
+ 
+-  PortProvider* routeTo(const Model::Path& path)
++  PortProvider* routeTo(const Node::GroupPath& path)
+   {
+     // could happen if the initialzer failed
+     if (mPortProviderList.empty())
+@@ -66,7 +66,7 @@
+     if (path.empty())
+       return mPortProviderList.front().portProvider;
+ 
+-    const Model::Path& originatingPath = mPortProviderList.front().modelPath;
++    const Node::GroupPath& originatingPath = mPortProviderList.front().modelPath;
+     // fast return if the models are not connected to the same root system
+     if (path.front() != originatingPath.front())
+       return 0;
+@@ -78,8 +78,8 @@
+ 
+     // Compute the iterators for seperating the common part of the model path
+     // from the different part
+-    Model::Path::const_iterator mi1 = path.begin();
+-    Model::Path::const_iterator mi2 = originatingPath.begin();
++    Node::GroupPath::const_iterator mi1 = path.begin();
++    Node::GroupPath::const_iterator mi2 = originatingPath.begin();
+     while (mi1 != path.end() && mi2 != originatingPath.end()) {
+       if (*mi1 != *mi2)
+         break;
+@@ -89,7 +89,7 @@
+ 
+     if (mi1 != path.end()) {
+       // that is: we must first go up that path and search again
+-      Model::Path pathUp = path;
++      Node::GroupPath pathUp = path;
+       pathUp.pop_back();
+       portProvider = routeTo(pathUp);
+       if (!portProvider)
+@@ -109,7 +109,7 @@
+ 
+     } else if (mi2 != originatingPath.end()) {
+       // that is: we need to step deeper towards the origin of that port
+-      Model::Path pathDown = path;
++      Node::GroupPath pathDown = path;
+       pathDown.push_back(*mi2);
+       portProvider = routeTo(pathDown);
+       if (!portProvider)
+@@ -134,7 +134,7 @@
+     }
+   }
+ 
+-  PortProvider* findProvider(const Model::Path& path)
++  PortProvider* findProvider(const Node::GroupPath& path)
+   {
+     PortProviderList::iterator i = mPortProviderList.begin();
+     while (i != mPortProviderList.end()) {
+@@ -175,7 +175,7 @@
+   void clear()
+   { mMap.clear(); }
+ 
+-  PortProvider* routeTo(const std::string& name, const Model::Path& path)
++  PortProvider* routeTo(const std::string& name, const Node::GroupPath& path)
+   {
+     std::string simplifiedName = simplify(name);
+     if (mMap.count(simplifiedName) <= 0)
+@@ -231,7 +231,7 @@
+ 
+   /// <FIXME> document and rethink
+   PortProvider* lookupJSBExpression(const std::string& name,
+-                                    const Model::Path& path = Model::Path(),
++                                    const Node::GroupPath& path = Node::GroupPath(),
+                                     bool recheckAeroProp = true);
+ 
+   bool connectJSBExpression(const std::string& name, PortAcceptor*,
+@@ -241,9 +241,9 @@
+   void registerJSBExpression(const std::string& name, PortProvider* expr);
+ 
+   PortProvider* createAndScheduleAeroProp(const std::string& name,
+-                                          const Model::Path& path);
++                                          const Node::GroupPath& path);
+   PortProvider* createAndScheduleInput(const std::string& name,
+-                                       const Model::Path& path);
++                                       const Node::GroupPath& path);
+ 
+   PortProvider* addInputModel(const std::string& name, const std::string& propName,
+                       real_type gain = 1);
+@@ -253,7 +253,7 @@
+   PortProvider* addInverterModel(const std::string& name, PortProvider* in);
+   PortProvider* addAbsModel(const std::string& name, PortProvider* in);
+   PortProvider* addConstModel(const std::string& name, real_type value,
+-                              const Model::Path& path = Model::Path());
++                              const Node::GroupPath& path = Node::GroupPath());
+   PortProvider* addToUnit(const std::string& name, Unit u, PortProvider* in);
+   PortProvider* addFromUnit(const std::string& name, Unit u, PortProvider* in);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/Connection.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -127,13 +127,13 @@
+ Port::ConnectResult
+ Connection::connectRoute(PortProvider* port0, PortAcceptor* port1)
+ {
+-  Model::Path path0;
++  Node::GroupPath path0;
+   SharedPtr<Node> model = port0->getModel().lock();
+   if (!model)
+     return Port::IsolatedModel;
+   path0 = model->getPath();
+ 
+-  Model::Path path1;
++  Node::GroupPath path1;
+   model = port1->getModel().lock();
+   if (!model)
+     return Port::IsolatedModel;
+@@ -148,7 +148,7 @@
+   }
+   
+   // Ok, now the paths are clear
+-  Model::Path::reverse_iterator i;
++  Node::GroupPath::reverse_iterator i;
+   i = path0.rbegin();
+   while (i != path0.rend()) {
+     SharedPtr<GroupOutput> groupOutput = new GroupOutput(port0->getName());
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -29,17 +29,6 @@
+   visitor.apply(*this);
+ }
+ 
+-void
+-Node::ascend(ModelVisitor& visitor)
+-{
+-  for (ParentList::iterator i = mParents.begin(); i != mParents.end(); ++i) {
+-    SharedPtr<ModelGroup> group = i->lock();
+-    if (!group)
+-      continue;
+-    group->accept(visitor);
+-  }
+-}
+-
+ const Model*
+ Node::toModel(void) const
+ {
+@@ -64,6 +53,12 @@
+   return 0;
+ }
+ 
++unsigned
++Node::getNumParents(void) const
++{
++  return mParents.size();
++}
++
+ WeakPtr<const ModelGroup>
+ Node::getParent(unsigned idx) const
+ {
+@@ -80,33 +75,56 @@
+   return mParents[idx];
+ }
+ 
+-class ModelPathCollector :
++class Node::PathListCollector :
+     public ModelVisitor {
+ public:
+-  virtual void apply(Model& model)
+-  { ascend(model); }
+-  virtual void apply(ModelGroup& modelGroup)
++  virtual void apply(Node& node)
+   {
++    Log(Model, Error) << "apply node " << node.getName() << std::endl;
+     // First go up and collect the path above.
+     // When we are back here append this.
+-    ascend(modelGroup);
+-    path.push_back(&modelGroup);
++    if (0 < node.getNumParents())
++      ascend(node);
++    else {
++      pathList.push_back(getNodePath());
++
++      Log(Model, Error) << "push node path:" << std::endl;
++      for (Node::Path::const_iterator i = getNodePath().begin();
++           i != getNodePath().end(); ++i) {
++        Log(Model, Error) << "\"" << (*i)->getName() << "\" ";
++      }
++      Log(Model, Error) << std::endl;
++    }
+   }
+-  Node::Path path;
++  Node::PathList pathList;
+ };
+ 
+-Node::Path
++Node::GroupPath
+ Node::getPath()
+ {
+-  ModelPathCollector modelPathCollector;
+-  ascend(modelPathCollector);
+-  return modelPathCollector.path;
++  PathList pathList = getParentPathList();
++  Log(Model, Error) << "getPath()" << std::endl;
++  GroupPath path;
++  if (!pathList.empty()) {
++    Log(Model, Error) << "return path for: " << getName() << std::endl;
++    Path::iterator i;
++    for (i = pathList.back().begin(); i != pathList.back().end(); ++i) {
++      Log(Model, Error) << "\"" << (*i)->getName() << "\" ";
++      ModelGroup* modelGroup = (*i)->toModelGroup();
++      OpenFDMAssert(modelGroup);
++      path.push_back(modelGroup);
++    }
++    Log(Model, Error) << std::endl;
++  }
++  return path;
+ }
+ 
+-unsigned
+-Node::getNumParents(void) const
++Node::PathList
++Node::getParentPathList()
+ {
+-  return mParents.size();
++  PathListCollector pathListCollector;
++  accept(pathListCollector);
++  return pathListCollector.pathList;
+ }
+ 
+ unsigned
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-12-08 08:25:13 UTC (rev 342)
+@@ -7,8 +7,10 @@
+ 
+ #include <string>
+ #include <vector>
++#include <list>
+ #include <algorithm>
+ 
++#include "OpenFDMConfig.h"
+ #include "Assert.h"
+ #include "LogStream.h"
+ #include "Object.h"
+@@ -40,13 +42,16 @@
+ class ModelVisitor;
+ class TaskInfo;
+ 
+-
+-
+ class Node : public Object {
+   OPENFDM_OBJECT(Node, Object);
+ public:
+-  typedef std::list<SharedPtr<ModelGroup> > Path;
++  // FIXME
++  typedef std::list<SharedPtr<ModelGroup> > GroupPath;
+ 
++  // FIXME vector??
++  typedef std::vector<SharedPtr<Node> > Path;
++  typedef std::vector<Path> PathList;
++
+   Node(const std::string& name);
+   virtual ~Node(void);
+ 
+@@ -55,21 +60,19 @@
+   /// Double dispatch helper for the system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+-  /// Double dispatch helper for the system visitor
+-  void ascend(ModelVisitor& visitor);
+-  /// Double dispatch helper for the system visitor
+-//   void ascend(ConstModelVisitor& visitor) const;
+-
+   virtual const Model* toModel(void) const;
+   virtual Model* toModel(void);
+ 
+   virtual const ModelGroup* toModelGroup(void) const;
+   virtual ModelGroup* toModelGroup(void);
+ 
++  unsigned getNumParents(void) const;
+   WeakPtr<const ModelGroup> getParent(unsigned idx) const;
+   WeakPtr<ModelGroup> getParent(unsigned idx);
+ 
+-  Path getPath() OpenFDM_DEPRECATED;
++  GroupPath getPath() OpenFDM_DEPRECATED;
++  /// Returns the list of paths leading to this Node.
++  PathList getParentPathList();
+ 
+   /// Returns the number of input properties.
+   unsigned getNumInputPorts(void) const
+@@ -79,7 +82,6 @@
+ 
+ protected:
+   // Sets the parent model.
+-  unsigned getNumParents(void) const;
+   // FIXME: remove virtual here ...
+   virtual unsigned addParent(ModelGroup* model);
+   virtual void removeParent(unsigned idx);
+@@ -147,6 +149,8 @@
+   friend class GroupOutput;
+ 
+ private:
++  class PathListCollector;
++
+   typedef std::vector<WeakPtr<ModelGroup> > ParentList;
+   ParentList mParents;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -33,13 +33,6 @@
+   visitor.apply(*this);
+ }
+ 
+-void
+-ModelGroup::traverse(ModelVisitor& visitor)
+-{
+-  for (ModelList::iterator it = mModels.begin(); it != mModels.end(); ++it)
+-    (*it)->accept(visitor);
+-}
+-
+ const ModelGroup*
+ ModelGroup::toModelGroup(void) const
+ {
+@@ -245,10 +238,10 @@
+   return mConnections[i];
+ }
+ 
+-Model::Path
+-ModelGroup::getGroupPath() /* FIXME const*/
++Model::GroupPath
++ModelGroup::getGroupPath()
+ {
+-  Path path = getPath();
++  GroupPath path = getPath();
+   path.push_back(this);
+   return path;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-12-08 08:25:13 UTC (rev 342)
+@@ -25,8 +25,6 @@
+   virtual void accept(ModelVisitor& visitor);
+   /// Double dispatch helper for the multibody system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+-  /// Traverse this ModelGroup with the given visitor
+-  void traverse(ModelVisitor& visitor);
+ 
+   virtual const ModelGroup* toModelGroup(void) const;
+   virtual ModelGroup* toModelGroup(void);
+@@ -52,7 +50,7 @@
+ 
+   /// Returns the path of this ModelGroup. In contrast to getPath this returns
+   /// the path including the current ModelGroup.
+-  Path getGroupPath() /* FIXME const*/;
++  GroupPath getGroupPath() OpenFDM_DEPRECATED;
+ 
+   bool addSampleTime(const SampleTime& sampleTime)
+   { return mSampleTimeSet.addSampleTime(sampleTime); }
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-08 08:25:13 UTC (rev 342)
+@@ -13,8 +13,6 @@
+ 
+ namespace OpenFDM {
+ 
+-typedef std::list<SharedPtr<Node> > NodePath;
+-
+ class ModelVisitor {
+ public:
+   virtual ~ModelVisitor(void)
+@@ -34,7 +32,7 @@
+   virtual void apply(MobileRootJoint& mobileRootJoint)
+   { apply(static_cast<Joint&>(mobileRootJoint)); }
+ 
+-  const NodePath& getNodePath() const
++  const Node::Path& getNodePath() const
+   { return mNodePath; }
+ 
+ protected:
+@@ -42,21 +40,30 @@
+   /// traverse downward
+   inline void traverse(ModelGroup& modelGroup)
+   {
+-    mNodePath.push_back(&modelGroup);
+-    modelGroup.traverse(*this);
+-    mNodePath.pop_back();
++    for (unsigned i = 0; i < modelGroup.getNumModels(); ++i) {
++      SharedPtr<Node> node = modelGroup.getModel(i);
++      mNodePath.push_back(node);
++      node->accept(*this);
++      mNodePath.pop_back();
++    }
+   }
+   /// Call this in the apply(ModelGroup&) method if you want to
+   /// traverse upward
+   inline void ascend(Node& node)
+   {
+-    mNodePath.push_back(&node);
+-    node.ascend(*this);
+-    mNodePath.pop_back();
++    for (unsigned i = 0; i < node.getNumParents(); ++i) {
++      SharedPtr<ModelGroup> group = node.getParent(i).lock();
++      if (!group)
++        continue;
++      mNodePath.insert(mNodePath.begin(), group);
++      group->accept(*this);
++      mNodePath.erase(mNodePath.begin());
++    }
+   }
++
+ private:
+   // The path that visitor has passed
+-  NodePath mNodePath;
++  Node::Path mNodePath;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-12-07 15:51:37 UTC (rev 341)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-12-08 08:25:13 UTC (rev 342)
+@@ -24,7 +24,7 @@
+ 
+ struct ModelListEntry {
+   SharedPtr<Model> model;
+-  NodePath nodePath;
++  Node::Path nodePath;
+   SampleTimeSet sampleTimeSet;  
+ };
+ 
+@@ -754,7 +754,7 @@
+   ModelList2::const_iterator it;
+   it = mModels.begin();
+   while (it != mModels.end()) {
+-    NodePath::const_iterator ni;
++    Node::Path::const_iterator ni;
+     for (ni = it->nodePath.begin(); ni != it->nodePath.end(); ++ni)
+       Log(Schedule,Info) << "/" << (*ni)->getName();
+     Log(Schedule,Info) << "/" << it->model->getName() << " "
+
+
+
+From frohlich at mail.berlios.de  Sat Dec  8 09:29:02 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 8 Dec 2007 09:29:02 +0100
+Subject: [OpenFDM-svn] r343 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712080829.lB88T26h014331@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-08 09:29:01 +0100 (Sat, 08 Dec 2007)
+New Revision: 343
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+Log:
+Remove useless logs.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-12-08 08:25:13 UTC (rev 342)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-12-08 08:29:01 UTC (rev 343)
+@@ -80,21 +80,12 @@
+ public:
+   virtual void apply(Node& node)
+   {
+-    Log(Model, Error) << "apply node " << node.getName() << std::endl;
+     // First go up and collect the path above.
+     // When we are back here append this.
+     if (0 < node.getNumParents())
+       ascend(node);
+-    else {
++    else
+       pathList.push_back(getNodePath());
+-
+-      Log(Model, Error) << "push node path:" << std::endl;
+-      for (Node::Path::const_iterator i = getNodePath().begin();
+-           i != getNodePath().end(); ++i) {
+-        Log(Model, Error) << "\"" << (*i)->getName() << "\" ";
+-      }
+-      Log(Model, Error) << std::endl;
+-    }
+   }
+   Node::PathList pathList;
+ };
+@@ -103,18 +94,14 @@
+ Node::getPath()
+ {
+   PathList pathList = getParentPathList();
+-  Log(Model, Error) << "getPath()" << std::endl;
+   GroupPath path;
+   if (!pathList.empty()) {
+-    Log(Model, Error) << "return path for: " << getName() << std::endl;
+     Path::iterator i;
+     for (i = pathList.back().begin(); i != pathList.back().end(); ++i) {
+-      Log(Model, Error) << "\"" << (*i)->getName() << "\" ";
+       ModelGroup* modelGroup = (*i)->toModelGroup();
+       OpenFDMAssert(modelGroup);
+       path.push_back(modelGroup);
+     }
+-    Log(Model, Error) << std::endl;
+   }
+   return path;
+ }
+
+
+
+From frohlich at mail.berlios.de  Sat Dec  8 11:14:08 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 8 Dec 2007 11:14:08 +0100
+Subject: [OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712081014.lB8AE8Xc019817@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-08 11:14:07 +0100 (Sat, 08 Dec 2007)
+New Revision: 344
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/Output.cpp
+   trunk/OpenFDM/src/OpenFDM/Output.h
+Log:
+Add Input and Output models to the visitors.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2007-12-08 10:14:07 UTC (rev 344)
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include "Input.h"
++#include "ModelVisitor.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -27,6 +28,12 @@
+ {
+ }
+ 
++void
++Input::accept(ModelVisitor& visitor)
++{
++  visitor.apply(*this);
++}
++
+ const Input*
+ Input::toInput(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Input.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -15,6 +15,11 @@
+   Input(const std::string& name);
+   virtual ~Input(void);
+ 
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor& visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor& visitor) const;
++
+   virtual const Input* toInput(void) const;
+   virtual Input* toInput(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -6,6 +6,8 @@
+ #define OpenFDM_ModelVisitor_H
+ 
+ #include "Model.h"
++#include "Output.h"
++#include "Input.h"
+ #include "ModelGroup.h"
+ #include "RigidBody.h"
+ #include "MobileRootJoint.h"
+@@ -17,21 +19,32 @@
+ public:
+   virtual ~ModelVisitor(void)
+   { }
++
+   virtual void apply(Node& node)
+   { }
++
+   virtual void apply(Model& model)
+   { apply(static_cast<Node&>(model)); }
+   virtual void apply(ModelGroup& modelGroup)
+   { apply(static_cast<Node&>(modelGroup)); }
++
++  virtual void apply(Output& output)
++  { apply(static_cast<Model&>(output)); }
++  virtual void apply(Input& input)
++  { apply(static_cast<Model&>(input)); }
++  virtual void apply(Interact& interact)
++  { apply(static_cast<Model&>(interact)); }
++
+   virtual void apply(System& system)
+   { apply(static_cast<ModelGroup&>(system)); }
+-  virtual void apply(Interact& interact)
+-  { apply(static_cast<Model&>(interact)); }
++
+   virtual void apply(Joint& joint)
+   { apply(static_cast<Interact&>(joint)); }
++
+   virtual void apply(MobileRootJoint& mobileRootJoint)
+   { apply(static_cast<Joint&>(mobileRootJoint)); }
+ 
++
+   const Node::Path& getNodePath() const
+   { return mNodePath; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Output.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.cpp	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Output.cpp	2007-12-08 10:14:07 UTC (rev 344)
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include "Output.h"
++#include "ModelVisitor.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -27,6 +28,12 @@
+ {
+ }
+ 
++void
++Output::accept(ModelVisitor& visitor)
++{
++  visitor.apply(*this);
++}
++
+ bool
+ Output::init(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Output.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Output.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -15,6 +15,11 @@
+   Output(const std::string& name);
+   virtual ~Output(void);
+   
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor& visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor& visitor) const;
++
+   virtual const Output* toOutput(void) const;
+   virtual Output* toOutput(void);
+ 
+
+
+
+From frohlich at mail.berlios.de  Sat Dec  8 11:15:22 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 8 Dec 2007 11:15:22 +0100
+Subject: [OpenFDM-svn] r345 - trunk/flightgear
+Message-ID: <200712081015.lB8AFMdC020076@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-08 11:15:22 +0100 (Sat, 08 Dec 2007)
+New Revision: 345
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGOpenFDM.h
+Log:
+Use Visitors to walk the models.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2007-12-08 10:14:07 UTC (rev 344)
++++ trunk/flightgear/FGOpenFDM.cpp	2007-12-08 10:15:22 UTC (rev 345)
+@@ -225,37 +225,154 @@
+   InputConnectModelVisitor(const SGSharedPtr<SGPropertyNode>& acRootNode) :
+     mAircraftRootNode(acRootNode)
+   { }
+-  virtual void apply(Model& model)
++  virtual void apply(Input& input)
+   {
+-    // Check for input models
+-    // If so, we need to register a change notifier in flightgears properties
+-    Input* inputModel = model.toInput();
+-    if (!inputModel)
+-      return;
+-
+     SG_LOG(SG_FLIGHT, SG_INFO,
+-           "Registering input for \"" << inputModel->getName() << "\"");
+-    std::string pName = inputModel->getInputName();
++           "Registering input for \"" << input.getName() << "\"");
++    std::string pName = input.getInputName();
+     SGPropertyNode* sgProp = mAircraftRootNode->getNode(pName.c_str(), true);
+-    inputModel->setCallback(new FGInputCallback(sgProp));
++    input.setCallback(new FGInputCallback(sgProp));
++
++    ModelVisitor::apply(input);
+   }
+   virtual void apply(ModelGroup& modelGroup)
+-  { traverse(modelGroup); }
++  {
++    traverse(modelGroup);
++  }
+ private:
+   SGSharedPtr<SGPropertyNode> mAircraftRootNode;
+ };
+ 
++class BindVisitor :
++    public ModelVisitor {
++public:
++  BindVisitor(SGPropertyNode* aircraftRootNode,
++                SGPropertyNode* vehicleRootNode) :
++    mAircraftRootNode(aircraftRootNode),
++    mCurrentNode(vehicleRootNode)
++  { }
+ 
++  virtual void apply(Node& node)
++  {
++    SGSharedPtr<SGPropertyNode> oldNode = mCurrentNode;
+ 
+-void printVehicle(Vehicle* vehicle)
+-{
+-  cout << "T = " << vehicle->getTime()
+-       << ", Pos: " << vehicle->getGeodPosition()
+-//        << ", Or: " << vehicle->getGeodOrientation()
+-       << endl;
+-}
++    std::string pName = toPropname(node.getName());
++    mCurrentNode = oldNode->getNode(pName.c_str(), true);
+ 
++    tieObject(node);
++    
++    mCurrentNode = oldNode;
+ 
++    ModelVisitor::apply(node);
++  }
++
++  virtual void apply(Model& model)
++  {
++    SGPropertyNode* outputBase = mCurrentNode->getNode("outputs", true);
++    for (unsigned i = 0; i < model.getNumOutputPorts(); ++i) {
++      std::string name = model.getOutputPortName(i);
++      SGPropertyNode* sgProp = outputBase->getNode(name.c_str(), true);
++      sgProp->tie(FGRealPortReflector(model.getOutputPort(i)));
++    }
++
++    ModelVisitor::apply(model);
++  }
++
++  virtual void apply(Output& output)
++  {
++    std::string pName = output.getOutputName();
++    SGPropertyNode* sgProp = mAircraftRootNode->getNode(pName.c_str(), true);
++    if (sgProp->isTied())
++      sgProp->untie();
++    sgProp->tie(FGOutputReflector(&output));
++
++    ModelVisitor::apply(output);
++  }
++
++  virtual void apply(ModelGroup& modelGroup)
++  {
++    SGSharedPtr<SGPropertyNode> oldNode = mCurrentNode;
++
++    std::string pName = toPropname(modelGroup.getName());
++    mCurrentNode = oldNode->getNode(pName.c_str(), true);
++    
++    traverse(modelGroup);
++
++    tieObject(modelGroup);
++
++    mCurrentNode = oldNode;
++  }
++
++private:
++  void tieObject(Object& object)
++  {
++    // The usual, whole object reflection so that one can take a look into
++    // OpenFDM's internal modules ...
++    std::vector<PropertyInfo> props;
++    object.getPropertyInfoList(props);
++    std::vector<PropertyInfo>::iterator it = props.begin();
++    while (it != props.end()) {
++      // ... well, FIXME cleanup ...
++      std::string pName = toPropname(it->getName());
++      SGPropertyNode* sgProp = mCurrentNode->getChild(pName.c_str(), 0, true);
++      Variant value;
++      object.getPropertyValue(it->getName(), value);
++      
++      if (value.isString())
++        sgProp->tie(FGStringPropertyAdapter(&object, it->getName()));
++      else if (value.isReal())
++        sgProp->tie(FGRealPropertyAdapter(&object, it->getName()));
++      else if (value.isInteger())
++        sgProp->tie(FGIntegerPropertyAdapter(&object, it->getName()));
++      else if (value.isUnsigned())
++        sgProp->tie(FGIntegerPropertyAdapter(&object, it->getName()));
++      
++      else if (value.isMatrix()) {
++        Matrix m = value.toMatrix();
++        unsigned reshapeSize = rows(m) * cols(m);
++        
++        sgProp->tie(FGRealPropertyAdapter(&object, it->getName()));
++        for (unsigned i = 2; i <= reshapeSize; ++i) {
++          sgProp = mCurrentNode->getChild(pName.c_str(), i-1, true);
++          sgProp->tie(FGRealPropertyAdapter(&object, it->getName(), i));
++        }
++      }
++      else if (value.isValid()) {
++        SG_LOG(SG_FLIGHT, SG_WARN,
++               "Found unexpected property type with property named \""
++               << it->getName() << "\"");
++      }
++      ++it;
++    }
++  }
++
++  static std::string
++  toPropname(const std::string& name)
++  {
++    std::string pName = name;
++    std::string::size_type pos;
++    while ((pos = pName.find(' ')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    while ((pos = pName.find('<')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '[');
++    }
++    while ((pos = pName.find('>')) != std::string::npos) {
++      pName.replace(pos, 1, 1, ']');
++    }
++    while ((pos = pName.find('(')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    while ((pos = pName.find(')')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    return pName;
++  }
++
++  SGSharedPtr<SGPropertyNode> mAircraftRootNode;
++  SGSharedPtr<SGPropertyNode> mCurrentNode;
++};
++
+ // Our local storage covers the pointer to our vehicle.
+ // A list of the property to expression adaptors.
+ struct FGOpenFDMData {
+@@ -384,7 +501,9 @@
+   SGPropertyNode* sgProp = mAircraftRootNode->getChild("fdm", 0, true);
+   sgProp = sgProp->getChild("vehicle", 0, true);
+   sgProp = sgProp->getChild("system", 0, true);
+-  tieModelGroup(sgProp, mData->vehicle->getSystem());
++
++  BindVisitor visitor(mAircraftRootNode, sgProp);
++  mData->vehicle->getSystem()->accept(visitor);
+ }
+ 
+ void FGOpenFDM::unbind()
+@@ -505,90 +624,7 @@
+     _set_Alpha( sgProp->getDoubleValue() );
+ }
+ 
+-
+ void
+-FGOpenFDM::tieObject(SGPropertyNode* base, Object* object)
+-{
+-  // Check for output models
+-  // If so, we want to reflect that in flightgears property tree
+-  Output* outputModel = dynamic_cast<Output*>(object);
+-  if (outputModel) {
+-    std::string pName = outputModel->getOutputName();
+-    SGPropertyNode* sgProp = mAircraftRootNode->getNode(pName.c_str(), true);
+-    if (sgProp->isTied())
+-      sgProp->untie();
+-    sgProp->tie(FGOutputReflector(outputModel));
+-  }
+-
+-  // Reflect all output ports
+-  Model* model = dynamic_cast<Model*>(object);
+-  if (model && model->getNumOutputPorts()) {
+-    SGPropertyNode* outputBase = base->getNode("outputs", true);
+-    for (unsigned i = 0; i < model->getNumOutputPorts(); ++i) {
+-      std::string name = model->getOutputPortName(i);
+-      SGPropertyNode* sgProp = outputBase->getNode(name.c_str(), true);
+-      sgProp->tie(FGRealPortReflector(model->getOutputPort(i)));
+-    }
+-  }
+-
+-  // The usual, whole object reflection so that one can take a look into
+-  // OpenFDM's internal modules ...
+-  std::vector<PropertyInfo> props;
+-  object->getPropertyInfoList(props);
+-  std::vector<PropertyInfo>::iterator it = props.begin();
+-  while (it != props.end()) {
+-    // ... well, FIXME cleanup ...
+-    std::string pName = toPropname(it->getName());
+-    SGPropertyNode* sgProp = base->getChild(pName.c_str(), 0, true);
+-    Variant value;
+-    object->getPropertyValue(it->getName(), value);
+-
+-    if (value.isString())
+-      sgProp->tie(FGStringPropertyAdapter(object, it->getName()));
+-    else if (value.isReal())
+-      sgProp->tie(FGRealPropertyAdapter(object, it->getName()));
+-    else if (value.isInteger())
+-      sgProp->tie(FGIntegerPropertyAdapter(object, it->getName()));
+-    else if (value.isUnsigned())
+-      sgProp->tie(FGIntegerPropertyAdapter(object, it->getName()));
+-
+-    else if (value.isMatrix()) {
+-      Matrix m = value.toMatrix();
+-      unsigned reshapeSize = rows(m) * cols(m);
+-
+-      sgProp->tie(FGRealPropertyAdapter(object, it->getName()));
+-      for (unsigned i = 2; i <= reshapeSize; ++i) {
+-        sgProp = base->getChild(pName.c_str(), i-1, true);
+-        sgProp->tie(FGRealPropertyAdapter(object, it->getName(), i));
+-      }
+-    }
+-    else if (value.isValid()) {
+-      SG_LOG(SG_FLIGHT, SG_WARN,
+-             "Found unexpected property type with property named \""
+-             << it->getName() << "\"");
+-    }
+-    ++it;
+-  }
+-}
+-
+-void
+-FGOpenFDM::tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup)
+-{
+-  unsigned numModels = modelGroup->getNumModels();
+-  for (unsigned i = 0; i < numModels; ++i) {
+-    Node* model = modelGroup->getModel(i);
+-    std::string pName = toPropname(model->getName());
+-    SGPropertyNode* sgProp = base->getNode(pName.c_str(), true);
+-    tieObject(sgProp, model);
+-
+-    ModelGroup* nestedGroup = model->toModelGroup();
+-    if (nestedGroup) {
+-      tieModelGroup(sgProp, nestedGroup);
+-    }
+-  }
+-}
+-
+-void
+ FGOpenFDM::untieRecursive(SGPropertyNode* base)
+ {
+   // Unties and removes a whole tree.
+@@ -618,27 +654,4 @@
+   }
+ }
+ 
+-std::string
+-FGOpenFDM::toPropname(const std::string& name)
+-{
+-  std::string pName = name;
+-  std::string::size_type pos;
+-  while ((pos = pName.find(' ')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  while ((pos = pName.find('<')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '[');
+-  }
+-  while ((pos = pName.find('>')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, ']');
+-  }
+-  while ((pos = pName.find('(')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  while ((pos = pName.find(')')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  return pName;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/flightgear/FGOpenFDM.h
+===================================================================
+--- trunk/flightgear/FGOpenFDM.h	2007-12-08 10:14:07 UTC (rev 344)
++++ trunk/flightgear/FGOpenFDM.h	2007-12-08 10:15:22 UTC (rev 345)
+@@ -35,13 +35,9 @@
+   virtual void update(double dt);
+ 
+ private:
+-  void tieObject(SGPropertyNode* base, Object* object);
+-  void tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup);
+   static void untieNamed(SGPropertyNode* base, const char* name);
+   static void untieRecursive(SGPropertyNode* base);
+ 
+-  static std::string toPropname(const std::string& name);
+-
+   FGOpenFDMData* mData;
+   SGPropertyNode_ptr mAircraftRootNode;
+ };
+
+
+
+From frohlich at mail.berlios.de  Sun Dec  9 10:26:43 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 9 Dec 2007 10:26:43 +0100
+Subject: [OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg
+	test
+Message-ID: <200712090926.lB99QhOV022792@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-09 10:26:42 +0100 (Sun, 09 Dec 2007)
+New Revision: 346
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+   trunk/OpenFDM/src/OpenFDM/Math.h
+   trunk/OpenFDM/src/OpenFDM/Plane.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Quaternion.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/test/quattest.cpp
+Log:
+Improove Limit comparisons.
+Improove euler angle computation.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -273,7 +273,7 @@
+ {
+   if (mDirtyAlpha) {
+     Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(V(0)) < Limits<real_type>::min())
++    if (fabs(V(0)) <= Limits<real_type>::min())
+       mAlpha = 0;
+     else
+       mAlpha = atan2(V(2), V(0));
+@@ -307,7 +307,7 @@
+   if (mDirtyBeta) {
+     real_type Vuw = getTrueSpeedUW();
+     Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(Vuw) < Limits<real_type>::min())
++    if (fabs(Vuw) <= Limits<real_type>::min())
+       mBeta = 0;
+     else
+       mBeta = atan2(V(1), Vuw);
+@@ -410,7 +410,7 @@
+ {
+   if (mDirtyWingSpanOver2Speed) {
+     real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) < Limits<real_type>::min())
++    if (fabs(Vt2) <= Limits<real_type>::min())
+       mWingSpanOver2Speed = 0;
+     else
+       mWingSpanOver2Speed = getWingSpan()/Vt2;
+@@ -424,7 +424,7 @@
+ {
+   if (mDirtyCoordOver2Speed) {
+     real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) < Limits<real_type>::min())
++    if (fabs(Vt2) <= Limits<real_type>::min())
+       mCoordOver2Speed = 0;
+     else
+       mCoordOver2Speed = getCoord()/Vt2;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -185,7 +185,7 @@
+     // if we have really reached the zero position, we must have the full
+     // speed in exactly the relPos direction.
+     real_type nrmRelPos = norm(relPos);
+-    if (nrmRelPos < Limits<real_type>::min()) {
++    if (nrmRelPos <= Limits<real_type>::min()) {
+       Vector6 relVel6 = mMountFrame[0]->getRelVel(mMountFrame[1]);
+       dir = normalize(relVel6.getLinear());
+     } else
+@@ -212,7 +212,7 @@
+     // if we have really reached the zero position, we must have the full
+     // speed in exactly the relPos direction.
+     real_type nrmRelPos = norm(relPos);
+-    if (nrmRelPos < Limits<real_type>::min())
++    if (nrmRelPos <= Limits<real_type>::min())
+       mRelVel = norm(relVel6.getLinear());
+     else
+       mRelVel = dot(relPos, relVel6.getLinear())/nrmRelPos;
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -133,7 +133,7 @@
+ {
+   typedef typename Impl::value_type value_type;
+   value_type nrm = norm(v);
+-  if (fabs(nrm) < Limits<real_type>::min())
++  if (fabs(nrm) <= Limits<real_type>::min())
+     return Vector<value_type,n>(v);
+   else
+     return Vector<value_type,n>((1/nrm)*v);
+@@ -301,7 +301,7 @@
+     nrmd += d*d;
+   }
+ 
+-  return nrmd < static_cast<value_type>(rows);
++  return nrmd <= static_cast<value_type>(rows);
+ }
+ 
+ /**  Scaled difference of vectors.
+@@ -414,7 +414,7 @@
+     nrmd += d*d;
+   }
+ 
+-  return nrmd < static_cast<value_type>(rows)*tol*tol*max(nrmv1, nrmv2);
++  return nrmd <= static_cast<value_type>(rows)*tol*tol*max(nrmv1, nrmv2);
+ }
+ 
+ /** Comparison function.
+@@ -611,7 +611,7 @@
+       value_type Aii = A(i,i);
+       // If the matrix is exactly singular, compute the solution where the
+       // righthandside is projected into the image of the matrix.
+-      if (fabs(Aii) < Limits<value_type>::min()) {
++      if (fabs(Aii) <= Limits<value_type>::min()) {
+         v(i) = static_cast<value_type>(0);
+       } else {
+         v(i) /= Aii;
+@@ -638,7 +638,7 @@
+         value_type Aii = A(i,i);
+         // If the matrix is exactly singular, compute the solution where the
+         // righthandside is projected into the image of the matrix.
+-        if (fabs(Aii) < Limits<value_type>::min()) {
++        if (fabs(Aii) <= Limits<value_type>::min()) {
+           v(i,j) = static_cast<value_type>(0);
+         } else {
+           v(i,j) /= Aii;
+@@ -751,7 +751,7 @@
+   size_type n = A.cols();
+   for (size_type j = 0; j < n; ++j) {
+     // The matrix is exactly singular.
+-    if (fabs(A(j,j)) < Limits<value_type>::min())
++    if (fabs(A(j,j)) <= Limits<value_type>::min())
+       nonsingular = false;
+     else {
+       if (j < n-1) {
+@@ -785,7 +785,7 @@
+     perm(j) = jp;
+ 
+     // The matrix is exactly singular.
+-    if (fabs(A(jp,j)) < Limits<value_type>::min())
++    if (fabs(A(jp,j)) <= Limits<value_type>::min())
+       nonsingular = false;
+     else {
+       if (jp != j) {
+@@ -928,7 +928,7 @@
+ 
+     // Check if that thing is singular.
+     value_type Ajj = A(j, j);
+-    if (fabs(Ajj) < Limits<value_type>::min())
++    if (fabs(Ajj) <= Limits<value_type>::min())
+       nonsingular = false;
+ 
+     A(j, j) = 1;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Math.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Math.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Math.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -91,7 +91,7 @@
+ {
+   /// FIXME
+ #define PI static_cast<T>(3.1415926535897932384626433832795029L)
+-  if (saturation < Limits<T>::min())
++  if (saturation <= Limits<T>::min())
+     return 0;
+   else
+     return atan(val*0.5*PI/saturation)*2*saturation/PI;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Plane.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Plane.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Plane.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -24,17 +24,17 @@
+   {}
+   Plane(const Vector3& normal, value_type dist)
+     : mNormal(normal), mDist(dist)
+-  { OpenFDMAssert((norm(mNormal)-1) < 8*Limits<value_type>::epsilon()); }
++  { OpenFDMAssert((norm(mNormal)-1) <= 8*Limits<value_type>::epsilon()); }
+   Plane(const Vector3& normal, const Vector3& off)
+     : mNormal(normal), mDist(-dot(normal, off))
+-  { OpenFDMAssert((norm(mNormal)-1) < 8*Limits<value_type>::epsilon()); }
++  { OpenFDMAssert((norm(mNormal)-1) <= 8*Limits<value_type>::epsilon()); }
+ 
+   const Vector3& getNormal(void) const
+   { return mNormal; }
+   void setNormal(const Vector3& normal)
+   {
+     mNormal = normal;
+-    OpenFDMAssert((norm(mNormal)-1) < 8*Limits<value_type>::epsilon());
++    OpenFDMAssert((norm(mNormal)-1) <= 8*Limits<value_type>::epsilon());
+   }
+ 
+   value_type getDist(void) const
+@@ -76,7 +76,7 @@
+     value_type tmp = dot(ndir, mNormal);
+ 
+     // Check if the line is parallel to the plane.
+-    if (fabs(tmp) < Limits<value_type>::epsilon())
++    if (fabs(tmp) <= Limits<value_type>::epsilon())
+       return false;
+ 
+     ip = base - (getDist(base)/tmp)*ndir;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -83,7 +83,7 @@
+ PrismaticJoint::setJointAxis(const Vector3& axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm < Limits<real_type>::min()) {
++  if (nrm <= Limits<real_type>::min()) {
+     Log(Initialization, Error) << "JointAxis is zero ..." << endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Quaternion.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -78,10 +78,10 @@
+   OpenFDM_FORCE_INLINE
+   bool isIdentity(void) const
+   {
+-    return fabs(fabs(w())-1) < Limits<T>::epsilon() &&
+-      fabs(x()) < Limits<T>::epsilon() &&
+-      fabs(y()) < Limits<T>::epsilon() &&
+-      fabs(z()) < Limits<T>::epsilon();
++    return fabs(fabs(w())-1) <= Limits<T>::epsilon() &&
++      fabs(x()) <= Limits<T>::epsilon() &&
++      fabs(y()) <= Limits<T>::epsilon() &&
++      fabs(z()) <= Limits<T>::epsilon();
+   }
+ 
+   OpenFDM_FORCE_INLINE
+@@ -96,7 +96,7 @@
+   {
+     value_type nrm = norm(*this);
+     // More or less emergency exit. Should not happen ...
+-    if (nrm < Limits<value_type>::epsilon())
++    if (nrm <= Limits<value_type>::epsilon())
+       return Vector3::zeros();
+ 
+     Vector4<T> nq = (*this)/nrm;
+@@ -132,34 +132,54 @@
+     value_type q2 = x();
+     value_type q3 = y();
+     value_type q4 = z();
+-    value_type sqrQ1 = q1*q1;
+-    value_type sqrQ2 = q2*q2;
+-    value_type sqrQ3 = q3*q3;
+-    value_type sqrQ4 = q4*q4;
+ 
+-    value_type den = sqrQ1 - sqrQ2 - sqrQ3 + sqrQ4;
+-    value_type num = 2*(q3*q4 + q1*q2);
+-    if (fabs(den) < Limits<value_type>::min() &&
+-        fabs(num) < Limits<value_type>::min())
+-      angles(0) = 0;
+-    else
+-      angles(0) = atan2(num, den);
++    value_type r = 1/dot(*this, *this);
++    value_type rq1 = r*q1;
++    value_type rq2 = r*q2;
++    value_type rq3 = r*q3;
++    value_type rq4 = r*q4;
++
++    value_type q1q1 = rq1*q1;
++    value_type q2q2 = rq2*q2;
++    value_type q3q3 = rq3*q3;
++    value_type q4q4 = rq4*q4;
++    value_type q1q2 = rq1*q2;
++    value_type q1q3 = rq1*q3;
++    value_type q1q4 = rq1*q4;
++    value_type q2q3 = rq2*q3;
++    value_type q2q4 = rq2*q4;
++    value_type q3q4 = rq3*q4;
+     
+-    value_type tmp = 2*(q2*q4 - q1*q3);
+-    if (tmp < -1)
+-      angles(1) = pi05;
+-    else if (1.0 < tmp)
++    value_type m11 = q1q1 + q2q2 - q3q3 - q4q4;
++    value_type m12 = 2*(q2q3 + q1q4);
++    value_type m13 = 2*(q2q4 - q1q3);
++    value_type m21 = 2*(q2q3 - q1q4);
++    value_type m22 = q1q1 - q2q2 + q3q3 - q4q4;
++    value_type m23 = 2*(q3q4 + q1q2);
++    // value_type m31 = 2*(q2q4 + q1q3);
++    // value_type m32 = 2*(q3q4 - q1q2);
++    value_type m33 = q1q1 - q2q2 - q3q3 + q4q4;
++
++    if (1 - 8*Limits<T>::epsilon() <= m13) {
++      // take one of them for the first angle
++      // angles(0) = atan2(-m32, -m31);
++      angles(0) = atan2(-m21, m22);
++      // angles(0) = atan2(- m32 - m21, - m31 + m22);
+       angles(1) = -pi05;
+-    else
+-      angles(1) = -asin(tmp);
+-    
+-    den = sqrQ1 + sqrQ2 - sqrQ3 - sqrQ4;
+-    num = 2*(q2*q3 + q1*q4);
+-    if (fabs(den) < Limits<value_type>::min() &&
+-        fabs(num) < Limits<value_type>::min())
++      // angles(1) = -acos(sqrt(m11*m11 + m12*m12));
+       angles(2) = 0;
+-    else {
+-      value_type psi = atan2(num, den);
++    } else if (m13 <= 8*Limits<T>::epsilon() - 1) {
++      // take one of them for the first angle
++      // angles(0) = -atan2(m32, m31);
++      angles(0) = -atan2(-m21, m22);
++      // angles(0) = -atan2(m32 - m21, m31 + m22);
++      angles(1) = pi05;
++      // angles(1) = acos(sqrt(m11*m11 + m12*m12));
++      angles(2) = 0;
++    } else {
++      angles(0) = atan2(m23, m33);
++      angles(1) = -asin(m13);
++      value_type psi = atan2(m12, m11);
+       if (psi < 0)
+         psi += pi2;
+       angles(2) = psi;
+@@ -283,11 +303,12 @@
+     return q1*q2*q3;
+   }
+ 
+-  static Quaternion fromEuler(value_type z, value_type y, value_type x)
++  OpenFDM_FORCE_INLINE
++  static Quaternion fromEuler(const Vector3& euler)
+   {
+-    value_type zd2 = 0.5*z;
+-    value_type yd2 = 0.5*y;
+-    value_type xd2 = 0.5*x;
++    value_type zd2 = value_type(0.5)*euler(2);
++    value_type yd2 = value_type(0.5)*euler(1);
++    value_type xd2 = value_type(0.5)*euler(0);
+     
+     value_type Szd2 = sin(zd2);
+     value_type Syd2 = sin(yd2);
+@@ -307,6 +328,9 @@
+                        Cxd2Czd2*Syd2 + Sxd2Szd2*Cyd2,
+                        Cxd2Szd2*Cyd2 - Sxd2Czd2*Syd2);
+   }
++  OpenFDM_FORCE_INLINE
++  static Quaternion fromEuler(value_type z, value_type y, value_type x)
++  { return fromEuler(Vector3(x, y, z)); }
+ 
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromYawPitchRoll(value_type y, value_type p, value_type r)
+@@ -319,8 +343,8 @@
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromLonLat(value_type lon, value_type lat)
+   {
+-    value_type zd2 = 0.5*lon;
+-    value_type yd2 = - pi025 - 0.5*lat;
++    value_type zd2 = value_type(0.5)*lon;
++    value_type yd2 = - pi025 - value_type(0.5)*lat;
+     
+     value_type Szd2 = sin(zd2);
+     value_type Syd2 = sin(yd2);
+@@ -334,7 +358,7 @@
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromAngleAxis(value_type angle, const Vector3& axis)
+   {
+-    value_type angle2 = 0.5*angle;
++    value_type angle2 = value_type(0.5)*angle;
+     return Quaternion::fromRealImag(cos(angle2), sin(angle2)*axis);
+   }
+ 
+@@ -351,7 +375,7 @@
+   {
+     value_type nfrom = norm(from);
+     value_type nto = norm(to);
+-    if (nfrom < Limits<T>::min() || nto < Limits<T>::min())
++    if (nfrom <= Limits<T>::min() || nto <= Limits<T>::min())
+       return Quaternion::unit();
+ 
+     return Quaternion::fromRotateToNorm((1/nfrom)*from, (1/nto)*to);
+@@ -363,13 +387,13 @@
+   {
+     value_type nrmv1 = norm(v1);
+     value_type nrmv2 = norm(v2);
+-    if (nrmv1 < Limits<T>::min() || nrmv2 < Limits<T>::min())
++    if (nrmv1 <= Limits<T>::min() || nrmv2 <= Limits<T>::min())
+       return Quaternion::unit();
+ 
+     Vector3 nv1 = (1/nrmv1)*v1;
+     Vector3 nv2 = (1/nrmv2)*v2;
+     value_type dv1v2 = dot(nv1, nv2);
+-    if (fabs(fabs(dv1v2)-1) < Limits<value_type>::epsilon())
++    if (fabs(fabs(dv1v2)-1) <= Limits<value_type>::epsilon())
+       return Quaternion::unit();
+ 
+     // The target vector for the first rotation
+@@ -449,7 +473,7 @@
+     // in the interval [-pi,pi]. That means that 0.5*angle is in the interval
+     // [-pi/2,pi/2]. But in that range the cosine is allways >= 0.
+     // So we do not need to care for egative roots in the following equation:
+-    value_type cos05ang = sqrt(0.5+0.5*cosang);
++    value_type cos05ang = sqrt(value_type(0.5)+value_type(0.5)*cosang);
+ 
+ 
+     // Now our assumption of angles <= 90 deg comes in play.
+@@ -559,7 +583,7 @@
+   T sqreps = eps*eps*16*16;
+   Vector4<T> t1 = q1 - q2;
+   Vector4<T> t2 = q1 + q2;
+-  return dot(t1, t1) < sqreps || dot(t2, t2) < sqreps;
++  return dot(t1, t1) <= sqreps || dot(t2, t2) <= sqreps;
+ }
+ 
+ template<typename T>
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -89,7 +89,7 @@
+ RevoluteActuator::setJointAxis(const Vector3& axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm < Limits<real_type>::min()) {
++  if (nrm <= Limits<real_type>::min()) {
+     Log(Initialization, Error) << "JointAxis is zero ..." << endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -80,7 +80,7 @@
+ RevoluteJoint::setJointAxis(const Vector3& axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm < Limits<real_type>::min()) {
++  if (nrm <= Limits<real_type>::min()) {
+     Log(Initialization, Error) << "JointAxis is zero ..." << endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/test/quattest.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/quattest.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/test/quattest.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -22,7 +22,43 @@
+   return normalize(rVec());
+ }
+ 
++/// Return normalized random vector
++Quaternion
++rnQuat(void)
++{
++  Quaternion q(drand48()-0.5, drand48()-0.5, drand48()-0.5, drand48()-0.5);
++  return Quaternion(normalize(q));
++}
++
+ int
++eulerTest(const Quaternion& q, real_type testEps)
++{
++  Vector3 euler = q.getEuler();
++  Quaternion q2 = Quaternion::fromEuler(euler);
++  Vector3 euler2 = q2.getEuler();
++  
++  if (!equal(q, q2, testEps) && !equal(q, -q2, testEps)) {
++    std::cerr << "Failing on test Quaternion euler angles conversion:\n"
++              << "q = " << q << "\n"
++              << "q2 = " << q2
++              << std::endl;
++    return -1;
++  }
++
++  
++  if (!equal(euler, euler2, testEps)) {
++    std::cerr << "Failing on test Quaternion euler angles conversion:\n"
++              << "q = " << q << "\n"
++              << "q2 = " << q2
++              << std::endl;
++    return -1;
++  }
++
++
++  return 0;
++}
++
++int
+ quattest(void)
+ {
+   real_type eps = Limits<real_type>::epsilon();
+@@ -82,9 +118,56 @@
+                 << std::endl;
+       return -1;
+     }
++  }
+ 
++  // Test euler angle to quaternion and back conversion.
++  // special fixed cases
++  int fail = 0;
++  fail += eulerTest(Quaternion::fromEuler(0, 0, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, 0, pi05), 100*eps);
++  // special fixed cases at the gimbal lock
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, pi05), 100*eps);
++
++  real_type gimbalEps = 1e3*eps;
++  // special cases around the gimbal lock
++  for (unsigned i = 0; i < nTests; ++i) {
++    for (unsigned k = 1; k < 1024; k *= 2) {
++      Vector3 euler = rVec();
++      euler(1) = pi05;
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = pi05*(1 - k*Limits<real_type>::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = pi05*(1 + k*Limits<real_type>::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05;
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05*(1 - k*Limits<real_type>::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05*(1 + k*Limits<real_type>::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++    }
+   }
++  // arbitrary cases
++  for (unsigned i = 0; i < nTests; ++i)
++    fail += eulerTest(rnQuat(), 100*eps);
+ 
++  if (fail)
++    return -1;
++
+   return 0;
+ }
+ 
+
+
+
+From frohlich at mail.berlios.de  Sun Dec  9 10:52:14 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 9 Dec 2007 10:52:14 +0100
+Subject: [OpenFDM-svn] r347 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712090952.lB99qEfl023792@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-09 10:52:14 +0100 (Sun, 09 Dec 2007)
+New Revision: 347
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Unit.h
+Log:
+Make it compile ...
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Unit.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Unit.h	2007-12-09 09:26:42 UTC (rev 346)
++++ trunk/OpenFDM/src/OpenFDM/Unit.h	2007-12-09 09:52:14 UTC (rev 347)
+@@ -437,15 +437,15 @@
+ std::basic_ostream<char_type, traits_type>&
+ operator<<(std::basic_ostream<char_type, traits_type>& stream, const Unit& u)
+ {
+-  stream << stream.widen("Unit: Factor = ") << u.getFactor()
+-         << stream.widen(", Offset = ") << u.getOffset()
++  stream << "Unit: Factor = " << u.getFactor()
++         << ", Offset = " << u.getOffset()
+          << stream.widen(' ');
+ 
+   // Distinguish between offset free and units with offset.
+   PhysicalDimension physicalDimension = u.getPhysicalDimension();
+   if (u.getOffset() == 0) {
+     if (physicalDimension.getMass()) {
+-      stream << stream.widen("kg");
++      stream << stream.widen('k') << stream.widen('g');
+       if (physicalDimension.getMass() != 1)
+         stream << int(physicalDimension.getMass());
+       stream << stream.widen(' ');
+@@ -475,18 +475,18 @@
+       stream << stream.widen(' ');
+     }
+     if (physicalDimension.getLumIntensity()) {
+-      stream << stream.widen("cd");
++      stream << stream.widen('c') << stream.widen('d');
+       if (physicalDimension.getLumIntensity() != 1)
+         stream << int(physicalDimension.getLumIntensity());
+       stream << stream.widen(' ');
+     }
+   } else {
+-    stream << stream.widen(", Length = ") << int(physicalDimension.getLength())
+-           << stream.widen(", Mass = ") << int(physicalDimension.getMass())
+-           << stream.widen(", Time = ") << int(physicalDimension.getTime())
+-           << stream.widen(", Temperature = ") << int(physicalDimension.getTemperature())
+-           << stream.widen(", Current = ") << int(physicalDimension.getCurrent())
+-           << stream.widen(", LumIntensity = ") << int(physicalDimension.getLumIntensity());
++    stream << ", Length = " << int(physicalDimension.getLength())
++           << ", Mass = " << int(physicalDimension.getMass())
++           << ", Time = " << int(physicalDimension.getTime())
++           << ", Temperature = " << int(physicalDimension.getTemperature())
++           << ", Current = " << int(physicalDimension.getCurrent())
++           << ", LumIntensity = " << int(physicalDimension.getLumIntensity());
+   }
+   return stream;
+ }
+
+
+
+From frohlich at mail.berlios.de  Thu Dec 13 20:28:36 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 13 Dec 2007 20:28:36 +0100
+Subject: [OpenFDM-svn] r348 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200712131928.lBDJSaWQ023756@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-13 20:28:35 +0100 (Thu, 13 Dec 2007)
+New Revision: 348
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Quaternion.h
+Log:
+An other method to convert in the gimbal lock situation.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Quaternion.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-09 09:52:14 UTC (rev 347)
++++ trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-13 19:28:35 UTC (rev 348)
+@@ -163,7 +163,8 @@
+     if (1 - 8*Limits<T>::epsilon() <= m13) {
+       // take one of them for the first angle
+       // angles(0) = atan2(-m32, -m31);
+-      angles(0) = atan2(-m21, m22);
++      // angles(0) = atan2(-m21, m22);
++      angles(0) = 2*atan2(x(), w());
+       // angles(0) = atan2(- m32 - m21, - m31 + m22);
+       angles(1) = -pi05;
+       // angles(1) = -acos(sqrt(m11*m11 + m12*m12));
+@@ -171,7 +172,8 @@
+     } else if (m13 <= 8*Limits<T>::epsilon() - 1) {
+       // take one of them for the first angle
+       // angles(0) = -atan2(m32, m31);
+-      angles(0) = -atan2(-m21, m22);
++      // angles(0) = -atan2(-m21, m22);
++      angles(0) = 2*atan2(x(), w());
+       // angles(0) = -atan2(m32 - m21, m31 + m22);
+       angles(1) = pi05;
+       // angles(1) = acos(sqrt(m11*m11 + m12*m12));
+
+
+
+From frohlich at mail.berlios.de  Sun Dec 16 09:13:19 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 16 Dec 2007 09:13:19 +0100
+Subject: [OpenFDM-svn] r349 - trunk/OpenFDM
+Message-ID: <200712160813.lBG8DJAd023080@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-16 09:13:19 +0100 (Sun, 16 Dec 2007)
+New Revision: 349
+
+Modified:
+   trunk/OpenFDM/autogen.sh
+Log:
+Do not remove OpenFDMConfig.h.in
+
+
+Modified: trunk/OpenFDM/autogen.sh
+===================================================================
+--- trunk/OpenFDM/autogen.sh	2007-12-13 19:28:35 UTC (rev 348)
++++ trunk/OpenFDM/autogen.sh	2007-12-16 08:13:19 UTC (rev 349)
+@@ -6,8 +6,8 @@
+ ORIGDIR=`pwd`
+ cd $srcdir
+ 
+-rm -f $srcdir/src/OpenFDM/OpenFDMConfig.h.in $srcdir/src/OpenFDM/config.h.in
+-touch $srcdir/src/OpenFDM/OpenFDMConfig.h.in $srcdir/src/OpenFDM/config.h.in
++#rm -f $srcdir/src/OpenFDM/config.h.in
++#touch $srcdir/src/OpenFDM/config.h.in
+ # libtoolize
+ # aclocal
+ # autoconf
+
+
+
+From frohlich at mail.berlios.de  Sun Dec 16 09:14:37 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 16 Dec 2007 09:14:37 +0100
+Subject: [OpenFDM-svn] r350 - in trunk/OpenFDM: . src/OpenFDM
+Message-ID: <200712160814.lBG8EblF023114@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-12-16 09:14:37 +0100 (Sun, 16 Dec 2007)
+New Revision: 350
+
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+Small build system updates.
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2007-12-16 08:13:19 UTC (rev 349)
++++ trunk/OpenFDM/configure.ac	2007-12-16 08:14:37 UTC (rev 350)
+@@ -126,8 +126,8 @@
+ 
+ dnl write makefiles and config.h
+ AM_CONFIG_HEADER([src/OpenFDM/config.h])
++AC_CONFIG_FILES([src/OpenFDM/OpenFDMConfig.h])
+ AC_OUTPUT([
+-  src/OpenFDM/OpenFDMConfig.h
+   Makefile
+   src/Makefile
+   src/OpenFDM/Makefile
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2007-12-16 08:13:19 UTC (rev 349)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2007-12-16 08:14:37 UTC (rev 350)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_OpenFDMConfig_H
+ #define OpenFDM_OpenFDMConfig_H
+ 
++#define OpenFDM_VERSION_STRING "@PACKAGE_VERSION@"
++
+ #if defined(__GNUC__) && (4 <= __GNUC__) && (1 <= __GNUC_MINOR__)
+ #define OpenFDM_DEPRECATED __attribute__ ((deprecated))
+ #else
+
+
+

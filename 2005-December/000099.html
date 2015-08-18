@@ -1,0 +1,435 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r115 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r115%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512231848.jBNImBBt010053%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000098.html">
+   <LINK REL="Next"  HREF="000100.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r115 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r115%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512231848.jBNImBBt010053%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r115 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Dec 23 19:48:11 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000098.html">[OpenFDM-svn] r114 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000100.html">[OpenFDM-svn] r116 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#99">[ date ]</a>
+              <a href="thread.html#99">[ thread ]</a>
+              <a href="subject.html#99">[ subject ]</a>
+              <a href="author.html#99">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-23 19:48:01 +0100 (Fri, 23 Dec 2005)
+New Revision: 115
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+   trunk/OpenFDM/src/OpenFDM/Mass.cpp
+   trunk/OpenFDM/src/OpenFDM/Mass.h
+   trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+Log:
+Make Mass an Interact
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-23 18:48:01 UTC (rev 115)
+@@ -707,7 +707,7 @@
+     spi += inertiaFrom(structToBody(it-&gt;first), inertia);
+     ++it;
+   }
+-  mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(new Mass(spi));
++  mVehicle-&gt;getTopBody()-&gt;addInteract2(new Mass(spi));
+ 
+   // Attach the eye point.
+   FreeFrame* epFrame = new FreeFrame(&quot;Eyepoint Frame&quot;);
+@@ -738,7 +738,7 @@
+ {
+   RigidBody* wheel = new RigidBody(name + &quot; Wheel&quot;);
+   InertiaMatrix wheelInertia(10, 0, 0, 100, 0, 10);
+-  wheel-&gt;addMultiBodyModel(new Mass(SpatialInertia(wheelInertia, 50)));
++  wheel-&gt;addInteract2(new Mass(SpatialInertia(wheelInertia, 50)));
+   parent-&gt;addChildFrame(wheel);
+   mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(wheel);
+   
+@@ -929,7 +929,7 @@
+       RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+       mVehicle-&gt;getTopBody()-&gt;addChildFrame(arm);
+-      arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
++      arm-&gt;addInteract2(new Mass(inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
+ 
+       // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+@@ -1047,7 +1047,7 @@
+       RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+       strutParent-&gt;addChildFrame(arm);
+-      arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
++      arm-&gt;addInteract2(new Mass(inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
+ 
+       // This time it is a prismatic joint
+       PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-23 18:48:01 UTC (rev 115)
+@@ -26,7 +26,6 @@
+   Interact(const std::string&amp; name, unsigned numParents);
+   virtual ~Interact(void);
+ 
+-
+   /// Double dispatch helper for the multibody system visitor
+   virtual void accept(Visitor&amp; visitor);
+   /// Double dispatch helper for the multibody system visitor
+@@ -37,6 +36,8 @@
+   virtual void traverse(ConstVisitor&amp; visitor) const;
+ 
+ 
++
++
+   bool attachTo(RigidBody* rigidBody);
+   bool detachFrom(RigidBody* rigidBody);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Mass.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mass.cpp	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/Mass.cpp	2005-12-23 18:48:01 UTC (rev 115)
+@@ -2,15 +2,13 @@
+  *
+  */
+ 
+-#include &quot;Frame.h&quot;
+ #include &quot;Mass.h&quot;
+-#include &quot;Visitor.h&quot;
+-#include &quot;ConstVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-Mass::Mass(const SpatialInertia&amp; inertia, const std::string&amp; name)
+-  : MultiBodyModel(name), _inertia(inertia)
++Mass::Mass(const SpatialInertia&amp; inertia, const std::string&amp; name) :
++  Interact(name, 1),
++  mInertia(inertia)
+ {
+ }
+ 
+@@ -19,51 +17,27 @@
+ }
+ 
+ void
+-Mass::accept(Visitor&amp; visitor)
++Mass::interactWith(RigidBody* rigidBody)
+ {
+-  visitor.apply(*this);
++  rigidBody-&gt;contributeLocalInertia(mInertia);
+ }
+ 
+ void
+-Mass::accept(ConstVisitor&amp; visitor) const
+-{
+-  visitor.apply(*this);
+-}
+-
+-Mass*
+-Mass::toMass(void)
+-{
+-  return this;
+-}
+-
+-const Mass*
+-Mass::toMass(void) const
+-{
+-  return this;
+-}
+-
+-void
+ Mass::setInertia(real_type mass)
+ {
+-  _inertia = SpatialInertia(mass);
++  mInertia = SpatialInertia(mass);
+ }
+ 
+ void
+ Mass::setInertia(real_type mass, const InertiaMatrix&amp; inertia)
+ {
+-  _inertia = SpatialInertia(inertia, mass);
++  mInertia = SpatialInertia(inertia, mass);
+ }
+ 
+ void
+ Mass::setInertia(const SpatialInertia&amp; I)
+ {
+-  _inertia = I;
++  mInertia = I;
+ }
+ 
+-void
+-Mass::contributeInertia(SpatialInertia&amp; I) const
+-{
+-  I += _inertia;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Mass.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mass.h	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/Mass.h	2005-12-23 18:48:01 UTC (rev 115)
+@@ -5,31 +5,22 @@
+ #ifndef OpenFDM_Mass_H
+ #define OpenFDM_Mass_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;MultiBodyModel.h&quot;
++#include &quot;Interact.h&quot;
+ #include &quot;Inertia.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Visitor;
+-class ConstVisitor;
+-
+-class Mass
+-  : public MultiBodyModel {
+-  OpenFDM_NodeImplementation(1);
++class Mass :
++    public Interact {
+ public:
+   Mass(const SpatialInertia&amp; inertia = SpatialInertia(0),
+        const std::string&amp; name = std::string());
+   virtual ~Mass(void);
+ 
+-  virtual void accept(Visitor&amp; visitor);
+-  virtual void accept(ConstVisitor&amp; visitor) const;
++  virtual void interactWith(RigidBody* rigidBody);
+ 
+-  virtual Mass* toMass(void);
+-  virtual const Mass* toMass(void) const;
+-
+   const SpatialInertia&amp; getInertia(void) const
+-  { return _inertia; }
++  { return mInertia; }
+ 
+   /** Set the local spatial inertia.
+       @param mass mass in kg.
+@@ -55,11 +46,8 @@
+    */
+   void setInertia(const SpatialInertia&amp; I);
+ 
+-  // More efficient getter. ??
+-  void contributeInertia(SpatialInertia&amp; I) const;
+-
+ private:
+-  SpatialInertia _inertia;
++  SpatialInertia mInertia;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodyModel.cpp	2005-12-23 18:48:01 UTC (rev 115)
+@@ -40,18 +40,6 @@
+ {
+ }
+ 
+-Mass*
+-MultiBodyModel::toMass(void)
+-{
+-  return 0;
+-}
+-
+-const Mass*
+-MultiBodyModel::toMass(void) const
+-{
+-  return 0;
+-}
+-
+ Joint*
+ MultiBodyModel::toJoint(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodyModel.h	2005-12-23 18:48:01 UTC (rev 115)
+@@ -12,7 +12,6 @@
+ namespace OpenFDM {
+ 
+ class Frame;
+-class Mass;
+ class Joint;
+ class Visitor;
+ class ConstVisitor;
+@@ -29,9 +28,6 @@
+   virtual void accept(ConstVisitor&amp; visitor) const;
+   virtual void traverse(ConstVisitor&amp; visitor) const;
+ 
+-  virtual Mass* toMass(void);
+-  virtual const Mass* toMass(void) const;
+-
+   virtual Joint* toJoint(void);
+   virtual const Joint* toJoint(void) const;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-23 18:48:01 UTC (rev 115)
+@@ -56,10 +56,6 @@
+   InteractList::iterator it;
+   for (it = mInteracts.begin(); it != mInteracts.end(); ++it)
+     (*it)-&gt;accept(visitor);
+-//     MassList::iterator it;
+-//     for (it = mMasses.begin(); it != mMasses.end(); ++it)
+-//       (*it)-&gt;accept(visitor);
+-  
+   Frame::traverse(visitor);
+ }
+ 
+@@ -69,9 +65,6 @@
+   InteractList::const_iterator it;
+   for (it = mInteracts.begin(); it != mInteracts.end(); ++it)
+     (*it)-&gt;accept(visitor);
+-//     MassList::const_iterator it;
+-//     for (it = mMasses.begin(); it != mMasses.end(); ++it)
+-//       (*it)-&gt;accept(visitor);
+   Frame::traverse(visitor);
+ }
+ 
+@@ -83,28 +76,11 @@
+ 
+   // At first this is the inertia matrix of the current body.
+   mArtInertia = SpatialInertia::zeros();
++  mArtForce = Vector6::zeros();
+ 
++  // Now collect all articulated forces and all articulated inertias.
+   unsigned n = getNumMultiBodyModels();
+   for (unsigned i = 0; i &lt; n; ++i) {
+-    Mass* child = getMultiBodyModel(i)-&gt;toMass();
+-    if (child) {
+-      Log(ArtBody, Debug) &lt;&lt; &quot;Adding local mass \&quot;&quot; &lt;&lt; child-&gt;getName()
+-                          &lt;&lt; &quot;\&quot; to body \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      mArtInertia += child-&gt;getInertia();
+-    }
+-  }
+-  
+-
+-  // 
+-  Vector6 iv = getSpVel();
+-  Vector6 Jiv = mArtInertia*iv;
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;Spatial velocity is &quot; &lt;&lt; trans(iv) &lt;&lt; endl;
+-  mArtForce = Vector6(cross(iv.getAngular(), Jiv.getAngular()) +
+-                      cross(iv.getLinear(), Jiv.getLinear()),
+-                      cross(iv.getAngular(), Jiv.getLinear()));
+-
+-  // Now collect all articulated forces and all articulated inertias.
+-  for (unsigned i = 0; i &lt; n; ++i) {
+     Joint* joint = getMultiBodyModel(i)-&gt;toJoint();
+     if (joint) {
+       Log(ArtBody, Debug) &lt;&lt; &quot;Processing joint \&quot;&quot; &lt;&lt; joint-&gt;getName()
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-23 17:48:36 UTC (rev 114)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-23 18:48:01 UTC (rev 115)
+@@ -82,16 +82,24 @@
+   Vector6 getPAlpha(void) const
+   { return mArtForce + mArtInertia*getHdot(); }
+ 
+-  /**
+-   */
++  /// Contribute articulated force
+   void contributeForce(const Vector6&amp; force)
+   { mArtForce += force; }
+ 
+-  /**
+-   */
++  /// Contribute articulated inertia
+   void contributeInertia(const SpatialInertia&amp; inertia)
+   { mArtInertia += inertia; }
+ 
++  /// Contribute the articulated inertia and force of a local Mass object
++  void contributeLocalInertia(const SpatialInertia&amp; inertia)
++  {
++    Vector6 iv = getFrame()-&gt;getSpVel();
++    Vector6 Jiv = inertia*iv;
++    mArtForce += Vector6(cross(iv.getAngular(), Jiv.getAngular()) +
++                         cross(iv.getLinear(), Jiv.getLinear()),
++                         cross(iv.getAngular(), Jiv.getLinear()));
++    mArtInertia += inertia;
++  }
+ 
+   /** Introduce an interface routine
+    */
+@@ -107,14 +115,15 @@
+   void addInteract(Interact* interact);
+   bool removeInteract(Interact* interact);
+ 
+-  /** Outboard articulated inertia.
+-   */
++  /// Outboard articulated inertia
+   SpatialInertia mArtInertia;
+ 
+-  /** Outboard articulated force.
+-   */
++  /// Outboard articulated force
+   Vector6 mArtForce;
+ 
++  /// Local inertia, needs to be set up at each cycle!?
++//   SpatialInertia mLocalInertia;
++
+   /// Frame attached to this rigid body
+ //   SharedPtr&lt;Frame&gt; mFrame;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000098.html">[OpenFDM-svn] r114 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000100.html">[OpenFDM-svn] r116 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#99">[ date ]</a>
+              <a href="thread.html#99">[ thread ]</a>
+              <a href="subject.html#99">[ subject ]</a>
+              <a href="author.html#99">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,204 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r606 - in	branches/OpenFDM-StateSeparation/src/OpenFDM: . LinAlg
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r606%20-%20in%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM%3A%20.%20LinAlg&In-Reply-To=%3C200810130438.m9D4cZwx015213%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000575.html">
+   <LINK REL="Next"  HREF="000577.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r606 - in	branches/OpenFDM-StateSeparation/src/OpenFDM: . LinAlg</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r606%20-%20in%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM%3A%20.%20LinAlg&In-Reply-To=%3C200810130438.m9D4cZwx015213%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r606 - in	branches/OpenFDM-StateSeparation/src/OpenFDM: . LinAlg">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Oct 13 06:38:35 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000575.html">[OpenFDM-svn] r605 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000577.html">[OpenFDM-svn] r607 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#576">[ date ]</a>
+              <a href="thread.html#576">[ thread ]</a>
+              <a href="subject.html#576">[ subject ]</a>
+              <a href="author.html#576">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-13 06:38:33 +0200 (Mon, 13 Oct 2008)
+New Revision: 606
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Vector.h
+Log:
+Add state to the root joint.
+
+M    Vector.h
+M    LinAlg/Container.h
+M    MatrixStateInfo.h
+M    MobileRootJoint.h
+M    MobileRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h	2008-10-13 04:21:12 UTC (rev 605)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h	2008-10-13 04:38:33 UTC (rev 606)
+@@ -850,6 +850,37 @@
+ };
+ 
+ template&lt;typename T&gt;
++class Vector1
++  : public Vector&lt;T,1&gt; {
++public:
++  OpenFDM_FORCE_INLINE
++  Vector1(void)
++  { }
++  OpenFDM_FORCE_INLINE
++  Vector1(T v1)
++  { (*this)(0) = v1; }
++  OpenFDM_FORCE_INLINE
++  Vector1(const Vector1&amp; v)
++    : Vector&lt;T,1&gt;(v)
++  { }
++  template&lt;typename Impl, size_type m, size_type n&gt;
++  OpenFDM_FORCE_INLINE
++  Vector1(const MatrixRValue&lt;Impl,m,n&gt;&amp; A)
++    : Vector&lt;T,1&gt;(A)
++  { }
++  OpenFDM_FORCE_INLINE
++  ~Vector1(void)
++  { }
++
++  OpenFDM_FORCE_INLINE
++  const real_type&amp; x(void) const
++  { return Vector&lt;T,1&gt;::operator()(0); }
++  OpenFDM_FORCE_INLINE
++  real_type&amp; x(void)
++  { return Vector&lt;T,1&gt;::operator()(0); }
++};
++
++template&lt;typename T&gt;
+ class Vector2
+   : public Vector&lt;T,2&gt; {
+ public:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateInfo.h	2008-10-13 04:21:12 UTC (rev 605)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateInfo.h	2008-10-13 04:38:33 UTC (rev 606)
+@@ -13,6 +13,21 @@
+ class MatrixStateInfo : public TemplateContinousStateInfo&lt;Matrix&gt; {
+ };
+ 
++class Vector1StateInfo : public TemplateContinousStateInfo&lt;Vector1&gt; {
++};
++
++class Vector2StateInfo : public TemplateContinousStateInfo&lt;Vector2&gt; {
++};
++
++class Vector3StateInfo : public TemplateContinousStateInfo&lt;Vector3&gt; {
++};
++
++class Vector4StateInfo : public TemplateContinousStateInfo&lt;Vector4&gt; {
++};
++
++class Vector6StateInfo : public TemplateContinousStateInfo&lt;Vector6&gt; {
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-13 04:21:12 UTC (rev 605)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-13 04:38:33 UTC (rev 606)
+@@ -16,8 +16,15 @@
+ namespace OpenFDM {
+ 
+ MobileRootJoint::MobileRootJoint(const std::string&amp; name) :
+-  RootJoint(name)
++  RootJoint(name),
++  mMechanicLink(newMechanicLink(&quot;link&quot;)),
++  mPositionStateInfo(new Vector3StateInfo),
++  mOrientationStateInfo(new Vector4StateInfo),
++  mVelocityStateInfo(new Vector6StateInfo)
+ {
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mOrientationStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
+ }
+ 
+ MobileRootJoint::~MobileRootJoint()
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-13 04:21:12 UTC (rev 605)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-13 04:38:33 UTC (rev 606)
+@@ -31,6 +31,12 @@
+                           const ContinousStateValueVector&amp;,
+                           const PortValueList&amp; portValues,
+                           ContinousStateValueVector&amp;) const;
++private:
++  MechanicLink mMechanicLink;
++
++  SharedPtr&lt;MatrixStateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;MatrixStateInfo&gt; mOrientationStateInfo;
++  SharedPtr&lt;MatrixStateInfo&gt; mVelocityStateInfo;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Vector.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Vector.h	2008-10-13 04:21:12 UTC (rev 605)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Vector.h	2008-10-13 04:38:33 UTC (rev 606)
+@@ -23,6 +23,7 @@
+ using LinAlg::Range;
+ using LinAlg::trans;
+ 
++typedef LinAlg::Vector1&lt;real_type&gt; Vector1;
+ typedef LinAlg::Vector2&lt;real_type&gt; Vector2;
+ typedef LinAlg::Vector3&lt;real_type&gt; Vector3;
+ typedef LinAlg::Vector4&lt;real_type&gt; Vector4;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000575.html">[OpenFDM-svn] r605 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000577.html">[OpenFDM-svn] r607 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#576">[ date ]</a>
+              <a href="thread.html#576">[ thread ]</a>
+              <a href="subject.html#576">[ subject ]</a>
+              <a href="author.html#576">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

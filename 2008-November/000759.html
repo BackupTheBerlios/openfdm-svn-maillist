@@ -1,0 +1,522 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r790 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r790%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811241904.mAOJ4DqI018496%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000758.html">
+   <LINK REL="Next"  HREF="000760.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r790 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r790%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811241904.mAOJ4DqI018496%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r790 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 24 20:04:13 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000758.html">[OpenFDM-svn] r789 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000760.html">[OpenFDM-svn] r791 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#759">[ date ]</a>
+              <a href="thread.html#759">[ thread ]</a>
+              <a href="subject.html#759">[ subject ]</a>
+              <a href="author.html#759">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-24 20:04:12 +0100 (Mon, 24 Nov 2008)
+New Revision: 790
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+Log:
+Simplify design position handling.
+
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/RotationalJoint.cpp
+M    src/OpenFDM/PrismaticJoint.cpp
+M    src/OpenFDM/RevoluteActuator.cpp
+M    src/OpenFDM/RevoluteJoint.cpp
+M    src/OpenFDM/RotationalJoint.h
+M    src/OpenFDM/UniversalJoint.h
+M    src/OpenFDM/PrismaticJoint.h
+M    src/OpenFDM/RevoluteActuator.h
+M    src/OpenFDM/RevoluteJoint.h
+M    src/OpenFDM/UniversalJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -26,6 +26,12 @@
+   typedef LinAlg::Matrix&lt;real_type,n,n&gt; MatrixNN;
+   typedef LinAlg::MatrixFactors&lt;real_type,n,n,LinAlg::LUTag&gt; MatrixFactorsNN;
+ 
++  // Each Cartesian joint has a position that has some kind of invariance
++  const Vector3&amp; getPosition() const
++  { return mPosition; }
++  void setPosition(const Vector3&amp; position)
++  { mPosition = position; }
++
+   virtual MechanicContext*
+   newMechanicContext(const MechanicLinkInfo* parentLink,
+                      const MechanicLinkInfo* childLink,
+@@ -77,7 +83,8 @@
+   CartesianJoint(const std::string&amp; name) :
+     Joint(name),
+     mParentLink(newMechanicLink(&quot;link0&quot;)),
+-    mChildLink(newMechanicLink(&quot;link1&quot;))
++    mChildLink(newMechanicLink(&quot;link1&quot;)),
++    mPosition(0, 0, 0)
+   { }
+   virtual ~CartesianJoint(void)
+   { }
+@@ -182,8 +189,6 @@
+   virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp;, const PortValueList&amp;) const
+   { }
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const = 0;
+   virtual void velocity(const MechanicLinkValue&amp; parentLink,
+                         MechanicLinkValue&amp; childLink,
+                         const ContinousStateValueVector&amp; states,
+@@ -220,7 +225,7 @@
+     
+     virtual void initDesignPosition()
+     {
+-      mCartesianJoint-&gt;initDesignPosition(*mParentLink, *mChildLink);
++      mChildLink-&gt;setDesignPosition(mCartesianJoint-&gt;getPosition());
+     }
+ 
+     bool alloc()
+@@ -276,6 +281,7 @@
+   MechanicLink mChildLink;
+ 
+   Matrix6N mJointMatrix;
++  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-24 19:04:12 UTC (rev 790)
+@@ -28,8 +28,7 @@
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+-  mAxis(Vector3(1, 0, 0)),
+-  mPosition(Vector3(0, 0, 0))
++  mAxis(Vector3(1, 0, 0))
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -63,13 +62,13 @@
+ const Vector3&amp;
+ PrismaticJoint::getPosition() const
+ {
+-  return mPosition;
++  return CartesianJoint&lt;1&gt;::getPosition();
+ }
+ 
+ void
+ PrismaticJoint::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
++  CartesianJoint&lt;1&gt;::setPosition(position);
+ }
+ 
+ void
+@@ -90,13 +89,6 @@
+ }
+ 
+ void
+-PrismaticJoint::initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                   MechanicLinkValue&amp; childLink) const
+-{
+-  childLink.setDesignPosition(mPosition);
+-}
+-
+-void
+ PrismaticJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+@@ -119,7 +111,7 @@
+   if (!mVelocityPort.empty())
+     portValues[mVelocityPort] = jointVel;
+   
+-  Vector3 position = mAxis*jointPos + mPosition - parentLink.getDesignPosition();
++  Vector3 position = mAxis*jointPos + getPosition() - parentLink.getDesignPosition();
+   velocity(parentLink, childLink, position, Quaternion::unit(),
+            getJointMatrix()*jointVel);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -41,8 +41,6 @@
+ 
+ protected:
+ 
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const;
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const;
+@@ -82,7 +80,6 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
+-  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2008-11-24 19:04:12 UTC (rev 790)
+@@ -34,7 +34,6 @@
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+   mAxis(Vector3(1, 0, 0)),
+-  mPosition(Vector3(0, 0, 0)),
+   mVelocityControl(false),
+   mVelGain(1),
+   mVelDotGain(1),
+@@ -72,23 +71,16 @@
+ const Vector3&amp;
+ RevoluteActuator::getPosition() const
+ {
+-  return mPosition;
++  return CartesianJoint&lt;1&gt;::getPosition();
+ }
+ 
+ void
+ RevoluteActuator::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
++  CartesianJoint&lt;1&gt;::setPosition(position);
+ }
+ 
+ void
+-RevoluteActuator::initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                     MechanicLinkValue&amp; childLink) const
+-{
+-  childLink.setDesignPosition(mPosition);
+-}
+-
+-void
+ RevoluteActuator::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                        ContinousStateValueVector&amp; continousState,
+                        const PortValueList&amp;) const
+@@ -111,7 +103,7 @@
+   if (!mVelocityPort.empty())
+     portValues[mVelocityPort] = jointVel;
+   
+-  Vector3 position = mPosition - parentLink.getDesignPosition();
++  Vector3 position = getPosition() - parentLink.getDesignPosition();
+   Quaternion orientation(Quaternion::fromAngleAxis(jointPos(0), mAxis));
+   velocity(parentLink, childLink, position, orientation, getJointMatrix()*jointVel);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -58,8 +58,6 @@
+ 
+ protected:
+ 
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const;
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const;
+@@ -98,7 +96,6 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
+-  Vector3 mPosition;
+   bool mVelocityControl;
+   real_type mVelGain;
+   real_type mVelDotGain;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-24 19:04:12 UTC (rev 790)
+@@ -28,8 +28,7 @@
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+-  mAxis(Vector3(1, 0, 0)),
+-  mPosition(Vector3(0, 0, 0))
++  mAxis(Vector3(1, 0, 0))
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -63,13 +62,13 @@
+ const Vector3&amp;
+ RevoluteJoint::getPosition() const
+ {
+-  return mPosition;
++  return CartesianJoint&lt;1&gt;::getPosition();
+ }
+ 
+ void
+ RevoluteJoint::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
++  CartesianJoint&lt;1&gt;::setPosition(position);
+ }
+ 
+ void
+@@ -90,13 +89,6 @@
+ }
+ 
+ void
+-RevoluteJoint::initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const
+-{
+-  childLink.setDesignPosition(mPosition);
+-}
+-
+-void
+ RevoluteJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+@@ -120,7 +112,7 @@
+     portValues[mVelocityPort] = jointVel;
+ 
+   // FIXME: move that somewhere into the context??
+-  Vector3 position = mPosition - parentLink.getDesignPosition();
++  Vector3 position = getPosition() - parentLink.getDesignPosition();
+   velocity(parentLink, childLink, position,
+            Quaternion::fromAngleAxis(jointPos(0), mAxis),
+            getJointMatrix()*jointVel);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -41,8 +41,6 @@
+ 
+ protected:
+ 
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const;
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const;
+@@ -82,7 +80,6 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
+-  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2008-11-24 19:04:12 UTC (rev 790)
+@@ -26,8 +26,7 @@
+   mOrientationPort(this, &quot;orientation&quot;, Size(4, 1)),
+   mVelocityPort(this, &quot;velocity&quot;, Size(3, 1)),
+   mPositionStateInfo(new Vector4StateInfo),
+-  mVelocityStateInfo(new Vector3StateInfo),
+-  mPosition(0, 0, 0)
++  mVelocityStateInfo(new Vector3StateInfo)
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -46,13 +45,13 @@
+ const Vector3&amp;
+ RotationalJoint::getPosition() const
+ {
+-  return mPosition;
++  return CartesianJoint&lt;3&gt;::getPosition();
+ }
+ 
+ void
+ RotationalJoint::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
++  CartesianJoint&lt;3&gt;::setPosition(position);
+ }
+ 
+ void
+@@ -73,13 +72,6 @@
+ }
+ 
+ void
+-RotationalJoint::initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const
+-{
+-  childLink.setDesignPosition(mPosition);
+-}
+-
+-void
+ RotationalJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+@@ -102,7 +94,7 @@
+   if (!mVelocityPort.empty())
+     portValues[mVelocityPort] = jointVel;
+   
+-  Vector3 position = mPosition - parentLink.getDesignPosition();
++  Vector3 position = getPosition() - parentLink.getDesignPosition();
+   velocity(parentLink, childLink, position,
+            orientation, getJointMatrix()*jointVel);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -38,8 +38,6 @@
+ 
+ protected:
+ 
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const;
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const;
+@@ -76,8 +74,6 @@
+ 
+   SharedPtr&lt;Vector4StateInfo&gt; mPositionStateInfo;
+   SharedPtr&lt;Vector3StateInfo&gt; mVelocityStateInfo;
+-
+-  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-24 19:04:12 UTC (rev 790)
+@@ -28,8 +28,7 @@
+   mVelocityPort(this, &quot;velocity&quot;, Size(2, 1)),
+   mPositionStateInfo(new Vector3StateInfo),
+   mVelocityStateInfo(new Vector2StateInfo),
+-  mAxis(Vector3(1, 0, 0)),
+-  mPosition(0, 0, 0)
++  mAxis(Vector3(1, 0, 0))
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -71,13 +70,13 @@
+ const Vector3&amp;
+ UniversalJoint::getPosition() const
+ {
+-  return mPosition;
++  return CartesianJoint&lt;2&gt;::getPosition();
+ }
+ 
+ void
+ UniversalJoint::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
++  CartesianJoint&lt;2&gt;::setPosition(position);
+ }
+ 
+ void
+@@ -98,13 +97,6 @@
+ }
+ 
+ void
+-UniversalJoint::initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const
+-{
+-  childLink.setDesignPosition(mPosition);
+-}
+-
+-void
+ UniversalJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+@@ -130,7 +122,7 @@
+   if (!mVelocityPort.empty())
+     portValues[mVelocityPort] = jointVel;
+   
+-  Vector3 position = mPosition - parentLink.getDesignPosition();
++  Vector3 position = getPosition() - parentLink.getDesignPosition();
+   velocity(parentLink, childLink, position,
+            orientation, getJointMatrix()*jointVel);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-24 17:46:39 UTC (rev 789)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-24 19:04:12 UTC (rev 790)
+@@ -41,8 +41,6 @@
+ 
+ protected:
+ 
+-  virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+-                                  MechanicLinkValue&amp; childLink) const;
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const;
+@@ -82,7 +80,6 @@
+   SharedPtr&lt;Vector2StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
+-  Vector3 mPosition;
+   Quaternion mOrientation;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000758.html">[OpenFDM-svn] r789 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000760.html">[OpenFDM-svn] r791 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#759">[ date ]</a>
+              <a href="thread.html#759">[ thread ]</a>
+              <a href="subject.html#759">[ subject ]</a>
+              <a href="author.html#759">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

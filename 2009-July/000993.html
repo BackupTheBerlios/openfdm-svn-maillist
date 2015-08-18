@@ -1,0 +1,158 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1030%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200907262142.n6QLgmKC011687%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000992.html">
+   <LINK REL="Next"  HREF="000994.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1030%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200907262142.n6QLgmKC011687%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jul 26 23:42:48 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000992.html">[OpenFDM-svn] r1029 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000994.html">[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#993">[ date ]</a>
+              <a href="thread.html#993">[ thread ]</a>
+              <a href="subject.html#993">[ subject ]</a>
+              <a href="author.html#993">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-26 23:42:48 +0200 (Sun, 26 Jul 2009)
+New Revision: 1030
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+Log:
+Make use of the aerodanymic model classes.
+
+M    ballistic.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-07-26 21:41:41 UTC (rev 1029)
++++ branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-07-26 21:42:48 UTC (rev 1030)
+@@ -1,4 +1,5 @@
+ #include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/InternalInteract.h&gt;
+ #include &lt;OpenFDM/LinearSpringDamper.h&gt;
+@@ -10,6 +11,11 @@
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+ 
++#include &lt;OpenFDM/DynamicPressure.h&gt;
++#include &lt;OpenFDM/MachNumber.h&gt;
++#include &lt;OpenFDM/WindAxis.h&gt;
++#include &lt;OpenFDM/WindAxisForce.h&gt;
++
+ using namespace OpenFDM;
+ 
+ Node* buildBallistic()
+@@ -40,6 +46,61 @@
+   group-&gt;connect(rigidBody-&gt;getPort(&quot;externalInteractLink&quot;),
+                  externalInteract-&gt;getPort(&quot;link&quot;));
+ 
++  DynamicPressure* dynamicPressure = new DynamicPressure(&quot;DynamicPressure&quot;);
++  group-&gt;addChild(dynamicPressure);
++
++  group-&gt;connect(externalInteract-&gt;getPort(&quot;bodyWindVelocity&quot;),
++                 dynamicPressure-&gt;getPort(&quot;velocity&quot;));
++  group-&gt;connect(externalInteract-&gt;getPort(&quot;density&quot;),
++                 dynamicPressure-&gt;getPort(&quot;density&quot;));
++
++
++  MachNumber* machNumber = new MachNumber(&quot;MachNumber&quot;);
++  group-&gt;addChild(machNumber);
++
++  group-&gt;connect(externalInteract-&gt;getPort(&quot;bodyWindVelocity&quot;),
++                 machNumber-&gt;getPort(&quot;velocity&quot;));
++  group-&gt;connect(externalInteract-&gt;getPort(&quot;soundSpeed&quot;),
++                 machNumber-&gt;getPort(&quot;soundSpeed&quot;));
++
++
++  WindAxis* windAxis = new WindAxis(&quot;WindAxis&quot;);
++  group-&gt;addChild(windAxis);
++
++  group-&gt;connect(externalInteract-&gt;getPort(&quot;bodyWindVelocity&quot;),
++                 windAxis-&gt;getPort(&quot;bodyVelocity&quot;));
++
++
++  WindAxisForce* windAxisForce = new WindAxisForce(&quot;WindAxisForce&quot;);
++  group-&gt;addChild(windAxisForce);
++
++  group-&gt;connect(windAxis-&gt;getPort(&quot;alpha&quot;),
++                 windAxisForce-&gt;getPort(&quot;alpha&quot;));
++  group-&gt;connect(windAxis-&gt;getPort(&quot;beta&quot;),
++                 windAxisForce-&gt;getPort(&quot;beta&quot;));
++
++  externalInteract-&gt;setEnableBodyForce(true);
++  group-&gt;connect(windAxisForce-&gt;getPort(&quot;bodyForce&quot;),
++                 externalInteract-&gt;getPort(&quot;bodyForce&quot;));
++
++  ConstModel* zeroConst = new ConstModel(&quot;ConstModel 0&quot;);
++  group-&gt;addChild(zeroConst);
++
++  group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
++                 windAxisForce-&gt;getPort(&quot;side&quot;));
++  group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
++                 windAxisForce-&gt;getPort(&quot;lift&quot;));
++
++  Gain* dragCoeficient = new Gain(&quot;Drag Coeficient&quot;);
++  dragCoeficient-&gt;setGain(0.01);
++  group-&gt;addChild(dragCoeficient);
++
++  group-&gt;connect(dragCoeficient-&gt;getPort(&quot;input&quot;),
++                 dynamicPressure-&gt;getPort(&quot;dynamicPressure&quot;));
++
++  group-&gt;connect(dragCoeficient-&gt;getPort(&quot;output&quot;),
++                 windAxisForce-&gt;getPort(&quot;drag&quot;));
++
+   return group.release();
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000992.html">[OpenFDM-svn] r1029 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000994.html">[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#993">[ date ]</a>
+              <a href="thread.html#993">[ thread ]</a>
+              <a href="subject.html#993">[ subject ]</a>
+              <a href="author.html#993">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

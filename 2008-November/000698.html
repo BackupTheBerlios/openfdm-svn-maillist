@@ -1,0 +1,292 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r729 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r729%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811160736.mAG7ajom004784%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000697.html">
+   <LINK REL="Next"  HREF="000699.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r729 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r729%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811160736.mAG7ajom004784%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r729 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 16 08:36:45 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000697.html">[OpenFDM-svn] r728 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000699.html">[OpenFDM-svn] r730 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#698">[ date ]</a>
+              <a href="thread.html#698">[ thread ]</a>
+              <a href="subject.html#698">[ subject ]</a>
+              <a href="author.html#698">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-16 08:36:45 +0100 (Sun, 16 Nov 2008)
+New Revision: 729
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Try to implement propper model sorting in face of mechanic models.
+
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-13 06:14:53 UTC (rev 728)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-16 07:36:45 UTC (rev 729)
+@@ -113,15 +113,15 @@
+   }
+ 
+   void appendModelContext(const SampleTime&amp; sampleTime,
+-                          ModelContext* modelContext)
++                          ModelContext* modelContext, unsigned listIndex)
+   {
+     // The init task contains them all
+-    mInitTask-&gt;mModelContextList[0].push_back(modelContext);
++    mInitTask-&gt;mModelContextList[listIndex].push_back(modelContext);
+     
+     // for now continous tasks take also all of them
+     mContinousTask-&gt;appendStateValuesFromLeafContext(*modelContext);
+     if (sampleTime.isContinous())
+-      mContinousTask-&gt;mModelContextList[0].push_back(modelContext);
++      mContinousTask-&gt;mModelContextList[listIndex].push_back(modelContext);
+ 
+     // Discrete tasks need special treatment
+     if (sampleTime.isDiscrete()) {
+@@ -129,6 +129,7 @@
+       for (unsigned i = 0; i &lt; mDiscreteTaskList.size(); ++i) {
+         if (!equal(mDiscreteTaskList[i]-&gt;getStepsize(), realSampleTime))
+           continue;
++        // FIXME: is this true??? No model index here??
+         mDiscreteTaskList[i]-&gt;mModelContextList.push_back(modelContext);
+         break;
+       }
+@@ -899,6 +900,8 @@
+   NodeInstanceDataList mNodeInstanceDataList;
+   // The Models list, worthwhile for sorting
+   ModelInstanceDataList mModelInstanceDataList;
++  ModelInstanceDataList mVelocityModelInstanceDataList;
++  ModelInstanceDataList mAccelerationModelInstanceDataList;
+   // The mechanical system list, also for sorting
+   MechanicInstanceDataList mMechanicInstanceDataList;
+ 
+@@ -928,7 +931,7 @@
+   // to simulate the system.
+   AbstractSystem* buildSystem()
+   {
+-    // The MechanicNode instances are sorted to match the direct input property
++    // Build the spanning tree for the mechanic system
+     if (!sortMechanicList())
+       return 0;
+     // The model instances are sorted to match the direct input property
+@@ -956,9 +959,21 @@
+     for (i = mModelInstanceDataList.begin();
+          i != mModelInstanceDataList.end(); ++i) {
+       discreteSystem-&gt;appendModelContext((*i)-&gt;getSampleTime(),
+-                                         (*i)-&gt;getModelContext());
++                                         (*i)-&gt;getModelContext(), 0);
+     }
+ 
++    for (i = mVelocityModelInstanceDataList.begin();
++         i != mVelocityModelInstanceDataList.end(); ++i) {
++      discreteSystem-&gt;appendModelContext((*i)-&gt;getSampleTime(),
++                                         (*i)-&gt;getModelContext(), 1);
++    }
++
++    for (i = mAccelerationModelInstanceDataList.begin();
++         i != mAccelerationModelInstanceDataList.end(); ++i) {
++      discreteSystem-&gt;appendModelContext((*i)-&gt;getSampleTime(),
++                                         (*i)-&gt;getModelContext(), 2);
++    }
++
+     MechanicInstanceDataList::const_iterator j;
+     for (j = mMechanicInstanceDataList.begin();
+          j != mMechanicInstanceDataList.end(); ++j) {
+@@ -1070,14 +1085,126 @@
+     return true;
+   }
+ 
+-  // method to sort the leafs according to their dependency
++  bool isDirectVelocityDependent(ModelInstanceData&amp; modelInstanceData)
++  {
++    MechanicInstanceDataList::iterator i = mMechanicInstanceDataList.begin();
++    for (; i != mMechanicInstanceDataList.end(); ++i) {
++      if (modelInstanceData.dependsOn(*(*i), false))
++        return true;
++      if (modelInstanceData.dependsOn(*(*i), true))
++        return true;
++    }
++    return false;
++  }
++
++  bool isDirectForceModel(ModelInstanceData&amp; modelInstanceData)
++  {
++    MechanicInstanceDataList::iterator i = mMechanicInstanceDataList.begin();
++    for (; i != mMechanicInstanceDataList.end(); ++i) {
++      if ((*i)-&gt;dependsOn(modelInstanceData))
++        return true;
++    }
++    return false;
++  }
++
++  void
++  getVelocityDependentModels(ModelInstanceDataList&amp; velocityDependentModels)
++  {
++    // find all models that are dependent on the mechanic systems velocities
++    ModelInstanceDataList::iterator i = mModelInstanceDataList.begin();
++    while (i != mModelInstanceDataList.end()) {
++      if (isDirectVelocityDependent(*(*i))) {
++        velocityDependentModels.push_back(*i);
++        i = mModelInstanceDataList.erase(i);
++      } else {
++        ++i;
++      }
++    }
++
++    for (i = velocityDependentModels.begin();
++         i != velocityDependentModels.end(); ++i) {
++
++      ModelInstanceDataList::iterator j = mModelInstanceDataList.begin();
++      while (j != mModelInstanceDataList.end()) {
++        if ((*j)-&gt;dependsOn(*(*i))) {
++          velocityDependentModels.push_back(*j);
++          j = mModelInstanceDataList.erase(j);
++        } else {
++          ++j;
++        }
++      }
++    }
++  }
++
++  void splitForceModels(ModelInstanceDataList&amp; velocityDependentModels,
++                        ModelInstanceDataList&amp; forceModelList)
++  {
++    ModelInstanceDataList::iterator i = velocityDependentModels.begin();
++    while (i != velocityDependentModels.end()) {
++      if (isDirectForceModel(*(*i))) {
++        forceModelList.push_back(*i);
++        i = velocityDependentModels.erase(i);
++      } else {
++        ++i;
++      }
++    }
++
++    for (i = forceModelList.begin();
++         i != forceModelList.end(); ++i) {
++
++      ModelInstanceDataList::iterator j = velocityDependentModels.begin();
++      while (j != velocityDependentModels.end()) {
++        if ((*i)-&gt;dependsOn(*(*j))) {
++          forceModelList.push_back(*j);
++          j = velocityDependentModels.erase(j);
++        } else {
++          ++j;
++        }
++      }
++    }
++  }
++
+   bool sortModelList()
+   {
++    // How to sort:
++    //  * First split out all velocity dependent models.
++    //  * build up a usual sorted list of models
++    //  * Go from the back of this list and push all models in the acceleration
++    //    list when it is not needed for the forces (?? does not work ??)
++    //    (hmm, alternatively build the force list by walking back the velocity
++    //     list and pulling out all chains that depend on force.
++    //     The old velocity list is than the acceleration one??)
++    //  * Check the resulting velocity list for dependency on acceleration
++    
++    // get the list of models that depend on the mechnic systems velocity or
++    // acceleration
++    getVelocityDependentModels(mAccelerationModelInstanceDataList);
++
++    // Seperate out those models that are really required for forces
++    splitForceModels(mAccelerationModelInstanceDataList,
++                     mVelocityModelInstanceDataList);
++
++    // Sort that lists according to the usual rules
++    if (!sortModelList(mModelInstanceDataList))
++      return false;
++
++    if (!sortModelList(mVelocityModelInstanceDataList))
++      return false;
++
++    if (!sortModelList(mAccelerationModelInstanceDataList))
++      return false;
++
++    return true;
++  }
++
++  // method to sort the leafs according to their dependency
++  bool sortModelList(ModelInstanceDataList&amp; modelInstanceDataList)
++  {
+     ModelInstanceDataList sortedModelInstanceDataList;
+-    while (!mModelInstanceDataList.empty()) {
++    while (!modelInstanceDataList.empty()) {
+       SharedPtr&lt;ModelInstanceData&gt; modelInstanceData;
+-      modelInstanceData = mModelInstanceDataList.front();
+-      mModelInstanceDataList.pop_front();
++      modelInstanceData = modelInstanceDataList.front();
++      modelInstanceDataList.pop_front();
+ 
+       if (modelInstanceData-&gt;dependsOn(*modelInstanceData)) {
+         Log(Schedule, Warning)
+@@ -1128,11 +1255,11 @@
+         }
+       }
+     }
+-    mModelInstanceDataList.swap(sortedModelInstanceDataList);
++    modelInstanceDataList.swap(sortedModelInstanceDataList);
+ 
+     Log(Schedule,Info) &lt;&lt; &quot;Model Schedule&quot; &lt;&lt; std::endl;
+-    ModelInstanceDataList::iterator i = mModelInstanceDataList.begin();
+-    for (; i != mModelInstanceDataList.end(); ++i) {
++    ModelInstanceDataList::iterator i = modelInstanceDataList.begin();
++    for (; i != modelInstanceDataList.end(); ++i) {
+       Log(Schedule,Info)
+         &lt;&lt; &quot;  Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000697.html">[OpenFDM-svn] r728 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000699.html">[OpenFDM-svn] r730 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#698">[ date ]</a>
+              <a href="thread.html#698">[ thread ]</a>
+              <a href="subject.html#698">[ subject ]</a>
+              <a href="author.html#698">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

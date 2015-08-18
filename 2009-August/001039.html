@@ -1,0 +1,138 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1080 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1080%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908081415.n78EFNAm023252%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001038.html">
+   <LINK REL="Next"  HREF="001040.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1080 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1080%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908081415.n78EFNAm023252%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1080 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug  8 16:15:23 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001038.html">[OpenFDM-svn] r1079 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001040.html">[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1039">[ date ]</a>
+              <a href="thread.html#1039">[ thread ]</a>
+              <a href="subject.html#1039">[ subject ]</a>
+              <a href="author.html#1039">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-08 16:15:23 +0200 (Sat, 08 Aug 2009)
+New Revision: 1080
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Prepare for more tags.
+
+M    JSBSimReader.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-08 13:08:07 UTC (rev 1079)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-08 14:15:23 UTC (rev 1080)
+@@ -344,12 +344,28 @@
+       return error(&quot;Cannot convert ground_reactions&quot;);
+   }
+ 
++  // external_reactions - neat
++  const XMLElement* externalReactionsElem = topElem-&gt;getElement(&quot;external_reactions&quot;);
++  if (externalReactionsElem) {
++    std::cout &lt;&lt; &quot;Ignoring external_reactions section&quot; &lt;&lt; std::endl;
++//     if (!convertGroundReactionsElem(groundReactionsElem))
++//       return error(&quot;Cannot convert ground_reactions&quot;);
++  }
++
+   // Parse the propulsion section.
+   const XMLElement* propulsionElem = topElem-&gt;getElement(&quot;propulsion&quot;);
+   if (propulsionElem) {
+     if (!convertPropulsion(propulsionElem))
+       return error(&quot;Cannot convert propulsion data&quot;);
+   }
++
++  // Include the system tags.
++  std::list&lt;const XMLElement*&gt; systemElems = topElem-&gt;getElements(&quot;system&quot;);
++  if (!systemElems.empty()) {
++    std::cout &lt;&lt; &quot;Ignoring system sections&quot; &lt;&lt; std::endl;
++//     if (!convertPropulsion(propulsionElem))
++//       return error(&quot;Cannot convert propulsion data&quot;);
++  }
+   
+   // Convert the aerodynamic force.
+   const XMLElement* aeroElem = topElem-&gt;getElement(&quot;aerodynamics&quot;);
+@@ -1518,9 +1534,30 @@
+ 
+     out = model-&gt;getPort(&quot;output&quot;);
+ 
++  } else if (type == &quot;FCS_FUNCTION&quot; || type == &quot;fcs_function&quot;) {
++    SharedPtr&lt;Summer&gt; summer = new Summer(name);
++    addFCSModel(summer);
++    
++    if (!convertFunction(fcsComponent-&gt;getElement(&quot;function&quot;), summer))
++      return error(&quot;could not read fcs_function \&quot;&quot; + name + &quot;\&quot;&quot;);
++    model = summer;
++    out = summer-&gt;getOutputPort();
++
++  } else if (type == &quot;PID&quot; || type == &quot;pid&quot;) {
++    std::cout &lt;&lt; &quot;Ignoring PID&quot; &lt;&lt; std::endl;
++
++  } else if (type == &quot;PROPERTY&quot; || type == &quot;property&quot;) {
++    std::cout &lt;&lt; &quot;Ignoring PROPERTY&quot; &lt;&lt; std::endl;
++
+   } else if (type == &quot;SENSOR&quot; || type == &quot;sensor&quot;) {
+     std::cout &lt;&lt; &quot;Ignoring SENSOR&quot; &lt;&lt; std::endl;
+ 
++  } else if (type == &quot;ACCELEROMETER&quot; || type == &quot;accelerometer&quot;) {
++    std::cout &lt;&lt; &quot;Ignoring ACCELEROMETER&quot; &lt;&lt; std::endl;
++
++  } else if (type == &quot;ACTUATOR&quot; || type == &quot;actuator&quot;) {
++    std::cout &lt;&lt; &quot;Ignoring ACTUATOR&quot; &lt;&lt; std::endl;
++
+   } else
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001038.html">[OpenFDM-svn] r1079 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001040.html">[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1039">[ date ]</a>
+              <a href="thread.html#1039">[ thread ]</a>
+              <a href="subject.html#1039">[ subject ]</a>
+              <a href="author.html#1039">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

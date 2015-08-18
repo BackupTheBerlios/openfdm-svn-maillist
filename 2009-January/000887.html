@@ -1,0 +1,532 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r920 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r920%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041403.n04E3bi7026256%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000886.html">
+   <LINK REL="Next"  HREF="000888.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r920 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r920%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041403.n04E3bi7026256%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r920 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jan  4 15:03:37 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000886.html">[OpenFDM-svn] r919 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000888.html">[OpenFDM-svn] r921 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#887">[ date ]</a>
+              <a href="thread.html#887">[ thread ]</a>
+              <a href="subject.html#887">[ subject ]</a>
+              <a href="author.html#887">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-04 15:03:31 +0100 (Sun, 04 Jan 2009)
+New Revision: 920
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+Log:
+Improove ExternalInteract sensing.
+
+M    src/OpenFDM/Frame.h
+M    src/OpenFDM/ExternalInteract.h
+M    src/OpenFDM/ExternalInteract.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-01-04 12:04:10 UTC (rev 919)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-01-04 14:03:31 UTC (rev 920)
+@@ -15,10 +15,14 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnablePosition, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableOrientation, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableEulerAngles, Serialized)
+-  DEF_OPENFDM_PROPERTY(Bool, EnableLinearVelocity, Serialized)
+-  DEF_OPENFDM_PROPERTY(Bool, EnableAngularVelocity, Serialized)
+-  DEF_OPENFDM_PROPERTY(Bool, EnableCentrifugalAcceleration, Serialized)
+-  DEF_OPENFDM_PROPERTY(Bool, EnableWindVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBodyLinearVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBodyAngularVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableGlobalLinearVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableGlobalAngularVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBodyCentrifugalAcceleration, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBodyLoad, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBodyWindVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableGlobalWindVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableTemperature, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnablePressure, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableDensity, Serialized)
+@@ -99,22 +103,38 @@
+     portValues[mEulerAnglesPort] = frame.getRefOrientation().getEuler();
+ 
+   // Velocity related sensing
+-  bool enableAngularVelocity = getEnableAngularVelocity();
+-  bool enableLinearVelocity = getEnableLinearVelocity();
+-  bool enableWindVelocity = getEnableWindVelocity();
+-  if (enableAngularVelocity || enableLinearVelocity || enableWindVelocity) {
+-    Vector6 refVelocity = frame.getRefVelAt(position);
+-    if (enableAngularVelocity)
+-      portValues[mAngularVelocityPort] = refVelocity.getAngular();
++  bool enableBodyAngularVelocity = getEnableBodyAngularVelocity();
++  bool enableGlobalAngularVelocity = getEnableGlobalAngularVelocity();
++  bool enableBodyLinearVelocity = getEnableBodyLinearVelocity();
++  bool enableGlobalLinearVelocity = getEnableGlobalLinearVelocity();
++  bool enableBodyWindVelocity = getEnableBodyWindVelocity();
++  bool enableGlobalWindVelocity = getEnableGlobalWindVelocity();
++  if (enableBodyAngularVelocity || enableBodyLinearVelocity
++      || enableGlobalAngularVelocity || enableGlobalLinearVelocity
++      || enableBodyWindVelocity || enableGlobalWindVelocity) {
++    Vector6 refVelocity = motionTo(position, frame.getRefVel());
++    if (enableBodyAngularVelocity)
++      portValues[mBodyAngularVelocityPort] = refVelocity.getAngular();
++    if (enableGlobalAngularVelocity)
++      portValues[mGlobalAngularVelocityPort]
++        = frame.rotToRef(refVelocity.getAngular());
+     
+-    if (enableLinearVelocity)
+-      portValues[mLinearVelocityPort] = refVelocity.getLinear();
++    if (enableBodyLinearVelocity)
++      portValues[mBodyLinearVelocityPort] = refVelocity.getLinear();
++    if (enableGlobalLinearVelocity)
++      portValues[mGlobalLinearVelocityPort]
++        = frame.rotToRef(refVelocity.getLinear());
+ 
+     // Wind sensing
+-    if (enableWindVelocity) {
++    if (enableBodyWindVelocity || enableGlobalWindVelocity) {
+       Vector6 wind = environment.getWindVelocity(task.getTime(), position);
++      wind = Vector6(frame.rotFromRef(wind.getAngular()),
++                     frame.rotFromRef(wind.getLinear()));
+       wind -= refVelocity;
+-      portValues[mWindVelocityPort] = frame.rotFromRef(wind.getLinear());
++      if (enableBodyWindVelocity)
++        portValues[mBodyWindVelocityPort] = wind.getLinear();
++      if (enableGlobalWindVelocity)
++        portValues[mGlobalWindVelocityPort] = frame.rotToRef(wind.getLinear());
+     }
+   }
+ 
+@@ -191,22 +211,22 @@
+   // FIXME, for now relative position
+   Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+ 
+-  bool enableCentrifugalAcceleration = getEnableCentrifugalAcceleration();
+-  bool enableLoad = getEnableLoad();
+-  if (enableCentrifugalAcceleration || enableLoad) {
++  bool enableBodyCentrifugalAcceleration=getEnableBodyCentrifugalAcceleration();
++  bool enableBodyLoad = getEnableBodyLoad();
++  if (enableBodyCentrifugalAcceleration || enableBodyLoad) {
+     Vector6 spatialVel = motionTo(position, frame.getSpVel());
+     Vector6 spatialAccel = motionTo(position, frame.getSpAccel());
+     Vector3 centrifugalAccel = spatialAccel.getLinear();
+     centrifugalAccel += cross(spatialVel.getAngular(), spatialVel.getLinear());
+ 
+-    if (enableCentrifugalAcceleration)
+-      portValues[mCentrifugalAccelerationPort] = centrifugalAccel;
+-    if (enableLoad) {
++    if (enableBodyCentrifugalAcceleration)
++      portValues[mBodyCentrifugalAccelerationPort] = centrifugalAccel;
++    if (enableBodyLoad) {
+       // May be cache that from the velocity step??
+       Vector3 refPosition = frame.posToRef(position);
+       Vector3 gravity = environment.getGravityAcceleration(refPosition);
+       gravity = frame.rotFromRef(gravity);
+-      portValues[mLoadPort] = centrifugalAccel - gravity;
++      portValues[mBodyLoadPort] = centrifugalAccel - gravity;
+     }
+   }
+ }
+@@ -263,93 +283,149 @@
+ }
+ 
+ void
+-ExternalInteract::setEnableLinearVelocity(bool enable)
++ExternalInteract::setEnableBodyLinearVelocity(bool enable)
+ {
+-  if (enable == getEnableLinearVelocity())
++  if (enable == getEnableBodyLinearVelocity())
+     return;
+   if (enable)
+-    mLinearVelocityPort = MatrixOutputPort(this, &quot;linearVelocity&quot;, Size(3, 1));
++    mBodyLinearVelocityPort
++      = MatrixOutputPort(this, &quot;bodyLinearVelocity&quot;, Size(3, 1));
+   else
+-    mLinearVelocityPort.clear();
++    mBodyLinearVelocityPort.clear();
+ }
+ 
+ bool
+-ExternalInteract::getEnableLinearVelocity() const
++ExternalInteract::getEnableBodyLinearVelocity() const
+ {
+-  return !mLinearVelocityPort.empty();
++  return !mBodyLinearVelocityPort.empty();
+ }
+ 
+ void
+-ExternalInteract::setEnableAngularVelocity(bool enable)
++ExternalInteract::setEnableBodyAngularVelocity(bool enable)
+ {
+-  if (enable == getEnableAngularVelocity())
++  if (enable == getEnableBodyAngularVelocity())
+     return;
+   if (enable)
+-    mAngularVelocityPort
+-      = MatrixOutputPort(this, &quot;angularVelocity&quot;, Size(3, 1));
++    mBodyAngularVelocityPort
++      = MatrixOutputPort(this, &quot;bodyAngularVelocity&quot;, Size(3, 1));
+   else
+-    mAngularVelocityPort.clear();
++    mBodyAngularVelocityPort.clear();
+ }
+ 
+ bool
+-ExternalInteract::getEnableAngularVelocity() const
++ExternalInteract::getEnableBodyAngularVelocity() const
+ {
+-  return !mAngularVelocityPort.empty();
++  return !mBodyAngularVelocityPort.empty();
+ }
+ 
+ void
+-ExternalInteract::setEnableCentrifugalAcceleration(bool enable)
++ExternalInteract::setEnableGlobalLinearVelocity(bool enable)
+ {
+-  if (enable == getEnableCentrifugalAcceleration())
++  if (enable == getEnableGlobalLinearVelocity())
+     return;
+   if (enable)
+-    mCentrifugalAccelerationPort
+-      = MatrixOutputPort(this, &quot;centrifugalAcceleration&quot;, Size(3, 1), true);
++    mGlobalLinearVelocityPort
++      = MatrixOutputPort(this, &quot;globalLinearVelocity&quot;, Size(3, 1));
+   else
+-    mCentrifugalAccelerationPort.clear();
++    mGlobalLinearVelocityPort.clear();
+ }
+ 
+ bool
+-ExternalInteract::getEnableCentrifugalAcceleration() const
++ExternalInteract::getEnableGlobalLinearVelocity() const
+ {
+-  return !mCentrifugalAccelerationPort.empty();
++  return !mGlobalLinearVelocityPort.empty();
+ }
+ 
+ void
+-ExternalInteract::setEnableLoad(bool enable)
++ExternalInteract::setEnableGlobalAngularVelocity(bool enable)
+ {
+-  if (enable == getEnableLoad())
++  if (enable == getEnableGlobalAngularVelocity())
+     return;
+   if (enable)
+-    mLoadPort = MatrixOutputPort(this, &quot;load&quot;, Size(3, 1), true);
++    mGlobalAngularVelocityPort
++      = MatrixOutputPort(this, &quot;globalAngularVelocity&quot;, Size(3, 1));
+   else
+-    mLoadPort.clear();
++    mGlobalAngularVelocityPort.clear();
+ }
+ 
+ bool
+-ExternalInteract::getEnableLoad() const
++ExternalInteract::getEnableGlobalAngularVelocity() const
+ {
+-  return !mLoadPort.empty();
++  return !mGlobalAngularVelocityPort.empty();
+ }
+ 
+ void
+-ExternalInteract::setEnableWindVelocity(bool enable)
++ExternalInteract::setEnableBodyCentrifugalAcceleration(bool enable)
+ {
+-  if (enable == getEnableWindVelocity())
++  if (enable == getEnableBodyCentrifugalAcceleration())
+     return;
+   if (enable)
+-    mWindVelocityPort = MatrixOutputPort(this, &quot;windVelocity&quot;, Size(3, 1));
++    mBodyCentrifugalAccelerationPort
++      = MatrixOutputPort(this, &quot;bodyCentrifugalAcceleration&quot;, Size(3, 1), true);
+   else
+-    mWindVelocityPort.clear();
++    mBodyCentrifugalAccelerationPort.clear();
+ }
+ 
+ bool
+-ExternalInteract::getEnableWindVelocity() const
++ExternalInteract::getEnableBodyCentrifugalAcceleration() const
+ {
+-  return !mWindVelocityPort.empty();
++  return !mBodyCentrifugalAccelerationPort.empty();
+ }
+ 
+ void
++ExternalInteract::setEnableBodyLoad(bool enable)
++{
++  if (enable == getEnableBodyLoad())
++    return;
++  if (enable)
++    mBodyLoadPort = MatrixOutputPort(this, &quot;bodyLoad&quot;, Size(3, 1), true);
++  else
++    mBodyLoadPort.clear();
++}
++
++bool
++ExternalInteract::getEnableBodyLoad() const
++{
++  return !mBodyLoadPort.empty();
++}
++
++void
++ExternalInteract::setEnableBodyWindVelocity(bool enable)
++{
++  if (enable == getEnableBodyWindVelocity())
++    return;
++  if (enable)
++    mBodyWindVelocityPort
++      = MatrixOutputPort(this, &quot;bodyWindVelocity&quot;, Size(3, 1));
++  else
++    mBodyWindVelocityPort.clear();
++}
++
++bool
++ExternalInteract::getEnableBodyWindVelocity() const
++{
++  return !mBodyWindVelocityPort.empty();
++}
++
++void
++ExternalInteract::setEnableGlobalWindVelocity(bool enable)
++{
++  if (enable == getEnableGlobalWindVelocity())
++    return;
++  if (enable)
++    mGlobalWindVelocityPort
++      = MatrixOutputPort(this, &quot;globalWindVelocity&quot;, Size(3, 1));
++  else
++    mGlobalWindVelocityPort.clear();
++}
++
++bool
++ExternalInteract::getEnableGlobalWindVelocity() const
++{
++  return !mGlobalWindVelocityPort.empty();
++}
++
++void
+ ExternalInteract::setEnableTemperature(bool enable)
+ {
+   if (enable == getEnableTemperature())
+@@ -525,11 +601,14 @@
+   setEnablePosition(enable);
+   setEnableOrientation(enable);
+   setEnableEulerAngles(enable);
+-  setEnableLinearVelocity(enable);
+-  setEnableAngularVelocity(enable);
+-  setEnableCentrifugalAcceleration(enable);
+-  setEnableLoad(enable);
+-  setEnableWindVelocity(enable);
++  setEnableBodyLinearVelocity(enable);
++  setEnableBodyAngularVelocity(enable);
++  setEnableGlobalLinearVelocity(enable);
++  setEnableGlobalAngularVelocity(enable);
++  setEnableBodyCentrifugalAcceleration(enable);
++  setEnableBodyLoad(enable);
++  setEnableBodyWindVelocity(enable);
++  setEnableGlobalWindVelocity(enable);
+   setEnableTemperature(enable);
+   setEnablePressure(enable);
+   setEnableDensity(enable);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h	2009-01-04 12:04:10 UTC (rev 919)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h	2009-01-04 14:03:31 UTC (rev 920)
+@@ -49,33 +49,58 @@
+   /// Get availabilty of the euler angles output port
+   bool getEnableEulerAngles() const;
+ 
++
+   /// Set availabilty of the linear velocity output port
+-  void setEnableLinearVelocity(bool enable);
++  /// The output vector is measured in body coordinates
++  void setEnableBodyLinearVelocity(bool enable);
+   /// Get availabilty of the linear velocity output port
+-  bool getEnableLinearVelocity() const;
++  bool getEnableBodyLinearVelocity() const;
+ 
+   /// Set availabilty of the angular velocity output port
+-  void setEnableAngularVelocity(bool enable);
++  /// The output vector is measured in body coordinates
++  void setEnableBodyAngularVelocity(bool enable);
+   /// Get availabilty of the angular velocity output port
+-  bool getEnableAngularVelocity() const;
++  bool getEnableBodyAngularVelocity() const;
+ 
++  /// Set availabilty of the linear velocity output port
++  /// The output vector is measured in global coordinates
++  void setEnableGlobalLinearVelocity(bool enable);
++  /// Get availabilty of the linear velocity output port
++  bool getEnableGlobalLinearVelocity() const;
++
++  /// Set availabilty of the angular velocity output port
++  /// The output vector is measured in global coordinates
++  void setEnableGlobalAngularVelocity(bool enable);
++  /// Get availabilty of the angular velocity output port
++  bool getEnableGlobalAngularVelocity() const;
++
++
+   /// Set availabilty of the linear acceleration output port
+-  void setEnableCentrifugalAcceleration(bool enable);
++  /// The output vector is measured in body coordinates
++  void setEnableBodyCentrifugalAcceleration(bool enable);
+   /// Get availabilty of the linear acceleration output port
+-  bool getEnableCentrifugalAcceleration() const;
++  bool getEnableBodyCentrifugalAcceleration() const;
+ 
+   /// Set availabilty of the load output port
+-  void setEnableLoad(bool enable);
++  /// The output vector is measured in body coordinates
++  void setEnableBodyLoad(bool enable);
+   /// Get availabilty of the load output port
+-  bool getEnableLoad() const;
++  bool getEnableBodyLoad() const;
+ 
+ 
+   /// Set availabilty of the wind velocity output port
+-  void setEnableWindVelocity(bool enable);
++  /// The output vector is measured in body coordinates
++  void setEnableBodyWindVelocity(bool enable);
+   /// Get availabilty of the wind velocity output port
+-  bool getEnableWindVelocity() const;
++  bool getEnableBodyWindVelocity() const;
+ 
++  /// Set availabilty of the wind velocity output port
++  /// The output vector is measured in global coordinates
++  void setEnableGlobalWindVelocity(bool enable);
++  /// Get availabilty of the wind velocity output port
++  bool getEnableGlobalWindVelocity() const;
+ 
++
+   /// Set availabilty of the temperature output port
+   void setEnableTemperature(bool enable);
+   /// Get availabilty of the temperature output port
+@@ -135,17 +160,22 @@
+   void setEnableAllOutputs(bool enable);
+ 
+ protected:
++  /// Positional state sensing
+   MatrixOutputPort mPositionPort;
+   MatrixOutputPort mOrientationPort;
+   MatrixOutputPort mEulerAnglesPort;
+ 
+-  MatrixOutputPort mLinearVelocityPort;
+-  MatrixOutputPort mAngularVelocityPort;
++  /// Velocity state sensing
++  MatrixOutputPort mBodyLinearVelocityPort;
++  MatrixOutputPort mBodyAngularVelocityPort;
++  MatrixOutputPort mGlobalLinearVelocityPort;
++  MatrixOutputPort mGlobalAngularVelocityPort;
+ 
+-  MatrixOutputPort mCentrifugalAccelerationPort;
+-  MatrixOutputPort mLoadPort;
++  MatrixOutputPort mBodyCentrifugalAccelerationPort;
++  MatrixOutputPort mBodyLoadPort;
+ 
+-  MatrixOutputPort mWindVelocityPort;
++  MatrixOutputPort mBodyWindVelocityPort;
++  MatrixOutputPort mGlobalWindVelocityPort;
+ 
+   RealOutputPort mTemperaturePort;
+   RealOutputPort mPressurePort;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2009-01-04 12:04:10 UTC (rev 919)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2009-01-04 14:03:31 UTC (rev 920)
+@@ -106,22 +106,6 @@
+     mRelVelDot = spatialAcceleration - mParentSpAccel - getHdot();
+   }
+ 
+-
+-  // FIXME: they do not yet update the dependent values inside ...
+-//   void setRefOrientation(const Frame&amp; parent, const Quaternion&amp; o)
+-//   { setOrientation(inverse(parent.getRefOrientation())*o); }
+-//   void setRefPosition(const Frame&amp; parent, const Vector3&amp; p)
+-//   { setPosition(parent.posFromRef(p)); }
+-//   void setRefVel(const Frame&amp; parent, const Vector6&amp; vel)
+-//   { setRelVel(vel - motionFromParent(parent.getRefVel())); }
+-
+-//   void setPosition(const Vector3&amp; p)
+-//   { mPosition = p; }
+-//   void setOrientation(const Quaternion&amp; o)
+-//   { mOrientation = o; }
+-//   void setRelVel(const Vector6&amp; vel)
+-//   { mRelVel = vel; }
+-
+   /** Position of the current frame.
+       @return The position vector of the current frame with repsect to the
+       parent frame. It is the only vector which is in the parent frames
+@@ -409,18 +393,6 @@
+   const Vector3&amp; getRefPosition(void) const
+   { return mRefPos; }
+ 
+-  Quaternion getRelOrientation(const Frame&amp; frame) const
+-  { return inverse(getRefOrientation())*frame.getRefOrientation(); }
+-  Vector3 getRelPosition(const Frame&amp; frame) const
+-  { return posFromRef(frame.getRefPosition()); }
+-  Vector6 getRelVel(const Frame&amp; frame) const
+-  { return motionFromRef(frame.motionToRef(frame.getRefVel())) - getRefVel(); }
+-
+-  // FIXME, docunment, and improove
+-  Vector6 getRefVelAt(const Vector3&amp; p) const
+-  { return motionFrom(posToRef(p), getRefOrientation(), motionTo(p, getRefVel())); }
+-
+-
+ private:
+   // The offset of this frames origin wrt the parent frame measured in
+   // the parent frames coordinates.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000886.html">[OpenFDM-svn] r919 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000888.html">[OpenFDM-svn] r921 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#887">[ date ]</a>
+              <a href="thread.html#887">[ thread ]</a>
+              <a href="subject.html#887">[ subject ]</a>
+              <a href="author.html#887">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

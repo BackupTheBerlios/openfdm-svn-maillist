@@ -1,0 +1,652 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r380 - in trunk/OpenFDM/src: OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-April/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r380%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20test&In-Reply-To=%3C200804152101.m3FL1IT2004341%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000352.html">
+   <LINK REL="Next"  HREF="000354.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r380 - in trunk/OpenFDM/src: OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r380%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20test&In-Reply-To=%3C200804152101.m3FL1IT2004341%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r380 - in trunk/OpenFDM/src: OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Apr 15 23:01:18 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000352.html">[OpenFDM-svn] r379 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000354.html">[OpenFDM-svn] r381 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#353">[ date ]</a>
+              <a href="thread.html#353">[ thread ]</a>
+              <a href="subject.html#353">[ subject ]</a>
+              <a href="author.html#353">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-04-15 23:01:18 +0200 (Tue, 15 Apr 2008)
+New Revision: 380
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/FixedRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/FixedRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/FixedRootJointFrame.h
+   trunk/OpenFDM/src/test/tiretestrig.cpp
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/test/Makefile.am
+Log:
+First attempt for model testing.
+
+A    src/test/tiretestrig.cpp
+M    src/test/Makefile.am
+A    src/OpenFDM/FixedRootJoint.h
+M    src/OpenFDM/Makefile.am
+A    src/OpenFDM/FixedRootJoint.cpp
+A    src/OpenFDM/FixedRootJointFrame.h
+
+
+Added: trunk/OpenFDM/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FixedRootJoint.cpp	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/OpenFDM/FixedRootJoint.cpp	2008-04-15 21:01:18 UTC (rev 380)
+@@ -0,0 +1,151 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;FixedRootJoint.h&quot;
++
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Gravity.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;ModelVisitor.h&quot;
++#include &quot;RootFrame.h&quot;
++#include &quot;FixedRootJointFrame.h&quot;
++
++namespace OpenFDM {
++
++FixedRootJoint::FixedRootJoint(const std::string&amp; name)
++  : Joint(name),
++    mFrame(new FixedRootJointFrame(name))
++{
++}
++
++FixedRootJoint::~FixedRootJoint(void)
++{
++}
++
++void
++FixedRootJoint::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
++bool
++FixedRootJoint::init(void)
++{
++  mGravity = mEnvironment-&gt;getGravity();
++  if (!mGravity) {
++    Log(Model,Error) &lt;&lt; &quot;Can not get gravity model!&quot; &lt;&lt; endl;
++    return false;
++  }
++  const Frame* rootFrame = mEnvironment-&gt;getRootFrame();
++  if (!rootFrame) {
++    Log(Model,Error) &lt;&lt; &quot;Can not get rootFrame model!&quot; &lt;&lt; endl;
++    return false;
++  }
++  recheckTopology();
++
++  return Joint::init();
++}
++
++void
++FixedRootJoint::recheckTopology(void)
++{
++  // Hmm, works for the first cut, but rethink what happens with strange
++  // attach reattach sequences ...
++  RigidBody* rigidBody = getOutboardBody();
++  if (!rigidBody)
++    return;
++  // check if already done
++  if (mFrame != rigidBody-&gt;getFrame())
++    rigidBody-&gt;setFrame(mFrame);
++
++  // Check if we are attached to some rigid body ...
++  rigidBody = getInboardBody();
++  if (rigidBody) {
++    Frame* frame = rigidBody-&gt;getFrame();
++    if (frame &amp;&amp; !frame-&gt;isDirectParentFrameOf(mFrame))
++      frame-&gt;addChildFrame(mFrame);
++  } else {
++    if (mEnvironment) {
++      Frame* rootFrame = mEnvironment-&gt;getRootFrame();
++      if (rootFrame &amp;&amp; !rootFrame-&gt;isDirectParentFrameOf(mFrame))
++        rootFrame-&gt;addChildFrame(mFrame);
++    }
++  }
++}
++
++const Vector3&amp;
++FixedRootJoint::getRefPosition(void) const
++{
++  return mFrame-&gt;getRefPosition();
++}
++
++void
++FixedRootJoint::setRefPosition(const Vector3&amp; p)
++{
++  mFrame-&gt;setRefPosition(p);
++}
++
++const Quaternion&amp;
++FixedRootJoint::getRefOrientation(void) const
++{
++  return mFrame-&gt;getRefOrientation();
++}
++
++void
++FixedRootJoint::setRefOrientation(const Quaternion&amp; o)
++{
++  mFrame-&gt;setRefOrientation(o);
++}
++
++Geodetic
++FixedRootJoint::getGeodPosition(void) const
++{
++  if (!mEnvironment)
++    return Geodetic();
++  return mEnvironment-&gt;getPlanet()-&gt;toGeod(getRefPosition());
++}
++
++void
++FixedRootJoint::setGeodPosition(const Geodetic&amp; geod)
++{
++  if (!mEnvironment)
++    return;
++  setRefPosition(mEnvironment-&gt;getPlanet()-&gt;toCart(geod));
++}
++
++Quaternion
++FixedRootJoint::getGeodOrientation(void) const
++{
++  if (!mEnvironment)
++    return Quaternion::unit();
++  Quaternion hlOr = mEnvironment-&gt;getPlanet()-&gt;getGeodHLOrientation(getRefPosition());
++  return inverse(hlOr)*getRefOrientation();
++}
++
++void
++FixedRootJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
++                             const SpatialInertia&amp; outI,
++                             const Vector6&amp; outF)
++{
++  artI.clear();
++  artF.clear();
++
++  Log(ArtBody, Debug) &lt;&lt; &quot;FixedRootJoint::computeRelVelDot():\n&quot; &lt;&lt; outI &lt;&lt; endl;
++  mFrame-&gt;jointArticulation(outF, outI, mGravity);
++}
++
++void
++FixedRootJoint::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++}
++
++} // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/FixedRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FixedRootJoint.h	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/OpenFDM/FixedRootJoint.h	2008-04-15 21:01:18 UTC (rev 380)
+@@ -0,0 +1,81 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_FixedRootJoint_H
++#define OpenFDM_FixedRootJoint_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;RigidBody.h&quot;
++#include &quot;Planet.h&quot;
++#include &quot;Joint.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++class ModelVisitor;
++class FixedRootJointFrame;
++
++class FixedRootJoint
++  : public Joint {
++public:
++  FixedRootJoint(const std::string&amp; name);
++  virtual ~FixedRootJoint(void);
++
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
++  virtual bool init(void);
++
++  virtual void recheckTopology(void);
++
++  /// Get the reference position.
++  const Vector3&amp; getRefPosition(void) const;
++  /// Set the reference position.
++  void setRefPosition(const Vector3&amp; p);
++
++  /// Get the reference orientation.
++  const Quaternion&amp; getRefOrientation(void) const;
++  /// Set the reference orientation.
++  void setRefOrientation(const Quaternion&amp; o);
++
++  /// Get the geodetic position.
++  Geodetic getGeodPosition(void) const;
++  /// Set the geodetic position.
++  void setGeodPosition(const Geodetic&amp; geod);
++  /// Get orientation wrt the geodetic hl frame.
++  Quaternion getGeodOrientation(void) const;
++
++  /** Plugin function for the articulated body algorithm.
++   */
++  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
++                                 const SpatialInertia&amp; outI,
++                                 const Vector6&amp; outF);
++
++
++protected:
++  virtual void setEnvironment(Environment* environment);
++
++private:
++  /// The commonly used gravity model from the environment class
++  /// It is initialized at the init() call
++  SharedPtr&lt;const Gravity&gt; mGravity;
++
++  /// The frame of the mobile root
++  SharedPtr&lt;FixedRootJointFrame&gt; mFrame;
++
++  /// The environment pointer
++  SharedPtr&lt;Environment&gt; mEnvironment;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: trunk/OpenFDM/src/OpenFDM/FixedRootJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FixedRootJointFrame.h	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/OpenFDM/FixedRootJointFrame.h	2008-04-15 21:01:18 UTC (rev 380)
+@@ -0,0 +1,60 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_FixedRootJointFrame_H
++#define OpenFDM_FixedRootJointFrame_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++
++namespace OpenFDM {
++
++class FixedRootJointFrame :
++  public Frame {
++public:
++  FixedRootJointFrame(const std::string&amp; name) :
++    Frame(name),
++    mRelVelDot(Vector6::zeros())
++  { }
++  virtual ~FixedRootJointFrame(void)
++  { }
++
++  /// The interface routine for the Frame,
++  /// returns the relative velocity derivative of this frame
++  virtual const Vector6&amp; getRelVelDot(void) const
++  { return mRelVelDot; }
++
++  /// Compute the articulated force and inertia past inboard to that joint
++  void jointArticulation(const Vector6&amp;, const SpatialInertia&amp;,
++                         const Gravity* gravity)
++  {
++    Log(ArtBody, Debug) &lt;&lt; &quot;FixedRootJointFrame::jointArticulation()&quot; &lt;&lt; endl;
++
++    // Assumption: body is small compared to the distance to the planets
++    // center of mass. That means gravity could be considered equal for the
++    // whole vehicle.
++    // See Featherstone, Orin: Equations and Algorithms
++    Vector3 ga = gravity-&gt;gravityAccel(getRefPosition());
++    Vector6 grav = Vector6(Vector3::zeros(), rotFromRef(ga));
++
++    mRelVelDot = grav - getParentSpAccel() - getHdot();
++    setAccelDirty();
++  }
++
++  using Frame::setPosition;
++  using Frame::setRefPosition;
++  using Frame::setOrientation;
++  using Frame::setRefOrientation;
++
++private:
++  /// The derivative of the frame velocity
++  Vector6 mRelVelDot;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-04-15 21:01:18 UTC (rev 380)
+@@ -131,6 +131,8 @@
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+   ExternalForceModel.h \
++  FixedRootJoint.h \
++  FixedRootJointFrame.h \
+   Force.h \
+   Gain.h \
+   Gravity.h \
+@@ -187,6 +189,7 @@
+   DiscBrake.cpp \
+   DiscreteIntegrator.cpp \
+   ExternalForceModel.cpp \
++  FixedRootJoint.cpp \
+   Force.cpp \
+   Gain.cpp \
+   Gravity.cpp \
+
+Modified: trunk/OpenFDM/src/test/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/test/Makefile.am	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/test/Makefile.am	2008-04-15 21:01:18 UTC (rev 380)
+@@ -1,9 +1,15 @@
+ INCLUDES = -I$(srcdir)/..
+ 
++# define some util programs
++bin_PROGRAMS = tiretestrig
++
+ # define some unit tests
+ check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic limit
+ TESTS          = $(check_PROGRAMS)
+ 
++tiretestrig_SOURCES = tiretestrig.cpp
++tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
++
+ unitstest_SOURCES = unitstest.cpp
+ unitstest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: trunk/OpenFDM/src/test/tiretestrig.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/tiretestrig.cpp	2008-04-06 08:22:56 UTC (rev 379)
++++ trunk/OpenFDM/src/test/tiretestrig.cpp	2008-04-15 21:01:18 UTC (rev 380)
+@@ -0,0 +1,209 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;cstdlib&gt;
++#include &lt;iostream&gt;
++#include &lt;fstream&gt;
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/DoPri5.h&gt;
++#include &lt;OpenFDM/FixedRootJoint.h&gt;
++#include &lt;OpenFDM/Gain.h&gt;
++#include &lt;OpenFDM/Gravity.h&gt;
++#include &lt;OpenFDM/Ground.h&gt;
++#include &lt;OpenFDM/Integrator.h&gt;
++#include &lt;OpenFDM/LinearSpringDamper.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/ModelGroup.h&gt;
++#include &lt;OpenFDM/ModelVisitor.h&gt;
++#include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/PrismaticJoint.h&gt;
++#include &lt;OpenFDM/RevoluteActuator.h&gt;
++#include &lt;OpenFDM/RevoluteJoint.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/SimulationTime.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &lt;OpenFDM/WheelContact.h&gt;
++
++using namespace OpenFDM;
++
++class CSVWriter : public ModelVisitor {
++public:
++  CSVWriter(const std::string&amp; filename) :
++    _csvFile(filename.c_str())
++  { }
++  virtual void apply(Model&amp; model)
++  {
++    unsigned numOutputs = model.getNumOutputPorts();
++    for (unsigned i = 0; i &lt; numOutputs; ++i) {
++      NumericPortProvider* numericPort = model.getOutputPort(i);
++      if (!numericPort)
++        continue;
++      PortInterface* portInterface = numericPort-&gt;getPortInterface();
++      if (!portInterface)
++        continue;
++      MatrixPortInterface* matrixPortInterface;
++      matrixPortInterface = portInterface-&gt;toMatrixPortInterface();
++      if (!matrixPortInterface)
++        continue;
++
++      const Matrix&amp; m = matrixPortInterface-&gt;getMatrixValue();
++      for (unsigned i = 0; i &lt; rows(m); ++i)
++        for (unsigned j = 0; j &lt; cols(m); ++j)
++          _csvFile &lt;&lt; &quot;, &quot; &lt;&lt; m(i, j);
++    }
++  }
++  virtual void apply(ModelGroup&amp; modelGroup)
++  { traverse(modelGroup); }
++  virtual void apply(System&amp; system)
++  {
++    _csvFile &lt;&lt; system.getTime();
++    ModelVisitor::apply(system);
++    _csvFile &lt;&lt; std::endl;
++  }
++private:
++  std::ofstream _csvFile;
++};
++
++class MovingGround : public Ground {
++public:
++  MovingGround(const Vector3&amp; linearVelocity) : mVelocity(linearVelocity)
++  { }
++  virtual GroundValues getGroundPlane(real_type, const Vector3&amp; refPos) const
++  {
++    return GroundValues(Plane(Vector3(0, 0, -1), Vector3::zeros()),
++                        Vector6(Vector3::zeros(), mVelocity),
++                        real_type(1));
++  }
++private:
++  Vector3 mVelocity;
++};
++
++class ZGravity : public Gravity {
++public:
++  virtual Vector3 gravityAccel(const Vector3&amp; cart) const
++  { return Vector3(0, 0, 9.81); }
++};
++
++int
++main(int argc, char *argv[])
++{
++  real_type omega = 2;
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Tire Testrig&quot;);
++  system-&gt;addSampleTime(real_type(1)/real_type(100));
++  system-&gt;setTimestepper(new DoPri5);
++
++  // set the moving ground
++  system-&gt;getEnvironment()-&gt;setGround(new MovingGround(Vector3(10, 0, 0)));
++  system-&gt;getEnvironment()-&gt;setGravity(new ZGravity());
++  
++  // First build up the mechanical system
++  FixedRootJoint* fixedRootJoint = new FixedRootJoint(&quot;Fixed Root Joint&quot;);
++  system-&gt;addModel(fixedRootJoint);
++  fixedRootJoint-&gt;setRefPosition(Vector3(0, 0, 1));
++
++  PrismaticJoint* prismaticJoint = new PrismaticJoint(&quot;Normal Force joint&quot;);
++  prismaticJoint-&gt;setJointAxis(Vector3::unit(2));
++  system-&gt;addModel(prismaticJoint);
++
++  Summer* normalForceSum = new Summer(&quot;Normal Force Sum&quot;);
++  normalForceSum-&gt;setNumSummands(2);
++  system-&gt;addModel(normalForceSum);
++  Connection::connect(prismaticJoint-&gt;getInputPort(0),
++                      normalForceSum-&gt;getOutputPort(0));
++
++  ConstModel* normalForce = new ConstModel(&quot;Normal force&quot;);
++  normalForce-&gt;setScalarValue(5000);
++  system-&gt;addModel(normalForce);
++  Connection::connect(normalForceSum-&gt;getInputPort(0),
++                      normalForce-&gt;getOutputPort(0));
++ 
++  LinearSpringDamper* strutDamper = new LinearSpringDamper(&quot;Strut Damper&quot;);
++  strutDamper-&gt;setSpringConstant(0);
++  strutDamper-&gt;setDamperConstant(-30);
++  system-&gt;addModel(strutDamper);
++  Connection::connect(normalForceSum-&gt;getInputPort(1),
++                      strutDamper-&gt;getOutputPort(0));
++  Connection::connect(strutDamper-&gt;getInputPort(0),
++                      prismaticJoint-&gt;getOutputPort(0));
++  Connection::connect(strutDamper-&gt;getInputPort(1),
++                      prismaticJoint-&gt;getOutputPort(1));
++
++  RigidBody* rootMount = new RigidBody(&quot;Root Mount&quot;);
++  system-&gt;addModel(rootMount);
++  rootMount-&gt;setInboardJoint(fixedRootJoint);
++  rootMount-&gt;addInteract(prismaticJoint);
++
++
++  RevoluteActuator* camberActuator = new RevoluteActuator(&quot;Camber Actuator&quot;);
++  system-&gt;addModel(camberActuator);
++
++  ConstModel* camberAngle = new ConstModel(&quot;Camber Angle&quot;);
++  camberAngle-&gt;setScalarValue(0);
++  system-&gt;addModel(camberAngle);
++  Connection::connect(camberActuator-&gt;getInputPort(0),
++                      camberAngle-&gt;getOutputPort(0));
++
++  RigidBody* normalForceStrut = new RigidBody(&quot;Normal Force Strut&quot;);
++  system-&gt;addModel(normalForceStrut);
++  normalForceStrut-&gt;setInboardJoint(prismaticJoint);
++  normalForceStrut-&gt;addInteract(camberActuator);
++
++ 
++  RevoluteActuator* sideActuator = new RevoluteActuator(&quot;Sideslip Actuator&quot;);
++  system-&gt;addModel(sideActuator);
++
++  ConstModel* sideslipAngle = new ConstModel(&quot;Sideslip Angle&quot;);
++  sideslipAngle-&gt;setScalarValue(0);
++  system-&gt;addModel(sideslipAngle);
++  Connection::connect(sideActuator-&gt;getInputPort(0),
++                      sideslipAngle-&gt;getOutputPort(0));
++
++  RigidBody* camberStrut = new RigidBody(&quot;Camber Strut&quot;);
++  system-&gt;addModel(camberStrut);
++  camberStrut-&gt;setInboardJoint(camberActuator);
++  camberStrut-&gt;addInteract(sideActuator);
++
++
++  RevoluteJoint* hubJoint = new RevoluteJoint(&quot;Hub Joint&quot;);
++  hubJoint-&gt;setJointAxis(Vector3(0, 1, 0));
++  system-&gt;addModel(hubJoint);
++
++  RigidBody* hubStrut = new RigidBody(&quot;Hub Strut&quot;);
++  system-&gt;addModel(hubStrut);
++  hubStrut-&gt;setInboardJoint(sideActuator);
++  hubStrut-&gt;addInteract(hubJoint);
++
++  RigidBody* rimAndTire = new RigidBody(&quot;Rim and Tire&quot;);
++  system-&gt;addModel(rimAndTire);
++  rimAndTire-&gt;setInboardJoint(hubJoint);
++
++  Mass* tireAndRimMass = new Mass(&quot;Tire And Rim Mass&quot;);
++  tireAndRimMass-&gt;setInertia(1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  system-&gt;addModel(tireAndRimMass);
++  rimAndTire-&gt;addInteract(tireAndRimMass);
++  
++  WheelContact* wheelContact = new WheelContact(&quot;Wheel Contact&quot;);
++  wheelContact-&gt;setWheelRadius(0.3);
++  wheelContact-&gt;setSpringConstant(1000);
++  wheelContact-&gt;setSpringDamping(sqrt(wheelContact-&gt;getSpringConstant())/10);
++  system-&gt;addModel(wheelContact);
++  rimAndTire-&gt;addInteract(wheelContact);
++
++  if (!system-&gt;init()) {
++    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  CSVWriter writer(&quot;out.csv&quot;);
++  system-&gt;accept(writer);
++  while (system-&gt;getTime() &lt; 100) {
++    system-&gt;simulate(system-&gt;getTime() + 0.01);
++    system-&gt;accept(writer);
++  }
++  
++  return EXIT_SUCCESS;
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000352.html">[OpenFDM-svn] r379 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000354.html">[OpenFDM-svn] r381 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#353">[ date ]</a>
+              <a href="thread.html#353">[ thread ]</a>
+              <a href="subject.html#353">[ subject ]</a>
+              <a href="author.html#353">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

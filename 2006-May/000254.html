@@ -1,0 +1,135 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r275%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605271128.k4RBSKa7022267%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000255.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r275%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605271128.k4RBSKa7022267%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat May 27 13:28:20 CEST 2006</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000255.html">[OpenFDM-svn] r277 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#254">[ date ]</a>
+              <a href="thread.html#254">[ thread ]</a>
+              <a href="subject.html#254">[ subject ]</a>
+              <a href="author.html#254">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-05-27 13:28:18 +0200 (Sat, 27 May 2006)
+New Revision: 275
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+Log:
+Only return a shared pointer in lock, if the reference count is positive
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-04-17 08:57:13 UTC (rev 274)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-05-27 11:28:18 UTC (rev 275)
+@@ -16,7 +16,7 @@
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+-  {}
++  { }
+   WeakPtr(T* ptr)
+   { assign(ptr); }
+   WeakPtr(const WeakPtr&amp; p) : mWeakDataPtr(p.mWeakDataPtr)
+@@ -24,6 +24,9 @@
+   template&lt;typename U&gt;
+   WeakPtr(const SharedPtr&lt;U&gt;&amp; p)
+   { assign(p.ptr()); }
++  template&lt;typename U&gt;
++  WeakPtr(const WeakPtr&lt;U&gt;&amp; p)
++  { assign(p.ptr()); }
+   ~WeakPtr(void)
+   { }
+   
+@@ -31,13 +34,21 @@
+   WeakPtr&amp; operator=(const SharedPtr&lt;U&gt;&amp; p)
+   { assign(p.ptr()); return *this; }
+   template&lt;typename U&gt;
+-  WeakPtr&amp; operator=(U* p)
++  WeakPtr&amp; operator=(const WeakPtr&lt;U&gt;&amp; p)
++  { assign(p.ptr()); return *this; }
++  WeakPtr&amp; operator=(T* p)
+   { assign(p); return *this; }
+   WeakPtr&amp; operator=(const WeakPtr&amp; p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
+   SharedPtr&lt;T&gt; lock(void) const
+-  { return SharedPtr&lt;T&gt;(ptr()); }
++  {
++    T* p = ptr();
++    if (Referenced::count(p))
++      return SharedPtr&lt;T&gt;(p);
++    else
++      return SharedPtr&lt;T&gt;();
++  }
+ 
+   T* operator-&gt;(void) const
+   { return ptr(); }
+@@ -50,15 +61,13 @@
+ 
+ private:
+   T* ptr(void) const
+-  { return static_cast&lt;T*&gt;(objectPtr()); }
+-
+-  WeakReferenced* objectPtr(void) const
+   {
+     if (mWeakDataPtr)
+-      return mWeakDataPtr-&gt;object;
++      return static_cast&lt;T*&gt;(mWeakDataPtr-&gt;object);
+     else
+       return 0;
+   }
++
+   void assign(T* p)
+   {
+     if (p)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000255.html">[OpenFDM-svn] r277 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#254">[ date ]</a>
+              <a href="thread.html#254">[ thread ]</a>
+              <a href="subject.html#254">[ subject ]</a>
+              <a href="author.html#254">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

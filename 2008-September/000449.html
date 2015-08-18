@@ -1,0 +1,547 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r477 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r477%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809150545.m8F5jobX019868%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000448.html">
+   <LINK REL="Next"  HREF="000450.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r477 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r477%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809150545.m8F5jobX019868%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r477 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 15 07:45:50 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000448.html">[OpenFDM-svn] r476 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000450.html">[OpenFDM-svn] r478 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#449">[ date ]</a>
+              <a href="thread.html#449">[ thread ]</a>
+              <a href="subject.html#449">[ subject ]</a>
+              <a href="author.html#449">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-15 07:45:49 +0200 (Mon, 15 Sep 2008)
+New Revision: 477
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+More on building up simulation systems.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-14 17:28:28 UTC (rev 476)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-15 05:45:49 UTC (rev 477)
+@@ -171,6 +171,23 @@
+   SharedPtr&lt;const Node&gt; mNode;
+ };
+ 
++class GenericNodeInstance : public NodeInstance {
++public:
++  GenericNodeInstance(NodeContext* nodeContext) :
++    mNodeContext(nodeContext)
++  { }
++
++  /// The node context that belongs to this instance.
++  virtual NodeContext&amp; getNodeContext()
++  { return *mNodeContext; }
++  virtual const NodeContext&amp; getNodeContext() const
++  { return *mNodeContext; }
++
++  SharedPtr&lt;NodeContext&gt; mNodeContext;
++};
++
++
++
+ //// This one is used to execute the simulation system
+ class ModelContext : public LeafContext {
+ public:
+@@ -178,7 +195,7 @@
+     mModel(model)
+   { }
+ 
+-  virtual const Node&amp; getNode() const
++  virtual const Model&amp; getNode() const
+   { return *mModel; }
+ 
+   bool alloc()
+@@ -204,13 +221,30 @@
+   ModelContext&amp; operator=(const ModelContext&amp;);
+ };
+ 
++class ModelInstance : public NodeInstance {
++public:
++  ModelInstance(const Model* model) :
++    mModelContext(new ModelContext(model))
++  { }
++
++  virtual ModelContext&amp; getNodeContext()
++  { return *mModelContext; }
++  virtual const ModelContext&amp; getNodeContext() const
++  { return *mModelContext; }
++
++  SharedPtr&lt;ModelContext&gt; mModelContext;
++};
++
++
++
++
+ class MechanicContext : public LeafContext {
+ public:
+   MechanicContext(const MechanicNode* mechanicNode) :
+     mMechanicNode(mechanicNode)
+   { }
+ 
+-  virtual const Node&amp; getNode() const
++  virtual const MechanicNode&amp; getNode() const
+   { return *mMechanicNode; }
+ 
+   bool alloc()
+@@ -226,12 +260,28 @@
+   MechanicContext&amp; operator=(const MechanicContext&amp;);
+ };
+ 
++class MechanicInstance : public NodeInstance {
++public:
++  MechanicInstance(const MechanicNode* mechanicNode) :
++    mMechanicContext(new MechanicContext(mechanicNode))
++  { }
+ 
++  virtual MechanicContext&amp; getNodeContext()
++  { return *mMechanicContext; }
++  virtual const MechanicContext&amp; getNodeContext() const
++  { return *mMechanicContext; }
+ 
++  SharedPtr&lt;MechanicContext&gt; mMechanicContext;
++};
+ 
+-class LeafInstance : public NodeInstance {
+-public:
+ 
++
++
++
++
++// Just here so that I do not care for intationation order for now ...
++struct PortDataHelper {
++
+   class PortDataList;
+ 
+   struct LeafPortData;
+@@ -261,7 +311,7 @@
+       SharedPtr&lt;PortDataList&gt; portDataList = getParentPortDataList();
+       if (!portDataList)
+         return std::string();
+-      SharedPtr&lt;NodeInstance&gt; nodeInstance = portDataList-&gt;mNodeInstance.lock();
++      SharedPtr&lt;NodeInstance&gt; nodeInstance = portDataList-&gt;mNodeInstance;
+       if (!nodeInstance)
+         return std::string();
+       return nodeInstance-&gt;getNode().getName();
+@@ -335,6 +385,8 @@
+         acceptorPortData = _acceptorPortDataList[i].lock();
+         if (!acceptorPortData)
+           continue;
++        if (!acceptorPortData-&gt;getPortInfo())
++          continue;
+         std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; acceptorPortData-&gt;getNodeName()
+                   &lt;&lt; &quot;\&quot; Port \&quot;&quot; &lt;&lt; acceptorPortData-&gt;getPortInfo()-&gt;getName()
+                   &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+@@ -403,8 +455,9 @@
+       providerPortData = _providerPortData.lock();
+       if (!providerPortData)
+         return;
+- 
+-      std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; providerPortData-&gt;getNodeName()
++      if (!providerPortData-&gt;getPortInfo())
++        return;
++       std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; providerPortData-&gt;getNodeName()
+                 &lt;&lt; &quot;\&quot; Port \&quot;&quot; &lt;&lt; providerPortData-&gt;getPortInfo()-&gt;getName()
+                 &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     }
+@@ -421,8 +474,8 @@
+ 
+   class ProxyPortData : public PortData {
+   public:
+-    ProxyPortData(PortData* portData) :
+-      PortData(0 /*FIXME*/)
++    ProxyPortData(PortDataList* portDataList, PortData* portData) :
++      PortData(portDataList)
+     {
+       if (!portData)
+         return;
+@@ -451,25 +504,7 @@
+     std::vector&lt;SharedPtr&lt;PortData&gt; &gt; mPortDataList;
+   };
+ 
+-  LeafInstance(const LeafNode* leaf)
+-  { }
+-  virtual ~LeafInstance()
+-  { }
+-
+-  void print()
+-  {
+-    std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; getNode().getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-    for (unsigned i = 0; i &lt; getPortData().size(); ++i) {
+-      getPortData()[i]-&gt;print();
+-    }
+-  }
+-
+   // Return true if this leaf directly depends on one of leafInstance outputs
+-  bool dependsOn(LeafInstance* leafInstance)
+-  {
+-    return getPortDataList()-&gt;dependsOn(leafInstance-&gt;getPortDataList());
+-  }
+-
+   class PortDataList : public WeakReferenced {
+   public:
+     PortDataList(NodeInstance* nodeInstance) :
+@@ -490,9 +525,24 @@
+       mPortDataVector.push_back(providerPortData);
+       return providerPortData;
+     }
++    ProxyPortData* newProxyPortData(PortData* portData)
++    {
++      ProxyPortData* proxyPortData;
++      proxyPortData = new ProxyPortData(this, portData);
++      // FIXME
++//       mPortDataVector.push_back(proxyPortData);
++      return proxyPortData;
++    }
+     
+     const Node&amp; getNode() const
+-    { return mNodeInstance.lock()-&gt;getNode(); }
++    { return mNodeInstance-&gt;getNode(); }
++
++    void print()
++    {
++      for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
++        mPortDataVector[i]-&gt;print();
++      }
++    }
+     
+     bool allocAndConnectProviderPortValues()
+     {
+@@ -503,6 +553,8 @@
+           continue;
+         
+         PortValue* portValue = providerPortInfo-&gt;newValue();
++        if (!portValue)
++          continue;
+         setPortValue(i, portValue);
+         
+         // Also set the port value to all connected ports
+@@ -520,16 +572,19 @@
+           portDataList = acceptorPortData-&gt;getParentPortDataList();
+           OpenFDMAssert(portDataList);
+           
+-          OpenFDMAssert(acceptorPortData-&gt;getPortInfo());
++          // FIXME, for now the GenericNodePorts do not have PortValues for
++          // this reason.
++          if (!acceptorPortData-&gt;getPortInfo())
++            continue;
+           unsigned index = acceptorPortData-&gt;getPortInfo()-&gt;getIndex();
+           portDataList-&gt;setPortValue(index, portValue);
+         }
+       }
++      return true;
+     }
+     void setPortValue(unsigned i, PortValue* portValue)
+-    { mNodeInstance.lock()-&gt;getNodeContext().getPortValueList().setPortValue(i, portValue); }
+-      
+-      
++    { mNodeInstance-&gt;getNodeContext().getPortValueList().setPortValue(i, portValue); }
++
+     // Return true if this leaf directly depends on one of leafInstance outputs
+     bool dependsOn(PortDataList* portDataList)
+     {
+@@ -544,7 +599,7 @@
+           for (unsigned k = 0; k &lt; mPortDataVector.size(); ++k) {
+             PortId outPortId = getNode().getPortId(k);
+             // FIXME ugly
+-            const Node* node = &amp;(mNodeInstance.lock()-&gt;getNode());
++            const Node* node = &amp;(mNodeInstance-&gt;getNode());
+             const LeafNode* leafNode = dynamic_cast&lt;const LeafNode*&gt;(node);
+             if (leafNode &amp;&amp; leafNode-&gt;dependsOn(inPortId, outPortId))
+               return true;
+@@ -560,57 +615,10 @@
+     
+     /// The NodeInstance having some way to reference the
+     /// PortValues to the current connect information.
+-    // FIXME: can only be weak so far ...
+-    //   SharedPtr&lt;NodeInstance&gt; mNodeInstance;
+-    WeakPtr&lt;NodeInstance&gt; mNodeInstance;
++    SharedPtr&lt;NodeInstance&gt; mNodeInstance;
+   };
+-
+-  SharedPtr&lt;PortDataList&gt; getPortDataList()
+-  {
+-    if (!mPortDataList)
+-      mPortDataList = new PortDataList(this);
+-    return mPortDataList;
+-  }
+-  
+-  std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt;&amp; getPortData()
+-  { return getPortDataList()-&gt;mPortDataVector; }
+-
+-  // List of port dependent info used to build up the connect info and
+-  // the sorted list of leafs.
+-  SharedPtr&lt;PortDataList&gt; mPortDataList;
+ };
+ 
+-class ModelInstance : public LeafInstance {
+-public:
+-  ModelInstance(const Model* model) :
+-    LeafInstance(model),
+-    mModelContext(new ModelContext(model))
+-  { }
+-
+-  virtual ModelContext&amp; getNodeContext()
+-  { return *mModelContext; }
+-  virtual const ModelContext&amp; getNodeContext() const
+-  { return *mModelContext; }
+-
+-  SharedPtr&lt;ModelContext&gt; mModelContext;
+-};
+-
+-class MechanicInstance : public LeafInstance {
+-public:
+-  MechanicInstance(const MechanicNode* mechanicNode) :
+-    LeafInstance(mechanicNode),
+-    mMechanicContext(new MechanicContext(mechanicNode))
+-  { }
+-
+-  virtual MechanicContext&amp; getNodeContext()
+-  { return *mMechanicContext; }
+-  virtual const MechanicContext&amp; getNodeContext() const
+-  { return *mMechanicContext; }
+-
+-  SharedPtr&lt;MechanicContext&gt; mMechanicContext;
+-};
+-
+-
+ class LeafInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+@@ -621,44 +629,65 @@
+   virtual void apply(const LibraryNode&amp; libraryNode)
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+ 
++  PortDataHelper::PortDataList* buildGenericNodeContext(const Node&amp; node)
++  {
++    GenericNodeContext* genericNodeContext = new GenericNodeContext(&amp;node);
++    GenericNodeInstance* genericNodeInstance;
++    genericNodeInstance = new GenericNodeInstance(genericNodeContext);
++    _nodeInstanceList.push_back(genericNodeInstance);
++    PortDataHelper::PortDataList* portDataList = new PortDataHelper::PortDataList(genericNodeInstance);
++    _portDataListMap[_nodeInstanceList.back()] = portDataList;
++
++    return portDataList;
++  }
++
+   // Aussen acceptor, innen provider
+   virtual void apply(const GroupAcceptorNode&amp; leaf)
+   {
++    PortDataHelper::PortDataList* portDataList = buildGenericNodeContext(leaf);
++
+     OpenFDMAssert(leaf.getPort(0));
+     PortId portId = leaf.getPortId(0);
+-    LeafInstance::ProviderPortData* pd;
+-    pd = new LeafInstance::ProviderPortData(0, leaf._groupInternalPort);
+-    _leafPortDataMap[getCurrentNodeId()][portId] = pd;
++
++    PortDataHelper::ProviderPortData* providerPortData;
++//     providerPortData = portDataList-&gt;newProviderPortData(leaf._groupInternalPort);
++    providerPortData = portDataList-&gt;newProviderPortData(0 /*FIXME*/);
++    _leafPortDataMap[getCurrentNodeId()][portId] = providerPortData;
+   }
+   // Aussen provider, innen acceptor
+   virtual void apply(const GroupProviderNode&amp; leaf)
+   {
++    PortDataHelper::PortDataList* portDataList = buildGenericNodeContext(leaf);
++
+     OpenFDMAssert(leaf.getPort(0));
+     PortId portId = leaf.getPortId(0);
+-    LeafInstance::AcceptorPortData* ad;
+-    ad = new LeafInstance::AcceptorPortData(0, leaf._groupInternalPort);
+-    _leafPortDataMap[getCurrentNodeId()][portId] = ad;
++
++    PortDataHelper::AcceptorPortData* acceptorPortData;
++//     acceptorPortData = portDataList-&gt;newAcceptorPortData(leaf._groupInternalPort);
++    acceptorPortData = portDataList-&gt;newAcceptorPortData(0 /*FIXME*/);
++    _leafPortDataMap[getCurrentNodeId()][portId] = acceptorPortData;
+   }
+ 
+-  void allocPortData(LeafInstance* leafInstance, const LeafNode&amp; leaf)
++  void allocPortData(NodeInstance* leafInstance, const LeafNode&amp; leaf)
+   {
++    PortDataHelper::PortDataList* portDataList = new PortDataHelper::PortDataList(leafInstance);
++    _portDataListMap[SharedPtr&lt;NodeInstance&gt;(leafInstance)] = portDataList;
++
+     // FIXME: move to LeafInstance??
+     for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+       SharedPtr&lt;const PortInfo&gt; port = leaf.getPort(i);
+       const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
+       if (providerPort) {
+-        LeafInstance::ProviderPortData* providerPortData;
+-        providerPortData =
+-          leafInstance-&gt;getPortDataList()-&gt;newProviderPortData(providerPort);
++        PortDataHelper::ProviderPortData* providerPortData;
++        providerPortData = portDataList-&gt;newProviderPortData(providerPort);
+ 
+         PortId portId = leaf.getPortId(i);
+         _leafPortDataMap[getCurrentNodeId()][portId] = providerPortData;
+       }
+       const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
+       if (acceptorPort) {
+-        LeafInstance::AcceptorPortData* acceptorPortData;
+-        acceptorPortData =
+-          leafInstance-&gt;getPortDataList()-&gt;newAcceptorPortData(acceptorPort);
++        PortDataHelper::AcceptorPortData* acceptorPortData;
++        acceptorPortData = portDataList-&gt;newAcceptorPortData(acceptorPort);
+ 
+         PortId portId = leaf.getPortId(i);
+         _leafPortDataMap[getCurrentNodeId()][portId] = acceptorPortData;
+@@ -746,10 +775,8 @@
+         std::cerr &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
+     }
+ 
+-    // Add a proxy LeafInstance that holds this groups ports, will be removed
+-    // when merged into the parent
+-    // FIXME: how to tell the parent group which connections need to be done??
+-    // FIXME:
++    PortDataHelper::PortDataList* portDataList = buildGenericNodeContext(group);
++
+     // add group connect routings
+     // merge child list into the global list of instances
+     for (unsigned i = 0; i &lt; group.getNumPorts(); ++i) {
+@@ -763,7 +790,7 @@
+       }
+ 
+       parentLeafPortDataMap[getCurrentNodeId()][portId] = 
+-          new LeafInstance::ProxyPortData(_leafPortDataMap[nodeId].begin()-&gt;second);
++          portDataList-&gt;newProxyPortData(_leafPortDataMap[nodeId].begin()-&gt;second);
+     }
+ 
+     parentLeafPortDataMap.swap(_leafPortDataMap);
+@@ -786,14 +813,16 @@
+ 
+   ////////////////////////////////////////////////////////////////////////////
+   // Used to map connections in groups ...
+-  typedef std::map&lt;PortId, SharedPtr&lt;LeafInstance::PortData&gt; &gt; NodePortDataMap;
++  typedef std::map&lt;PortId, SharedPtr&lt;PortDataHelper::PortData&gt; &gt; NodePortDataMap;
+   typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; LeafPortDataMap;
+   LeafPortDataMap _leafPortDataMap;
++  // Just to hold references to all mort data lists we have in the
++  // simulation system. They are just needed during traversal for connect
++  // information and to distribute port value pointers.
++  typedef std::map&lt;SharedPtr&lt;NodeInstance&gt;,SharedPtr&lt;PortDataHelper::PortDataList&gt; &gt; PortDataListMap;
++  PortDataListMap _portDataListMap;
+ 
+-  /// Used to alloc ports
+-//   typedef std::list&lt;SharedPtr&lt;LeafInstance::ProviderPortData&gt; &gt; ProviderPortDataList;
+ 
+-
+   // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+@@ -806,7 +835,12 @@
+       for (i = sortedModelInstanceList.begin();
+            i != sortedModelInstanceList.end();
+            ++i) {
+-        if (!(*i)-&gt;dependsOn(modelInstance))
++
++        PortDataHelper::PortDataList* portDataListMI
++          = _portDataListMap[modelInstance];
++        PortDataHelper::PortDataList* portDataListI = _portDataListMap[*i];
++
++        if (!portDataListI-&gt;dependsOn(portDataListMI))
+           continue;
+         sortedModelInstanceList.insert(i, modelInstance);
+         break;
+@@ -832,7 +866,10 @@
+ 
+     ModelContextList::const_iterator j;
+     for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+-      if (!(*j)-&gt;getPortDataList()-&gt;allocAndConnectProviderPortValues()) {
++      PortDataHelper::PortDataList* portDataList = _portDataListMap[*j];
++      if (!portDataList)
++        continue;
++      if (!portDataList-&gt;allocAndConnectProviderPortValues()) {
+         Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
+         return false;
+       }
+@@ -855,6 +892,18 @@
+     return true;
+   }
+ 
++  void print()
++  {
++    ModelInstanceList::iterator i;
++    for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
++      std::cout &lt;&lt; &quot;Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNode().getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++      PortDataHelper::PortDataList* portDataList = _portDataListMap[*i];
++      if (!portDataList)
++        continue;
++      portDataList-&gt;print();
++    }
++  }
++
+   void pushNodeId(const Group::NodeId&amp; nodeId)
+   { _nodeIdStack.push_back(nodeId); }
+   void popNodeId()
+@@ -919,12 +968,7 @@
+   
+   nodeInstanceCollector.sortModelList();
+ 
+-  LeafInstanceCollector::ModelInstanceList::const_iterator i;
+-  for (i = nodeInstanceCollector._modelInstanceList.begin();
+-       i != nodeInstanceCollector._modelInstanceList.end();
+-       ++i) {
+-    (*i)-&gt;print();
+-  }
++  nodeInstanceCollector.print();
+ 
+   LeafInstanceCollector::ModelContextList modelContextList;
+   nodeInstanceCollector.getModelContextList(modelContextList);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000448.html">[OpenFDM-svn] r476 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000450.html">[OpenFDM-svn] r478 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#449">[ date ]</a>
+              <a href="thread.html#449">[ thread ]</a>
+              <a href="subject.html#449">[ subject ]</a>
+              <a href="author.html#449">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

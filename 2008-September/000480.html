@@ -1,0 +1,537 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r508 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r508%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271006.m8RA6IKk012495%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000479.html">
+   <LINK REL="Next"  HREF="000481.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r508 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r508%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271006.m8RA6IKk012495%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r508 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 12:06:18 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000479.html">[OpenFDM-svn] r507 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000481.html">[OpenFDM-svn] r509 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#480">[ date ]</a>
+              <a href="thread.html#480">[ thread ]</a>
+              <a href="subject.html#480">[ subject ]</a>
+              <a href="author.html#480">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 12:06:17 +0200 (Sat, 27 Sep 2008)
+New Revision: 508
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimulationTime.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move node path handling into the visitor.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-09-27 10:06:17 UTC (rev 508)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_ConstNodeVisitor_H
+ #define OpenFDM_ConstNodeVisitor_H
+ 
++#include &quot;Node.h&quot;
++
+ namespace OpenFDM {
+ 
+ class Node;
+@@ -42,6 +44,18 @@
+ 
+   virtual void apply(const Interact&amp;);
+   virtual void apply(const RootJoint&amp;);
++
++  const NodePath&amp; getNodePath() const { return mNodePath; }
++
++  template&lt;typename T&gt;
++  void handleNodePathAndApply(T&amp; node)
++  {
++    mNodePath.push_back(&amp;node);
++    apply(node);
++    mNodePath.pop_back();
++  }
++private:
++  NodePath mNodePath;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -33,7 +33,7 @@
+ void
+ FixedRootJoint::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ bool
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -35,13 +35,13 @@
+ void
+ Group::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ Group::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ Group::NodeId
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -31,7 +31,7 @@
+ void
+ Input::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ const Input*
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ Interact::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ Interact::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -33,7 +33,7 @@
+ void
+ Joint::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ LeafNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ LeafNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -25,13 +25,13 @@
+ void
+ LibraryNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ LibraryNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ SharedPtr&lt;LibraryModel&gt;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ MechanicNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ MechanicNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -35,7 +35,7 @@
+ void
+ MobileRootJoint::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ bool
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -25,13 +25,13 @@
+ void
+ Model::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ Model::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ Node::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ Node::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-09-27 10:06:17 UTC (rev 508)
+@@ -14,9 +14,12 @@
+ 
+ namespace OpenFDM {
+ 
++class Node;
+ class NodeVisitor;
+ class ConstNodeVisitor;
+ 
++typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
++
+ class Node : public Object {
+   OPENFDM_OBJECT(Node, Object);
+ public:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-27 10:06:17 UTC (rev 508)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_NodeVisitor_H
+ #define OpenFDM_NodeVisitor_H
+ 
++#include &quot;Node.h&quot;
++
+ namespace OpenFDM {
+ 
+ class Node;
+@@ -42,6 +44,19 @@
+ 
+   virtual void apply(Interact&amp;);
+   virtual void apply(RootJoint&amp;);
++
++  const NodePath&amp; getNodePath() const { return mNodePath; }
++
++  template&lt;typename T&gt;
++  void handleNodePathAndApply(T&amp; node)
++  {
++    mNodePath.push_back(&amp;node);
++    apply(node);
++    mNodePath.pop_back();
++  }
++
++private:
++  NodePath mNodePath;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -33,13 +33,13 @@
+ void
+ Output::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ Output::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ RigidBody::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ RigidBody::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,13 +24,13 @@
+ void
+ RootJoint::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ void
+ RootJoint::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimulationTime.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimulationTime.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimulationTime.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -24,7 +24,7 @@
+ void
+ SimulationTime::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ bool
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -92,7 +92,7 @@
+ void
+ System::accept(ModelVisitor&amp; visitor)
+ {
+-  visitor.apply(*this);
++  visitor.handleNodePathAndApply(*this);
+ }
+ 
+ static bool
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 09:42:09 UTC (rev 507)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 10:06:17 UTC (rev 508)
+@@ -103,8 +103,6 @@
+ /// there must be a PortData like structure that is only built during simulation
+ /// model initialization.
+ 
+-typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
+-
+ /// A NodeInstance represents an effective model node in a ready to run
+ /// System. You can access the Nodes Ports values for example.
+ /// This class is meant to show up in the user interface of this simulation.
+@@ -693,7 +691,7 @@
+   PortDataHelper::PortDataList* buildNodeContext(const Node&amp; node)
+   {
+     NodeInstance* nodeInstance;
+-    nodeInstance = new NodeInstance(mNodePath, &amp;node);
++    nodeInstance = new NodeInstance(getNodePath(), &amp;node);
+     _nodeInstanceList.push_back(nodeInstance);
+     PortDataHelper::PortDataList* portDataList;
+     portDataList = getCurrentNodePortDataList();
+@@ -747,7 +745,7 @@
+   {
+     // Need to stor the root nodes to build up the spanning tree for the
+     // mechanical system here.
+-    MechanicInstance* mechanicInstance = new MechanicInstance(mNodePath, &amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+ //     _mechanicInstanceList.push_back(mechanicInstance);
+     _rootJointInstanceList.push_back(mechanicInstance);
+@@ -755,14 +753,14 @@
+   }
+   virtual void apply(const MechanicNode&amp; node)
+   {
+-    MechanicInstance* mechanicInstance = new MechanicInstance(mNodePath, &amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(const Model&amp; node)
+   {
+-    ModelInstance* modelInstance = new ModelInstance(mNodePath, &amp;node);
++    ModelInstance* modelInstance = new ModelInstance(getNodePath(), &amp;node);
+     _nodeInstanceList.push_back(modelInstance);
+     _modelInstanceList.push_back(modelInstance);
+     allocPortData(modelInstance, node);
+@@ -786,9 +784,7 @@
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+       mCurrentNodePortDataList = _portDataMap[i];
+ 
+-      mNodePath.push_back(group.getChild(i));
+       group.getChild(i)-&gt;accept(*this);
+-      mNodePath.pop_back();
+ 
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+     }
+@@ -1010,8 +1006,6 @@
+ 
+ private:
+   SharedPtr&lt;PortDataHelper::PortDataList&gt; mCurrentNodePortDataList;
+-
+-  NodePath mNodePath;
+ };
+ 
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000479.html">[OpenFDM-svn] r507 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000481.html">[OpenFDM-svn] r509 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#480">[ date ]</a>
+              <a href="thread.html#480">[ thread ]</a>
+              <a href="subject.html#480">[ subject ]</a>
+              <a href="author.html#480">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,164 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r198 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r198%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601061732.k06HW19V014430%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000180.html">
+   <LINK REL="Next"  HREF="000182.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r198 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r198%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601061732.k06HW19V014430%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r198 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Jan  6 18:32:01 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000180.html">[OpenFDM-svn] r197 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000182.html">[OpenFDM-svn] r199 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#181">[ date ]</a>
+              <a href="thread.html#181">[ thread ]</a>
+              <a href="subject.html#181">[ subject ]</a>
+              <a href="author.html#181">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-06 18:31:41 +0100 (Fri, 06 Jan 2006)
+New Revision: 198
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Use levenberg marquart
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-01-06 17:30:35 UTC (rev 197)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-01-06 17:31:41 UTC (rev 198)
+@@ -287,14 +287,14 @@
+   virtual unsigned inSize(void) const
+   { return mSystem.getNumContinousStates(); }
+   virtual unsigned outSize(void) const
+-  { return mSystem.getNumContinousStates(); }
++  { return mSystem.getNumContinousStates() + 6; }
+   virtual void eval(real_type t, const Vector&amp; v, Vector&amp; out)
+   {
+     unsigned nStates = mSystem.getNumContinousStates();
+     Vector deriv(nStates);
+     mSystem.evalFunction(t, v, deriv);
+ 
+-    TrimCollectorVisitor tcv(nStates);
++    TrimCollectorVisitor tcv(nStates + 6);
+     mSystem.accept(tcv);
+     Vector3 eo = mGeodOr.getEuler();
+     Vector3 en = tcv.mGeodOr.getEuler();
+@@ -315,14 +315,14 @@
+     tmp = 1e2*(eo(3) - en(3));
+     tcv.mStateStream.writeSubState(tmp);
+ 
+-    tcv.mStateStream.writeSubState(1e2*norm(tcv.mQDot) + norm(tcv.mPosDot - mPosDot));
+-//     tcv.mStateStream.writeSubState(1e2*tcv.mQDot);
+-//     tcv.mStateStream.writeSubState(tcv.mPosDot);
++//     tcv.mStateStream.writeSubState(1e2*norm(tcv.mQDot) + norm(tcv.mPosDot - mPosDot));
++    tcv.mStateStream.writeSubState(1e8*tcv.mQDot);
++    tcv.mStateStream.writeSubState(tcv.mPosDot - mPosDot);
+     tcv.mStateStream.writeSubState(1e6*tcv.mVelDot);
+ 
+     out = tcv.mStateStream.getState();
+   }
+-private:
++// private:
+   System&amp; mSystem;
+   Geodetic mGeodPos;
+   Quaternion mGeodOr;
+@@ -379,7 +379,7 @@
+ //     Log(Model,Error) &lt;&lt; trans(out) &lt;&lt; endl;
+ //     Log(Model,Error) &lt;&lt; mGeodPos &lt;&lt; geod &lt;&lt; endl &lt;&lt; endl;
+   }
+-private:
++// private:
+   System&amp; mSystem;
+   real_type mRange;
+   Geodetic mGeodPos;
+@@ -404,6 +404,9 @@
+   real_type range = 20;
+   AltitudeFinderTrimFunction altTrim(*this, range);
+ 
++  // Buld up the trim function
++  TrimFunction trimFunction(*this);
++
+   Vector altV(1);
+   altV(1) = 0;
+   Vector dk(1);
+@@ -412,6 +415,7 @@
+   altTrim.eval(getTime(), res, dk /*dummy*/);
+   output(taskInfo);
+ 
++  trimFunction.mGeodPos.altitude = altTrim.mGeodPos.altitude;
+ 
+   // Get the current state
+   StateStream stateStream(getNumContinousStates());
+@@ -419,18 +423,18 @@
+   Vector state = stateStream.getState();
+ 
+   Vector trimState = stateStream.getState();
+-  // Buld up the trim function
+-  TrimFunction trimFunction(*this);
+ 
+   // Try to find a minimum
+-  real_type atol = 1e-7;
+-  real_type rtol = 1e-8;
+-  bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
+-//   bool ret = LevenbergMarquart(trimFunction, getTime(), trimState, atol, rtol);
++  real_type atol = 1e-10;
++  real_type rtol = 1e-13;
++//   bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
++  bool ret = LevenbergMarquart(trimFunction, getTime(), trimState, atol, rtol);
+   if (ret) {
++    Log(Model, Debug) &lt;&lt; &quot;Trim did converge&quot; &lt;&lt; endl;
+     stateStream.setState(trimState);
+     setState(stateStream);
+   } else {
++    Log(Model, Warning) &lt;&lt; &quot;Trim did NOT converge&quot; &lt;&lt; endl;
+     stateStream.setState(state);
+     setState(stateStream);
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000180.html">[OpenFDM-svn] r197 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000182.html">[OpenFDM-svn] r199 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#181">[ date ]</a>
+              <a href="thread.html#181">[ thread ]</a>
+              <a href="subject.html#181">[ subject ]</a>
+              <a href="author.html#181">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

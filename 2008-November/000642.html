@@ -1,0 +1,163 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r673 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r673%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811062045.mA6KjCox026861%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000641.html">
+   <LINK REL="Next"  HREF="000643.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r673 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r673%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811062045.mA6KjCox026861%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r673 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Nov  6 21:45:12 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000641.html">[OpenFDM-svn] r672 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000643.html">[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#642">[ date ]</a>
+              <a href="thread.html#642">[ thread ]</a>
+              <a href="subject.html#642">[ subject ]</a>
+              <a href="author.html#642">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-06 21:45:11 +0100 (Thu, 06 Nov 2008)
+New Revision: 673
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Provide PortValue interfaces directly at the instances.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-11-06 19:23:09 UTC (rev 672)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-11-06 20:45:11 UTC (rev 673)
+@@ -39,8 +39,13 @@
+   const SampleTime&amp; getSampleTime() const
+   { return mSampleTime; }
+ 
+-  const PortValueList&amp; getPortValueList() const
+-  { return getNodeContext().getPortValueList(); }
++  /// Access port values by the PortInfo values
++  const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  { return getNodeContext().getPortValueList().getPortValue(portInfo); }
++  const NumericPortValue* getPortValue(const NumericPortInfo&amp; portInfo) const
++  { return getNodeContext().getPortValueList().getPortValue(portInfo); }
++  const MechanicLinkValue* getPortValue(const MechanicLinkInfo&amp; portInfo) const
++  { return getNodeContext().getPortValueList().getPortValue(portInfo); }
+ 
+   /// Set port value for the given port.
+   void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-11-06 19:23:09 UTC (rev 672)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-11-06 20:45:11 UTC (rev 673)
+@@ -392,14 +392,14 @@
+       const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
+       if (!nodeInstance)
+         return;
+-      apply(portInfo, nodeInstance-&gt;getPortValueList().getPortValue(portInfo));
++      apply(portInfo, nodeInstance-&gt;getPortValue(portInfo));
+     }
+     virtual void apply(const MechanicLinkInfo&amp; portInfo)
+     {
+       const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
+       if (!nodeInstance)
+         return;
+-      apply(portInfo, nodeInstance-&gt;getPortValueList().getPortValue(portInfo));
++      apply(portInfo, nodeInstance-&gt;getPortValue(portInfo));
+     }
+     
+     virtual void apply(const NumericPortInfo&amp; portInfo,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-06 19:23:09 UTC (rev 672)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-06 20:45:11 UTC (rev 673)
+@@ -130,6 +130,17 @@
+       return 0;
+     return portValue-&gt;toMechanicLinkValue();
+   }
++  /// Save but partially expensive Accessor for numeric ports
++  const PortValue* getPortValue(const PortInfo* portInfo) const
++  {
++    if (!portInfo)
++      return 0;
++    return getPortValue(portInfo-&gt;getIndex());
++  }
++  const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  {
++    return getPortValue(portInfo.getIndex());
++  }
+ 
+ protected:
+   PortValueVector mPortValueVector;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-06 19:23:09 UTC (rev 672)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-06 20:45:11 UTC (rev 673)
+@@ -317,7 +317,7 @@
+ 
+     virtual bool createPortValue()
+     {
+-      if (mNodeInstance-&gt;getPortValueList().getPortValue(getPortInfo()-&gt;getIndex()))
++      if (mNodeInstance-&gt;getPortValue(*getPortInfo()))
+         return true;
+       if (mProxyPortData.lock())
+         return true;
+@@ -834,7 +834,7 @@
+         SharedPtr&lt;const PortInfo&gt; portInfo = node.getPort(k);
+         if (portInfo-&gt;getOptional())
+           continue;
+-        if (!(*j)-&gt;getPortValueList().getPortValue(k)) {
++        if (!(*j)-&gt;getPortValue(*portInfo)) {
+           Log(Schedule, Error) &lt;&lt; &quot;Mandatory port value for port \&quot;&quot;
+                                &lt;&lt; portInfo-&gt;getName() &lt;&lt; &quot;\&quot; for model \&quot;&quot;
+                                &lt;&lt; (*j)-&gt;getNodeNamePath()
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000641.html">[OpenFDM-svn] r672 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000643.html">[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#642">[ date ]</a>
+              <a href="thread.html#642">[ thread ]</a>
+              <a href="subject.html#642">[ subject ]</a>
+              <a href="author.html#642">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

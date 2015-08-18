@@ -1,0 +1,147 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r526 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r526%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809280658.m8S6wY8Z022659%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000497.html">
+   <LINK REL="Next"  HREF="000499.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r526 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r526%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809280658.m8S6wY8Z022659%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r526 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 28 08:58:34 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000497.html">[OpenFDM-svn] r525 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000499.html">[OpenFDM-svn] r527 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#498">[ date ]</a>
+              <a href="thread.html#498">[ thread ]</a>
+              <a href="subject.html#498">[ subject ]</a>
+              <a href="author.html#498">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-28 08:58:34 +0200 (Sun, 28 Sep 2008)
+New Revision: 526
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+Log:
+For now dump some Abstract system implementations here.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2008-09-28 06:45:35 UTC (rev 525)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2008-09-28 06:58:34 UTC (rev 526)
+@@ -78,6 +78,70 @@
+   real_type mTime;
+ };
+ 
++// FIXME: dump them here for now. Will be required later ...
++class EnabledSystem : public AbstractSystem {
++};
++
++class GroupedSystem : public AbstractSystem {
++public:
++  unsigned getNumChildren() const
++  { return mAbstractSystemList.size(); }
++  AbstractSystem* getChild(unsigned index)
++  {
++    if (mAbstractSystemList.size() &lt;= index)
++      return 0;
++    return mAbstractSystemList[index];
++  }
++  unsigned addChild(AbstractSystem* abstractSystem)
++  {
++    unsigned index = mAbstractSystemList.size();
++    mAbstractSystemList.push_back(abstractSystem);
++    return index;
++  }
++  void removeChild(AbstractSystem* abstractSystem)
++  {
++    AbstractSystemList::iterator i;
++    i = std::find(mAbstractSystemList.begin(), mAbstractSystemList.end(),
++                  abstractSystem);
++    if (i == mAbstractSystemList.end())
++      return;
++    mAbstractSystemList.erase(i);
++  }
++
++protected:
++  virtual void initImplementation(const real_type&amp; t)
++  {
++    AbstractSystemList::const_iterator i;
++    for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i) {
++      (*i)-&gt;init(t);
++    }
++  }
++  virtual void updateImplementation(const real_type&amp; tEndHint)
++  {
++    // initially set to all
++    TimeInterval validityInterval = TimeInterval::all();
++    AbstractSystemList::const_iterator i;
++    for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i) {
++      (*i)-&gt;update(tEndHint);
++      if (validityInterval.getBegin() &lt; (*i)-&gt;getValidityInterval().getBegin())
++        validityInterval.setBegin((*i)-&gt;getValidityInterval().getBegin());
++      if ((*i)-&gt;getValidityInterval().getEnd() &lt; validityInterval.getEnd())
++        validityInterval.setEnd((*i)-&gt;getValidityInterval().getEnd());
++    }
++    setValidityInterval(validityInterval);
++  }
++  virtual void outputImplementation(const real_type&amp; t)
++  {
++    AbstractSystemList::const_iterator i;
++    for (i = mAbstractSystemList.begin(); i != mAbstractSystemList.end(); ++i)
++      (*i)-&gt;output(t);
++  }
++private:
++  typedef std::vector&lt;SharedPtr&lt;AbstractSystem&gt; &gt; AbstractSystemList;
++  AbstractSystemList mAbstractSystemList;
++};
++
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000497.html">[OpenFDM-svn] r525 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000499.html">[OpenFDM-svn] r527 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#498">[ date ]</a>
+              <a href="thread.html#498">[ thread ]</a>
+              <a href="subject.html#498">[ subject ]</a>
+              <a href="author.html#498">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

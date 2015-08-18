@@ -1,0 +1,231 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r200 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r200%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601082045.k08Kj3b6027706%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000182.html">
+   <LINK REL="Next"  HREF="000184.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r200 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r200%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601082045.k08Kj3b6027706%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r200 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Jan  8 21:45:03 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000182.html">[OpenFDM-svn] r199 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000184.html">[OpenFDM-svn] r201 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#183">[ date ]</a>
+              <a href="thread.html#183">[ thread ]</a>
+              <a href="subject.html#183">[ subject ]</a>
+              <a href="author.html#183">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-08 21:44:55 +0100 (Sun, 08 Jan 2006)
+New Revision: 200
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/Atmosphere.cpp
+   trunk/OpenFDM/src/OpenFDM/Atmosphere.h
+   trunk/OpenFDM/src/OpenFDM/AtmosphereSTD1976.cpp
+Log:
+Clean up atmosphere computations a bit
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-08 11:51:24 UTC (rev 199)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-08 20:44:55 UTC (rev 200)
+@@ -564,8 +564,8 @@
+ {
+   computeAtmosphere();
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getSoundSpeed() &quot;
+-                       &lt;&lt; mAtmos.soundspeed &lt;&lt; endl;
+-  return mAtmos.soundspeed;
++                       &lt;&lt; mSoundSpeed &lt;&lt; endl;
++  return mSoundSpeed;
+ }
+ 
+ const real_type&amp;
+@@ -595,7 +595,7 @@
+ AeroForce::getSoundSpeedSeaLevel(void) const
+ {
+   computeSLAtmosphere();
+-  return mSLAtmos.soundspeed;
++  return mSLSoundSpeed;
+ }
+ 
+ const real_type&amp;
+@@ -665,6 +665,7 @@
+   if (mDirtyAtmosphere) {
+     // Get the Athmosphere information at this position and the given time.
+     mAtmos = getAtmosphere()-&gt;getData(getAltitude());
++    mSoundSpeed = getAtmosphere()-&gt;getSoundSpeed(mAtmos.temperature);
+     mDirtyAtmosphere = false;
+   }
+ }
+@@ -675,6 +676,7 @@
+   if (mDirtySLAtmosphere) {
+     // Hmm, may be this does not need to be computed each time???
+     mSLAtmos = getAtmosphere()-&gt;getData(0);
++    mSLSoundSpeed = getAtmosphere()-&gt;getSoundSpeed(mSLAtmos.temperature);
+     mDirtySLAtmosphere = false;
+   }
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atmosphere.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atmosphere.cpp	2006-01-08 11:51:24 UTC (rev 199)
++++ trunk/OpenFDM/src/OpenFDM/Atmosphere.cpp	2006-01-08 20:44:55 UTC (rev 200)
+@@ -6,7 +6,9 @@
+ 
+ namespace OpenFDM {
+ 
+-Atmosphere::Atmosphere(void)
++Atmosphere::Atmosphere(real_type gasConstant, real_type specificHeatRatio) :
++  mGasConstant(gasConstant),
++  mSpecificHeatRatio(specificHeatRatio)
+ {
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atmosphere.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atmosphere.h	2006-01-08 11:51:24 UTC (rev 199)
++++ trunk/OpenFDM/src/OpenFDM/Atmosphere.h	2006-01-08 20:44:55 UTC (rev 200)
+@@ -13,18 +13,47 @@
+ struct AtmosphereData {
+   real_type pressure;
+   real_type density;
+-  real_type soundspeed;
+   real_type temperature;
+ };
+ 
+ class Atmosphere
+   : public EnvironmentObject {
+ public:
+-  Atmosphere(void);
+   virtual ~Atmosphere(void);
+ 
++  /// Returns the gas constant for that current atmosphere gas often refered
++  /// as R. The unit is as usual in the SI system m^2/(s^2 K)
++  real_type getGasConstant(void) const
++  { return mGasConstant; }
++  real_type getR(void) const
++  { return mGasConstant; }
++
++  /// Returns the soundspeed for the given temperature
++  real_type getSoundSpeed(real_type temperature) const
++  { return sqrt(getGamma(temperature)*temperature*getGasConstant()); }
++
++  /// Returns the specific heat ratio
++  real_type getSpecificHeatRatio(real_type temperature) const
++  { return mSpecificHeatRatio; }
++  real_type getGamma(real_type temperature) const
++  { return mSpecificHeatRatio; }
++
++  /// Returns the specific heat constant
++  real_type getCp(real_type temperature) const
++  {
++    real_type gamma = getGamma(temperature);
++    return getGasConstant()*gamma/(gamma-1);
++  }
++
+   // Get the atmosphere data for a given altitude alt.
+   virtual AtmosphereData getData(real_type alt) const = 0;
++
++protected:
++  Atmosphere(real_type gasConstant, real_type specificHeatRatio);
++
++private:
++  real_type mGasConstant;
++  real_type mSpecificHeatRatio;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/AtmosphereSTD1976.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AtmosphereSTD1976.cpp	2006-01-08 11:51:24 UTC (rev 199)
++++ trunk/OpenFDM/src/OpenFDM/AtmosphereSTD1976.cpp	2006-01-08 20:44:55 UTC (rev 200)
+@@ -22,7 +22,12 @@
+ // Radius of the Earth (km)
+ const real_type AtmosphereSTD1976::mEarthRadius = 6369.0;
+ 
+-AtmosphereSTD1976::AtmosphereSTD1976(void)
++#define MOL_WT          28.9644  // kg/kgmol (air)
++#define R_HAT           8314.32  // J/kgmol.K (gas const.)
++#define GAMMA           1.4
++
++AtmosphereSTD1976::AtmosphereSTD1976(void) :
++  Atmosphere(R_HAT/MOL_WT, GAMMA)
+ {
+   mTable[0.0] = TableData(288.15, 1.0, -6.5);
+   mTable[11.0] = TableData(216.65, 2.233611e-1, 0.0);
+@@ -92,23 +97,14 @@
+   // Temperature in kelvin
+   data.temperature = slTemperature*theta;
+ 
+-const real_type specific_heat_ratio = 1.4;
+-
+-#define MOL_WT          28.9644  /*  kg/kgmol (air)         */
+-#define R_HAT         8314.32    /*  J/kgmol.K (gas const.) */
+-
+-
+   if (fabs(data.temperature) &gt; Limits&lt;real_type&gt;::min())
+-    data.density = data.pressure / ((R_HAT/MOL_WT)*data.temperature);
++    data.density = data.pressure / (getGasConstant()*data.temperature);
+   else
+     data.density = 0.0;
+-  data.soundspeed = sqrt(specific_heat_ratio*data.temperature*(R_HAT/MOL_WT));
+ 
+-
+   Log(Environment, Debug) &lt;&lt; &quot;p = &quot; &lt;&lt; data.pressure &lt;&lt; &quot;, T = &quot;
+                           &lt;&lt; data.temperature &lt;&lt; &quot;, rho = &quot;
+-                          &lt;&lt; data.density &lt;&lt; &quot;, soundspeed = &quot;
+-                          &lt;&lt; data.soundspeed &lt;&lt; endl;
++                          &lt;&lt; data.density &lt;&lt; endl;
+   
+   return data;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000182.html">[OpenFDM-svn] r199 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000184.html">[OpenFDM-svn] r201 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#183">[ date ]</a>
+              <a href="thread.html#183">[ thread ]</a>
+              <a href="subject.html#183">[ subject ]</a>
+              <a href="author.html#183">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

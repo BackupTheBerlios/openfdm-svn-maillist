@@ -1,0 +1,130 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r552 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r552%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810031508.m93F8C9d023736%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000522.html">
+   <LINK REL="Next"  HREF="000524.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r552 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r552%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810031508.m93F8C9d023736%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r552 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct  3 17:08:12 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000522.html">[OpenFDM-svn] r551 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000524.html">[OpenFDM-svn] r553 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#523">[ date ]</a>
+              <a href="thread.html#523">[ thread ]</a>
+              <a href="subject.html#523">[ subject ]</a>
+              <a href="author.html#523">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-03 17:08:11 +0200 (Fri, 03 Oct 2008)
+New Revision: 552
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+Log:
+Change continous state allocation.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-10-03 14:48:27 UTC (rev 551)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-10-03 15:08:11 UTC (rev 552)
+@@ -53,7 +53,7 @@
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  leafContext.mContinousState.setValue(*mMatrixStateInfo, leafContext);
++  leafContext.setContinousStateSize(*mMatrixStateInfo, sz);
+   return true;
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-10-03 14:48:27 UTC (rev 551)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-10-03 15:08:11 UTC (rev 552)
+@@ -5,21 +5,35 @@
+ #ifndef OpenFDM_LeafContext_H
+ #define OpenFDM_LeafContext_H
+ 
++#include &quot;AbstractNodeContext.h&quot;
+ #include &quot;ContinousStateValueVector.h&quot;
+ #include &quot;DiscreteStateValueVector.h&quot;
+-#include &quot;AbstractNodeContext.h&quot;
++#include &quot;LeafNode.h&quot;
++#include &quot;MatrixStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ class LeafContext : public AbstractNodeContext {
+ public:
++  virtual ~LeafContext() {}
++  virtual const LeafNode&amp; getNode() const = 0;
++
++  void setContinousStateSize(const MatrixStateInfo&amp; stateInfo,
++                             const Size&amp; sz)
++  {
++    mContinousState.setValue(stateInfo, *this);
++    mContinousState[stateInfo].resize(sz(0), sz(1));
++    mContinousStateDerivative.setValue(stateInfo, *this);
++    mContinousStateDerivative[stateInfo].resize(sz(0), sz(1));
++  }
++
++// protected:
+   // Continous States
+   ContinousStateValueVector mContinousState;
++  ContinousStateValueVector mContinousStateDerivative;
+   // Discrete States
+   DiscreteStateValueVector mDiscreteState;
+ 
+-  // Task id's ???
+-
+   // functors to the operations to do??
+ 
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000522.html">[OpenFDM-svn] r551 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000524.html">[OpenFDM-svn] r553 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#523">[ date ]</a>
+              <a href="thread.html#523">[ thread ]</a>
+              <a href="subject.html#523">[ subject ]</a>
+              <a href="author.html#523">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

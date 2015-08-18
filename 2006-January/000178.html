@@ -1,0 +1,771 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r195 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r195%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601060912.k069C64d023385%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000177.html">
+   <LINK REL="Next"  HREF="000179.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r195 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r195%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601060912.k069C64d023385%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r195 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Jan  6 10:12:06 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000177.html">[OpenFDM-svn] r194 - trunk/OpenFDM/src/OpenFDM/LinAlg
+</A></li>
+        <LI>Next message: <A HREF="000179.html">[OpenFDM-svn] r196 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#178">[ date ]</a>
+              <a href="thread.html#178">[ thread ]</a>
+              <a href="subject.html#178">[ subject ]</a>
+              <a href="author.html#178">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-06 10:11:46 +0100 (Fri, 06 Jan 2006)
+New Revision: 195
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/ConstModel.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstModel.h
+   trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp
+   trunk/OpenFDM/src/OpenFDM/ExternalForceModel.h
+Removed:
+   trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstSystem.h
+   trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstantForce.h
+   trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+   trunk/OpenFDM/src/OpenFDM/DirectForce.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Port.h
+   trunk/OpenFDM/src/OpenFDM/Product.cpp
+   trunk/OpenFDM/src/OpenFDM/Product.h
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+clean up external force system
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -13,11 +13,11 @@
+ 
+ #include &lt;OpenFDM/AeroForce.h&gt;
+ #include &lt;OpenFDM/Bias.h&gt;
+-#include &lt;OpenFDM/ConstSystem.h&gt;
++#include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/DeadBand.h&gt;
+ #include &lt;OpenFDM/DiscreteIntegrator.h&gt;
++#include &lt;OpenFDM/ExternalForceModel.h&gt;
+ #include &lt;OpenFDM/TransferFunction.h&gt;
+-#include &lt;OpenFDM/DirectForce.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+@@ -674,7 +674,7 @@
+ {
+   Matrix m(1, 1);
+   m(1, 1) = 0;
+-  ConstSystem* cModel = new ConstSystem(name, m);
++  ConstModel* cModel = new ConstModel(name, m);
+   addFCSModel(cModel);
+   return cModel-&gt;getOutputPort(0);
+ }
+@@ -2097,14 +2097,24 @@
+       return error(&quot;Unknown parameter in engine configuration&quot;);
+   }
+ 
++
++
+   std::string namestr = &quot;Engine&lt;&quot; + number + &quot;&gt;&quot;;
+-  DirectForce* engineForce = new DirectForce(namestr);
+-  engineForce-&gt;setDirection(Vector6(0, 0, 0, 4.4*1.5e4, 0, 0));
++  ConstModel* fullForce = new ConstModel(namestr + &quot; full&quot;,
++                                         Vector6(0, 0, 0, 4.4*1.5e4, 0, 0));
++  addMultiBodyModel(fullForce);
++
++  Product* prod = new Product(namestr + &quot; modulation&quot;);
++  std::string throttlename = &quot;fcs/throttle-cmd-norm[&quot; + number + &quot;]&quot;;
++  prod-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(throttlename));
++  prod-&gt;getInputPort(1)-&gt;connect(fullForce-&gt;getOutputPort(0));
++  addMultiBodyModel(prod);
++
++  ExternalForceModel* engineForce = new ExternalForceModel(namestr);
+   engineForce-&gt;setPosition(structToBody(loc));
+   engineForce-&gt;setOrientation(Quaternion::fromHeadAttBank(pitch, 0, yaw));
+ 
+-  std::string throttlename = &quot;fcs/throttle-cmd-norm[&quot; + number + &quot;]&quot;;
+-  engineForce-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(throttlename));
++  engineForce-&gt;getInputPort(0)-&gt;connect(prod-&gt;getOutputPort(0));
+ 
+   mVehicle-&gt;getTopBody()-&gt;addInteract(engineForce);
+ 
+@@ -2270,8 +2280,8 @@
+   if (ndims == 0) {
+     Matrix value(1, 1);
+     datastr &gt;&gt; value(1, 1);
+-    ConstSystem* constModel
+-      = new ConstSystem(prod-&gt;getName() + &quot; Factor&quot;, value);
++    ConstModel* constModel
++      = new ConstModel(prod-&gt;getName() + &quot; Factor&quot;, value);
+     addMultiBodyModel(constModel);
+ 
+     unsigned nf = prod-&gt;getNumFactors();
+
+Copied: trunk/OpenFDM/src/OpenFDM/ConstModel.cpp (from rev 190, trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/ConstModel.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -0,0 +1,34 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;ConstModel.h&quot;
++
++namespace OpenFDM {
++
++ConstModel::ConstModel(const std::string&amp; name, const Matrix&amp; value) :
++  Model(name), mValue(value)
++{
++  addProperty(&quot;value&quot;, Property(this, &amp;ConstModel::getValue, &amp;ConstModel::setValue));
++
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;output&quot;, this, &amp;ConstModel::getValue);
++}
++
++ConstModel::~ConstModel(void)
++{
++}
++
++const Matrix&amp;
++ConstModel::getValue(void) const
++{
++  return mValue;
++}
++
++void
++ConstModel::setValue(const Matrix&amp; value)
++{
++  mValue = value;
++}
++
++} // namespace OpenFDM
+
+Copied: trunk/OpenFDM/src/OpenFDM/ConstModel.h (from rev 190, trunk/OpenFDM/src/OpenFDM/ConstSystem.h)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstSystem.h	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/ConstModel.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -0,0 +1,28 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ConstModel_H
++#define OpenFDM_ConstModel_H
++
++#include &quot;Model.h&quot;
++#include &quot;Matrix.h&quot;
++
++namespace OpenFDM {
++
++class ConstModel
++  : public Model {
++public:
++  ConstModel(const std::string&amp; name, const Matrix&amp; value);
++  virtual ~ConstModel(void);
++
++  const Matrix&amp; getValue(void) const;
++  void setValue(const Matrix&amp; value);
++
++private:
++  Matrix mValue;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Deleted: trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,34 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;ConstSystem.h&quot;
+-
+-namespace OpenFDM {
+-
+-ConstSystem::ConstSystem(const std::string&amp; name, const Matrix&amp; value) :
+-  Model(name), mValue(value)
+-{
+-  addProperty(&quot;value&quot;, Property(this, &amp;ConstSystem::getValue, &amp;ConstSystem::setValue));
+-
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;ConstSystem::getValue);
+-}
+-
+-ConstSystem::~ConstSystem(void)
+-{
+-}
+-
+-const Matrix&amp;
+-ConstSystem::getValue(void) const
+-{
+-  return mValue;
+-}
+-
+-void
+-ConstSystem::setValue(const Matrix&amp; value)
+-{
+-  mValue = value;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/ConstSystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstSystem.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ConstSystem.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,28 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ConstSystem_H
+-#define OpenFDM_ConstSystem_H
+-
+-#include &quot;Model.h&quot;
+-#include &quot;Matrix.h&quot;
+-
+-namespace OpenFDM {
+-
+-class ConstSystem
+-  : public Model {
+-public:
+-  ConstSystem(const std::string&amp; name, const Matrix&amp; value);
+-  virtual ~ConstSystem(void);
+-
+-  const Matrix&amp; getValue(void) const;
+-  void setValue(const Matrix&amp; value);
+-
+-private:
+-  Matrix mValue;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Deleted: trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,20 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Vector.h&quot;
+-#include &quot;ConstantForce.h&quot;
+-
+-namespace OpenFDM {
+-
+-ConstantForce::ConstantForce(const std::string&amp; name, const Vector6&amp; force)
+-  : ExternalForce(name)
+-{
+-  setForce(force);
+-}
+-
+-ConstantForce::~ConstantForce(void)
+-{
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/ConstantForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstantForce.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ConstantForce.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,28 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ConstantForce_H
+-#define OpenFDM_ConstantForce_H
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+-
+-namespace OpenFDM {
+-
+-class ConstantForce
+-  : public ExternalForce {
+-public:
+-  ConstantForce(const std::string&amp; name,
+-                const Vector6&amp; force = Vector6::zeros());
+-  virtual ~ConstantForce(void);
+-
+-  using ExternalForce::setForce;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Deleted: trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,60 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Vector.h&quot;
+-#include &quot;DirectForce.h&quot;
+-
+-namespace OpenFDM {
+-
+-DirectForce::DirectForce(const std::string&amp; name, const Vector6&amp; direction) :
+-  ExternalForce(name),
+-  mDirection(direction),
+-  mMagnitude(0)
+-{
+-  addProperty(&quot;direction&quot;, Property(this, &amp;DirectForce::getDirection, &amp;DirectForce::setDirection));
+-  addProperty(&quot;magnitude&quot;, Property(this, &amp;DirectForce::getMagnitude));
+-
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;magnitude&quot;);
+-}
+-
+-DirectForce::~DirectForce(void)
+-{
+-}
+-
+-void
+-DirectForce::setDirection(const Vector6&amp; direction)
+-{
+-  mDirection = direction;
+-}
+-
+-const Vector6&amp;
+-DirectForce::getDirection(void) const
+-{
+-  return mDirection;
+-}
+-
+-real_type
+-DirectForce::getMagnitude(void) const
+-{
+-  return mMagnitude;
+-}
+-
+-bool
+-DirectForce::init(void)
+-{
+-  return true;
+-}
+-
+-void
+-DirectForce::output(const TaskInfo&amp;)
+-{
+-  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+-  mMagnitude = rh.getRealValue();
+-  setForce(mMagnitude*mDirection);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/DirectForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DirectForce.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/DirectForce.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -1,38 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_DirectForce_H
+-#define OpenFDM_DirectForce_H
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+-
+-namespace OpenFDM {
+-
+-class DirectForce
+-  : public ExternalForce {
+-public:
+-  DirectForce(const std::string&amp; name,
+-              const Vector6&amp; direction = Vector6::unit(4));
+-  virtual ~DirectForce(void);
+-
+-  void setDirection(const Vector6&amp; direction);
+-  const Vector6&amp; getDirection(void) const;
+-
+-  real_type getMagnitude(void) const;
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+-private:
+-  Vector6 mDirection;
+-  real_type mMagnitude;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Added: trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -0,0 +1,51 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Vector.h&quot;
++#include &quot;ExternalForceModel.h&quot;
++
++namespace OpenFDM {
++
++ExternalForceModel::ExternalForceModel(const std::string&amp; name)
++  : ExternalForce(name)
++{
++  setDirectFeedThrough(true);
++
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;forceInput&quot;);
++}
++
++ExternalForceModel::~ExternalForceModel(void)
++{
++}
++
++bool
++ExternalForceModel::init(void)
++{
++  mInputPort = getInputPort(0)-&gt;toMatrixPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of ExternalForceModel model \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot;
++                      &lt;&lt; getInputPortName(0) &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  if (size(mInputPort.getMatrixValue()) != Size(6, 1)) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of ExternalForceModel model \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot;
++                      &lt;&lt; getInputPortName(0) &lt;&lt; &quot;\&quot; is not of size [6, 1]!&quot;
++                      &lt;&lt; endl;
++    return false;
++  }
++
++  return true;
++}
++
++void
++ExternalForceModel::output(const TaskInfo&amp;)
++{
++  OpenFDMAssert(mInputPort.isConnected());
++  setForce(mInputPort.getMatrixValue());
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/ExternalForceModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ExternalForceModel.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/ExternalForceModel.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -0,0 +1,31 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ExternalForceModel_H
++#define OpenFDM_ExternalForceModel_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++
++namespace OpenFDM {
++
++class ExternalForceModel
++  : public ExternalForce {
++public:
++  ExternalForceModel(const std::string&amp; name);
++  virtual ~ExternalForceModel(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp;);
++
++private:
++  MatrixPortHandle mInputPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/ExternalForceModel.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-06 09:11:46 UTC (rev 195)
+@@ -34,15 +34,13 @@
+   CartesianActuatorFrame.h \
+   CartesianJointFrame.h \
+   Contact.h \
+-  ConstantForce.h \
+-  ConstSystem.h \
++  ConstModel.h \
+   ConstFrameVisitor.h \
+   CowPtr.h \
+   DeadBand.h \
+   DefaultGravity.h \
+   DefaultGround.h \
+   DefaultPlanet.h \
+-  DirectForce.h \
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+   DoPri5.h \
+@@ -50,6 +48,7 @@
+   EnvironmentObject.h \
+   ExplicitAdams.h \
+   ExplicitEuler.h \
++  ExternalForceModel.h \
+   Force.h \
+   Frame.h \
+   FrameVisitor.h \
+@@ -143,13 +142,11 @@
+   Bias.cpp \
+   BinaryFunctionModel.cpp \
+   Contact.cpp \
+-  ConstantForce.cpp \
+-  ConstSystem.cpp \
++  ConstModel.cpp \
+   DeadBand.cpp \
+   DefaultGravity.cpp \
+   DefaultGround.cpp \
+   DefaultPlanet.cpp \
+-  DirectForce.cpp \
+   DiscBrake.cpp \
+   DiscreteIntegrator.cpp \
+   DoPri5.cpp \
+@@ -157,6 +154,7 @@
+   EnvironmentObject.cpp \
+   ExplicitAdams.cpp \
+   ExplicitEuler.cpp \
++  ExternalForceModel.cpp \
+   Force.cpp \
+   Frame.cpp \
+   Function.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -33,6 +33,7 @@
+   RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
+   virtual RealPortInterface* toRealPortInterface(void)
+   {
++    evaluate();
+     if (Size(1, 1) == size(mValue))
+       return this;
+     else
+
+Modified: trunk/OpenFDM/src/OpenFDM/Product.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -34,15 +34,39 @@
+ bool
+ Product::init(void)
+ {
+-  mFactorPorts.resize(getNumFactors());
++  mScalarFactorPorts.clear();
++  mMatrixFactorPorts.clear();
+   for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
+-    if (!getInputPort(i)-&gt;isConnected()) {
+-      Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for Product \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
++    RealPortHandle scalarHandle = getInputPort(i)-&gt;toRealPortHandle();
++    if (scalarHandle.isConnected())
++      mScalarFactorPorts.push_back(scalarHandle);
++    else {
++      MatrixPortHandle matrixHandle = getInputPort(i)-&gt;toMatrixPortHandle();
++      if (matrixHandle.isConnected()) {
++        if (!mMatrixFactorPorts.empty()) {
++          unsigned lastCols = cols(mMatrixFactorPorts.back().getMatrixValue());
++          unsigned thisRows = rows(matrixHandle.getMatrixValue());
++          if (lastCols != thisRows) {
++            Log(Model, Error) &lt;&lt; &quot;Dimensions for Product \&quot;&quot;
++                              &lt;&lt; getName() &lt;&lt; &quot;\&quot; do not agree!&quot; &lt;&lt; endl;
++            return false;
++          }
++        }
++
++        mMatrixFactorPorts.push_back(matrixHandle);
++      } else {
++        Log(Model, Error) &lt;&lt; &quot;Found unconnected input Port for Product \&quot;&quot;
++                          &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        return false;
++      }
+     }
+-    mFactorPorts[i] = getInputPort(i)-&gt;toRealPortHandle();
+   }
++  if (mMatrixFactorPorts.empty()) {
++    mProduct.resize(1, 1);
++  } else {
++    mProduct.resize(rows(mMatrixFactorPorts.front().getMatrixValue()),
++                    cols(mMatrixFactorPorts.back().getMatrixValue()));
++  }
+ 
+   return true;
+ }
+@@ -50,14 +74,22 @@
+ void
+ Product::output(const TaskInfo&amp;)
+ {
+-  mProduct = 1;
+-  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i)
+-    mProduct *= mFactorPorts[i].getRealValue();
++  real_type scalarFac = 1;
++  for (unsigned i = 0; i &lt; mScalarFactorPorts.size(); ++i)
++    scalarFac *= mScalarFactorPorts[i].getRealValue();
++  if (mMatrixFactorPorts.empty()) {
++    mProduct(1, 1) = scalarFac;
++  } else {
++    mProduct = mMatrixFactorPorts[0].getMatrixValue();
++    for (unsigned i = 1; i &lt; mMatrixFactorPorts.size(); ++i)
++      mProduct = mProduct*mMatrixFactorPorts[i].getMatrixValue();
++    mProduct *= scalarFac;
++  }
+   Log(Model,Debug3) &lt;&lt; &quot;Output of Product \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+                     &lt;&lt; mProduct &lt;&lt; endl;
+ }
+ 
+-const real_type&amp;
++const Matrix&amp;
+ Product::getProduct(void) const
+ {
+   return mProduct;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Product.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Product.h	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/Product.h	2006-01-06 09:11:46 UTC (rev 195)
+@@ -21,14 +21,15 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  const real_type&amp; getProduct(void) const;
++  const Matrix&amp; getProduct(void) const;
+ 
+   unsigned getNumFactors(void) const;
+   void setNumFactors(const unsigned&amp; num);
+ 
+ private:
+-  real_type mProduct;
+-  std::vector&lt;RealPortHandle&gt; mFactorPorts;
++  Matrix mProduct;
++  std::vector&lt;RealPortHandle&gt; mScalarFactorPorts;
++  std::vector&lt;MatrixPortHandle&gt; mMatrixFactorPorts;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-06 08:18:07 UTC (rev 194)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-06 09:11:46 UTC (rev 195)
+@@ -44,7 +44,7 @@
+ #include &lt;OpenFDM/Model.h&gt;
+ #include &lt;OpenFDM/ModelGroup.h&gt;
+ #include &lt;OpenFDM/Bias.h&gt;
+-#include &lt;OpenFDM/ConstSystem.h&gt;
++#include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/DeadBand.h&gt;
+ #include &lt;OpenFDM/DiscreteIntegrator.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+@@ -308,7 +308,7 @@
+     if (type == &quot;Bias&quot;) {
+       model = new Bias(name);
+     } else if (type == &quot;Const&quot;) {
+-      model = new ConstSystem(name, Matrix()); // FIXME
++      model = new ConstModel(name, Matrix()); // FIXME
+     } else if (type == &quot;DeadBand&quot;) {
+       model = new DeadBand(name);
+     } else if (type == &quot;DiscreteIntegrator&quot;) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000177.html">[OpenFDM-svn] r194 - trunk/OpenFDM/src/OpenFDM/LinAlg
+</A></li>
+	<LI>Next message: <A HREF="000179.html">[OpenFDM-svn] r196 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#178">[ date ]</a>
+              <a href="thread.html#178">[ thread ]</a>
+              <a href="subject.html#178">[ subject ]</a>
+              <a href="author.html#178">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

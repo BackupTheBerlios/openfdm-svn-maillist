@@ -1,0 +1,977 @@
+From frohlich at mail.berlios.de  Sun May  8 21:14:50 2011
+From: frohlich at mail.berlios.de (frohlich at mail.berlios.de)
+Date: Sun,  8 May 2011 21:14:50 +0200
+Subject: [OpenFDM-svn] r1128 - trunk/flightgear
+Message-ID: <20110508191451.130C548125E@sheep.berlios.de>
+
+Author: frohlich
+Date: 2011-05-08 21:14:50 +0200 (Sun, 08 May 2011)
+New Revision: 1128
+
+Modified:
+   trunk/flightgear/flightgear.diff
+Log:
+Also add an option for the cmake build system.
+
+
+Modified: trunk/flightgear/flightgear.diff
+===================================================================
+--- trunk/flightgear/flightgear.diff	2011-04-30 05:37:47 UTC (rev 1127)
++++ trunk/flightgear/flightgear.diff	2011-05-08 19:14:50 UTC (rev 1128)
+@@ -1,7 +1,20 @@
+-diff -urNb flightgear/configure.ac flightgear-OpenFDM/configure.ac
+---- flightgear/configure.ac	2011-02-04 21:40:50.243193039 +0100
+-+++ flightgear-OpenFDM/configure.ac	2011-02-04 21:43:59.514302275 +0100
+-@@ -638,6 +638,14 @@
++diff --git a/CMakeLists.txt b/CMakeLists.txt
++index 1ec1f62..a141ae7 100644
++--- a/CMakeLists.txt
+++++ b/CMakeLists.txt
++@@ -54,6 +54,7 @@ option(ENABLE_LARCSIM "Set to ON to build FlightGear with LaRCsim FDM" ON)
++ option(ENABLE_YASIM "Set to ON to build FlightGear with YASIM FDM" ON)
++ option(ENABLE_JSBSIM "Set to ON to build FlightGear with JSBSim FDM" ON)
++ option(ENABLE_FGADMIN "Set to ON to build FlightGear with FGADMIN" ON)
+++option(FG_ENABLE_OPENFDM_FDM "Set to ON to build FlightGear with OpenFDM FDM" ON)
++ option(EVENT_INPUT "Set to ON to build FlightGear with event-based Input support" OFF)
++ option(ENABLE_LIBSVN "Set to ON to build terrasync with libsvnclient support" OFF)
++ 
++diff --git a/configure.ac b/configure.ac
++index 3635cfe..cb0ff54 100644
++--- a/configure.ac
+++++ b/configure.ac
++@@ -646,6 +646,14 @@ if test "x$ac_cv_header_simgear_screen_jpgfactory_hxx" = "xyes"; then
+  fi
+  AM_CONDITIONAL(ENABLE_JPEG_SERVER, test "x$ac_cv_header_simgear_screen_jpgfactory_hxx" = "xyes")
+  
+@@ -16,7 +29,7 @@
+  # Check for "plib" without which we cannot go on
+  case "${host}" in
+  *-apple-darwin*)
+-@@ -906,6 +914,7 @@
++@@ -914,6 +922,7 @@ AC_CONFIG_FILES([ \
+  	src/FDM/JSBSim/models/atmosphere/Makefile \
+  	src/FDM/JSBSim/models/propulsion/Makefile \
+  	src/FDM/LaRCsim/Makefile \
+@@ -24,9 +37,55 @@
+  	src/FDM/SP/Makefile \
+  	src/FDM/UIUCModel/Makefile \
+  	src/FDM/YASim/Makefile \
+-diff -urNb flightgear/src/FDM/fdm_shell.cxx flightgear-OpenFDM/src/FDM/fdm_shell.cxx
+---- flightgear/src/FDM/fdm_shell.cxx	2011-02-04 21:40:51.239883094 +0100
+-+++ flightgear-OpenFDM/src/FDM/fdm_shell.cxx	2011-02-04 21:46:38.588038239 +0100
++diff --git a/src/FDM/CMakeLists.txt b/src/FDM/CMakeLists.txt
++index 74d695f..70ca3d6 100644
++--- a/src/FDM/CMakeLists.txt
+++++ b/src/FDM/CMakeLists.txt
++@@ -9,6 +9,12 @@ set(SP_FDM_SOURCES
++ 	)
++ endif()
++ 
+++if(FG_ENABLE_OPENFDM_FDM)
+++set(OPENFDM_SOURCES
+++	OpenFDM/FGOpenFDM.cpp
+++	)
+++endif()
+++
++ set(UIUC_SOURCES
++ 	uiuc_1DdataFileReader.cpp
++ 	uiuc_1Dinterpolation.cpp
++@@ -133,6 +139,7 @@ set(SOURCES
++ 	TankProperties.cxx
++ 	groundcache.cxx
++ 	${SP_FDM_SOURCES}
+++	${OPENFDM_SOURCES}
++ 	ExternalNet/ExternalNet.cxx
++ 	ExternalPipe/ExternalPipe.cxx
++ 	)
++diff --git a/src/FDM/Makefile.am b/src/FDM/Makefile.am
++index 41bfe3f..b94a8d4 100644
++--- a/src/FDM/Makefile.am
+++++ b/src/FDM/Makefile.am
++@@ -4,8 +4,14 @@ else
++ SP_DIR =
++ endif
++ 
+++if ENABLE_OpenFDM_FDM
+++OpenFDM_DIR = OpenFDM
+++else
+++OpenFDM_DIR =
+++endif
+++
++ SUBDIRS	= JSBSim LaRCsim UIUCModel YASim \
++-          $(SP_DIR) ExternalNet ExternalPipe
+++          $(SP_DIR) $(OpenFDM_DIR) ExternalNet ExternalPipe
++ 
++ noinst_LIBRARIES = libFlight.a
++ 
++diff --git a/src/FDM/fdm_shell.cxx b/src/FDM/fdm_shell.cxx
++index 8055bce..e77be1c 100644
++--- a/src/FDM/fdm_shell.cxx
+++++ b/src/FDM/fdm_shell.cxx
+ @@ -48,6 +48,9 @@
+  #include <FDM/UFO.hxx>
+  #include <FDM/NullFDM.hxx>
+@@ -35,9 +94,9 @@
+ +#include <FDM/OpenFDM/FGOpenFDM.h>
+ +#endif
+  
++ 
+  /*
+-  * Evil global variable required by Network/FGNative,
+-@@ -258,6 +261,10 @@
++@@ -245,6 +248,10 @@ void FDMShell::createImplementation()
+          _impl = new FGNullFDM( dt );
+      } else if ( model == "yasim" ) {
+          _impl = new YASim( dt );
+@@ -48,10 +107,11 @@
+      } else {
+          throw sg_exception(string("Unrecognized flight model '") + model
+                 + "', cannot init flight dynamics model.");
+-diff -urNb flightgear/src/FDM/flight.hxx flightgear-OpenFDM/src/FDM/flight.hxx
+---- flightgear/src/FDM/flight.hxx	2011-02-04 21:40:51.239883094 +0100
+-+++ flightgear-OpenFDM/src/FDM/flight.hxx	2011-02-04 21:43:59.514302275 +0100
+-@@ -402,7 +402,10 @@
++diff --git a/src/FDM/flight.hxx b/src/FDM/flight.hxx
++index 6965d30..49de534 100644
++--- a/src/FDM/flight.hxx
+++++ b/src/FDM/flight.hxx
++@@ -402,7 +402,10 @@ public:
+  	FG_PARACHUTE = 9,
+  
+  	// Driven externally via a serial port, net, file, etc.
+@@ -63,29 +123,44 @@
+      };
+  
+      // initialization
+-diff -urNb flightgear/src/FDM/Makefile.am flightgear-OpenFDM/src/FDM/Makefile.am
+---- flightgear/src/FDM/Makefile.am	2011-02-04 21:40:50.976543581 +0100
+-+++ flightgear-OpenFDM/src/FDM/Makefile.am	2011-02-04 21:43:59.514302275 +0100
+-@@ -4,8 +4,14 @@
+- SP_DIR =
+- endif
++diff --git a/src/Include/config_cmake.h.in b/src/Include/config_cmake.h.in
++index 0477170..86f0ce4 100644
++--- a/src/Include/config_cmake.h.in
+++++ b/src/Include/config_cmake.h.in
++@@ -28,6 +28,7 @@
++ #cmakedefine ENABLE_LARCSIM
++ #cmakedefine ENABLE_YASIM
++ #cmakedefine ENABLE_JSBSIM
+++#cmakedefine FG_ENABLE_OPENFDM_FDM
+  
+-+if ENABLE_OpenFDM_FDM
+-+OpenFDM_DIR = OpenFDM
+-+else
+-+OpenFDM_DIR =
+-+endif
++ #cmakedefine HAVE_SVN_CLIENT_H
++ #cmakedefine HAVE_LIBSVN_CLIENT_1
++diff --git a/src/Main/CMakeLists.txt b/src/Main/CMakeLists.txt
++index 954c020..7fd0dd8 100644
++--- a/src/Main/CMakeLists.txt
+++++ b/src/Main/CMakeLists.txt
++@@ -47,9 +47,16 @@ else()
++   set(HLA_LIBRARIES "")
++ endif()
++ 
+++if(FG_ENABLE_OPENFDM_FDM)
+++  set(OPENFDM_LIBRARIES "-lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM")
+++else()
+++  set(OPENFDM_LIBRARIES "")
+++endif()
+ +
+- SUBDIRS	= JSBSim LaRCsim UIUCModel YASim \
+--          $(SP_DIR) ExternalNet ExternalPipe
+-+          $(SP_DIR) $(OpenFDM_DIR) ExternalNet ExternalPipe
+- 
+- noinst_LIBRARIES = libFlight.a
+- 
+-diff -urNb flightgear/src/Main/Makefile.am flightgear-OpenFDM/src/Main/Makefile.am
+---- flightgear/src/Main/Makefile.am	2011-02-04 21:40:51.856564229 +0100
+-+++ flightgear-OpenFDM/src/Main/Makefile.am	2011-02-04 21:44:34.298452374 +0100
+-@@ -9,6 +9,13 @@
++ target_link_libraries(fgfs 
++ 	${FG_LIBS}
++         ${HLA_LIBRARIES}
+++	${OPENFDM_LIBRARIES}
++ 	${SIMGEAR_LIBRARIES}
++ 	${OPENSCENEGRAPH_LIBRARIES} 
++ 	${OPENAL_LIBRARY} 
++diff --git a/src/Main/Makefile.am b/src/Main/Makefile.am
++index c4525ed..6abb582 100644
++--- a/src/Main/Makefile.am
+++++ b/src/Main/Makefile.am
++@@ -9,6 +9,13 @@ else
+  SP_FDM_LIBS =
+  endif
+  
+@@ -99,7 +174,7 @@
+  if WITH_EVENTINPUT
+  EVENT_LIBS = $(eventinput_LIBS)
+  else
+-@@ -90,6 +97,7 @@
++@@ -90,6 +97,7 @@ fgfs_LDADD = \
+  	$(top_builddir)/src/FDM/LaRCsim/libLaRCsim.a \
+  	$(top_builddir)/src/FDM/UIUCModel/libUIUCModel.a \
+  	$(SP_FDM_LIBS) \
+
+
+
+From frohlich at mail.berlios.de  Sun May  8 22:57:51 2011
+From: frohlich at mail.berlios.de (frohlich at mail.berlios.de)
+Date: Sun,  8 May 2011 22:57:51 +0200
+Subject: [OpenFDM-svn] r1129 - trunk/flightgear
+Message-ID: <20110508205751.5005248125E@sheep.berlios.de>
+
+Author: frohlich
+Date: 2011-05-08 22:57:50 +0200 (Sun, 08 May 2011)
+New Revision: 1129
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Fix warnings, fix off by one error.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2011-05-08 19:14:50 UTC (rev 1128)
++++ trunk/flightgear/FGOpenFDM.cpp	2011-05-08 20:57:50 UTC (rev 1129)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich
+  *
+  */
+ 
+@@ -128,7 +128,7 @@
+ 
+     return true;
+   }
+-  
++
+   virtual void
+   releaseWire(void) const
+   {
+@@ -139,7 +139,7 @@
+ 
+   void setInterface(FGInterface *ifce)
+   { mIfce = ifce; }
+-  
++
+ private:
+   FGInterface *mIfce;
+ };
+@@ -267,7 +267,7 @@
+     mCurrentNode = oldNode->getNode(pName.c_str(), true);
+ 
+     tieObject(node);
+-    
++
+     mCurrentNode = oldNode;
+ 
+     ModelVisitor::apply(node);
+@@ -302,7 +302,7 @@
+ 
+     std::string pName = toPropname(modelGroup.getName());
+     mCurrentNode = oldNode->getNode(pName.c_str(), true);
+-    
++
+     traverse(modelGroup);
+ 
+     tieObject(modelGroup);
+@@ -324,7 +324,7 @@
+       SGPropertyNode* sgProp = mCurrentNode->getChild(pName.c_str(), 0, true);
+       Variant value;
+       object.getPropertyValue(it->getName(), value);
+-      
++
+       if (value.isString())
+         sgProp->tie(FGStringPropertyAdapter(&object, it->getName()));
+       else if (value.isReal())
+@@ -333,11 +333,11 @@
+         sgProp->tie(FGIntegerPropertyAdapter(&object, it->getName()));
+       else if (value.isUnsigned())
+         sgProp->tie(FGIntegerPropertyAdapter(&object, it->getName()));
+-      
++
+       else if (value.isMatrix()) {
+         Matrix m = value.toMatrix();
+         unsigned reshapeSize = rows(m) * cols(m);
+-        
++
+         sgProp->tie(FGRealPropertyAdapter(&object, it->getName()));
+         for (unsigned i = 2; i <= reshapeSize; ++i) {
+           sgProp = mCurrentNode->getChild(pName.c_str(), i-1, true);
+@@ -425,14 +425,14 @@
+   reader.loadAircraft(aircraftFile);
+   if (reader.getErrorState()) {
+     SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
+-    
++
+     SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from JSBSim reader:");
+     ReaderWriter::StringList errors = reader.getErrors();
+     ReaderWriter::StringList::const_iterator it;
+     for (it = errors.begin(); it != errors.end(); ++it) {
+       SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+     }
+-    
++
+     return;
+   }
+   mData->vehicle = reader.getVehicle();
+@@ -494,7 +494,7 @@
+ 
+   Rotation geodOr = vehicle->getGeodOrientation();
+   Vector3 euler = geodOr.getEuler();
+-  _set_Euler_Angles(euler(1), euler(2), euler(3));
++  _set_Euler_Angles(euler(0), euler(1), euler(2));
+ }
+ 
+ void FGOpenFDM::bind()
+@@ -550,7 +550,7 @@
+     vehicle->setGeodPosition(gp);
+   }
+ 
+-  // Check the orientation 
++  // Check the orientation
+   Vector3 euler = vehicle->getGeodOrientation().getEuler();
+   if (!equal(euler, Vector3(get_Phi(), get_Theta(), get_Psi()))) {
+     Quaternion
+@@ -562,7 +562,7 @@
+            << "\n\tcurrent: "<< go );
+     vehicle->setGeodOrientation(go);
+   }
+-  
++
+   double acrad = vehicle->getRadius();
+   double groundCacheRadius = acrad
+     + 2*dt*norm(vehicle->getVelocity().getLinear());
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2011-05-08 19:14:50 UTC (rev 1128)
++++ trunk/flightgear/FGPropertyAdapter.h	2011-05-08 20:57:50 UTC (rev 1129)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich
+  *
+  */
+ 
+@@ -36,8 +36,8 @@
+   }
+ 
+ private:
++  WeakPtr<Object> mObject;
+   std::string mPropertyName;
+-  WeakPtr<Object> mObject;
+ };
+ 
+ 
+@@ -60,7 +60,7 @@
+       mValue = variantValue.toString();
+     return mValue.c_str();
+   }
+-  
++
+   virtual FGStringPropertyAdapter* clone(void) const
+   { return new FGStringPropertyAdapter(*this); }
+ 
+@@ -91,7 +91,7 @@
+       return false;
+     if (cols(m) <= c)
+       return false;
+-    
++
+     m(r, c) = value;
+     return setPropertyValue(Variant(m));
+   }
+@@ -117,7 +117,7 @@
+       return m(r, c);
+     }
+   }
+-  
++
+   virtual FGRealPropertyAdapter* clone(void) const
+   { return new FGRealPropertyAdapter(*this); }
+ private:
+@@ -184,7 +184,7 @@
+ 
+   virtual bool setValue(double value)
+   { return false; }
+-  
++
+   virtual double getValue(void) const
+   { return mOutputCallback->getValue(); }
+ 
+@@ -232,7 +232,7 @@
+         return 0;
+     }
+   }
+-  
++
+   virtual FGRealPortReflector* clone(void) const
+   { return new FGRealPortReflector(*this); }
+ 
+
+
+
+From frohlich at mail.berlios.de  Mon May  9 07:39:49 2011
+From: frohlich at mail.berlios.de (frohlich at mail.berlios.de)
+Date: Mon,  9 May 2011 07:39:49 +0200
+Subject: [OpenFDM-svn] r1130 - branches/OpenFDM-StateSeparation/src/JSBSim
+Message-ID: <20110509053949.D12B4481429@sheep.berlios.de>
+
+Author: frohlich
+Date: 2011-05-09 07:39:49 +0200 (Mon, 09 May 2011)
+New Revision: 1130
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Fix off by one error.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2011-05-08 20:57:50 UTC (rev 1129)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2011-05-09 05:39:49 UTC (rev 1130)
+@@ -1531,11 +1531,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(1);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setNumerator(v);
+     v.resize(2);
+-    v(1) = 1;
+-    v(2) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = 1;
++    v(1) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setDenominator(v);
+     out = model->getPort("output");
+ 
+@@ -1552,11 +1552,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(2);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
+-    v(2) = realData(fcsComponent->getElement("c2"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
++    v(1) = realData(fcsComponent->getElement("c2"), 1);
+     discreteTransfFunc->setNumerator(v);
+-    v(1) = realData(fcsComponent->getElement("c3"), 1);
+-    v(2) = realData(fcsComponent->getElement("c4"), 1);
++    v(0) = realData(fcsComponent->getElement("c3"), 1);
++    v(1) = realData(fcsComponent->getElement("c4"), 1);
+     discreteTransfFunc->setDenominator(v);
+ 
+     out = model->getPort("output");
+@@ -1574,11 +1574,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(1);
+-    v(1) = 1;
++    v(0) = 1;
+     discreteTransfFunc->setNumerator(v);
+     v.resize(2);
+-    v(1) = 1;
+-    v(2) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = 1;
++    v(1) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setDenominator(v);
+     out = model->getPort("output");
+ 
+@@ -1595,13 +1595,13 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(3);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
+-    v(2) = realData(fcsComponent->getElement("c2"), 1);
+-    v(3) = realData(fcsComponent->getElement("c3"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
++    v(1) = realData(fcsComponent->getElement("c2"), 1);
++    v(2) = realData(fcsComponent->getElement("c3"), 1);
+     discreteTransfFunc->setNumerator(v);
+-    v(1) = realData(fcsComponent->getElement("c4"), 1);
+-    v(2) = realData(fcsComponent->getElement("c5"), 1);
+-    v(3) = realData(fcsComponent->getElement("c6"), 1);
++    v(0) = realData(fcsComponent->getElement("c4"), 1);
++    v(1) = realData(fcsComponent->getElement("c5"), 1);
++    v(2) = realData(fcsComponent->getElement("c6"), 1);
+     discreteTransfFunc->setDenominator(v);
+ 
+     out = model->getPort("output");
+
+
+
+From frohlich at mail.berlios.de  Mon May  9 07:40:28 2011
+From: frohlich at mail.berlios.de (frohlich at mail.berlios.de)
+Date: Mon,  9 May 2011 07:40:28 +0200
+Subject: [OpenFDM-svn] r1131 - trunk/OpenFDM/src/JSBSim
+Message-ID: <20110509054028.39DD1481429@sheep.berlios.de>
+
+Author: frohlich
+Date: 2011-05-09 07:40:28 +0200 (Mon, 09 May 2011)
+New Revision: 1131
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+Log:
+Fix off by one error.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2011-05-09 05:39:49 UTC (rev 1130)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2011-05-09 05:40:28 UTC (rev 1131)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich
+  *
+  */
+ 
+@@ -245,7 +245,7 @@
+   aoDamp->setMaxDamperConstant(maxDamp);
+   return aoDamp;
+ }
+-  
++
+ JSBSimReader::JSBSimReader(void)
+ {
+ }
+@@ -338,7 +338,7 @@
+     if (!convertPropulsion(propulsionElem))
+       return error("Cannot convert PROPULSION data");
+   }
+-  
++
+   // Convert the aerodynamic force.
+   const XMLElement* aeroElem = topElem->getElement("aerodynamics");
+   if (aeroElem) {
+@@ -414,7 +414,7 @@
+   // a point not being the center of gravity, use that here ...
+   Vector3 cg = mBodyReference;
+   mBodyReference = vrp;
+-  
++
+   // Attach the eye point.
+   FreeFrame* epFrame = new FreeFrame("Eyepoint Frame");
+   epFrame->setPosition(structToBody(ep));
+@@ -470,7 +470,7 @@
+   I(0, 2) = Unit::slugSquareFoot().convertFrom(ixz);
+   real_type iyz = realData(massBalance->getElement("iyz"), 0);
+   I(1, 2) = Unit::slugSquareFoot().convertFrom(iyz);
+-  
++
+   mass = realData(massBalance->getElement("emptywt"), 0);
+   mass = Unit::lbs().convertFrom(mass);
+ 
+@@ -520,7 +520,7 @@
+                         SpatialInertia(wheelInertia, wheelMass));
+   mVehicle->getMultiBodySystem()->addModel(mass);
+   wheel->addInteract(mass);
+-  
++
+   RevoluteJoint* wj = new RevoluteJoint(name + " Wheel Joint");
+   mVehicle->getMultiBodySystem()->addModel(wj);
+   parent->addInteract(wj);
+@@ -563,7 +563,7 @@
+     // ... and provides an output force
+     Connection::connect(rollingFric->getOutputPort(0), wj->getInputPort(0));
+   }
+-  
++
+   real_type wheelDiam = realData(wheelElem->getElement("wheelDiameter"));
+   WheelContact* wc = new WheelContact(name + " Wheel Contact");
+   mVehicle->getMultiBodySystem()->addModel(wc);
+@@ -575,7 +575,7 @@
+   wc->setSpringDamping(Unit::lbfPerFoot().convertFrom(tireDamp));
+   real_type fc = realData(wheelElem->getElement("frictionCoef"), 0.9);
+   wc->setFrictionCoeficient(fc);
+-  
++
+   PortProvider* port = wj->getOutputPort(0);
+   std::string nameBase = "Wheel " + numStr + " Position";
+   addOutputModel(port, nameBase,
+@@ -607,14 +607,14 @@
+         Vector3 loc
+           = locationData((*it)->getElement("location"), Vector3(0, 0, 0));
+         sg->setPosition(structToBody(loc));
+-        
++
+         real_type k = realData((*it)->getElement("spring_coeff"), 0);
+         sg->setSpringConstant(Unit::lbfPerFoot().convertFrom(k));
+         real_type d = realData((*it)->getElement("damping_coeff"), 0);
+         sg->setSpringDamping(Unit::lbfPerFootPerSecond().convertFrom(d));
+         real_type fs = realData((*it)->getElement("static_friction"), 0);
+         sg->setFrictionCoeficient(fs);
+-        
++
+         // Connect apprioriate input and output models
+ 
+         // FIXME
+@@ -667,7 +667,7 @@
+           Connection::connect(unitConv->getOutputPort(0),
+                               sg->getInputPort("steeringAngle"));
+         }
+-        
++
+         std::string brake = stringData((*it)->getElement("brake_group"));
+         if (brake == "LEFT") {
+           if (!connectJSBExpression("gear/left-brake-pos-norm",
+@@ -678,7 +678,7 @@
+                                     sg->getInputPort("brakeCommand")))
+             return error("could not connect brake command for group RIGHT");
+         }
+-        
++
+       } else if (type == "STRUCTURE" || type == "CONTACT") {
+         // Very simple contact force. Penalty method.
+         SimpleContact* sc = new SimpleContact((*it)->getAttribute("name"));
+@@ -695,7 +695,7 @@
+         sc->setSpringDamping(Unit::lbfPerFootPerSecond().convertFrom(d));
+         real_type fs = realData((*it)->getElement("static_friction"), 0);
+         sc->setFrictionCoeficient(fs);
+-        
++
+       } else if (type == "NOSEGEAR") {
+         // Ok, a compressable gear like the F-18's main gear is.
+         // Some kind of hardcoding here ...
+@@ -715,7 +715,7 @@
+           // A new part modelling the steering
+           RigidBody* steer = new RigidBody(name + " Steer");
+           mVehicle->getMultiBodySystem()->addModel(steer);
+-          
++
+           // connect that via a revolute joint to the toplevel body.
+           // Note the 0.05m below, most steering wheels have some kind of
+           // castering auto line up behavour. That is doe with this 0.05m.
+@@ -729,7 +729,7 @@
+           parentPos = structToBody(compressJointPos) + Vector3(0.05, 0, 0);
+           sj->setPosition(parentPos);
+           sj->setOrientation(Quaternion::unit());
+-          
++
+           UnaryFunctionModel* scale
+             = new UnaryFunctionModel(name + " Scale", UnaryFunctionModel::Abs);
+           addFCSModel(scale);
+@@ -745,9 +745,9 @@
+             return error("could not connect to steering command");
+           Connection::connect(scale->getOutputPort(0), sProd->getInputPort(1));
+           Connection::connectRoute(sProd->getOutputPort(0), sj->getInputPort(0));
+-  
++
+           strutParent = steer;
+-          
++
+           // Prepare outputs
+           PortProvider* port = sj->getOutputPort(0);
+           std::string nameBase = "Steering " + numStr + " Position";
+@@ -757,7 +757,7 @@
+           addOutputModel(port, nameBase + " Deg",
+                          "gear/gear[" + numStr + "]/steering-pos-deg");
+         }
+-        
++
+         const XMLElement* launchbarElem = (*it)->getElement("launchbar");
+         if (launchbarElem) {
+           Launchbar* launchbar = new Launchbar(name + " Launchbar");
+@@ -790,14 +790,14 @@
+           addOutputModel(port, nameBase + " Deg", "gear/launchbar-pos-deg");
+         }
+ 
+-        
++
+         // Now the compressible part of the strut
+         RigidBody* arm = new RigidBody(name + " Strut");
+         mVehicle->getMultiBodySystem()->addModel(arm);
+         Mass* mass = new Mass(name + " Strut Mass", inertiaFrom(Vector3(0, 0, 1), SpatialInertia(100)));
+         mVehicle->getMultiBodySystem()->addModel(mass);
+         arm->addInteract(mass);
+-        
++
+         // This time it is a prismatic joint
+         PrismaticJoint* pj = new PrismaticJoint(name + " Compress Joint");
+         mVehicle->getMultiBodySystem()->addModel(pj);
+@@ -806,7 +806,7 @@
+         pj->setJointAxis(Vector3(0, 0, -1));
+         pj->setPosition(structToBody(compressJointPos) - parentPos);
+         parentPos = structToBody(compressJointPos);
+-        
++
+         // The damper element
+         const XMLElement* airSpringElem = (*it)->getElement("damper");
+         AirSpring* aoDamp = getAirSpring(airSpringElem, name);
+@@ -814,20 +814,20 @@
+         Connection::connect(aoDamp->getOutputPort(0), pj->getInputPort(0));
+         Connection::connect(pj->getOutputPort(0), aoDamp->getInputPort(0));
+         Connection::connect(pj->getOutputPort(1), aoDamp->getInputPort(1));
+-        
++
+         // Attach a wheel to that strut part.
+         attachWheel((*it)->getElement("wheel"), name, numStr, arm, parentPos);
+-        
++
+         // Prepare some outputs ...
+         PortProvider* port = pj->getOutputPort(0);
+         addOutputModel(port, "Gear " + numStr + " Compression",
+                        "gear/gear[" + numStr + "]/compression-m");
+-        
++
+         port = lookupJSBExpression("gear/gear-pos-norm");
+         addOutputModel(port, "Gear " + numStr + " Position",
+                        "gear/gear[" + numStr + "]/position-norm");
+-        
+-        
++
++
+       } else if (type == "F18_MLG") {
+         /// Ok, a compressable gear like the F-18's main gear is.
+         /// Some kind of hardcoding here ...
+@@ -842,7 +842,7 @@
+         Mass* mass = new Mass(name + " Strut Mass", inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80)));
+         mVehicle->getMultiBodySystem()->addModel(mass);
+         arm->addInteract(mass);
+-        
++
+         // Connect that with a revolute joint to the main body
+         RevoluteJoint* rj = new RevoluteJoint(name + " Arm Joint");
+         mVehicle->getMultiBodySystem()->addModel(rj);
+@@ -856,7 +856,7 @@
+         Vector3 compressJointPos = locationData((*it)->getElement("location"));
+         rj->setPosition(structToBody(compressJointPos));
+         rj->setOrientation(Quaternion::unit());
+-        
++
+         LineForce* lineForce = new LineForce(name + " Air Spring LineForce");
+         mVehicle->getMultiBodySystem()->addModel(lineForce);
+         mVehicle->getTopBody()->addInteract(lineForce);
+@@ -871,7 +871,7 @@
+         lineForce->setPosition0(structToBody(asMnt0));
+         lineForce->setPosition1(structToBody(asMnt1)
+                                 - structToBody(compressJointPos));
+-        
++
+         // The damper element
+         const XMLElement* airSpringElem = (*it)->getElement("damper");
+         AirSpring* aoDamp = getAirSpring(airSpringElem, name);
+@@ -884,20 +884,20 @@
+         // ... and provides an output force
+         Connection::connect(aoDamp->getOutputPort(0),
+                             lineForce->getInputPort(0));
+-        
++
+         // Attach a wheel to that strut part.
+         attachWheel((*it)->getElement("wheel"), name, numStr, arm,
+                     structToBody(compressJointPos));
+-        
++
+         PortProvider* port = rj->getOutputPort(0);
+         addOutputModel(port, "Gear " + numStr + " Compression",
+                        "gear/gear[" + numStr + "]/compression-rad");
+-        
++
+         /// FIXME add a retract joint ...
+         port = lookupJSBExpression("gear/gear-pos-norm");
+         addOutputModel(port, "Gear " + numStr + " Position",
+                        "gear/gear[" + numStr + "]/position-norm");
+-        
++
+       } else if (type == "TAILHOOK") {
+         const XMLElement* tailhookElem = (*it);
+         std::string name = (*it)->getAttribute("name");
+@@ -914,11 +914,11 @@
+         tailhook->setPosition(loc);
+         addMultiBodyModel(tailhook);
+         mVehicle->getTopBody()->addInteract(tailhook);
+-        
++
+         if (!connectJSBExpression("/controls/gear/tailhook",
+                                   tailhook->getInputPort(0)))
+           return error("could not connect to tailhook command");
+-        
++
+         // expose the tailhook position
+         PortProvider* port = tailhook->getOutputPort(0);
+         std::string nameBase = "Tailhook Position";
+@@ -1032,7 +1032,7 @@
+   if (engineTopElem->getName() == "turbine_engine") {
+     if (!convertTurbine(engineTopElem, number, loc, orientation, 0))
+       return error("Error readinge turbine configuration");
+-    
++
+ //   } else if (engineTopElem->getName() == "piston_engine") {
+ //     if (!convertPiston(engineTopElem, number, 0))
+ //       return error("Error readinge piston configuration");
+@@ -1399,11 +1399,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(1);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setNumerator(v);
+     v.resize(2);
+-    v(1) = 1;
+-    v(2) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = 1;
++    v(1) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setDenominator(v);
+     out = model->getOutputPort(0);
+ 
+@@ -1420,11 +1420,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(2);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
+-    v(2) = realData(fcsComponent->getElement("c2"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
++    v(1) = realData(fcsComponent->getElement("c2"), 1);
+     discreteTransfFunc->setNumerator(v);
+-    v(1) = realData(fcsComponent->getElement("c3"), 1);
+-    v(2) = realData(fcsComponent->getElement("c4"), 1);
++    v(0) = realData(fcsComponent->getElement("c3"), 1);
++    v(1) = realData(fcsComponent->getElement("c4"), 1);
+     discreteTransfFunc->setDenominator(v);
+ 
+     out = model->getOutputPort(0);
+@@ -1442,11 +1442,11 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(1);
+-    v(1) = 1;
++    v(0) = 1;
+     discreteTransfFunc->setNumerator(v);
+     v.resize(2);
+-    v(1) = 1;
+-    v(2) = realData(fcsComponent->getElement("c1"), 1);
++    v(0) = 1;
++    v(1) = realData(fcsComponent->getElement("c1"), 1);
+     discreteTransfFunc->setDenominator(v);
+     out = model->getOutputPort(0);
+ 
+@@ -1463,13 +1463,13 @@
+       return error("could not connect to transfer function input \""
+                    + token + "\"");
+     Vector v(3);
+-    v(1) = realData(fcsComponent->getElement("c1"), 1);
+-    v(2) = realData(fcsComponent->getElement("c2"), 1);
+-    v(3) = realData(fcsComponent->getElement("c3"), 1);
++    v(0) = realData(fcsComponent->getElement("c1"), 1);
++    v(1) = realData(fcsComponent->getElement("c2"), 1);
++    v(2) = realData(fcsComponent->getElement("c3"), 1);
+     discreteTransfFunc->setNumerator(v);
+-    v(1) = realData(fcsComponent->getElement("c4"), 1);
+-    v(2) = realData(fcsComponent->getElement("c5"), 1);
+-    v(3) = realData(fcsComponent->getElement("c6"), 1);
++    v(0) = realData(fcsComponent->getElement("c4"), 1);
++    v(1) = realData(fcsComponent->getElement("c5"), 1);
++    v(2) = realData(fcsComponent->getElement("c6"), 1);
+     discreteTransfFunc->setDenominator(v);
+ 
+     out = model->getOutputPort(0);
+@@ -1505,11 +1505,11 @@
+ 
+     } else if ((*it)->getName() == "axis") {
+       std::string axisname = (*it)->getAttribute("name");
+-      
++
+       SharedPtr<Summer> sum = new Summer(axisname + " Sum");
+       addMultiBodyModel(sum);
+       sum->setNumSummands(0);
+-      
++
+       // Now parse the summands
+       std::list<const XMLElement*> funcs = (*it)->getElements();
+       std::list<const XMLElement*>::const_iterator fit;
+@@ -1517,7 +1517,7 @@
+         if (!convertFunction(*fit, sum))
+           return error("Cannot convert function");
+       }
+-      
++
+       if (!sum->getNumSummands())
+         continue;
+       PortProvider* port = sum->getOutputPort(0);
+@@ -1731,7 +1731,7 @@
+       break;
+     values.push_back(val);
+   }
+-  
++
+   if (values.size() % 2)
+     return error("Inconsistent 1D table data!");
+ 
+
+
+
+From frohlich at mail.berlios.de  Mon May  9 07:41:05 2011
+From: frohlich at mail.berlios.de (frohlich at mail.berlios.de)
+Date: Mon,  9 May 2011 07:41:05 +0200
+Subject: [OpenFDM-svn] r1132 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <20110509054105.455E3481429@sheep.berlios.de>
+
+Author: frohlich
+Date: 2011-05-09 07:41:05 +0200 (Mon, 09 May 2011)
+New Revision: 1132
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/DefaultGround.cpp
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+Log:
+Fix off by one error.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/DefaultGround.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DefaultGround.cpp	2011-05-09 05:40:28 UTC (rev 1131)
++++ trunk/OpenFDM/src/OpenFDM/DefaultGround.cpp	2011-05-09 05:41:05 UTC (rev 1132)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich
+  *
+  */
+ 
+@@ -30,8 +30,8 @@
+ 
+   // Get the unit down vector.
+   Quaternion hlOr = planet->getGeodHLOrientation(refPos);
+-  Vector3 unitDown = hlOr.backTransform(Vector3::unit(3));
+-  
++  Vector3 unitDown = hlOr.backTransform(Vector3::unit(2));
++
+   // Get the distance from the planets center.
+   Geodetic geod = planet->toGeod(refPos);
+   geod.altitude = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2011-05-09 05:40:28 UTC (rev 1131)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2011-05-09 05:41:05 UTC (rev 1132)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich
+  *
+  */
+ 
+@@ -129,7 +129,7 @@
+   real_type vel1 = dot(relVel0.getLinear(), wireDir1);
+ 
+ // Log(Model,Error) << vel0 << "  " << vel1 << endl;
+-  
++
+   real_type v = 0.5*(vel0 + vel1);
+   if (v < 0.1) {
+     mHasWire = false;
+@@ -242,7 +242,7 @@
+   real_type nx2nz2 = n(0)*n(0) + n(2)*n(2);
+ 
+   // we need to didive through that later, with exact operations it should
+-  // be safe to not check that because of n(3) being bounded away from zero,
++  // be safe to not check that because of n(2) being bounded away from zero,
+   // but due to the square the value can underflow
+   if (fabs(nx2nz2) <= Limits<real_type>::min())
+     return mAngleCommand;
+
+
+

@@ -1,0 +1,186 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r642 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r642%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810210521.m9L5Lbn5005446%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000610.html">
+   <LINK REL="Next"  HREF="000612.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r642 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r642%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810210521.m9L5Lbn5005446%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r642 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct 21 07:21:37 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000610.html">[OpenFDM-svn] r641 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000612.html">[OpenFDM-svn] r643 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#611">[ date ]</a>
+              <a href="thread.html#611">[ thread ]</a>
+              <a href="subject.html#611">[ subject ]</a>
+              <a href="author.html#611">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-21 07:21:33 +0200 (Tue, 21 Oct 2008)
+New Revision: 642
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add api to add links to a RigidBody.
+
+M    src/test/structure.cpp
+M    src/OpenFDM/RigidBody.h
+M    src/OpenFDM/MechanicLink.h
+M    src/OpenFDM/RigidBody.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h	2008-10-20 19:52:56 UTC (rev 641)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h	2008-10-21 05:21:33 UTC (rev 642)
+@@ -23,8 +23,12 @@
+     OpenFDMAssert(portValue-&gt;toMechanicLinkValue());
+     return static_cast&lt;MechanicLinkValue*&gt;(portValue);
+   }
++  bool empty() const
++  { return mPort; }
++  void clear()
++  { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+   unsigned getPortIndex() const
+-  { return mPort-&gt;getIndex(); }
++  { OpenFDMAssert(mPort); return mPort-&gt;getIndex(); }
+ private:
+   SharedPtr&lt;MechanicLinkInfo&gt; mPort;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-20 19:52:56 UTC (rev 641)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-21 05:21:33 UTC (rev 642)
+@@ -16,8 +16,8 @@
+ RigidBody::RigidBody(const std::string&amp; name) :
+   MechanicNode(name)
+ {
+-  mMechanicLinks.push_back(newMechanicLink(&quot;link&quot;));
+-  mMechanicLinks.push_back(newMechanicLink(&quot;link2&quot;));
++  addLink(&quot;link0&quot;);
++  addLink(&quot;link1&quot;);
+ }
+ 
+ RigidBody::~RigidBody()
+@@ -36,7 +36,28 @@
+   visitor.handleNodePathAndApply(this);
+ }
+ 
++PortId
++RigidBody::addLink(const std::string&amp; name)
++{
++  MechanicLink mechanicLink = newMechanicLink(name);
++  mMechanicLinks.push_back(mechanicLink);
++  return getPortId(mechanicLink.getPortIndex());
++}
++
+ void
++RigidBody::removeLink(const PortId&amp; portId)
++{
++  MechanicLinkVector::iterator i = mMechanicLinks.begin();
++  while (i != mMechanicLinks.end()) {
++    if (getPortIndex(portId) == i-&gt;getPortIndex()) {
++      i-&gt;clear();
++      i = mMechanicLinks.erase(i);
++    } else
++      ++i;
++  }
++}
++
++void
+ RigidBody::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+                     PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-10-20 19:52:56 UTC (rev 641)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-10-21 05:21:33 UTC (rev 642)
+@@ -19,6 +19,9 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
++  PortId addLink(const std::string&amp; name);
++  void removeLink(const PortId&amp; portId);
++
+   /// Simple node distributing the positions, velocities and accelerations
+   /// from the parent link to the child links. Forces and inertias are summed
+   /// over the children and written into the parent link.
+@@ -33,9 +36,9 @@
+                             PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+                             PortValueList&amp; portValues, MechanicContext&amp;) const;
+-
+ private:
+-  std::vector&lt;MechanicLink&gt; mMechanicLinks;
++  typedef std::vector&lt;MechanicLink&gt; MechanicLinkVector;
++  MechanicLinkVector mMechanicLinks;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-20 19:52:56 UTC (rev 641)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-21 05:21:33 UTC (rev 642)
+@@ -198,8 +198,8 @@
+   Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
+   Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
+ 
+-  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link&quot;);
+-  group-&gt;connect(rigidBody, &quot;link2&quot;, mass, &quot;link&quot;);
++  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
++  group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
+ 
+   return group.release();
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000610.html">[OpenFDM-svn] r641 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000612.html">[OpenFDM-svn] r643 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#611">[ date ]</a>
+              <a href="thread.html#611">[ thread ]</a>
+              <a href="subject.html#611">[ subject ]</a>
+              <a href="author.html#611">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

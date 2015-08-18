@@ -1,0 +1,399 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r345 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r345%20-%20trunk/flightgear&In-Reply-To=%3C200712081015.lB8AFMdC020076%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000318.html">
+   <LINK REL="Next"  HREF="000320.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r345 - trunk/flightgear</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r345%20-%20trunk/flightgear&In-Reply-To=%3C200712081015.lB8AFMdC020076%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r345 - trunk/flightgear">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Dec  8 11:15:22 CET 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000318.html">[OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000320.html">[OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg	test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#319">[ date ]</a>
+              <a href="thread.html#319">[ thread ]</a>
+              <a href="subject.html#319">[ subject ]</a>
+              <a href="author.html#319">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-12-08 11:15:22 +0100 (Sat, 08 Dec 2007)
+New Revision: 345
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGOpenFDM.h
+Log:
+Use Visitors to walk the models.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2007-12-08 10:14:07 UTC (rev 344)
++++ trunk/flightgear/FGOpenFDM.cpp	2007-12-08 10:15:22 UTC (rev 345)
+@@ -225,37 +225,154 @@
+   InputConnectModelVisitor(const SGSharedPtr&lt;SGPropertyNode&gt;&amp; acRootNode) :
+     mAircraftRootNode(acRootNode)
+   { }
+-  virtual void apply(Model&amp; model)
++  virtual void apply(Input&amp; input)
+   {
+-    // Check for input models
+-    // If so, we need to register a change notifier in flightgears properties
+-    Input* inputModel = model.toInput();
+-    if (!inputModel)
+-      return;
+-
+     SG_LOG(SG_FLIGHT, SG_INFO,
+-           &quot;Registering input for \&quot;&quot; &lt;&lt; inputModel-&gt;getName() &lt;&lt; &quot;\&quot;&quot;);
+-    std::string pName = inputModel-&gt;getInputName();
++           &quot;Registering input for \&quot;&quot; &lt;&lt; input.getName() &lt;&lt; &quot;\&quot;&quot;);
++    std::string pName = input.getInputName();
+     SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
+-    inputModel-&gt;setCallback(new FGInputCallback(sgProp));
++    input.setCallback(new FGInputCallback(sgProp));
++
++    ModelVisitor::apply(input);
+   }
+   virtual void apply(ModelGroup&amp; modelGroup)
+-  { traverse(modelGroup); }
++  {
++    traverse(modelGroup);
++  }
+ private:
+   SGSharedPtr&lt;SGPropertyNode&gt; mAircraftRootNode;
+ };
+ 
++class BindVisitor :
++    public ModelVisitor {
++public:
++  BindVisitor(SGPropertyNode* aircraftRootNode,
++                SGPropertyNode* vehicleRootNode) :
++    mAircraftRootNode(aircraftRootNode),
++    mCurrentNode(vehicleRootNode)
++  { }
+ 
++  virtual void apply(Node&amp; node)
++  {
++    SGSharedPtr&lt;SGPropertyNode&gt; oldNode = mCurrentNode;
+ 
+-void printVehicle(Vehicle* vehicle)
+-{
+-  cout &lt;&lt; &quot;T = &quot; &lt;&lt; vehicle-&gt;getTime()
+-       &lt;&lt; &quot;, Pos: &quot; &lt;&lt; vehicle-&gt;getGeodPosition()
+-//        &lt;&lt; &quot;, Or: &quot; &lt;&lt; vehicle-&gt;getGeodOrientation()
+-       &lt;&lt; endl;
+-}
++    std::string pName = toPropname(node.getName());
++    mCurrentNode = oldNode-&gt;getNode(pName.c_str(), true);
+ 
++    tieObject(node);
++    
++    mCurrentNode = oldNode;
+ 
++    ModelVisitor::apply(node);
++  }
++
++  virtual void apply(Model&amp; model)
++  {
++    SGPropertyNode* outputBase = mCurrentNode-&gt;getNode(&quot;outputs&quot;, true);
++    for (unsigned i = 0; i &lt; model.getNumOutputPorts(); ++i) {
++      std::string name = model.getOutputPortName(i);
++      SGPropertyNode* sgProp = outputBase-&gt;getNode(name.c_str(), true);
++      sgProp-&gt;tie(FGRealPortReflector(model.getOutputPort(i)));
++    }
++
++    ModelVisitor::apply(model);
++  }
++
++  virtual void apply(Output&amp; output)
++  {
++    std::string pName = output.getOutputName();
++    SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
++    if (sgProp-&gt;isTied())
++      sgProp-&gt;untie();
++    sgProp-&gt;tie(FGOutputReflector(&amp;output));
++
++    ModelVisitor::apply(output);
++  }
++
++  virtual void apply(ModelGroup&amp; modelGroup)
++  {
++    SGSharedPtr&lt;SGPropertyNode&gt; oldNode = mCurrentNode;
++
++    std::string pName = toPropname(modelGroup.getName());
++    mCurrentNode = oldNode-&gt;getNode(pName.c_str(), true);
++    
++    traverse(modelGroup);
++
++    tieObject(modelGroup);
++
++    mCurrentNode = oldNode;
++  }
++
++private:
++  void tieObject(Object&amp; object)
++  {
++    // The usual, whole object reflection so that one can take a look into
++    // OpenFDM's internal modules ...
++    std::vector&lt;PropertyInfo&gt; props;
++    object.getPropertyInfoList(props);
++    std::vector&lt;PropertyInfo&gt;::iterator it = props.begin();
++    while (it != props.end()) {
++      // ... well, FIXME cleanup ...
++      std::string pName = toPropname(it-&gt;getName());
++      SGPropertyNode* sgProp = mCurrentNode-&gt;getChild(pName.c_str(), 0, true);
++      Variant value;
++      object.getPropertyValue(it-&gt;getName(), value);
++      
++      if (value.isString())
++        sgProp-&gt;tie(FGStringPropertyAdapter(&amp;object, it-&gt;getName()));
++      else if (value.isReal())
++        sgProp-&gt;tie(FGRealPropertyAdapter(&amp;object, it-&gt;getName()));
++      else if (value.isInteger())
++        sgProp-&gt;tie(FGIntegerPropertyAdapter(&amp;object, it-&gt;getName()));
++      else if (value.isUnsigned())
++        sgProp-&gt;tie(FGIntegerPropertyAdapter(&amp;object, it-&gt;getName()));
++      
++      else if (value.isMatrix()) {
++        Matrix m = value.toMatrix();
++        unsigned reshapeSize = rows(m) * cols(m);
++        
++        sgProp-&gt;tie(FGRealPropertyAdapter(&amp;object, it-&gt;getName()));
++        for (unsigned i = 2; i &lt;= reshapeSize; ++i) {
++          sgProp = mCurrentNode-&gt;getChild(pName.c_str(), i-1, true);
++          sgProp-&gt;tie(FGRealPropertyAdapter(&amp;object, it-&gt;getName(), i));
++        }
++      }
++      else if (value.isValid()) {
++        SG_LOG(SG_FLIGHT, SG_WARN,
++               &quot;Found unexpected property type with property named \&quot;&quot;
++               &lt;&lt; it-&gt;getName() &lt;&lt; &quot;\&quot;&quot;);
++      }
++      ++it;
++    }
++  }
++
++  static std::string
++  toPropname(const std::string&amp; name)
++  {
++    std::string pName = name;
++    std::string::size_type pos;
++    while ((pos = pName.find(' ')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    while ((pos = pName.find('&lt;')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '[');
++    }
++    while ((pos = pName.find('&gt;')) != std::string::npos) {
++      pName.replace(pos, 1, 1, ']');
++    }
++    while ((pos = pName.find('(')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    while ((pos = pName.find(')')) != std::string::npos) {
++      pName.replace(pos, 1, 1, '_');
++    }
++    return pName;
++  }
++
++  SGSharedPtr&lt;SGPropertyNode&gt; mAircraftRootNode;
++  SGSharedPtr&lt;SGPropertyNode&gt; mCurrentNode;
++};
++
+ // Our local storage covers the pointer to our vehicle.
+ // A list of the property to expression adaptors.
+ struct FGOpenFDMData {
+@@ -384,7 +501,9 @@
+   SGPropertyNode* sgProp = mAircraftRootNode-&gt;getChild(&quot;fdm&quot;, 0, true);
+   sgProp = sgProp-&gt;getChild(&quot;vehicle&quot;, 0, true);
+   sgProp = sgProp-&gt;getChild(&quot;system&quot;, 0, true);
+-  tieModelGroup(sgProp, mData-&gt;vehicle-&gt;getSystem());
++
++  BindVisitor visitor(mAircraftRootNode, sgProp);
++  mData-&gt;vehicle-&gt;getSystem()-&gt;accept(visitor);
+ }
+ 
+ void FGOpenFDM::unbind()
+@@ -505,90 +624,7 @@
+     _set_Alpha( sgProp-&gt;getDoubleValue() );
+ }
+ 
+-
+ void
+-FGOpenFDM::tieObject(SGPropertyNode* base, Object* object)
+-{
+-  // Check for output models
+-  // If so, we want to reflect that in flightgears property tree
+-  Output* outputModel = dynamic_cast&lt;Output*&gt;(object);
+-  if (outputModel) {
+-    std::string pName = outputModel-&gt;getOutputName();
+-    SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
+-    if (sgProp-&gt;isTied())
+-      sgProp-&gt;untie();
+-    sgProp-&gt;tie(FGOutputReflector(outputModel));
+-  }
+-
+-  // Reflect all output ports
+-  Model* model = dynamic_cast&lt;Model*&gt;(object);
+-  if (model &amp;&amp; model-&gt;getNumOutputPorts()) {
+-    SGPropertyNode* outputBase = base-&gt;getNode(&quot;outputs&quot;, true);
+-    for (unsigned i = 0; i &lt; model-&gt;getNumOutputPorts(); ++i) {
+-      std::string name = model-&gt;getOutputPortName(i);
+-      SGPropertyNode* sgProp = outputBase-&gt;getNode(name.c_str(), true);
+-      sgProp-&gt;tie(FGRealPortReflector(model-&gt;getOutputPort(i)));
+-    }
+-  }
+-
+-  // The usual, whole object reflection so that one can take a look into
+-  // OpenFDM's internal modules ...
+-  std::vector&lt;PropertyInfo&gt; props;
+-  object-&gt;getPropertyInfoList(props);
+-  std::vector&lt;PropertyInfo&gt;::iterator it = props.begin();
+-  while (it != props.end()) {
+-    // ... well, FIXME cleanup ...
+-    std::string pName = toPropname(it-&gt;getName());
+-    SGPropertyNode* sgProp = base-&gt;getChild(pName.c_str(), 0, true);
+-    Variant value;
+-    object-&gt;getPropertyValue(it-&gt;getName(), value);
+-
+-    if (value.isString())
+-      sgProp-&gt;tie(FGStringPropertyAdapter(object, it-&gt;getName()));
+-    else if (value.isReal())
+-      sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName()));
+-    else if (value.isInteger())
+-      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, it-&gt;getName()));
+-    else if (value.isUnsigned())
+-      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, it-&gt;getName()));
+-
+-    else if (value.isMatrix()) {
+-      Matrix m = value.toMatrix();
+-      unsigned reshapeSize = rows(m) * cols(m);
+-
+-      sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName()));
+-      for (unsigned i = 2; i &lt;= reshapeSize; ++i) {
+-        sgProp = base-&gt;getChild(pName.c_str(), i-1, true);
+-        sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName(), i));
+-      }
+-    }
+-    else if (value.isValid()) {
+-      SG_LOG(SG_FLIGHT, SG_WARN,
+-             &quot;Found unexpected property type with property named \&quot;&quot;
+-             &lt;&lt; it-&gt;getName() &lt;&lt; &quot;\&quot;&quot;);
+-    }
+-    ++it;
+-  }
+-}
+-
+-void
+-FGOpenFDM::tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup)
+-{
+-  unsigned numModels = modelGroup-&gt;getNumModels();
+-  for (unsigned i = 0; i &lt; numModels; ++i) {
+-    Node* model = modelGroup-&gt;getModel(i);
+-    std::string pName = toPropname(model-&gt;getName());
+-    SGPropertyNode* sgProp = base-&gt;getNode(pName.c_str(), true);
+-    tieObject(sgProp, model);
+-
+-    ModelGroup* nestedGroup = model-&gt;toModelGroup();
+-    if (nestedGroup) {
+-      tieModelGroup(sgProp, nestedGroup);
+-    }
+-  }
+-}
+-
+-void
+ FGOpenFDM::untieRecursive(SGPropertyNode* base)
+ {
+   // Unties and removes a whole tree.
+@@ -618,27 +654,4 @@
+   }
+ }
+ 
+-std::string
+-FGOpenFDM::toPropname(const std::string&amp; name)
+-{
+-  std::string pName = name;
+-  std::string::size_type pos;
+-  while ((pos = pName.find(' ')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  while ((pos = pName.find('&lt;')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '[');
+-  }
+-  while ((pos = pName.find('&gt;')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, ']');
+-  }
+-  while ((pos = pName.find('(')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  while ((pos = pName.find(')')) != std::string::npos) {
+-    pName.replace(pos, 1, 1, '_');
+-  }
+-  return pName;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/flightgear/FGOpenFDM.h
+===================================================================
+--- trunk/flightgear/FGOpenFDM.h	2007-12-08 10:14:07 UTC (rev 344)
++++ trunk/flightgear/FGOpenFDM.h	2007-12-08 10:15:22 UTC (rev 345)
+@@ -35,13 +35,9 @@
+   virtual void update(double dt);
+ 
+ private:
+-  void tieObject(SGPropertyNode* base, Object* object);
+-  void tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup);
+   static void untieNamed(SGPropertyNode* base, const char* name);
+   static void untieRecursive(SGPropertyNode* base);
+ 
+-  static std::string toPropname(const std::string&amp; name);
+-
+   FGOpenFDMData* mData;
+   SGPropertyNode_ptr mAircraftRootNode;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000318.html">[OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000320.html">[OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg	test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#319">[ date ]</a>
+              <a href="thread.html#319">[ thread ]</a>
+              <a href="subject.html#319">[ subject ]</a>
+              <a href="author.html#319">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

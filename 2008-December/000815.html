@@ -1,0 +1,184 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r847 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r847%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812022110.mB2LAvJ4017079%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000814.html">
+   <LINK REL="Next"  HREF="000816.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r847 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r847%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812022110.mB2LAvJ4017079%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r847 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Dec  2 22:10:57 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000814.html">[OpenFDM-svn] r846 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000816.html">[OpenFDM-svn] r848 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#815">[ date ]</a>
+              <a href="thread.html#815">[ thread ]</a>
+              <a href="subject.html#815">[ subject ]</a>
+              <a href="author.html#815">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-02 22:10:57 +0100 (Tue, 02 Dec 2008)
+New Revision: 847
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Add above ground level sensing.
+
+M    Sensor.h
+M    Sensor.cpp
+M    Environment.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-02 20:34:58 UTC (rev 846)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-02 21:10:57 UTC (rev 847)
+@@ -110,6 +110,17 @@
+     // Then we know the plane ...
+     return Plane(unitDown, groundOff);
+   }
++  real_type getAboveGroundLevel(const real_type&amp; t, const Vector3&amp; position) const
++  {
++    // Get the unit down vector.
++    Vector3 unitDown = getHorizontalLocalDown(position);
++    GroundValues groundValues = getGroundPlane(t, position);
++    Vector3 intersectPoint;
++    if (groundValues.plane.intersectLine(position, unitDown, intersectPoint))
++      return norm(intersectPoint);
++    else
++      return Limits&lt;real_type&gt;::max();
++  }
+ 
+   ///////////////////////////////////////////////////////////////////////////
+   // Atmosphere sensing related
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-12-02 20:34:58 UTC (rev 846)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-12-02 21:10:57 UTC (rev 847)
+@@ -22,6 +22,7 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnableWindVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableTemperature, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnablePressure, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableAboveGroundLevel, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Sensor::Sensor(const std::string&amp; name) :
+@@ -91,6 +92,12 @@
+     if (enablePressure)
+       portValues[mPressurePort] = data.pressure;
+   }
++
++  if (getEnableAboveGroundLevel()) {
++    real_type agl;
++    agl = environment-&gt;getAboveGroundLevel(task.getTime(), refPosition);
++    portValues[mAboveGroundLevelPort] = agl;
++  }
+ }
+ 
+ void
+@@ -309,6 +316,23 @@
+ }
+ 
+ void
++Sensor::setEnableAboveGroundLevel(bool enable)
++{
++  if (enable == getEnableAboveGroundLevel())
++    return;
++  if (enable)
++    mAboveGroundLevelPort = RealOutputPort(this, &quot;aboveGroundLevel&quot;);
++  else
++    mAboveGroundLevelPort.clear();
++}
++
++bool
++Sensor::getEnableAboveGroundLevel() const
++{
++  return !mAboveGroundLevelPort.empty();
++}
++
++void
+ Sensor::setEnableAll(bool enable)
+ {
+   setEnablePosition(enable);
+@@ -321,6 +345,7 @@
+   setEnableWindVelocity(enable);
+   setEnableTemperature(enable);
+   setEnablePressure(enable);
++  setEnableAboveGroundLevel(enable);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-12-02 20:34:58 UTC (rev 846)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-12-02 21:10:57 UTC (rev 847)
+@@ -82,6 +82,11 @@
+   /// Get availabilty of the pressure output port
+   bool getEnablePressure() const;
+ 
++  /// Set availabilty of the pressure output port
++  void setEnableAboveGroundLevel(bool enable);
++  /// Get availabilty of the pressure output port
++  bool getEnableAboveGroundLevel() const;
++
+   /// Set availabilty of all output ports
+   /// This is mostly for convinience in testing
+   void setEnableAll(bool enable);
+@@ -106,6 +111,8 @@
+   RealOutputPort mTemperaturePort;
+   RealOutputPort mPressurePort;
+ //   RealOutputPort mDensityPort;
++
++  RealOutputPort mAboveGroundLevelPort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000814.html">[OpenFDM-svn] r846 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000816.html">[OpenFDM-svn] r848 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#815">[ date ]</a>
+              <a href="thread.html#815">[ thread ]</a>
+              <a href="subject.html#815">[ subject ]</a>
+              <a href="author.html#815">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

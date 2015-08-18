@@ -1,0 +1,187 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1009 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1009%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200907171915.n6HJFmJQ017855%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000970.html">
+   <LINK REL="Next"  HREF="000972.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1009 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1009%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200907171915.n6HJFmJQ017855%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1009 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Jul 17 21:15:48 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000970.html">[OpenFDM-svn] r1008 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000972.html">[OpenFDM-svn] r1010 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#971">[ date ]</a>
+              <a href="thread.html#971">[ thread ]</a>
+              <a href="subject.html#971">[ subject ]</a>
+              <a href="author.html#971">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-17 21:15:47 +0200 (Fri, 17 Jul 2009)
+New Revision: 1009
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/drop.cpp
+Log:
+Add an other small test program.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-07-17 18:03:15 UTC (rev 1008)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-07-17 19:15:47 UTC (rev 1009)
+@@ -13,6 +13,7 @@
+ 
+ # define some util programs
+ noinst_PROGRAMS = \
++	ballistic \
+ 	drop \
+ 	foucault \
+ 	inertianav \
+@@ -22,6 +23,9 @@
+ 	coordsys \
+ 	$(TESTS)
+ 
++ballistic_SOURCES = ballistic.cpp
++ballistic_LDADD = ../OpenFDM/libOpenFDM.la
++
+ constintegral_SOURCES = constintegral.cpp
+ constintegral_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-07-17 18:03:15 UTC (rev 1008)
++++ branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-07-17 19:15:47 UTC (rev 1009)
+@@ -0,0 +1,58 @@
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/InternalInteract.h&gt;
++#include &lt;OpenFDM/LinearSpringDamper.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
++#include &lt;OpenFDM/RevoluteJoint.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/ExternalInteract.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/SystemOutput.h&gt;
++
++using namespace OpenFDM;
++
++Node* buildBallistic()
++{
++  // A simple free falling mass.
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++
++  MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  mobileRootJoint-&gt;setInitialLinearVelocity(50/sqrt(2)*Vector3(1, 0, -1));
++  group-&gt;addChild(mobileRootJoint);
++
++  RigidBody* rigidBody = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBody-&gt;addLink(&quot;externalInteractLink&quot;);
++  group-&gt;addChild(rigidBody);
++
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  group-&gt;addChild(mass);
++
++  ExternalInteract* externalInteract = new ExternalInteract(&quot;ExternalInteract&quot;);
++  externalInteract-&gt;setPosition(mass-&gt;getPosition());
++  externalInteract-&gt;setEnableAllOutputs(true);
++  group-&gt;addChild(externalInteract);
++
++  group-&gt;connect(mobileRootJoint-&gt;getPort(&quot;link&quot;),
++                 rigidBody-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link1&quot;),
++                 mass-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;externalInteractLink&quot;),
++                 externalInteract-&gt;getPort(&quot;link&quot;));
++
++  return group.release();
++}
++
++int main()
++{
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildBallistic());
++
++  system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;ballistic&quot;));
++
++  if (!system-&gt;init())
++    return 1;
++
++  system-&gt;simulate(10);
++
++  return 0;
++}
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/test/drop.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/drop.cpp	2009-07-17 18:03:15 UTC (rev 1008)
++++ branches/OpenFDM-StateSeparation/src/test/drop.cpp	2009-07-17 19:15:47 UTC (rev 1009)
+@@ -18,6 +18,7 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+ 
+   MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  mobileRootJoint-&gt;setInitialAngularVelocity(Vector3(1, 1, 1));
+   group-&gt;addChild(mobileRootJoint);
+ 
+   RigidBody* rigidBody = new RigidBody(&quot;Rigid Body&quot;);
+@@ -56,6 +57,3 @@
+   return 0;
+ }
+ 
+-// Kabelbaum &lt;-&gt; PortBundle ??? Original Kabelbaum == Cabel Bundle
+-// Oder Cable Set &lt;-&gt; Port Set???
+-
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000970.html">[OpenFDM-svn] r1008 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000972.html">[OpenFDM-svn] r1010 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#971">[ date ]</a>
+              <a href="thread.html#971">[ thread ]</a>
+              <a href="subject.html#971">[ subject ]</a>
+              <a href="author.html#971">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

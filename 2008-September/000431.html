@@ -1,0 +1,416 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r459 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r459%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200809111622.m8BGMbaj031417%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000430.html">
+   <LINK REL="Next"  HREF="000432.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r459 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r459%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200809111622.m8BGMbaj031417%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r459 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Sep 11 18:22:37 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000430.html">[OpenFDM-svn] r458 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000432.html">[OpenFDM-svn] r460 - in branches/OpenFDM-StateSeparation: .	src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#431">[ date ]</a>
+              <a href="thread.html#431">[ thread ]</a>
+              <a href="subject.html#431">[ subject ]</a>
+              <a href="author.html#431">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-11 18:22:37 +0200 (Thu, 11 Sep 2008)
+New Revision: 459
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/LogStream.h
+   trunk/OpenFDM/src/OpenFDM/Logger.cpp
+Log:
+Loggin can be that easy :).
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/LogStream.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LogStream.h	2008-09-10 18:45:53 UTC (rev 458)
++++ trunk/OpenFDM/src/OpenFDM/LogStream.h	2008-09-11 16:22:37 UTC (rev 459)
+@@ -6,193 +6,72 @@
+ #define OpenFDM_LogStream_H
+ 
+ #include &lt;iosfwd&gt;
++// FIXME: because of using std::endl;
+ #include &lt;ostream&gt;
+ 
+ namespace OpenFDM {
+ 
+-namespace Log {
+-
+-enum Category {
+-  ArtBody          = 1,
+-  MultiBody        = ArtBody &lt;&lt; 1,
+-  TimeStep         = MultiBody &lt;&lt; 1,
+-  BoundCheck       = TimeStep &lt;&lt; 1,
+-  Environment      = BoundCheck &lt;&lt; 1,
+-  Frame            = Environment &lt;&lt; 1,
+-  Initialization   = Frame &lt;&lt; 1,
+-  NewtonMethod     = Initialization &lt;&lt; 1,
+-  Misc             = NewtonMethod &lt;&lt; 1,
+-  Model            = Misc &lt;&lt; 1,
+-  Schedule         = Model &lt;&lt; 1,
+-  Assert           = ~0
+-};
+-
+-enum Priority {
+-  Error            = 0,
+-  Warning          = Error + 1,
+-  Info             = Warning + 1,
+-  Debug            = Info + 1,
+-  Debug1           = Debug + 1,
+-  Debug2           = Debug1 + 1,
+-  Debug3           = Debug2 + 1
+-};
+-
+-template&lt;Category category, Priority priority&gt;
+-class LogFactory;
+-
+-template&lt;typename charT, typename traits = std::char_traits&lt;charT&gt; &gt;
+-class LogProxy;
+-
+-template&lt;typename charT, typename traits = std::char_traits&lt;charT&gt; &gt;
+-class LogSink;
+-
+-template&lt;class charT, class traits&gt;
+-class LogProxy {
+-public:
+-  typedef std::ios_base                    ios_base_type;
+-  typedef std::basic_ios&lt;charT,traits&gt;     basic_ios_type;
+-  typedef std::basic_ostream&lt;charT,traits&gt; basic_ostream_type;
+-
+-  template&lt;typename T&gt;
+-  LogProxy operator&lt;&lt;(const T&amp; value)
+-  { if (mStream) (*mStream) &lt;&lt; value; return *this; }
+-  LogProxy operator&lt;&lt;(ios_base_type&amp; (*mptr)(ios_base_type&amp;))
+-  { if (mStream) mptr(*mStream); return *this; }
+-  LogProxy operator&lt;&lt;(basic_ios_type&amp; (*mptr)(basic_ios_type&amp;))
+-  { if (mStream) mptr(*mStream); return *this; }
+-  LogProxy operator&lt;&lt;(basic_ostream_type&amp; (*mptr)(basic_ostream_type&amp;))
+-  { if (mStream) mptr(*mStream); return *this; }
+-
+-private:
+-  template&lt;Category category, Priority priority&gt;
+-  friend class LogFactory;
+-
+-  LogProxy(const LogProxy&amp; lp) : mStream(lp.mStream) {}
+-  LogProxy(basic_ostream_type* s) : mStream(s) {}
+-  LogProxy&amp; operator=(const LogProxy&amp;);
+-
+-  // A pointer to a stream we want to do output to.
+-  basic_ostream_type* mStream;
+-};
+-
+-template&lt;class charT, class traits&gt;
+-class LogSink {
+-public:
+-  typedef std::ios_base                    ios_base_type;
+-  typedef std::basic_ios&lt;charT,traits&gt;     basic_ios_type;
+-  typedef std::basic_ostream&lt;charT,traits&gt; basic_ostream_type;
+-
+-  template&lt;typename T&gt;
+-  LogSink operator&lt;&lt;(const T&amp;)
+-  { return *this; }
+-  LogSink operator&lt;&lt;(ios_base_type&amp; (*mptr)(ios_base_type&amp;))
+-  { return *this; }
+-  LogSink operator&lt;&lt;(basic_ios_type&amp; (*mptr)(basic_ios_type&amp;))
+-  { return *this; }
+-  LogSink operator&lt;&lt;(basic_ostream_type&amp; (*mptr)(basic_ostream_type&amp;))
+-  { return *this; }
+-
+-private:
+-  template&lt;Category category, Priority priority&gt;
+-  friend class LogFactory;
+-
+-  LogSink(const LogSink&amp;) {}
+-  LogSink(void) {}
+-  LogSink&amp; operator=(const LogSink&amp;);
+-};
+-
+ class Logger {
+ public:
++  enum Category {
++    ArtBody          = 1,
++    MultiBody        = ArtBody &lt;&lt; 1,
++    TimeStep         = MultiBody &lt;&lt; 1,
++    BoundCheck       = TimeStep &lt;&lt; 1,
++    Environment      = BoundCheck &lt;&lt; 1,
++    Frame            = Environment &lt;&lt; 1,
++    Initialization   = Frame &lt;&lt; 1,
++    NewtonMethod     = Initialization &lt;&lt; 1,
++    Misc             = NewtonMethod &lt;&lt; 1,
++    Model            = Misc &lt;&lt; 1,
++    Schedule         = Model &lt;&lt; 1,
++    Assert           = ~0
++  };
++  
++  enum Priority {
++    Error            = 0,
++    Warning          = Error + 1,
++    Info             = Warning + 1,
++    Debug            = Info + 1,
++    Debug1           = Debug + 1,
++    Debug2           = Debug1 + 1,
++    Debug3           = Debug2 + 1
++  };
++  
+   static void setCategoryEnable(Category category, bool enable = true);
+   static void setCategoryDisable(Category category);
+   static void setPriority(Priority priority);
+ 
+-  bool enabled(Category category, Priority priority) const
++  static inline bool
++  getStaticEnabled(Category category, Priority priority)
+   {
+-    return ((category &amp; mCategory) &amp;&amp; (priority &lt;= mPriority))
+-      || (priority == Error);
++#if defined(NDEBUG) || defined(_NDEBUG)
++    // In the NDEBUG case, give the compilers optimizer a chance to
++    // completely remove the code.
++    if (Info &lt;= priority)
++      return false;
++#endif
++    return Instance()-&gt;getEnabled(category, priority);
+   }
++  
++  static std::ostream&amp; getStream(Priority priority);
+ 
+-  std::basic_ostream&lt;char&gt;* getStream(void)
+-  { return mStream; }
+-
+ protected:
+   static Logger* Instance(void);
++  bool getEnabled(Category category, Priority priority);
+ 
+ private:
+-  Logger(std::basic_ostream&lt;char&gt;* stream = 0);
++  Logger(std::ostream* stream = 0);
+ 
+-  std::basic_ostream&lt;char&gt;* mStream;
++  std::ostream* mStream;
+   unsigned mCategory;
+   int mPriority;
+ };
+ 
+-#if defined(NDEBUG)
+-
+-template&lt;Category category, Priority priority&gt;
+-class LogFactory : public Logger {
+-public:
+-  typedef LogSink&lt;char&gt; proxy_type;
+-  static proxy_type
+-  CreateInstance(void)
+-  { return proxy_type(); }
+-};
+-
+-template&lt;Category category&gt;
+-class LogFactory&lt;category,Error&gt; : public Logger {
+-public:
+-  typedef LogProxy&lt;char&gt; proxy_type;
+-  static proxy_type
+-  CreateInstance(void)
+-  {
+-    Logger* logger = Instance();
+-    if (logger-&gt;enabled(category, Error))
+-      return proxy_type(logger-&gt;getStream());
+-    else
+-      return proxy_type(0);
+-  }
+-};
+-
+-template&lt;Category category&gt;
+-class LogFactory&lt;category,Warning&gt; : public Logger {
+-public:
+-  typedef LogProxy&lt;char&gt; proxy_type;
+-  static proxy_type
+-  CreateInstance(void)
+-  {
+-    Logger* logger = Instance();
+-    if (logger-&gt;enabled(category, Warning))
+-      return proxy_type(logger-&gt;getStream());
+-    else
+-      return proxy_type(0);
+-  }
+-};
+-
+-#else /* defined(NDEBUG) */
+-
+-template&lt;Category category, Priority priority&gt;
+-class LogFactory : public Logger {
+-public:
+-  static LogProxy&lt;char&gt;
+-  CreateInstance(void)
+-  {
+-    Logger* logger = Instance();
+-    if (logger-&gt;enabled(category, priority))
+-      return LogProxy&lt;char&gt;(logger-&gt;getStream());
+-    else
+-      return LogProxy&lt;char&gt;(0);
+-  }
+-};
+-
+-#endif /* else defined(NDEBUG) */
+-
+-} // namespace Log
+-
+ #define Log(category, priority) \
+-  Log::LogFactory&lt;Log::category,Log::priority&gt;::CreateInstance()
++if (Logger::getStaticEnabled(Logger::category, Logger::priority)) \
++  Logger::getStream(Logger::priority)
+ 
+-using Log::Logger;
+-
+ using std::endl;
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Logger.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Logger.cpp	2008-09-10 18:45:53 UTC (rev 458)
++++ trunk/OpenFDM/src/OpenFDM/Logger.cpp	2008-09-11 16:22:37 UTC (rev 459)
+@@ -12,8 +12,6 @@
+ 
+ namespace OpenFDM {
+ 
+-namespace Log {
+-
+ static unsigned
+ atou(const char* s)
+ {
+@@ -29,23 +27,8 @@
+   return value;
+ }
+ 
+-Logger::Logger(std::basic_ostream&lt;char&gt;* stream) :
+-  mStream(stream),
+-  mCategory(~0u),
+-  mPriority(Log::Error)
+-{
+-  // Set some defaults from the environment
+-  unsigned value = atou(std::getenv(&quot;OPENFDM_DEBUG_PRIORITY&quot;));
+-  if (value)
+-    mPriority = value;
+-      
+-  value = atou(std::getenv(&quot;OPENFDM_DEBUG_CATEGORY&quot;));
+-  if (value)
+-    mCategory = value;
+-}
+-
+ void
+-Logger::setCategoryEnable(Log::Category category, bool enable)
++Logger::setCategoryEnable(Logger::Category category, bool enable)
+ {
+   Logger* logger = Instance();
+   if (enable) {
+@@ -56,18 +39,30 @@
+ }
+ 
+ void
+-Logger::setCategoryDisable(Log::Category category)
++Logger::setCategoryDisable(Logger::Category category)
+ {
+   setCategoryEnable(category, false);
+ }
+ 
+ void
+-Logger::setPriority(Log::Priority priority)
++Logger::setPriority(Logger::Priority priority)
+ {
+   Logger* logger = Instance();
+   logger-&gt;mPriority = priority;
+ }
+ 
++std::ostream&amp;
++Logger::getStream(Logger::Priority priority)
++{
++  Logger* logger = Instance();
++  if (logger-&gt;mStream)
++    return *logger-&gt;mStream;
++  else if (Info &lt;= priority)
++    return std::cout;
++  else
++    return std::cerr;
++}
++
+ Logger*
+ Logger::Instance(void)
+ {
+@@ -83,6 +78,29 @@
+   return ptr;
+ }
+ 
+-} // namespace Log
++bool
++Logger::getEnabled(Logger::Category category, Logger::Priority priority)
++{
++  if (priority == Error)
++    return true;
++  if (!(category &amp; mCategory))
++    return false;
++  return priority &lt;= mPriority;
++}
+ 
++Logger::Logger(std::ostream* stream) :
++  mStream(stream),
++  mCategory(~0u),
++  mPriority(Error)
++{
++  // Set some defaults from the environment
++  unsigned value = atou(std::getenv(&quot;OPENFDM_DEBUG_PRIORITY&quot;));
++  if (value)
++    mPriority = value;
++      
++  value = atou(std::getenv(&quot;OPENFDM_DEBUG_CATEGORY&quot;));
++  if (value)
++    mCategory = value;
++}
++
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000430.html">[OpenFDM-svn] r458 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000432.html">[OpenFDM-svn] r460 - in branches/OpenFDM-StateSeparation: .	src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#431">[ date ]</a>
+              <a href="thread.html#431">[ thread ]</a>
+              <a href="subject.html#431">[ subject ]</a>
+              <a href="author.html#431">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,588 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r816%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300856.mAU8u5uU019204%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000783.html">
+   <LINK REL="Next"  HREF="000785.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r816%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300856.mAU8u5uU019204%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 30 09:56:05 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000783.html">[OpenFDM-svn] r815 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000785.html">[OpenFDM-svn] r817 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#784">[ date ]</a>
+              <a href="thread.html#784">[ thread ]</a>
+              <a href="subject.html#784">[ subject ]</a>
+              <a href="author.html#784">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-30 09:56:04 +0100 (Sun, 30 Nov 2008)
+New Revision: 816
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Move generic state and port arrays into the
+implementations that need them.
+
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/Model.h
+M    src/OpenFDM/Interact.cpp
+M    src/OpenFDM/RootJoint.cpp
+M    src/OpenFDM/AbstractModel.h
+M    src/OpenFDM/AbstractNodeContext.cpp
+M    src/OpenFDM/SimpleDirectModel.h
+M    src/OpenFDM/LeafContext.h
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/SimpleDirectModel.cpp
+M    src/OpenFDM/ModelContext.h
+M    src/OpenFDM/AbstractNodeContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-class ModelContext;
++class AbstractModelContext;
+ class PortValueList;
+ 
+ class AbstractModel : public LeafNode {
+@@ -24,7 +24,7 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  virtual ModelContext* newModelContext(PortValueList&amp;) const = 0;
++  virtual AbstractModelContext* newModelContext(PortValueList&amp;) const = 0;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-11-30 08:56:04 UTC (rev 816)
+@@ -14,17 +14,4 @@
+ {
+ }
+ 
+-const PortValue*
+-AbstractNodeContext::getPortValue(const PortInfo&amp; portInfo) const
+-{
+-  return mPortValueList.getPortValue(portInfo);
+-}
+-
+-void
+-AbstractNodeContext::setPortValue(const PortInfo&amp; portInfo,
+-                                  PortValue* portValue)
+-{
+-  mPortValueList.setPortValue(portInfo.getIndex(), portValue);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -19,13 +19,7 @@
+   virtual const Node&amp; getNode() const = 0;
+ 
+   /// Port value accessors for System external usage.
+-  virtual const PortValue* getPortValue(const PortInfo&amp;) const;
+-
+-  /// Set port value for the given port.
+-  virtual void setPortValue(const PortInfo&amp;, PortValue*);
+-
+-protected:
+-  PortValueList mPortValueList;
++  virtual const PortValue* getPortValue(const PortInfo&amp;) const = 0;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -259,6 +259,45 @@
+     const VectorN&amp; getVelDot() const
+     { return velDot; }
+     
++  bool allocStates()
++  {
++    unsigned numContinousStates = getNode().getNumContinousStateValues();
++    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
++      const ContinousStateInfo* continousStateInfo;
++      continousStateInfo = getNode().getContinousStateInfo(i);
++      mContinousState.setValue(*continousStateInfo, *this);
++      mContinousStateDerivative.setValue(*continousStateInfo, *this);
++    }
++    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
++    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
++      const StateInfo* stateInfo;
++      stateInfo = getNode().getDiscreteStateInfo(i);
++      mDiscreteState.setValue(*stateInfo, *this);
++    }
++    return true;
++  }
++
++  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp; info)
++  { return mContinousState.getValue(info); }
++  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp; info)
++  { return mContinousStateDerivative.getValue(info); }
++
++  /// Set port value for the given port.
++  virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  {  return mPortValueList.getPortValue(portInfo); }
++    void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++    { mPortValueList.setPortValue(portInfo.getIndex(), portValue); }
++  
++protected:
++  // PortValues
++  PortValueList mPortValueList;
++
++  // Continous States
++  ContinousStateValueVector mContinousState;
++  ContinousStateValueVector mContinousStateDerivative;
++  // Discrete States
++  DiscreteStateValueVector mDiscreteState;
++
+   private:
+     // Stores some values persistent accross velocity/articulation/acceleration
+     MatrixFactorsNN hIh;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-30 08:56:04 UTC (rev 816)
+@@ -18,9 +18,6 @@
+   virtual const Interact&amp; getNode() const
+   { return *mInteract; }
+ 
+-  virtual bool alloc()
+-  { return allocStates(); }
+-
+   virtual void initDesignPosition()
+   {
+     mInteract-&gt;initDesignPosition(mPortValueList);
+@@ -54,6 +51,45 @@
+   virtual void update(const DiscreteTask&amp;)
+   { }
+ 
++  bool alloc()
++  {
++    unsigned numContinousStates = getNode().getNumContinousStateValues();
++    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
++      const ContinousStateInfo* continousStateInfo;
++      continousStateInfo = getNode().getContinousStateInfo(i);
++      mContinousState.setValue(*continousStateInfo, *this);
++      mContinousStateDerivative.setValue(*continousStateInfo, *this);
++    }
++    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
++    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
++      const StateInfo* stateInfo;
++      stateInfo = getNode().getDiscreteStateInfo(i);
++      mDiscreteState.setValue(*stateInfo, *this);
++    }
++    return true;
++  }
++
++  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp; info)
++  { return mContinousState.getValue(info); }
++  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp; info)
++  { return mContinousStateDerivative.getValue(info); }
++
++  /// Set port value for the given port.
++  virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  {  return mPortValueList.getPortValue(portInfo); }
++  void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++  { mPortValueList.setPortValue(portInfo.getIndex(), portValue); }
++  
++protected:
++  // PortValues
++  PortValueList mPortValueList;
++
++  // Continous States
++  ContinousStateValueVector mContinousState;
++  ContinousStateValueVector mContinousStateDerivative;
++  // Discrete States
++  DiscreteStateValueVector mDiscreteState;
++
+ private:
+   SharedPtr&lt;const Interact&gt; mInteract;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -18,42 +18,8 @@
+   virtual ~LeafContext() {}
+   virtual const LeafNode&amp; getNode() const = 0;
+ 
+-  void setContinousStateSize(const MatrixStateInfo&amp; stateInfo,
+-                             const Size&amp; sz)
+-  {
+-    mContinousState[stateInfo].resize(sz(0), sz(1));
+-    mContinousStateDerivative[stateInfo].resize(sz(0), sz(1));
+-  }
+-
+-  bool allocStates()
+-  {
+-    unsigned numContinousStates = getNode().getNumContinousStateValues();
+-    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
+-      const ContinousStateInfo* continousStateInfo;
+-      continousStateInfo = getNode().getContinousStateInfo(i);
+-      mContinousState.setValue(*continousStateInfo, *this);
+-      mContinousStateDerivative.setValue(*continousStateInfo, *this);
+-    }
+-    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
+-    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
+-      const StateInfo* stateInfo;
+-      stateInfo = getNode().getDiscreteStateInfo(i);
+-      mDiscreteState.setValue(*stateInfo, *this);
+-    }
+-    return true;
+-  }
+-
+-  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp; info)
+-  { return mContinousState.getValue(info); }
+-  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp; info)
+-  { return mContinousStateDerivative.getValue(info); }
+-  
+-protected:
+-  // Continous States
+-  ContinousStateValueVector mContinousState;
+-  ContinousStateValueVector mContinousStateDerivative;
+-  // Discrete States
+-  DiscreteStateValueVector mDiscreteState;
++  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp;) = 0;
++  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp;) =0;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -12,6 +12,7 @@
+ #include &quot;AbstractModel.h&quot;
+ #include &quot;MatrixInputPort.h&quot;
+ #include &quot;MatrixOutputPort.h&quot;
++#include &quot;ModelContext.h&quot;
+ #include &quot;RealInputPort.h&quot;
+ #include &quot;RealOutputPort.h&quot;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -17,11 +17,11 @@
+ class DiscreteTask;
+ class InitTask;
+ 
+-//// This one is used to execute the simulation system
+-class ModelContext : public LeafContext {
++/// This one is used to execute the simulation system
++class AbstractModelContext : public LeafContext {
+ public:
+-  ModelContext() {}
+-  virtual ~ModelContext();
++  AbstractModelContext() {}
++  virtual ~AbstractModelContext() {}
+ 
+   virtual const AbstractModel&amp; getNode() const = 0;
+ 
+@@ -30,18 +30,77 @@
+   virtual void update(const DiscreteTask&amp; discreteTask) = 0;
+   virtual void derivative(const Task&amp;) = 0;
+ 
++private:
++  AbstractModelContext(const AbstractModelContext&amp;);
++  AbstractModelContext&amp; operator=(const AbstractModelContext&amp;);
++};
++
++
++
++class ModelContext : public AbstractModelContext {
++public:
++  ModelContext() {}
++  virtual ~ModelContext();
++
+   /// might vanish???
+   PortValueList&amp; getPortValueList()
+   { return mPortValueList; }
+ 
++  virtual void setContinousStateSize(const MatrixStateInfo&amp; stateInfo,
++                                     const Size&amp; sz)
++  {
++    mContinousState[stateInfo].resize(sz(0), sz(1));
++    mContinousStateDerivative[stateInfo].resize(sz(0), sz(1));
++  }
++
++  virtual bool allocStates()
++  {
++    unsigned numContinousStates = getNode().getNumContinousStateValues();
++    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
++      const ContinousStateInfo* continousStateInfo;
++      continousStateInfo = getNode().getContinousStateInfo(i);
++      mContinousState.setValue(*continousStateInfo, *this);
++      mContinousStateDerivative.setValue(*continousStateInfo, *this);
++    }
++    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
++    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
++      const StateInfo* stateInfo;
++      stateInfo = getNode().getDiscreteStateInfo(i);
++      mDiscreteState.setValue(*stateInfo, *this);
++    }
++    return true;
++  }
++
++  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp; info)
++  { return mContinousState.getValue(info); }
++  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp; info)
++  { return mContinousStateDerivative.getValue(info); }
++
++  /// Set port value for the given port.
++  virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  {  return mPortValueList.getPortValue(portInfo); }
++  virtual void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++  { mPortValueList.setPortValue(portInfo.getIndex(), portValue); }
++
++  
++protected:
++  // PortValues
++  PortValueList mPortValueList;
++
++  // Continous States
++  ContinousStateValueVector mContinousState;
++  ContinousStateValueVector mContinousStateDerivative;
++  // Discrete States
++  DiscreteStateValueVector mDiscreteState;
++
+ private:
+   ModelContext(const ModelContext&amp;);
+   ModelContext&amp; operator=(const ModelContext&amp;);
+ };
+ 
+-class ModelContextList : public std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; {
++class ModelContextList : public std::list&lt;SharedPtr&lt;AbstractModelContext&gt; &gt; {
+ public:
+-  typedef std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; list_type;
++  typedef std::list&lt;SharedPtr&lt;AbstractModelContext&gt; &gt; list_type;
+ 
+   void initOutput(const /*Init*/Task&amp; task) const
+   {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-30 08:56:04 UTC (rev 816)
+@@ -50,7 +50,47 @@
+   
+   virtual void update(const DiscreteTask&amp;)
+   { }
++
++  virtual bool allocStates()
++  {
++    unsigned numContinousStates = getNode().getNumContinousStateValues();
++    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
++      const ContinousStateInfo* continousStateInfo;
++      continousStateInfo = getNode().getContinousStateInfo(i);
++      mContinousState.setValue(*continousStateInfo, *this);
++      mContinousStateDerivative.setValue(*continousStateInfo, *this);
++    }
++    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
++    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
++      const StateInfo* stateInfo;
++      stateInfo = getNode().getDiscreteStateInfo(i);
++      mDiscreteState.setValue(*stateInfo, *this);
++    }
++    return true;
++  }
+   
++  virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp; info)
++  { return mContinousState.getValue(info); }
++  virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp; info)
++  { return mContinousStateDerivative.getValue(info); }
++  
++  /// Set port value for the given port.
++  virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const
++  {  return mPortValueList.getPortValue(portInfo); }
++  void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++  { mPortValueList.setPortValue(portInfo.getIndex(), portValue); }
++  
++  
++protected:
++  // PortValues
++  PortValueList mPortValueList;
++  
++  // Continous States
++  ContinousStateValueVector mContinousState;
++  ContinousStateValueVector mContinousStateDerivative;
++  // Discrete States
++  DiscreteStateValueVector mDiscreteState;
++  
+ private:
+   SharedPtr&lt;const RootJoint&gt; mRootJoint;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-30 08:56:04 UTC (rev 816)
+@@ -42,12 +42,18 @@
+   return 0;
+ }
+ 
+-void
+-SimpleDirectModel::Context::setPortValue(const PortInfo&amp; i, PortValue* v)
++ContinousStateValue*
++SimpleDirectModel::Context::getStateValue(const ContinousStateInfo&amp;)
+ {
+-  OpenFDMAssert(false);
++  return 0;
+ }
+-    
++
++ContinousStateValue*
++SimpleDirectModel::Context::getStateDerivative(const ContinousStateInfo&amp;)
++{
++  return 0;
++}
++
+ void
+ SimpleDirectModel::Context::initOutput(const /*Init*/Task&amp;)
+ {
+@@ -83,7 +89,7 @@
+ {
+ }
+ 
+-ModelContext*
++AbstractModelContext*
+ SimpleDirectModel::newModelContext(PortValueList&amp; portValueList) const
+ {
+   if (mInputPorts.empty()) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-30 08:56:04 UTC (rev 816)
+@@ -31,11 +31,11 @@
+   { return PortId(mOutputPort); }
+ 
+   class Context;
+-  virtual ModelContext* newModelContext(PortValueList&amp; portValueList) const;
++  virtual AbstractModelContext* newModelContext(PortValueList&amp; portValueList) const;
+   virtual void output(Context&amp; context) const = 0;
+ 
+   typedef std::vector&lt;SharedPtr&lt;const NumericPortValue&gt; &gt; InputValueVector;
+-  class Context : public ModelContext {
++  class Context : public AbstractModelContext {
+   public:
+     Context(const SimpleDirectModel* model, const InputValueVector&amp; inputValues,
+             NumericPortValue* outputValue);
+@@ -43,7 +43,9 @@
+     
+     virtual const SimpleDirectModel&amp; getNode() const;
+     virtual const PortValue* getPortValue(const PortInfo&amp;) const;
+-    virtual void setPortValue(const PortInfo&amp;, PortValue*);
++
++    virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp;);
++    virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp;);
+     
+     virtual void initOutput(const /*Init*/Task&amp;);
+     virtual void output(const Task&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-30 08:21:41 UTC (rev 815)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-30 08:56:04 UTC (rev 816)
+@@ -115,7 +115,8 @@
+   }
+ 
+   void appendModelContext(const SampleTime&amp; sampleTime,
+-                          ModelContext* modelContext, unsigned listIndex)
++                          AbstractModelContext* modelContext,
++                          unsigned listIndex)
+   {
+     // The init task contains them all
+     mInitTask-&gt;mModelContextList[listIndex].push_back(modelContext);
+@@ -532,12 +533,12 @@
+     virtual AbstractNodeInstance* newNodeInstance()
+     { return new LeafInstance(mSampleTime, mModelContext); }
+ 
+-    ModelContext* getModelContext()
++    AbstractModelContext* getModelContext()
+     { return mModelContext; }
+ 
+   private:
+     SharedPtr&lt;const AbstractModel&gt; mModel;
+-    SharedPtr&lt;ModelContext&gt; mModelContext;
++    SharedPtr&lt;AbstractModelContext&gt; mModelContext;
+   };
+   struct MechanicInstanceData : public InstanceData {
+     MechanicInstanceData(const MechanicNode&amp; mechanicNode,
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000783.html">[OpenFDM-svn] r815 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000785.html">[OpenFDM-svn] r817 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#784">[ date ]</a>
+              <a href="thread.html#784">[ thread ]</a>
+              <a href="subject.html#784">[ subject ]</a>
+              <a href="author.html#784">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

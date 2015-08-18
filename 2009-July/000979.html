@@ -1,0 +1,256 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1017 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1017%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907201839.n6KId3u3024812%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000978.html">
+   <LINK REL="Next"  HREF="000980.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1017 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1017%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907201839.n6KId3u3024812%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1017 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jul 20 20:39:03 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000978.html">[OpenFDM-svn] r1016 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000980.html">[OpenFDM-svn] r1018 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#979">[ date ]</a>
+              <a href="thread.html#979">[ thread ]</a>
+              <a href="subject.html#979">[ subject ]</a>
+              <a href="author.html#979">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-20 20:39:01 +0200 (Mon, 20 Jul 2009)
+New Revision: 1017
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp
+Log:
+Distinguish between the global reference frame and the
+inertial reference frame.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -152,6 +152,10 @@
+       Vector6 relVel = mJointMatrix*velocity;
+       mChildLink.setVelocity(parentSpVel + relVel);
+ 
++      Vector6 parentInVel = mParentLink.getInertialVelocity();
++      parentInVel = motionTo(positionDifference, parentInVel);
++      mChildLink.setInertialVelocity(parentInVel + relVel);
++
+       /**
+          This is the cross product of the inertial spatial velocity
+          vector with the relative spatial velocity vector (motion type
+@@ -162,9 +166,9 @@
+          transformed spatial velocity of the parent frame cross the
+          relative velocity.
+       */
+-      mHdot = Vector6(cross(parentSpVel.getAngular(), relVel.getAngular()),
+-                      cross(parentSpVel.getAngular(), relVel.getLinear()) + 
+-                      cross(parentSpVel.getLinear(), relVel.getAngular()));
++      mHdot = Vector6(cross(parentInVel.getAngular(), relVel.getAngular()),
++                      cross(parentInVel.getAngular(), relVel.getLinear()) + 
++                      cross(parentInVel.getLinear(), relVel.getAngular()));
+ 
+ 
+       mChildLink.setSpatialForce(Vector6::zeros());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -44,7 +44,8 @@
+                               mFixedRootJoint-&gt;mRootOrientation);
+     mChildLink.setCoordinateSystem(coordSys);
+     Vector6 vel = angularMotionTo(mFixedRootJoint-&gt;mRootPosition, angularVel);
+-    mChildLink.setVelocity(vel);
++    mChildLink.setVelocity(Vector6::zeros());
++    mChildLink.setInertialVelocity(vel);
+ 
+     mChildLink.setSpatialForce(Vector6::zeros());
+     mChildLink.setSpatialInertia(SpatialInertia::zeros());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -44,7 +44,7 @@
+ 
+     // Each inertia has a contribution to the spatial bias force.
+     // This part is handled here.
+-    Vector6 v = getLink().getVelocity(cs.getPosition());
++    Vector6 v = getLink().getInertialVelocity(cs.getPosition());
+     Vector6 Iv = Vector6(I*v.getAngular(), mMass-&gt;getMass()*v.getLinear());
+     Vector6 vIv = Vector6(cross(v.getAngular(), Iv.getAngular())
+                           /* Not needed since Iv.getLinear() is parallel to
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -8,6 +8,7 @@
+ 
+ MechanicLinkValue::MechanicLinkValue() :
+   mVelocity(Vector6::zeros()),
++  mInertialVelocity(Vector6::zeros()),
+   mAcceleration(Vector6::zeros()),
+   mForce(Vector6::zeros()),
+   mInertia(SpatialInertia::zeros())
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -42,6 +42,11 @@
+   const Vector6&amp; getVelocity() const
+   { return mVelocity; }
+ 
++  void setInertialVelocity(const Vector6&amp; inertialVelocity)
++  { mInertialVelocity = inertialVelocity; }
++  const Vector6&amp; getInertialVelocity() const
++  { return mInertialVelocity; }
++
+   /// The spatial acceleration of this mechanic link
+   ///
+   /// The acceleration is given in global coordinates and at this mechanic links
+@@ -82,6 +87,11 @@
+   Vector6 getSpatialVelocity(const CoordinateSystem&amp; cs) const
+   { return cs.rotToLocal(getSpatialVelocity(cs.getPosition())); }
+ 
++  Vector6 getInertialVelocity(const Vector3&amp; pos) const
++  { return motionTo(pos - mCoordinateSystem.getPosition(), getInertialVelocity()); }
++  Vector6 getInertialVelocity(const CoordinateSystem&amp; cs) const
++  { return cs.rotToLocal(getInertialVelocity(cs.getPosition())); }
++
+   Vector6 getSpatialAcceleration(const Vector3&amp; pos) const
+   { return motionTo(pos - mCoordinateSystem.getPosition(), getAcceleration()); }
+   Vector6 getSpatialAcceleration(const CoordinateSystem&amp; cs) const
+@@ -191,8 +201,8 @@
+   /// measured in global coordinate systems coordinates.
+   /// The spacial velocities pivot point is at the coordinate systems origin.
+   Vector6 mVelocity;
+-  // FIXME: make use of that!! Currently relative velocities do not work
+-//   Vector6 mReferenceVelocity;
++  /// Inertial velocity
++  Vector6 mInertialVelocity;
+ 
+   /// The spatial acceleration at the origin of the coordinate system
+   /// measured in global coordinate systems coordinates.
+@@ -267,6 +277,17 @@
+     return mMechanicLinkValue-&gt;getSpatialVelocity(cs);
+   }
+ 
++  Vector6 getInertialVelocity(const Vector3&amp; position) const
++  {
++    OpenFDMAssert(isConnected());
++    return mMechanicLinkValue-&gt;getInertialVelocity(position);
++  }
++  Vector6 getInertialVelocity(const CoordinateSystem&amp; cs) const
++  {
++    OpenFDMAssert(isConnected());
++    return mMechanicLinkValue-&gt;getInertialVelocity(cs);
++  }
++
+   Vector6 getAcceleration(const Vector3&amp; position) const
+   {
+     OpenFDMAssert(isConnected());
+@@ -292,6 +313,8 @@
+   { return mMechanicLinkValue-&gt;getAcceleration(); }
+   const Vector6&amp; getVelocity() const
+   { return mMechanicLinkValue-&gt;getVelocity(); }
++  const Vector6&amp; getInertialVelocity() const
++  { return mMechanicLinkValue-&gt;getInertialVelocity(); }
+ 
+   void setDesignPosition(const Vector3&amp; position)
+   {
+@@ -413,6 +436,11 @@
+   const Vector6&amp; getVelocity() const
+   { return mMechanicLinkValue-&gt;getVelocity(); }
+ 
++  void setInertialVelocity(const Vector6&amp; velocity)
++  { mMechanicLinkValue-&gt;setInertialVelocity(velocity); }
++  const Vector6&amp; getInertialVelocity() const
++  { return mMechanicLinkValue-&gt;getInertialVelocity(); }
++
+   void setCoordinateSystem(const CoordinateSystem&amp; coordinateSystem)
+   { return mMechanicLinkValue-&gt;setCoordinateSystem(coordinateSystem); }
+   const CoordinateSystem&amp; getCoordinateSystem() const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -181,7 +181,8 @@
+   velocity = childLink.getCoordinateSystem().rotToReference(velocity);
+   Vector3 angularBaseVelocity = environment.getAngularVelocity(task.getTime());
+   Vector6 baseVelocity(angularMotionTo(position, angularBaseVelocity));
+-  childLink.setVelocity(baseVelocity + velocity);
++  childLink.setVelocity(velocity);
++  childLink.setInertialVelocity(baseVelocity + velocity);
+ 
+   childLink.setSpatialForce(Vector6::zeros());
+   childLink.setSpatialInertia(SpatialInertia::zeros());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp	2009-07-20 18:17:30 UTC (rev 1016)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp	2009-07-20 18:39:01 UTC (rev 1017)
+@@ -28,6 +28,7 @@
+ SystemOutput*
+ SystemOutput::newDefaultSystemOutput(const std::string&amp; filename)
+ {
++  return 0;
+ #ifdef HAVE_HDF5_H
+   return new HDF5SystemOutput(filename);
+ #else
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000978.html">[OpenFDM-svn] r1016 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000980.html">[OpenFDM-svn] r1018 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#979">[ date ]</a>
+              <a href="thread.html#979">[ thread ]</a>
+              <a href="subject.html#979">[ subject ]</a>
+              <a href="author.html#979">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

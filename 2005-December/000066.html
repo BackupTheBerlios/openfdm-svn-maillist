@@ -1,0 +1,255 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r82 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r82%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512041907.jB4J7nGk001304%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000067.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r82 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r82%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512041907.jB4J7nGk001304%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r82 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Dec  4 20:07:49 CET 2005</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000067.html">[OpenFDM-svn] r83 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#66">[ date ]</a>
+              <a href="thread.html#66">[ thread ]</a>
+              <a href="subject.html#66">[ subject ]</a>
+              <a href="author.html#66">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-04 20:07:21 +0100 (Sun, 04 Dec 2005)
+New Revision: 82
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Sketch of a changed port api. Many if's and new's
+are in the fast path now, making it dead slow ...
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-29 19:14:59 UTC (rev 81)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-04 19:07:21 UTC (rev 82)
+@@ -24,7 +24,105 @@
+ class Input;
+ class Output;
+ 
+-/// Class for an inout or output port of a Model.
++class RealPortInterface;
++class MatrixPortInterface;
++
++class PortInterface : public Referenced {
++public:
++  virtual ~PortInterface(void) {}
++  virtual RealPortInterface* toRealPortInterface(void) { return 0; }
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return 0; }
++
++  virtual bool isConnected(void) const = 0;
++  virtual void evaluate(void) = 0;
++};
++
++class RealPortInterface : public PortInterface {
++public:
++  RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
++  virtual RealPortInterface* toRealPortInterface(void)
++  {
++    if (Size(1, 1) == size(mValue))
++      return this;
++    else
++      return 0;
++  }
++  // FIXME, should not be a virtual function
++  virtual real_type getRealValue(void)
++  { evaluate(); return mValue(1, 1); }
++protected:
++  Matrix mValue;
++};
++
++class MatrixPortInterface : public RealPortInterface {
++public:
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
++  // FIXME, should not be a virtual function
++  virtual const Matrix&amp; getMatrixValue(void)
++  { evaluate(); return mValue; }
++};
++
++
++/// FIXME adapter to be somehow backwards compatible
++/// Should vanish
++class PropertyPortInterface : public MatrixPortInterface {
++public:
++  PropertyPortInterface(const Property&amp; property) : mProperty(property)
++  { }
++  virtual void evaluate(void)
++  {
++    mValue = mProperty.getValue().toMatrix();
++  }
++  virtual bool isConnected(void) const
++  { return mProperty.isValid(); }
++private:
++  mutable Property mProperty;
++};
++
++class RealPortHandle {
++public:
++  RealPortHandle(RealPortInterface* realPortInterface) :
++    mRealPortInterface(realPortInterface)
++  { }
++  real_type getRealValue(void)
++  { return mRealPortInterface-&gt;getRealValue(); }
++  bool isConnected(void) const
++  { return mRealPortInterface &amp;&amp; mRealPortInterface-&gt;isConnected(); }
++private:
++  shared_ptr&lt;RealPortInterface&gt; mRealPortInterface;
++};
++
++class MatrixPortHandle {
++public:
++  MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
++    mMatrixPortInterface(matrixPortInterface)
++  { }
++  const Matrix&amp; getMatrixValue(void)
++  { return mMatrixPortInterface-&gt;getMatrixValue(); }
++  bool isConnected(void) const
++  { return mMatrixPortInterface &amp;&amp; mMatrixPortInterface-&gt;isConnected(); }
++private:
++  shared_ptr&lt;MatrixPortInterface&gt; mMatrixPortInterface;
++};
++
++// should vanish, just an adaptor for smoother migration
++class RealPortExpression : public PropertyImpl&lt;real_type&gt; {
++public:
++  RealPortExpression(const RealPortHandle&amp; rph) :
++    mRealPortHandle(rph)
++  { }
++  real_type getValue(void) const
++  { return mRealPortHandle.getRealValue(); }
++  void setValue(const real_type&amp;)
++  {  }
++  bool isValid(void) const { return mRealPortHandle.isConnected(); }
++  const Object* getObject(void) const { return 0; }
++  Object* getObject(void) { return 0; }
++private:
++  mutable RealPortHandle mRealPortHandle;
++};
++
++/// Class for an input or output port of a Model.
+ /// Ports can be connected together. This means in effect that the reader
+ /// gains access to value at the source model.
+ /// Additional information must be carried through that class.
+@@ -43,22 +141,31 @@
+   /// Just use the Properties for now. In this phase it might be a good idea.
+   void setProperty(const Property&amp; property)
+   {
+-    mProperty = property;
++    setPortInterface(new PropertyPortInterface(property));
++  }
++  void setPortInterface(PortInterface* portInterface)
++  {
++    mPortInterface = portInterface;
+     std::vector&lt;shared_ptr&lt;Port&gt; &gt;::iterator it;
+     for (it = mChainPorts.begin(); it != mChainPorts.end(); ++it) {
+-      (*it)-&gt;setProperty(property);
++      (*it)-&gt;setPortInterface(mPortInterface);
+     }
+   }
++
+   /// Just use the Properties for now. In this phase it might be a good idea.
+-  const Property&amp; getProperty(void) const
+-  { return mProperty; }
+-  Property&amp; getProperty(void)
+-  { return mProperty; }
++  Property getProperty(void) const
++  { return Property(new RealPortExpression(((Port*)(this))-&gt;toRealPortHandle())); }
+ 
++
+   /// returns true if this port has a source port connected to it
+   bool isConnected() const
+-  { return mProperty.isValid(); }
++  { return mPortInterface-&gt;isConnected(); }
+ 
++  RealPortHandle toRealPortHandle(void)
++  { return RealPortHandle(mPortInterface-&gt;toRealPortInterface()); }
++  MatrixPortHandle toMatrixPortHandle(void)
++  { return MatrixPortHandle(mPortInterface-&gt;toMatrixPortInterface()); }
++
+   /// Retrieve the value of this port
+   /// Note that we don't need a setValue method since we attach a getter of a
+   /// Model to a port.
+@@ -66,8 +173,19 @@
+   /// This might be the place where it is possible to implement
+   /// TaskInfo dependent output ports ...
+   /// Hmm, may be we should otoh 'dirty' some getters?
+-  Variant getValue(void) const
+-  { return mProperty.getValue(); }
++  /// Generic thing. Don't use if you don't have to
++  Variant getValue(void)
++  {
++    RealPortInterface* realPortInterface
++      = mPortInterface-&gt;toRealPortInterface();
++    if (realPortInterface)
++      return Variant(realPortInterface-&gt;getRealValue());
++    MatrixPortInterface* matrixPortInterface
++      = mPortInterface-&gt;toMatrixPortInterface();
++    if (matrixPortInterface)
++      return Variant(matrixPortInterface-&gt;getMatrixValue());
++    return Variant();
++  }
+ 
+   /// Connect this port to the given source port
+   void connect(Port* sourcePort)
+@@ -124,7 +242,10 @@
+   { disconnect(mSourcePort); }
+ 
+ private:
+-  mutable/*FIXME*/ Property mProperty;
++  /// For now the untyped input port
++  /// On Model::init() it is expected to be specialized
++  /// to a typed port handle
++  shared_ptr&lt;PortInterface&gt; mPortInterface;
+   /// The list of readers for this port
+   std::vector&lt;shared_ptr&lt;Port&gt; &gt; mChainPorts;
+   /// The source of the current port connection
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000067.html">[OpenFDM-svn] r83 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#66">[ date ]</a>
+              <a href="thread.html#66">[ thread ]</a>
+              <a href="subject.html#66">[ subject ]</a>
+              <a href="author.html#66">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,5489 @@
+From frohlich at berlios.de  Thu Feb  2 21:12:43 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:12:43 +0100
+Subject: [OpenFDM-svn] r224 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602022012.k12KChqE015871@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:12:36 +0100 (Thu, 02 Feb 2006)
+New Revision: 224
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Port.h
+Log:
+Fix for possible crash.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-01-28 15:56:04 UTC (rev 223)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-02-02 20:12:36 UTC (rev 224)
+@@ -142,9 +142,19 @@
+   bool hasSameSource(const Port* otherPort) const;
+ 
+   RealPortHandle toRealPortHandle(void)
+-  { return RealPortHandle(mPortInterface->toRealPortInterface()); }
++  {
++    if (mPortInterface)
++      return RealPortHandle(mPortInterface->toRealPortInterface());
++    else
++      return RealPortHandle(0);
++  }
+   MatrixPortHandle toMatrixPortHandle(void)
+-  { return MatrixPortHandle(mPortInterface->toMatrixPortInterface()); }
++  {
++    if (mPortInterface)
++      return MatrixPortHandle(mPortInterface->toMatrixPortInterface());
++    else
++      return MatrixPortHandle(0);
++  }
+ 
+   /// Retrieve the value of this port
+   /// Note that we don't need a setValue method since we attach a getter of a
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:13:10 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:13:10 +0100
+Subject: [OpenFDM-svn] r225 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602022013.k12KDA4S016057@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:13:04 +0100 (Thu, 02 Feb 2006)
+New Revision: 225
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/TableData.h
+Log:
+Don't try to copy zero length arrays.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/TableData.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TableData.h	2006-02-02 20:12:36 UTC (rev 224)
++++ trunk/OpenFDM/src/OpenFDM/TableData.h	2006-02-02 20:13:04 UTC (rev 225)
+@@ -186,9 +186,13 @@
+     if (ndarray.mData) {
+       mSize = ndarray.size();
+       unsigned totalLen = product(mSize);
+-      mData = new real_type[totalLen];
+-      for (unsigned i = 0; i < totalLen; ++i)
+-        mData[i] = ndarray.mData[i];
++      if (0 < totalLen) {
++        mData = new real_type[totalLen];
++        for (unsigned i = 0; i < totalLen; ++i)
++          mData[i] = ndarray.mData[i];
++      } else {
++        mData = 0;
++      }
+     } else {
+       mData = 0;
+     }
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:14:46 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:14:46 +0100
+Subject: [OpenFDM-svn] r226 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602022014.k12KEkdH016638@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:14:27 +0100 (Thu, 02 Feb 2006)
+New Revision: 226
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Add name printing including the model path.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-02-02 20:13:04 UTC (rev 225)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-02-02 20:14:27 UTC (rev 226)
+@@ -256,6 +256,24 @@
+   return mOutputPorts[i]->getName();
+ }
+ 
++class ModelPathCollector :
++    public ModelVisitor {
++public:
++  virtual ~ModelPathCollector(void)
++  { }
++  virtual void apply(Model& model)
++  { ascend(model); path += "/"; path += model.getName(); }
++  std::string path;
++};
++
++std::string
++Model::getPathString(void)
++{
++  ModelPathCollector modelPathCollector;
++  accept(modelPathCollector);
++  return modelPathCollector.path;
++}
++
+ void
+ Model::setNumInputPorts(unsigned num)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-02-02 20:13:04 UTC (rev 225)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-02-02 20:14:27 UTC (rev 226)
+@@ -135,9 +135,14 @@
+   Port* getOutputPort(const std::string& name);
+   const std::string& getOutputPortName(unsigned i) const;
+ 
++  std::string getPathString(void) /* FIXME const*/;
++
+   const Model* getParent(void) const { return mParentModel; }
+   Model* getParent(void) { return mParentModel; }
+ 
++  /// FIXME: have function returning the input ports a given output
++  /// port depends on
++
+ protected:
+   void setNumContinousStates(unsigned numContinousStates);
+   void setNumDiscreteStates(unsigned numDiscreteStates);
+@@ -190,6 +195,8 @@
+   // Sets the parent model.
+   // That is the one which is informed if the number of states changes.
+   void setParent(Model* model);
++
++  /// FIXME: use visitor for that
+   void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+   void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+ 
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:15:26 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:15:26 +0100
+Subject: [OpenFDM-svn] r227 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602022015.k12KFQbB016988@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:15:19 +0100 (Thu, 02 Feb 2006)
+New Revision: 227
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/TaskInfo.h
+Log:
+Remove unused include
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/TaskInfo.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TaskInfo.h	2006-02-02 20:14:27 UTC (rev 226)
++++ trunk/OpenFDM/src/OpenFDM/TaskInfo.h	2006-02-02 20:15:19 UTC (rev 227)
+@@ -5,7 +5,6 @@
+ #ifndef OpenFDM_TaskInfo_H
+ #define OpenFDM_TaskInfo_H
+ 
+-#include "Assert.h"
+ #include "SampleTime.h"
+ 
+ namespace OpenFDM {
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:16:02 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:16:02 +0100
+Subject: [OpenFDM-svn] r228 - trunk/OpenFDM/src/OpenFDM/XML
+Message-ID: <200602022016.k12KG24q017382@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:15:57 +0100 (Thu, 02 Feb 2006)
+New Revision: 228
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h
+   trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h
+Log:
+Add include guards
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h	2006-02-02 20:15:19 UTC (rev 227)
++++ trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h	2006-02-02 20:15:57 UTC (rev 228)
+@@ -2,6 +2,9 @@
+  *
+  */
+ 
++#ifndef OpenFDM_XML_EasyXMLReader_H
++#define OpenFDM_XML_EasyXMLReader_H
++
+ #include "XMLReader.h"
+ 
+ namespace OpenFDM {
+@@ -17,3 +20,5 @@
+ 
+ } // namespace XML
+ } // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h	2006-02-02 20:15:19 UTC (rev 227)
++++ trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h	2006-02-02 20:15:57 UTC (rev 228)
+@@ -2,6 +2,9 @@
+  *
+  */
+ 
++#ifndef OpenFDM_XML_ExpatXMLReader_H
++#define OpenFDM_XML_ExpatXMLReader_H
++
+ #include "XMLReader.h"
+ 
+ namespace OpenFDM {
+@@ -17,3 +20,5 @@
+ 
+ } // namespace XML
+ } // namespace OpenFDM
++
++#endif
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:16:43 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:16:43 +0100
+Subject: [OpenFDM-svn] r229 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602022016.k12KGh7j017780@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:16:38 +0100 (Thu, 02 Feb 2006)
+New Revision: 229
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ReaderWriter.cpp
+Log:
+Change default error message order for readers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ReaderWriter.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ReaderWriter.cpp	2006-02-02 20:15:57 UTC (rev 228)
++++ trunk/OpenFDM/src/OpenFDM/ReaderWriter.cpp	2006-02-02 20:16:38 UTC (rev 229)
+@@ -31,7 +31,7 @@
+ bool
+ ReaderWriter::error(const std::string& message)
+ {
+-  mErrors.push_front(message);
++  mErrors.push_back(message);
+   return false;
+ }
+ 
+
+
+
+From frohlich at berlios.de  Thu Feb  2 21:18:56 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Thu, 2 Feb 2006 21:18:56 +0100
+Subject: [OpenFDM-svn] r231 - trunk/flightgear
+Message-ID: <200602022018.k12KIu6D019080@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-02 21:18:45 +0100 (Thu, 02 Feb 2006)
+New Revision: 231
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Make use of the jsbsim 2 reader
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-02 20:17:30 UTC (rev 230)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-02 20:18:45 UTC (rev 231)
+@@ -11,6 +11,7 @@
+ #include <Main/fg_props.hxx>
+ 
+ #include <JSBSim/LegacyJSBSimReader.h>
++#include <JSBSim/JSBSimReader.h>
+ #include <OpenFDM/Units.h>
+ #include <OpenFDM/Vehicle.h>
+ #include <OpenFDM/Input.h>
+@@ -182,23 +183,34 @@
+ {
+   SG_LOG(SG_FLIGHT, SG_INFO, "FGOpenFDM::init()");
+ 
+-  // Try to read JSBSim legacy files.
+-  LegacyJSBSimReader reader;
+-  reader.addAircraftPath(fgGetString("/sim/aircraft-dir"));
+-  reader.addEnginePath(std::string(fgGetString("/sim/aircraft-dir"))
+-                       + "/Engines");
+-  reader.loadAircraft(std::string(fgGetString("/sim/aero")) + ".xml");
+-  if (reader.getErrorState()) {
+-    SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
+-    const ReaderWriter::StringList errors = reader.getErrors();
+-    ReaderWriter::StringList::const_iterator it;
+-    for (it = errors.begin(); it != errors.end(); ++it) {
+-      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++  std::string aircraftDir = fgGetString("/sim/aircraft-dir");
++  std::string engineDir = aircraftDir + "/Engines";
++  std::string aircraftFile = std::string(fgGetString("/sim/aero")) + ".xml";
++
++  JSBSimReader reader;
++  reader.addAircraftPath(aircraftDir);
++  reader.addEnginePath(engineDir);
++  reader.loadAircraft(aircraftFile);
++  if (!reader.getErrorState()) {
++    mData->vehicle = reader.getVehicle();
++  } else {
++    // Try to read JSBSim legacy files.
++    LegacyJSBSimReader legReader;
++    legReader.addAircraftPath(aircraftDir);
++    legReader.addEnginePath(engineDir);
++    legReader.loadAircraft(aircraftFile);
++    if (legReader.getErrorState()) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
++      const ReaderWriter::StringList errors = legReader.getErrors();
++      ReaderWriter::StringList::const_iterator it;
++      for (it = errors.begin(); it != errors.end(); ++it) {
++        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++      }
++      return;
+     }
+-    return;
++    mData->vehicle = legReader.getVehicle();
+   }
+ 
+-  mData->vehicle = reader.getVehicle();
+   Vehicle* vehicle = mData->vehicle;
+   mData->ground = new FGGround(this);
+   vehicle->setGround(mData->ground);
+
+
+
+From frohlich at berlios.de  Sat Feb  4 11:53:10 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 4 Feb 2006 11:53:10 +0100
+Subject: [OpenFDM-svn] r232 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602041053.k14ArA6F030950@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-04 11:53:07 +0100 (Sat, 04 Feb 2006)
+New Revision: 232
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/TableData.h
+Log:
+Fix capital bug in comparison operator.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/TableData.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TableData.h	2006-02-02 20:18:45 UTC (rev 231)
++++ trunk/OpenFDM/src/OpenFDM/TableData.h	2006-02-04 10:53:07 UTC (rev 232)
+@@ -146,7 +146,15 @@
+ 
+   bool operator==(const TableLookup& tl) const
+   {
+-    mTable == tl.mTable;
++    Table::const_iterator i1 = mTable.begin();
++    Table::const_iterator i2 = tl.mTable.begin();
++    while (i1 != mTable.end() && i2 != tl.mTable.end()) {
++      if (i1->first != i2->first || i1->second != i2->second)
++        return false;
++      ++i1;
++      ++i2;
++    }
++    return i1 == mTable.end() && i2 == tl.mTable.end();
+   }
+ 
+ private:
+
+
+
+From frohlich at berlios.de  Sat Feb  4 11:53:34 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 4 Feb 2006 11:53:34 +0100
+Subject: [OpenFDM-svn] r233 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602041053.k14ArYCc030972@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-04 11:53:32 +0100 (Sat, 04 Feb 2006)
+New Revision: 233
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Gain.cpp
+Log:
+Initialize gain value to 1
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Gain.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-02-04 10:53:07 UTC (rev 232)
++++ trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-02-04 10:53:32 UTC (rev 233)
+@@ -18,7 +18,8 @@
+   END_OPENFDM_OBJECT_DEF
+ 
+ Gain::Gain(const std::string& name) :
+-  Model(name)
++  Model(name),
++  mGain(1)
+ {
+   setDirectFeedThrough(true);
+   
+
+
+
+From frohlich at berlios.de  Sat Feb  4 11:54:26 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 4 Feb 2006 11:54:26 +0100
+Subject: [OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim
+Message-ID: <200602041054.k14AsQ0M031109@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-04 11:54:21 +0100 (Sat, 04 Feb 2006)
+New Revision: 234
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+Log:
+Collected small updates to the readers
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -360,7 +360,7 @@
+ 
+ 
+   std::list<const XMLElement*> locList = metricsElem->getElements("location");
+-  Vector3 ap = locationData(locList, "AEROPROP", Vector3(0, 0, 0));
++  Vector3 ap = locationData(locList, "AERORP", Vector3(0, 0, 0));
+   Vector3 ep = locationData(locList, "EYEPOINT", Vector3(0, 0, 0));
+   Vector3 vrp = locationData(locList, "VRP", Vector3(0, 0, 0));
+ 
+@@ -381,7 +381,7 @@
+ //   epFrame->addInteract(accelSensor);
+   mVehicle->getTopBody()->addInteract(accelSensor);
+   mVehicle->getTopBody()->getFrame()->addChildFrame(epFrame);
+-  addOutputModel(port, "Normalized load value", "/accelerations/nlf");
++  addOutputModel(port, "Normalized load value", "accelerations/nlf");
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce->setPosition(structToBody(ap));
+@@ -557,12 +557,12 @@
+         // missing output properties are "wow" and "tire-pressure-norm"
+ 
+         std::string retract = stringData((*it)->getElement("retractable"));
+-        if (retract == "RETRACT") {
++        if (retract == "RETRACT" || retract == "1") {
+           Port* port = lookupJSBExpression("gear/gear-pos-norm");
+           sg->getInputPort("enabled")->connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, "Gear " + numStr + " Position",
+-                         "/gear/gear[" + numStr + "]/position-norm");
++                         "gear/gear[" + numStr + "]/position-norm");
+         }
+ 
+         real_type maxSteer = realData((*it)->getElement("max_steer"), 0);
+@@ -575,7 +575,7 @@
+           gain->getInputPort(0)->connect(port);
+           addFCSModel(gain);
+           addOutputModel(port, "Gear " + numStr + " Steering Output",
+-                         "/gear/gear[" + numStr + "]/steering-norm");
++                         "gear/gear[" + numStr + "]/steering-norm");
+ 
+           UnitConversionModel* unitConv
+             = new UnitConversionModel(name + " Degree Conversion",
+@@ -691,7 +691,7 @@
+ //           sg->getInputPort("enabled")->connect(port);
+ //           // Well, connect that directly to the input
+ //           addOutputModel(port, "Gear " + numStr + " Position",
+-//                          "/gear/gear[" + numStr + "]/position-norm");
++//                          "gear/gear[" + numStr + "]/position-norm");
+ //         }
+ 
+ //         if (type == "STEERABLE") {
+@@ -703,7 +703,7 @@
+ //           gain->getInputPort(0)->connect(port);
+ //           addFCSModel(gain);
+ //           addOutputModel(port, "Gear " + numStr + " Steering Output",
+-//                          "/gear/gear[" + numStr + "]/steering-norm");
++//                          "gear/gear[" + numStr + "]/steering-norm");
+ 
+ 
+ //           UnitConversionModel* unitConv
+@@ -832,12 +832,12 @@
+ 
+ //       Port* port = rj->getOutputPort(0);
+ //       addOutputModel(port, "Gear " + numStr + " Compression",
+-//                      "/gear/gear[" + numStr + "]/compression-rad");
++//                      "gear/gear[" + numStr + "]/compression-rad");
+ 
+ //       /// FIXME add a retract joint ...
+ //       port = lookupJSBExpression("gear/gear-pos-norm");
+ //       addOutputModel(port, "Gear " + numStr + " Position",
+-//                      "/gear/gear[" + numStr + "]/position-norm");
++//                      "gear/gear[" + numStr + "]/position-norm");
+ 
+ //     } else if (uctype == "AC_CLG") {
+ //       std::string name, brake, steer;
+@@ -900,14 +900,14 @@
+ //         port = sj->getOutputPort(0);
+ //         std::string nameBase = "Steering " + numStr + " Position";
+ //         addOutputModel(port, nameBase,
+-//                        "/gear/gear[" + numStr + "]/steering-pos-rad");
++//                        "gear/gear[" + numStr + "]/steering-pos-rad");
+ //         UnitConversionModel* unitModel
+ //           = new UnitConversionModel(nameBase + " converter",
+ //                                     UnitConversionModel::SiToUnit, uDegree);
+ //         unitModel->getInputPort(0)->connect(port);
+ //         addFCSModel(unitModel);
+ //         addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
+-//                        "/gear/gear[" + numStr + "]/steering-pos-deg");
++//                        "gear/gear[" + numStr + "]/steering-pos-deg");
+ //       }
+ 
+ 
+@@ -947,11 +947,11 @@
+ //       // Prepare some outputs ...
+ //       Port* port = pj->getOutputPort(0);
+ //       addOutputModel(port, "Gear " + numStr + " Compression",
+-//                      "/gear/gear[" + numStr + "]/compression-m");
++//                      "gear/gear[" + numStr + "]/compression-m");
+ 
+ //       port = lookupJSBExpression("gear/gear-pos-norm");
+ //       addOutputModel(port, "Gear " + numStr + " Position",
+-//                      "/gear/gear[" + numStr + "]/position-norm");
++//                      "gear/gear[" + numStr + "]/position-norm");
+ 
+ //     } else if (uctype == "AC_CONTACT") {
+ //       std::string name, type, brake, retract;
+@@ -1209,17 +1209,17 @@
+ }
+ 
+ // bool
+-// JSBSimReader::convertElectric(const Element* turbine,
+-//                                     const std::string& number,
+-//                                     Port* thrusterDriver)
++// JSBSimReader::convertElectric(const XMLElement* turbine,
++//                               const std::string& number,
++//                               Port* thrusterDriver)
+ // {
+ //   return true;
+ // }
+ 
+ // bool
+-// JSBSimReader::convertPiston(const Element* turbine,
+-//                                   const std::string& number,
+-//                                   Port* thrusterDriver)
++// JSBSimReader::convertPiston(const XMLElement* turbine,
++//                             const std::string& number,
++//                             Port* thrusterDriver)
+ // {
+ //   return true;
+ // }
+@@ -1319,10 +1319,11 @@
+     std::list<const XMLElement*> setting = traverse->getElements("setting");
+     std::list<const XMLElement*>::iterator it = setting.begin();
+     while (it != setting.end()) {
+-      real_type val = realData(fcsComponent->getElement("position"), 0);
++      real_type val = realData((*it)->getElement("position"), 0);
+       minVal = min(minVal, val);
+       maxVal = max(maxVal, val);
+-      allTime += realData(fcsComponent->getElement("time"), 0);
++      if (it != setting.begin())
++        allTime += realData((*it)->getElement("time"), 0);
+       ++it;
+     }
+     if (allTime != 0)
+@@ -1606,6 +1607,10 @@
+                               Summer* sum)
+ {
+   std::string bindName = function->getAttribute("name");
++  std::string name = bindName;
++  std::string::size_type slachPos = bindName.rfind('/');
++  if (slachPos != std::string::npos)
++    name = name.substr(slachPos+1);
+   Port* port = 0;
+   std::list<const XMLElement*> elems = function->getElements();
+   std::list<const XMLElement*>::const_iterator it;
+@@ -1613,9 +1618,9 @@
+     if ((*it)->getName() == "description") {
+       // Just ignore
+     } else if ((*it)->getName() == "product") {
+-      SharedPtr<Product> prod = new Product(bindName);
++      SharedPtr<Product> prod = new Product(name + " product");
+       addMultiBodyModel(prod);
+-      std::list<Port*> inputs = readFunctionInputs(*it);
++      std::list<Port*> inputs = readFunctionInputs(*it, name);
+       if (inputs.empty())
+         return error("Cannot read product inputs!");
+       unsigned i = 0;
+@@ -1644,14 +1649,15 @@
+ }
+ 
+ std::list<Port*>
+-JSBSimReader::readFunctionInputs(const XMLElement* operationTag)
++JSBSimReader::readFunctionInputs(const XMLElement* operationTag,
++                                 const std::string& name)
+ {
+   std::list<Port*> inputs;
+   std::list<const XMLElement*> args = operationTag->getElements();
+   std::list<const XMLElement*>::const_iterator ait;
+   for (ait = args.begin(); ait != args.end(); ++ait) {
+     if ((*ait)->getName() == "value") {
+-      SharedPtr<ConstModel> constModel = new ConstModel("FIXME");
++      SharedPtr<ConstModel> constModel = new ConstModel(name + " Constant");
+       addMultiBodyModel(constModel);
+       std::stringstream stream((*ait)->getData());
+       Matrix v(1, 1);
+@@ -1670,10 +1676,11 @@
+           return std::list<Port*>();
+         }
+         std::string token = stringData((*ait)->getElement("independentVar"));
+-        Port* port = getTablePrelookup("TblLook", lookupJSBExpression(token),
++        Port* port = getTablePrelookup(name + " lookup",
++                                       lookupJSBExpression(token),
+                                        lookup);
+ 
+-        SharedPtr<Table1D> table = new Table1D("Table");
++        SharedPtr<Table1D> table = new Table1D(name + " Table");
+         table->getInputPort(0)->connect(port);
+         table->setTableData(data);
+         addMultiBodyModel(table);
+@@ -1696,12 +1703,14 @@
+         std::string rowInput = indepData(indeps, "row");
+         std::string colInput = indepData(indeps, "column");
+ 
+-        Port* rPort = getTablePrelookup("TblLk", lookupJSBExpression(rowInput),
++        Port* rPort = getTablePrelookup(name + " row lookup",
++                                        lookupJSBExpression(rowInput),
+                                         lookup[0]);
+-        Port* cPort = getTablePrelookup("TblLk", lookupJSBExpression(colInput),
++        Port* cPort = getTablePrelookup(name + " column lookup",
++                                        lookupJSBExpression(colInput),
+                                         lookup[1]);
+ 
+-        SharedPtr<Table2D> table = new Table2D("Table");
++        SharedPtr<Table2D> table = new Table2D(name  + " Table");
+         table->getInputPort(0)->connect(rPort);
+         table->getInputPort(1)->connect(cPort);
+         table->setTableData(data);
+@@ -1779,7 +1788,7 @@
+   sv(1) = sz;
+   data = TableData<1>(sv);
+   for (unsigned idx = 0; idx < sz; ++idx) {
+-    lookup.setAtIndex(idx, values[idx*2]);
++    lookup.setAtIndex(idx+1, values[idx*2]);
+     TableData<1>::Index iv;
+     iv(1) = idx + 1;
+     data(iv) = values[idx*2+1];
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-04 10:54:21 UTC (rev 234)
+@@ -52,7 +52,8 @@
+                       Port* thrusterDriver);
+   bool convertAerodynamics(const XMLElement* aero);
+   bool convertFunction(const XMLElement* function, Summer* sum);
+-  std::list<Port*> readFunctionInputs(const XMLElement* operationTag);
++  std::list<Port*> readFunctionInputs(const XMLElement* operationTag,
++                                      const std::string& name);
+ 
+   unsigned getNumTableDims(const XMLElement* tableElem);
+   bool readTable1D(const XMLElement* tableElem,
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -274,54 +274,54 @@
+   if (propName.substr(0, 9) == "controls/") {
+ //     std::string inputName = propName.substr(propName.rfind('/'));
+     std::string inputName = propName;
+-    return addInputModel("Control Input " + inputName, propName);
++    return addInputModel("Control " + inputName, propName);
+   } else {
+     Port* port = 0;
+     if (propName == "fdm/jsbsim/fcs/aileron-cmd-norm") {
+-      port = addInputModel("Aileron Input",
++      port = addInputModel("Aileron",
+                            "controls/flight/aileron");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/roll-trim-cmd-norm") {
+-      port = addInputModel("Aileron Trim Input",
++      port = addInputModel("Aileron Trim",
+                            "controls/flight/aileron-trim");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/elevator-cmd-norm") {
+-      port = addInputModel("Elevator Input",
++      port = addInputModel("Elevator",
+                            "controls/flight/elevator");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/pitch-trim-cmd-norm") {
+-      port = addInputModel("Elevator Trim Input",
++      port = addInputModel("Elevator Trim",
+                            "controls/flight/elevator-trim");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/rudder-cmd-norm") {
+       // FIXME is inverted in JSBSim ...
+-      port = addInputModel("Rudder Input",
++      port = addInputModel("Rudder",
+                            "controls/flight/rudder");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/yaw-trim-cmd-norm") {
+       // FIXME also with a minus
+-      port = addInputModel("Yaw Trim Input",
++      port = addInputModel("Yaw Trim",
+                            "controls/flight/rudder-trim");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/steer-cmd-norm") {
+       // FIXME is seperate in flightgear ???
+-      // port = addInputModel("Steering Input", "controls/gear/steering");
+-      port = addInputModel("Steering Input",
++      // port = addInputModel("Steering", "controls/gear/steering");
++      port = addInputModel("Steering",
+                            "controls/flight/rudder");
+ 
+     } else if (propName.substr(0, 28) == "fdm/jsbsim/fcs/steer-pos-deg") {
+       return lookupJSBExpression("fcs/steer-cmd-norm");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/flap-cmd-norm") {
+-      port = addInputModel("Flaps Input",
++      port = addInputModel("Flaps",
+                            "controls/flight/flaps");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/speedbrake-cmd-norm") {
+-      port = addInputModel("Speedbrake Input",
++      port = addInputModel("Speedbrake",
+                            "controls/flight/speedbrake");
+ 
+     } else if (propName == "fdm/jsbsim/fcs/spoiler-cmd-norm") {
+-      port = addInputModel("Spoiler Input",
++      port = addInputModel("Spoiler",
+                            "controls/flight/spoiler");
+ 
+ 
+@@ -357,25 +357,25 @@
+       return lookupJSBExpression(cmd);
+ 
+     } else if (propName == "fdm/jsbsim/gear/gear-cmd-norm") {
+-      port = addInputModel("Gear Retract Input",
++      port = addInputModel("Gear Retract",
+                            "controls/gear/gear-down");
+ 
+     } else if (propName == "fdm/jsbsim/gear/gear-pos-norm") {
+       return lookupJSBExpression("gear/gear-cmd-norm");
+ 
+     } else if (propName == "controls/gear/brake-parking") {
+-      port = addInputModel("Parking Brake Input",
++      port = addInputModel("Parking Brake",
+                            "controls/gear/brake-parking");
+ 
+     } else if (propName == "fdm/jsbsim/gear/right-brake-pos-norm") {
+       MaxModel* maxModel = new MaxModel("Right Brake Max");
+       maxModel->setNumMaxInputs(3);
+ 
+-      Port* pilotBr = addInputModel("Right Brake Input",
++      Port* pilotBr = addInputModel("Right Brake",
+                                     "controls/gear/brake-right");
+       maxModel->getInputPort(0)->connect(pilotBr);
+ 
+-      Port* copilotBr = addInputModel("Right Copilot Brake Input",
++      Port* copilotBr = addInputModel("Right Copilot Brake",
+                                       "controls/gear/copilot-brake-right");
+       maxModel->getInputPort(1)->connect(copilotBr);
+ 
+@@ -389,11 +389,11 @@
+       MaxModel* maxModel = new MaxModel("Left Brake Max");
+       maxModel->setNumMaxInputs(3);
+ 
+-      Port* pilotBr = addInputModel("Left Brake Input",
++      Port* pilotBr = addInputModel("Left Brake",
+                                     "controls/gear/brake-left");
+       maxModel->getInputPort(0)->connect(pilotBr);
+ 
+-      Port* copilotBr = addInputModel("Left Copilot Brake Input",
++      Port* copilotBr = addInputModel("Left Copilot Brake",
+                                       "controls/gear/copilot-brake-left");
+       maxModel->getInputPort(1)->connect(copilotBr);
+       
+@@ -560,7 +560,7 @@
+   } else if (propName == "fdm/jsbsim/metrics/Sw-sqft") {
+     /// FIXME, just schedule a constant block for that??
+     port = mAeroForce->getOutputPort("wingArea");
+-    port = addMultiBodyToUnit("Wingarea ft", uFoot2, port);
++    port = addMultiBodyToUnit("Wingarea ft2", uFoot2, port);
+ 
+   } else if (propName == "fdm/jsbsim/metrics/cbarw-ft") {
+     /// FIXME, just schedule a constant block for that??
+@@ -699,6 +699,8 @@
+ JSBSimReaderBase::getTablePrelookup(const std::string& name, Port* in,
+                                     const TableLookup& tl)
+ {
++  if (!in)
++    return 0;
+   // First check if we already have a table lookup for this port/brakepoint
+   // combination. If so return that output port
+   std::vector<SharedPtr<TablePreLookup> >::iterator it;
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-02-04 10:53:32 UTC (rev 233)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
+@@ -318,7 +318,7 @@
+ //   epFrame->addInteract(accelSensor);
+   mVehicle->getTopBody()->addInteract(accelSensor);
+   mVehicle->getTopBody()->getFrame()->addChildFrame(epFrame);
+-  addOutputModel(port, "Normalized load value", "/accelerations/nlf");
++  addOutputModel(port, "Normalized load value", "accelerations/nlf");
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce->setPosition(structToBody(ap));
+@@ -457,7 +457,7 @@
+           sg->getInputPort("enabled")->connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, "Gear " + numStr + " Position",
+-                         "/gear/gear[" + numStr + "]/position-norm");
++                         "gear/gear[" + numStr + "]/position-norm");
+         }
+ 
+         if (type == "STEERABLE") {
+@@ -469,7 +469,7 @@
+           gain->getInputPort(0)->connect(port);
+           addFCSModel(gain);
+           addOutputModel(port, "Gear " + numStr + " Steering Output",
+-                         "/gear/gear[" + numStr + "]/steering-norm");
++                         "gear/gear[" + numStr + "]/steering-norm");
+ 
+ 
+           UnitConversionModel* unitConv
+@@ -598,12 +598,12 @@
+ 
+       Port* port = rj->getOutputPort(0);
+       addOutputModel(port, "Gear " + numStr + " Compression",
+-                     "/gear/gear[" + numStr + "]/compression-rad");
++                     "gear/gear[" + numStr + "]/compression-rad");
+ 
+       /// FIXME add a retract joint ...
+       port = lookupJSBExpression("gear/gear-pos-norm");
+       addOutputModel(port, "Gear " + numStr + " Position",
+-                     "/gear/gear[" + numStr + "]/position-norm");
++                     "gear/gear[" + numStr + "]/position-norm");
+ 
+     } else if (uctype == "AC_CLG") {
+       std::string name, brake, steer;
+@@ -666,14 +666,14 @@
+         port = sj->getOutputPort(0);
+         std::string nameBase = "Steering " + numStr + " Position";
+         addOutputModel(port, nameBase,
+-                       "/gear/gear[" + numStr + "]/steering-pos-rad");
++                       "gear/gear[" + numStr + "]/steering-pos-rad");
+         UnitConversionModel* unitModel
+           = new UnitConversionModel(nameBase + " converter",
+                                     UnitConversionModel::SiToUnit, uDegree);
+         unitModel->getInputPort(0)->connect(port);
+         addFCSModel(unitModel);
+         addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
+-                       "/gear/gear[" + numStr + "]/steering-pos-deg");
++                       "gear/gear[" + numStr + "]/steering-pos-deg");
+       }
+ 
+ 
+@@ -713,11 +713,11 @@
+       // Prepare some outputs ...
+       Port* port = pj->getOutputPort(0);
+       addOutputModel(port, "Gear " + numStr + " Compression",
+-                     "/gear/gear[" + numStr + "]/compression-m");
++                     "gear/gear[" + numStr + "]/compression-m");
+ 
+       port = lookupJSBExpression("gear/gear-pos-norm");
+       addOutputModel(port, "Gear " + numStr + " Position",
+-                     "/gear/gear[" + numStr + "]/position-norm");
++                     "gear/gear[" + numStr + "]/position-norm");
+ 
+     } else if (uctype == "AC_CONTACT") {
+       std::string name, type, brake, retract;
+
+
+
+From frohlich at berlios.de  Sat Feb  4 20:25:22 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 4 Feb 2006 20:25:22 +0100
+Subject: [OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim
+Message-ID: <200602041925.k14JPM7F017955@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-04 20:25:15 +0100 (Sat, 04 Feb 2006)
+New Revision: 235
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+Log:
+1D and 2D tables models from JSBSim's new format should now work
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -17,20 +17,21 @@
+ namespace OpenFDM {
+ 
+ JSBSimAerosurfaceScale::JSBSimAerosurfaceScale(const std::string& name) :
+-  JSBSimFCSComponent(name, true)
++  JSBSimFCSComponent(name, true),
++  mGain(1)
+ {
+   // Such a component is a simple table lookup
+   //
+   // -|InputSaturation|-|TablePreLookup|-|Table1D|-
+   //
+ 
+-  Saturation* inputSaturation = new Saturation("Input Saturation");
+-  getModelGroup()->addModel(inputSaturation);
++  mInputSaturation = new Saturation("Input Saturation");
++  getModelGroup()->addModel(mInputSaturation);
+   Matrix tmp(1, 1);
+   tmp(1, 1) = -1;
+-  inputSaturation->setMinSaturation(tmp);
++  mInputSaturation->setMinSaturation(tmp);
+   tmp(1, 1) = 1;
+-  inputSaturation->setMaxSaturation(tmp);
++  mInputSaturation->setMaxSaturation(tmp);
+ 
+   mTablePreLookup = new TablePreLookup("Table Lookup");
+   TableLookup tl;
+@@ -38,7 +39,7 @@
+   tl.setAtIndex(2, 0);
+   tl.setAtIndex(3, 1);
+   mTablePreLookup->setTableLookup(tl);
+-  mTablePreLookup->getInputPort(0)->connect(inputSaturation->getOutputPort(0));
++  mTablePreLookup->getInputPort(0)->connect(mInputSaturation->getOutputPort(0));
+   getModelGroup()->addModel(mTablePreLookup);
+ 
+   mTable = new Table1D("Table");
+@@ -47,11 +48,11 @@
+   TableData<1> tableData(sv);
+   TableData<1>::Index iv;
+   iv(1) = 1;
+-  tableData(iv) = -1;
++  tableData(iv) = -mGain;
+   iv(1) = 2;
+   tableData(iv) = 0;
+   iv(1) = 3;
+-  tableData(iv) = 1;
++  tableData(iv) = mGain;
+   mTable->setTableData(tableData);
+   mTable->getInputPort(0)->connect(mTablePreLookup->getOutputPort(0));
+   getModelGroup()->addModel(mTable);
+@@ -59,10 +60,11 @@
+   // Now connect the input and the output to this groups in and outputs
+   getModelGroup()->setNumInputPorts(1);
+   getModelGroup()->getInputPort(0)->setName("Input");
+-  inputSaturation->getInputPort(0)->connect(getModelGroup()->getInputPort(0));
++  mInputSaturation->getInputPort(0)->connect(getModelGroup()->getInputPort(0));
+ 
+   getOutputPort()->connect(mTable->getOutputPort(0));
+-  getOutputNormPort()->connect(inputSaturation->getOutputPort(0));
++  // FIXME, is no longer normalized ...
++  getOutputNormPort()->connect(mInputSaturation->getOutputPort(0));
+ }
+ 
+ JSBSimAerosurfaceScale::~JSBSimAerosurfaceScale(void)
+@@ -72,6 +74,9 @@
+ void
+ JSBSimAerosurfaceScale::setMinDomain(real_type minDomain)
+ {
++  Matrix tmp(1, 1);
++  tmp(1, 1) = minDomain;
++  mInputSaturation->setMinSaturation(tmp);
+   TableLookup tl = mTablePreLookup->getTableLookup();
+   tl.setAtIndex(1, minDomain);
+   mTablePreLookup->setTableLookup(tl);
+@@ -80,6 +85,9 @@
+ void
+ JSBSimAerosurfaceScale::setMaxDomain(real_type maxDomain)
+ {
++  Matrix tmp(1, 1);
++  tmp(1, 1) = maxDomain;
++  mInputSaturation->setMaxSaturation(tmp);
+   TableLookup tl = mTablePreLookup->getTableLookup();
+   tl.setAtIndex(tl.size(), maxDomain);
+   mTablePreLookup->setTableLookup(tl);
+@@ -90,15 +98,43 @@
+ {
+   TableLookup tlOld = mTablePreLookup->getTableLookup();
+   TableLookup tl;
++
++  TableData<1> tableDataOld = mTable->getTableData();
++  TableData<1>::SizeVector sz;
++  TableData<1> tableData;
++  TableData<1>::Index iv;
++
+   if (centered) {
+     tl.setAtIndex(1, tlOld.getAtIndex(1));
+     tl.setAtIndex(2, 0);
+     tl.setAtIndex(3, tlOld.getAtIndex(tlOld.size()));
++
++    sz(1) = 3;
++    tableData = TableData<1>(sz);
++    iv(1) = 1;
++    tableData(iv) = tableDataOld(iv);
++    iv(1) = 2;
++    tableData(iv) = 0;
++    iv = tableDataOld.size();
++    real_type oldVal = tableDataOld(iv);
++    iv(1) = 3;
++    tableData(iv) = oldVal;
+   } else {
+     tl.setAtIndex(1, tlOld.getAtIndex(1));
+     tl.setAtIndex(2, tlOld.getAtIndex(tlOld.size()));
++
++    sz(1) = 2;
++    tableData = TableData<1>(sz);
++    iv(1) = 1;
++    tableData(iv) = tableDataOld(iv);
++    iv = tableDataOld.size();
++    real_type oldVal = tableDataOld(iv);
++    iv(1) = 2;
++    tableData(iv) = oldVal;
+   }
++
+   mTablePreLookup->setTableLookup(tl);
++  mTable->setTableData(tableData);
+ }
+ 
+ void
+@@ -107,18 +143,33 @@
+   TableData<1> tableData = mTable->getTableData();
+   TableData<1>::Index iv;
+   iv(1) = 1;
+-  tableData(iv) = minValue;
++  tableData(iv) = mGain*minValue;
+   mTable->setTableData(tableData);
+ }
+ 
+ void
+ JSBSimAerosurfaceScale::setMaxValue(real_type maxValue)
+ {
++  TableLookup tl = mTablePreLookup->getTableLookup();
+   TableData<1> tableData = mTable->getTableData();
+   TableData<1>::Index iv;
+-  iv(1) = 3;
+-  tableData(iv) = maxValue;
++  iv(1) = tl.size();
++  tableData(iv) = mGain*maxValue;
+   mTable->setTableData(tableData);
+ }
+ 
++void
++JSBSimAerosurfaceScale::setGain(real_type gain)
++{
++  TableLookup tl = mTablePreLookup->getTableLookup();
++  TableData<1> tableData = mTable->getTableData();
++  TableData<1>::Index iv;
++  iv(1) = 1;
++  tableData(iv) *= gain/mGain;
++  iv(1) = tl.size();
++  tableData(iv) *= gain/mGain;
++  mTable->setTableData(tableData);
++  mGain = gain;
++}
++
+ } //namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h	2006-02-04 19:25:15 UTC (rev 235)
+@@ -26,9 +26,13 @@
+   void setMinValue(real_type minValue);
+   void setMaxValue(real_type maxValue);
+ 
++  void setGain(real_type gain);
++
+ private:
++  SharedPtr<Saturation> mInputSaturation;
+   SharedPtr<TablePreLookup> mTablePreLookup;
+   SharedPtr<Table1D> mTable;
++  real_type mGain;
+ };
+ 
+ } //namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -326,35 +326,35 @@
+   const XMLElement* iwElem = metricsElem->getElement("wing_incidence");
+   if (iwElem) {
+     real_type iw = realData(iwElem, 0);
+-    Port* port = addConstModel("Wing Incidence Constant", iw);
++    Port* port = addMultiBodyConstModel("Wing Incidence Constant", iw);
+     registerJSBExpression("metrics/iw-deg", port);
+   }
+ 
+   const XMLElement* htareaElem = metricsElem->getElement("htailarea");
+   if (htareaElem) {
+     real_type htailarea = realData(htareaElem, 0);
+-    Port* port = addConstModel("HTail Area Constant", htailarea);
++    Port* port = addMultiBodyConstModel("HTail Area Constant", htailarea);
+     registerJSBExpression("metrics/Sh-sqft", port);
+   }
+ 
+   const XMLElement* htarmElem = metricsElem->getElement("htailarm");
+   if (htarmElem) {
+     real_type htailarm = realData(htarmElem, 0);
+-    Port* port = addConstModel("HTail Arm Constant", htailarm);
++    Port* port = addMultiBodyConstModel("HTail Arm Constant", htailarm);
+     registerJSBExpression("metrics/lh-ft", port);
+   }
+ 
+   const XMLElement* vtareaElem = metricsElem->getElement("vtailarea");
+   if (vtareaElem) {
+     real_type vtailarea = realData(vtareaElem, 0);
+-    Port* port = addConstModel("VTail Area Constant", vtailarea);
++    Port* port = addMultiBodyConstModel("VTail Area Constant", vtailarea);
+     registerJSBExpression("metrics/Sv-sqft", port);
+   }
+ 
+   const XMLElement* vtarmElem = metricsElem->getElement("vtailarm");
+   if (vtarmElem) {
+     real_type vtailarm = realData(vtarmElem, 0);
+-    Port* port = addConstModel("VTail Arm Constant", vtailarm);
++    Port* port = addMultiBodyConstModel("VTail Arm Constant", vtailarm);
+     registerJSBExpression("metrics/lv-ft", port);
+   }
+ 
+@@ -1252,7 +1252,6 @@
+ 
+   // The final output property.
+   SharedPtr<Port> out;
+-  SharedPtr<Port> normOut;
+ 
+   // JSBSim FCS output values contain some implicit rules.
+   // From the component name a default output property is formed.
+@@ -1338,7 +1337,6 @@
+     model->getInputPort(0)->connect(lookupJSBExpression(token));
+     addFCSModel(model);
+     out = kinemat->getOutputPort();
+-    normOut = kinemat->getOutputNormPort();
+ 
+   } else if (type == "PURE_GAIN" || type == "pure_gain") {
+     SharedPtr<Gain> gain = new Gain(name);
+@@ -1374,12 +1372,12 @@
+     }
+     std::string token = stringData(fcsComponent->getElement("zero_centered"));
+     asScale->setCentered(!(token == "0" || token == "false"));
++    asScale->setGain(realData(fcsComponent->getElement("gain"), 1));
+     model = asScale->getModelGroup();
+     token = stringData(fcsComponent->getElement("input"));
+     model->getInputPort(0)->connect(lookupJSBExpression(token));
+     addFCSModel(model);
+     out = asScale->getOutputPort();
+-    normOut = asScale->getOutputNormPort();
+ 
+   } else if (type == "SCHEDULED_GAIN" || type == "scheduled_gain") {
+     SharedPtr<JSBSimScheduledGain> sGain = new JSBSimScheduledGain(name);
+@@ -1512,36 +1510,14 @@
+                  + "\". Ignoring whole FCS component \"" + name + "\"" );
+ 
+   OpenFDMAssert(out->isConnected());
+-  if (!normOut || !normOut->isConnected())
+-    normOut = out;
+ 
+   // Register all output property names.
+-  std::list<std::string> outlist;
+-  outlist.push_back(std::string("fcs/") + normalizeComponentName(name));
+-  if (fcsComponent->getElement("output"))
+-    outlist.push_back(stringData(fcsComponent->getElement("output")));
+-  std::list<std::string>::iterator it;
+-  for (it = outlist.begin(); it != outlist.end(); ++it) {
+-    std::string propName = *it;
+-    registerJSBExpression(propName, out);
+-
+-    // Well, just an other kind of black magic ...
+-    if (propName == "fcs/elevator-pos-rad") {
+-      registerJSBExpression("fcs/elevator-pos-norm", normOut);
+-    } else if (propName == "fcs/left-aileron-pos-rad" ||
+-               propName == "fcs/aileron-pos-rad") {
+-      registerJSBExpression("fcs/left-aileron-pos-norm", normOut);
+-    } else if (propName == "fcs/right-aileron-pos-rad") {
+-      registerJSBExpression("fcs/right-aileron-pos-norm", normOut);
+-    } else if (propName == "fcs/rudder-pos-rad") {
+-      registerJSBExpression("fcs/rudder-pos-norm", normOut);
+-    } else if (propName == "fcs/speedbrake-pos-rad") {
+-      registerJSBExpression("fcs/speedbrake-pos-norm", normOut);
+-    } else if (propName == "fcs/spoiler-pos-rad") {
+-      registerJSBExpression("fcs/spoiler-pos-norm", normOut);
+-    } else if (propName == "fcs/flap-pos-deg") {
+-      registerJSBExpression("fcs/flap-pos-norm", normOut);
+-    }
++  std::string implicitOutname = normalizeComponentName(name);
++  registerJSBExpression(std::string("fcs/") + implicitOutname, out);
++  if (fcsComponent->getElement("output")) {
++    std::string outname = stringData(fcsComponent->getElement("output"));
++    if (outname != implicitOutname)
++      registerJSBExpression(outname, out);
+   }
+ 
+   return true;
+@@ -1657,13 +1633,10 @@
+   std::list<const XMLElement*>::const_iterator ait;
+   for (ait = args.begin(); ait != args.end(); ++ait) {
+     if ((*ait)->getName() == "value") {
+-      SharedPtr<ConstModel> constModel = new ConstModel(name + " Constant");
+-      addMultiBodyModel(constModel);
+       std::stringstream stream((*ait)->getData());
+-      Matrix v(1, 1);
+-      stream >> v(1, 1);
+-      constModel->setValue(v);
+-      inputs.push_back(constModel->getOutputPort(0));
++      real_type value;
++      stream >> value;
++      inputs.push_back(addMultiBodyConstModel(name + " Constant", value));
+     } else if ((*ait)->getName() == "property") {
+       inputs.push_back(lookupJSBExpression(stringData(*ait)));
+     } else if ((*ait)->getName() == "table") {
+@@ -1677,8 +1650,7 @@
+         }
+         std::string token = stringData((*ait)->getElement("independentVar"));
+         Port* port = getTablePrelookup(name + " lookup",
+-                                       lookupJSBExpression(token),
+-                                       lookup);
++                                       lookupJSBExpression(token), lookup);
+ 
+         SharedPtr<Table1D> table = new Table1D(name + " Table");
+         table->getInputPort(0)->connect(port);
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -175,15 +175,17 @@
+ }
+ 
+ Port*
+-JSBSimReaderBase::lookupJSBExpression(const std::string& name)
++JSBSimReaderBase::lookupJSBExpression(const std::string& name,
++                                      bool recheckAeroProp)
+ {
+   // Convert to something being able to look up
+   std::string propName = propNameFromJSBSim(name);
+   
+-  Port* port;
++  Port* port = 0;
+   if (mExpressionTable.count(propName) <= 0) {
+     // Not yet available, so look and see if it is an input
+-    port = createAndScheduleAeroProp(propName);
++    if (recheckAeroProp)
++      port = createAndScheduleAeroProp(propName);
+ 
+     if (!port || !port->isConnected()) {
+       // Not yet available, so look and see if it is an input
+@@ -403,6 +405,46 @@
+       addFCSModel(maxModel);
+       port = maxModel->getOutputPort(0);
+ 
++    } else if (propName == "fdm/jsbsim/fcs/elevator-pos-rad") {
++      port = lookupJSBExpression("fcs/elevator-pos-deg", false);
++      port = addFromUnit("elevator-pos-rad unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/elevator-pos-deg") {
++      port = lookupJSBExpression("fcs/elevator-pos-rad", false);
++      port = addToUnit("elevator-pos-deg unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/left-aileron-pos-rad") {
++      port = lookupJSBExpression("fcs/left-aileron-pos-deg", false);
++      port = addFromUnit("left-aileron-pos-rad unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/left-aileron-pos-deg") {
++      port = lookupJSBExpression("fcs/left-aileron-pos-rad", false);
++      port = addToUnit("left-aileron-pos-deg unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/right-aileron-pos-rad") {
++      port = lookupJSBExpression("fcs/right-aileron-pos-deg", false);
++      port = addFromUnit("right-aileron-pos-rad unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/right-aileron-pos-deg") {
++      port = lookupJSBExpression("fcs/right-aileron-pos-rad", false);
++      port = addToUnit("right-aileron-pos-deg unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/aileron-pos-rad") {
++      port = lookupJSBExpression("fcs/aileron-pos-deg", false);
++      port = addFromUnit("aileron-pos-rad unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/aileron-pos-deg") {
++      port = lookupJSBExpression("fcs/aileron-pos-rad", false);
++      port = addToUnit("aileron-pos-deg unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/rudder-pos-rad") {
++      port = lookupJSBExpression("fcs/rudder-pos-deg", false);
++      port = addFromUnit("rudder-pos-rad unit", uDegree, port);
++
++    } else if (propName == "fdm/jsbsim/fcs/rudder-pos-deg") {
++      port = lookupJSBExpression("fcs/rudder-pos-rad", false);
++      port = addToUnit("rudder-pos-deg unit", uDegree, port);
++
+     } else if (propName.substr(0, 19) == "fdm/jsbsim/fcs/mag-") {
+       // Special absolute modules for fcs/mag-*
+       // remove the 'mag-' substring here and use that as input for the
+@@ -643,6 +685,30 @@
+   return cModel->getOutputPort(0);
+ }
+ 
++Port*
++JSBSimReaderBase::addToUnit(const std::string& name, Unit u, Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::SiToUnit, u);
++  addFCSModel(unitConv);
++  unitConv->getInputPort(0)->connect(in);
++  return unitConv->getOutputPort(0);
++}
++
++Port*
++JSBSimReaderBase::addFromUnit(const std::string& name, Unit u, Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::UnitToSi, u);
++  addFCSModel(unitConv);
++  unitConv->getInputPort(0)->connect(in);
++  return unitConv->getOutputPort(0);
++}
++
+ void
+ JSBSimReaderBase::addFCSModel(Model* model)
+ {
+@@ -686,6 +752,16 @@
+   return unary->getOutputPort(0);
+ }
+ 
++Port*
++JSBSimReaderBase::addMultiBodyConstModel(const std::string& name, real_type value)
++{
++  Matrix m(1, 1);
++  m(1, 1) = value;
++  ConstModel* cModel = new ConstModel(name, m);
++  addMultiBodyModel(cModel);
++  return cModel->getOutputPort(0);
++}
++
+ void
+ JSBSimReaderBase::addMultiBodyModel(Model* model)
+ {
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2006-02-04 19:25:15 UTC (rev 235)
+@@ -146,7 +146,8 @@
+ 
+ 
+   /// <FIXME> document and rethink
+-  Port* lookupJSBExpression(const std::string& name);
++  Port* lookupJSBExpression(const std::string& name,
++                            bool recheckAeroProp = true);
+ 
+   void registerExpression(const std::string& name, Port* expr);
+   void registerJSBExpression(const std::string& name, Port* expr);
+@@ -162,12 +163,15 @@
+   Port* addInverterModel(const std::string& name, Port* in);
+   Port* addAbsModel(const std::string& name, Port* in);
+   Port* addConstModel(const std::string& name, real_type value);
++  Port* addToUnit(const std::string& name, Unit u, Port* in);
++  Port* addFromUnit(const std::string& name, Unit u, Port* in);
+ 
+   void addFCSModel(Model* model);
+ 
+   Port* addMultiBodyToUnit(const std::string& name, Unit u, Port* in);
+   Port* addMultiBodyFromUnit(const std::string& name, Unit u, Port* in);
+   Port* addMultiBodyAbsModel(const std::string& name, Port* in);
++  Port* addMultiBodyConstModel(const std::string& name, real_type value);
+   void addMultiBodyModel(Model* model);
+   /// </FIXME> document and rethink
+   Port* getTablePrelookup(const std::string& name, Port* in, const TableLookup& tl);
+
+
+
+From frohlich at berlios.de  Sun Feb  5 13:02:29 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 5 Feb 2006 13:02:29 +0100
+Subject: [OpenFDM-svn] r236 - trunk/OpenFDM/src/JSBSim
+Message-ID: <200602051202.k15C2TPv027908@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-05 13:01:41 +0100 (Sun, 05 Feb 2006)
+New Revision: 236
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+Log:
+Add the demo gears of the F-18
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 19:25:15 UTC (rev 235)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-05 12:01:41 UTC (rev 236)
+@@ -53,7 +53,7 @@
+ namespace OpenFDM {
+ 
+ static real_type
+-realData(const XMLElement* element, real_type def)
++realData(const XMLElement* element, real_type def = 0)
+ {
+   if (!element)
+     return def;
+@@ -66,7 +66,7 @@
+ }
+ 
+ static Vector3
+-locationData(const XMLElement* element, const Vector3& def)
++locationData(const XMLElement* element, const Vector3& def = Vector3(0, 0, 0))
+ {
+   if (!element)
+     return def;
+@@ -103,7 +103,7 @@
+ 
+ static Vector3
+ locationData(const std::list<const XMLElement*>& locList, const char* name,
+-             const Vector3& def)
++             const Vector3& def = Vector3(0, 0, 0))
+ {
+   const XMLElement* element = 0;
+   std::list<const XMLElement*>::const_iterator it;
+@@ -118,7 +118,7 @@
+ }
+ 
+ static Vector3
+-orientationData(const XMLElement* element, const Vector3& def)
++orientationData(const XMLElement* element, const Vector3& def = Vector3(0, 0, 0))
+ {
+   if (!element)
+     return def;
+@@ -153,6 +153,20 @@
+   return value;
+ }
+ 
++static InertiaMatrix
++inertiaData(const XMLElement* element,
++            const InertiaMatrix& def = InertiaMatrix(1, 0, 0, 1, 0, 1))
++{
++  InertiaMatrix I;
++  I(1, 1) = realData(element->getElement("ixx"), def(1, 1));
++  I(1, 2) = realData(element->getElement("ixy"), def(1, 2));
++  I(1, 3) = realData(element->getElement("ixz"), def(1, 3));
++  I(2, 2) = realData(element->getElement("iyy"), def(2, 2));
++  I(2, 3) = realData(element->getElement("iyz"), def(2, 3));
++  I(3, 3) = realData(element->getElement("izz"), def(3, 3));
++  return I;
++}
++
+ static std::string
+ stringData(const XMLElement* element)
+ {
+@@ -202,6 +216,34 @@
+   return ret;
+ }
+ 
++static AirSpring*
++getAirSpring(const XMLElement* airSpringElem, const std::string& name)
++{
++  AirSpring* aoDamp = new AirSpring(name + " Air Spring Force");
++  real_type pullPress
++    = realData(airSpringElem->getElement("pullPressure"), 1e5);
++  aoDamp->setPullPressure(pullPress);
++  real_type pushPress
++    = realData(airSpringElem->getElement("pushPressure"), 5e5);
++  aoDamp->setPushPressure(pushPress);
++  real_type area
++    = realData(airSpringElem->getElement("area"), 0.01);
++  aoDamp->setArea(area);
++  real_type minCompr
++    = realData(airSpringElem->getElement("minCompression"), 0);
++  aoDamp->setMinCompression(minCompr);
++  real_type maxCompr
++    = realData(airSpringElem->getElement("maxCompression"), 0.2);
++  aoDamp->setMaxCompression(maxCompr);
++  real_type minDamp
++    = realData(airSpringElem->getElement("minDamping"), 1e3);
++  aoDamp->setMinDamperConstant(minDamp);
++  real_type maxDamp
++    = realData(airSpringElem->getElement("maxDamping"), 1e3);
++  aoDamp->setMaxDamperConstant(maxDamp);
++  return aoDamp;
++}
++  
+ JSBSimReader::JSBSimReader(void)
+ {
+ }
+@@ -450,74 +492,82 @@
+   return true;
+ }
+ 
+-// void
+-// JSBSimReader::attachWheel(const std::string& name, const Vector3& pos,
+-//                                 const std::string& brake,
+-//                                 const std::string& numStr, real_type wheelDiam,
+-//                                 real_type tireSpring, real_type tireDamp,
+-//                                 RigidBody* parent)
+-// {
+-//   RigidBody* wheel = new RigidBody(name + " Wheel");
+-//   InertiaMatrix wheelInertia(10, 0, 0, 30, 0, 10);
+-//   wheel->addInteract(new Mass(name + " Wheel Inertia",
+-//                               SpatialInertia(wheelInertia, 30)));
+-//   mVehicle->getMultiBodySystem()->addRigidBody(wheel);
++bool
++JSBSimReader::attachWheel(const XMLElement* wheelElem, const std::string& name,
++                          const std::string& numStr, RigidBody* parent,
++                          const Vector3& parentDesignPos)
++{
++  RigidBody* wheel = new RigidBody(name + " Wheel");
++  InertiaMatrix wheelInertia = inertiaData(wheelElem->getElement("inertia"),
++                                           InertiaMatrix(10, 0, 0, 30, 0, 10));
++  real_type wheelMass = realData(wheelElem->getElement("mass"), 30);
++  wheel->addInteract(new Mass(name + " Wheel Inertia",
++                              SpatialInertia(wheelInertia, wheelMass)));
++  mVehicle->getMultiBodySystem()->addRigidBody(wheel);
+   
+-//   RevoluteJoint* wj = new RevoluteJoint(name + " Wheel Joint");
+-//   parent->addInteract(wj);
+-//   wheel->setInboardJoint(wj);
+-//   wj->setJointAxis(Vector3(0, 1, 0));
+-//   wj->setPosition(pos);
+-//   wj->setOrientation(Quaternion::unit());
+-//   wj->setJointPos(0);
+-//   wj->setJointVel(0);
++  RevoluteJoint* wj = new RevoluteJoint(name + " Wheel Joint");
++  parent->addInteract(wj);
++  wheel->setInboardJoint(wj);
++  wj->setJointAxis(Vector3(0, 1, 0));
++  Vector3 pos = structToBody(locationData(wheelElem->getElement("location")));
++  wj->setPosition(pos - parentDesignPos);
++  wj->setOrientation(Quaternion::unit());
++  wj->setJointPos(0);
++  wj->setJointVel(0);
+ 
+-//   // Add a brake force
+-//   if (brake == "LEFT" || brake == "RIGHT") {
+-//     DiscBrake* brakeF = new DiscBrake(name + " Brake Force");
+-//     brakeF->setMinForce(8e1);
+-//     brakeF->setMaxForce(1e4);
+-//     if (brake == "LEFT") {
+-//       Port* port = lookupJSBExpression("gear/left-brake-pos-norm");
+-//       brakeF->getInputPort(0)->connect(port);
+-//     } else if (brake == "RIGHT") {
+-//       Port* port = lookupJSBExpression("gear/right-brake-pos-norm");
+-//       brakeF->getInputPort(0)->connect(port);
+-//     }
+-//     // That one reads the joint position and velocity ...
+-//     brakeF->getInputPort(1)->connect(wj->getOutputPort(1));
+-//     // ... and provides an output force
+-//     wj->getInputPort(0)->connect(brakeF->getOutputPort(0));
+-//     addMultiBodyModel(brakeF);
+-//   } else {
+-//     // Just some 'rolloing friction' FIXME: does this belong here?
+-//     Gain* rollingFric = new Gain(name + " Rolling Friction Force");
+-//     rollingFric->setGain(-10);
+-//     rollingFric->getInputPort(0)->connect(wj->getOutputPort(1));
+-//     // ... and provides an output force
+-//     wj->getInputPort(0)->connect(rollingFric->getOutputPort(0));
+-//     addMultiBodyModel(rollingFric);
+-//   }
++  std::string brake = stringData(wheelElem->getElement("brake_group"));
++  // Add a brake force
++  if (brake == "LEFT" || brake == "RIGHT") {
++    DiscBrake* brakeF = new DiscBrake(name + " Brake Force");
++    real_type minForce = realData(wheelElem->getElement("minBrakeTorque"), 8e1);
++    brakeF->setMinForce(minForce);
++    real_type maxForce = realData(wheelElem->getElement("maxBrakeTorque"), 1e4);
++    brakeF->setMaxForce(maxForce);
++    if (brake == "LEFT") {
++      Port* port = lookupJSBExpression("gear/left-brake-pos-norm");
++      brakeF->getInputPort(0)->connect(port);
++    } else if (brake == "RIGHT") {
++      Port* port = lookupJSBExpression("gear/right-brake-pos-norm");
++      brakeF->getInputPort(0)->connect(port);
++    }
++    // That one reads the joint position and velocity ...
++    brakeF->getInputPort(1)->connect(wj->getOutputPort(1));
++    // ... and provides an output force
++    wj->getInputPort(0)->connect(brakeF->getOutputPort(0));
++    addMultiBodyModel(brakeF);
++  } else {
++    // Just some 'bearing friction'
++    Gain* rollingFric = new Gain(name + " Bearing Friction Force");
++    rollingFric->setGain(-10);
++    rollingFric->getInputPort(0)->connect(wj->getOutputPort(1));
++    // ... and provides an output force
++    wj->getInputPort(0)->connect(rollingFric->getOutputPort(0));
++    addMultiBodyModel(rollingFric);
++  }
+   
+-//   WheelContact* wc = new WheelContact(name + " Wheel Contact");
+-//   wc->setWheelRadius(0.5*wheelDiam);
+-//   wc->setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
+-//   wc->setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
+-//   wc->setFrictionCoeficient(0.9);
+-//   wheel->addInteract(wc);
++  real_type wheelDiam = realData(wheelElem->getElement("wheelDiameter"));
++  WheelContact* wc = new WheelContact(name + " Wheel Contact");
++  wc->setWheelRadius(0.5*wheelDiam);
++  real_type tireSpring = realData(wheelElem->getElement("tireSpring"));
++  wc->setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
++  real_type tireDamp = realData(wheelElem->getElement("tireDamping"));
++  wc->setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
++  real_type fc = realData(wheelElem->getElement("frictionCoef"), 0.9);
++  wc->setFrictionCoeficient(fc);
++  wheel->addInteract(wc);
+   
+-//   Port* port = wj->getOutputPort(0);
+-//   std::string nameBase = "Wheel " + numStr + " Position";
+-//   addOutputModel(port, nameBase,
+-//                  "gear/gear[" + numStr + "]/wheel-position-rad");
+-//   UnitConversionModel* unitModel
+-//     = new UnitConversionModel(nameBase + " converter",
+-//                               UnitConversionModel::SiToUnit, uDegree);
+-//   unitModel->getInputPort(0)->connect(port);
+-//   addFCSModel(unitModel);
+-//   addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
+-//                  "gear/gear[" + numStr + "]/wheel-position-deg");
+-// }
++  Port* port = wj->getOutputPort(0);
++  std::string nameBase = "Wheel " + numStr + " Position";
++  addOutputModel(port, nameBase,
++                 "gear/gear[" + numStr + "]/wheel-position-rad");
++  UnitConversionModel* unitModel
++    = new UnitConversionModel(nameBase + " converter",
++                              UnitConversionModel::SiToUnit, uDegree);
++  unitModel->getInputPort(0)->connect(port);
++  addFCSModel(unitModel);
++  addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
++                 "gear/gear[" + numStr + "]/wheel-position-deg");
++}
+ 
+ bool
+ JSBSimReader::convertGroundReactionsElem(const XMLElement* gr)
+@@ -620,6 +670,149 @@
+         
+         mVehicle->getTopBody()->addInteract(sc);
+ 
++      } else if (type == "NOSEGEAR") {
++        // Ok, a compressable gear like the F-18's main gear is.
++        // Some kind of hardcoding here ...
++        std::stringstream sstr;
++        sstr << gearNumber++;
++        std::string numStr = sstr.str();
++        std::string name = (*it)->getAttribute("name");
++
++        Vector3 compressJointPos = locationData((*it)->getElement("location"));
++        // Model steering here ...
++        // normally we connect the compressible part to the top level body, but
++        // in case of steering this is no longer true.
++        RigidBody* strutParent = mVehicle->getTopBody();
++        std::string steerable = stringData((*it)->getElement("steerable"));
++        if (steerable == "true" || steerable == "1") {
++          // A new part modelling the steering
++          RigidBody* steer = new RigidBody(name + " Steer");
++          mVehicle->getMultiBodySystem()->addRigidBody(steer);
++          
++          // connect that via a revolute joint to the toplevel body.
++          // Note the 0.05m below, most steering wheels have some kind of
++          // castering auto line up behavour. That is doe with this 0.05m.
++          RevoluteActuator* sj = new RevoluteActuator(name + " Steer Joint");
++          strutParent->addInteract(sj);
++          steer->setInboardJoint(sj);
++          sj->setJointAxis(Vector3(0, 0, 1));
++          sj->setJointPos(0);
++          sj->setJointVel(0);
++          sj->setPosition(structToBody(compressJointPos)
++                          + Vector3(0.05, 0, 0));
++          sj->setOrientation(Quaternion::unit());
++          
++          Port* port = lookupJSBExpression("fcs/steer-cmd-norm");
++          sj->getInputPort(0)->connect(port);
++          
++          strutParent = steer;
++          
++          // Prepare outputs
++          port = sj->getOutputPort(0);
++          std::string nameBase = "Steering " + numStr + " Position";
++          addOutputModel(port, nameBase,
++                         "gear/gear[" + numStr + "]/steering-pos-rad");
++          UnitConversionModel* unitModel
++            = new UnitConversionModel(nameBase + " converter",
++                                      UnitConversionModel::SiToUnit, uDegree);
++          unitModel->getInputPort(0)->connect(port);
++          addFCSModel(unitModel);
++          addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
++                         "gear/gear[" + numStr + "]/steering-pos-deg");
++        }
++        
++        
++        // Now the compressible part of the strut
++        RigidBody* arm = new RigidBody(name + " Strut");
++        mVehicle->getMultiBodySystem()->addRigidBody(arm);
++        arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(0, 0, 1), SpatialInertia(100))));
++        
++        // This time it is a prismatic joint
++        PrismaticJoint* pj = new PrismaticJoint(name + " Compress Joint");
++        strutParent->addInteract(pj);
++        arm->setInboardJoint(pj);
++        pj->setJointAxis(Vector3(0, 0, -1));
++        if (strutParent == mVehicle->getTopBody())
++          pj->setPosition(structToBody(compressJointPos));
++        else
++          pj->setPosition(Vector3(-0.05, 0, 0));
++        
++        // The damper element
++        const XMLElement* airSpringElem = (*it)->getElement("damper");
++        AirSpring* aoDamp = getAirSpring(airSpringElem, name);
++        pj->getInputPort(0)->connect(aoDamp->getOutputPort(0));
++        aoDamp->getInputPort(0)->connect(pj->getOutputPort(0));
++        aoDamp->getInputPort(1)->connect(pj->getOutputPort(1));
++        addMultiBodyModel(aoDamp);
++        
++        // Attach a wheel to that strut part.
++        attachWheel((*it)->getElement("wheel"), name, numStr, arm,
++                    structToBody(compressJointPos));
++        
++        // Prepare some outputs ...
++        Port* port = pj->getOutputPort(0);
++        addOutputModel(port, "Gear " + numStr + " Compression",
++                       "gear/gear[" + numStr + "]/compression-m");
++        
++        port = lookupJSBExpression("gear/gear-pos-norm");
++        addOutputModel(port, "Gear " + numStr + " Position",
++                       "gear/gear[" + numStr + "]/position-norm");
++        
++        
++      } else if (type == "F18_MLG") {
++        /// Ok, a compressable gear like the F-18's main gear is.
++        /// Some kind of hardcoding here ...
++        std::stringstream sstr;
++        sstr << gearNumber++;
++        std::string numStr = sstr.str();
++        std::string name = (*it)->getAttribute("name");
++
++        // This is the movable part of the strut, doing the compression
++        RigidBody* arm = new RigidBody(name + " Arm");
++        mVehicle->getMultiBodySystem()->addRigidBody(arm);
++        arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80))));
++        
++        // Connect that with a revolute joint to the main body
++        RevoluteJoint* rj = new RevoluteJoint(name + " Arm Joint");
++        mVehicle->getTopBody()->addInteract(rj);
++        arm->setInboardJoint(rj);
++        rj->setJointAxis(Vector3(0, 1, 0));
++        rj->setJointPos(0);
++        rj->setJointVel(0);
++        Vector3 compressJointPos = locationData((*it)->getElement("location"));
++        rj->setPosition(structToBody(compressJointPos));
++        rj->setOrientation(Quaternion::unit());
++        
++        LineForce* lineForce = new LineForce(name + " Air Spring LineForce");
++        /// FIXME that ordering in attachment is messy!
++        lineForce->setPosition0(structToBody(compressJointPos) - Vector3(0.1, 0, 0.5));
++        lineForce->setPosition1(Vector3(-0.5, 0, 0));
++        mVehicle->getTopBody()->addInteract(lineForce);
++        arm->addInteract(lineForce);
++        
++        // The damper element
++        const XMLElement* airSpringElem = (*it)->getElement("damper");
++        AirSpring* aoDamp = getAirSpring(airSpringElem, name);
++        addMultiBodyModel(aoDamp);
++        // That one reads the joint position and velocity ...
++        aoDamp->getInputPort(0)->connect(lineForce->getOutputPort(0));
++        aoDamp->getInputPort(1)->connect(lineForce->getOutputPort(1));
++        // ... and provides an output force
++        lineForce->getInputPort(0)->connect(aoDamp->getOutputPort(0));
++        
++        // Attach a wheel to that strut part.
++        attachWheel((*it)->getElement("wheel"), name, numStr, arm,
++                    structToBody(compressJointPos));
++        
++        Port* port = rj->getOutputPort(0);
++        addOutputModel(port, "Gear " + numStr + " Compression",
++                       "gear/gear[" + numStr + "]/compression-rad");
++        
++        /// FIXME add a retract joint ...
++        port = lookupJSBExpression("gear/gear-pos-norm");
++        addOutputModel(port, "Gear " + numStr + " Position",
++                       "gear/gear[" + numStr + "]/position-norm");
++        
+       } else if (type == "TAILHOOK") /*FIXME*/ {
+       } else if (type == "LAUNCHBAR") {
+       } else {
+@@ -629,352 +822,7 @@
+       return error("Unknown groundreactions tag " + (*it)->getName());
+     }
+   }
+-  
+ 
+-
+-//   // Undercarriage parsing.
+-//   std::stringstream datastr(data);
+-//   unsigned gearNumber = 0;
+-
+-//   while (datastr) {
+-//     std::string uctype;
+-//     datastr >> uctype;
+-    
+-//     std::stringstream sstr;
+-//     sstr << gearNumber;
+-//     std::string numStr = sstr.str();
+-//     // Increment the gear number
+-//     ++gearNumber;
+-
+-//     if (uctype == "AC_GEAR") {
+-//       std::string name, type, brake, retract;
+-//       real_type x, y, z, k, d, fs, fd, rr, sa;
+-//       datastr >> name >> x >> y >> z >> k >> d >> fs >> fd >> rr
+-//               >> type >> brake >> sa >> retract;
+-
+-//       if (type == "CASTERING") {
+-//         // Modelling castering gars as simple contacs without a special
+-//         // direction
+-//         SimpleContact* sc = new SimpleContact(name);
+-//         sc->setPosition(structToBody(Vector3(x, y, z)));
+-
+-//         sc->setSpringConstant(convertFrom(uPoundForcePFt, k));
+-//         // FIXME: conversion factor:
+-//         // Works since it is used as N/(m/s)=Ns/m (seconds don't change)
+-//         // Note that friction coefficients are different from that but
+-//         // viscosous friction is just used in that way ...
+-//         sc->setSpringDamping(convertFrom(uPoundForcePFt, d));
+-//         sc->setFrictionCoeficient(0.1*fs);
+-        
+-//         mVehicle->getTopBody()->addInteract(sc);
+-
+-//       } else {
+-//         // For jsbsim use simple gears
+-//         SimpleGear* sg = new SimpleGear(name);
+-//         sg->setPosition(structToBody(Vector3(x, y, z)));
+-        
+-//         sg->setSpringConstant(convertFrom(uPoundForcePFt, k));
+-//         // FIXME: conversion factor:
+-//         // Works since it is used as N/(m/s)=Ns/m (seconds don't change)
+-//         // Note that friction coefficients are different from that but
+-//         // viscosous friction is just used in that way ...
+-//         sg->setSpringDamping(convertFrom(uPoundForcePFt, d));
+-//         sg->setFrictionCoeficient(fs);
+-        
+-//         // Connect apprioriate input and output models
+-
+-//         // FIXME
+-//         // missing output properties are "wow" and "tire-pressure-norm"
+-
+-//         if (retract == "RETRACT") {
+-//           Port* port = lookupJSBExpression("gear/gear-pos-norm");
+-//           sg->getInputPort("enabled")->connect(port);
+-//           // Well, connect that directly to the input
+-//           addOutputModel(port, "Gear " + numStr + " Position",
+-//                          "gear/gear[" + numStr + "]/position-norm");
+-//         }
+-
+-//         if (type == "STEERABLE") {
+-//           // FIXME: FCS might later define something for that gain ...
+-// //           prop = lookupJSBExpression("fcs/steer-pos-deg[" + numStr + "]");
+-//           Port* port = lookupJSBExpression("fcs/steer-cmd-norm");
+-//           Gain* gain = new Gain(name + " Steer Gain");
+-//           gain->setGain(sa);
+-//           gain->getInputPort(0)->connect(port);
+-//           addFCSModel(gain);
+-//           addOutputModel(port, "Gear " + numStr + " Steering Output",
+-//                          "gear/gear[" + numStr + "]/steering-norm");
+-
+-
+-//           UnitConversionModel* unitConv
+-//             = new UnitConversionModel(name + " Degree Conversion",
+-//                                       UnitConversionModel::UnitToSi,
+-//                                       uDegree);
+-//           unitConv->getInputPort(0)->connect(gain->getOutputPort(0));
+-//           addFCSModel(unitConv);
+-
+-//           sg->getInputPort("steeringAngle")->connect(unitConv->getOutputPort(0));
+-//         }
+-        
+-//         if (brake == "LEFT") {
+-//           Port* port = lookupJSBExpression("gear/left-brake-pos-norm");
+-//           sg->getInputPort("brakeCommand")->connect(port);
+-//         } else if (brake == "RIGHT") {
+-//           Port* port = lookupJSBExpression("gear/right-brake-pos-norm");
+-//           sg->getInputPort("brakeCommand")->connect(port);
+-//         }
+-        
+-//         mVehicle->getTopBody()->addInteract(sg);
+-//       }
+-      
+-//     } else if (uctype == "AC_LAUNCHBAR") {
+-//       std::string d;
+-//       datastr >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d;
+-
+-//     } else if (uctype == "AC_HOOK") {
+-//       std::string d;
+-//       datastr >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d >> d;
+-
+-//     } else if (uctype == "AC_F18MLG") { 
+-//       /// Well, that here is exactly how it should not be,
+-//       /// but for initial testing of a new unfinished fdm ...
+-//       std::string name, brake;
+-//       Vector3 compressJointPos;
+-//       real_type pullPress;
+-//       real_type pushPress;
+-//       real_type area;
+-//       real_type minCompr;
+-//       real_type maxCompr;
+-//       real_type minDamp;
+-//       real_type maxDamp;
+-//       real_type armLength;
+-//       real_type wheelDiam;
+-//       real_type tireSpring, tireDamp;
+-
+-
+-//       datastr >> name >> brake
+-//               >> compressJointPos(1)
+-//               >> compressJointPos(2)
+-//               >> compressJointPos(3)
+-//               >> pullPress >> pushPress
+-//               >> area
+-//               >> minCompr
+-//               >> maxCompr
+-//               >> minDamp
+-//               >> maxDamp
+-//               >> armLength
+-//               >> wheelDiam
+-//               >> tireSpring >> tireDamp;
+-
+-//       // Well this is come hardcoding, but as a demo built from within the
+-//       // legacy JSBSim format this is ok :)
+-
+-//       // This is the movable part of the strut, doing the compression
+-//       RigidBody* arm = new RigidBody(name + " Arm");
+-//       mVehicle->getMultiBodySystem()->addRigidBody(arm);
+-//       arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80))));
+-
+-//       // Connect that with a revolute joint to the main body
+-//       RevoluteJoint* rj = new RevoluteJoint(name + " Arm Joint");
+-//       mVehicle->getTopBody()->addInteract(rj);
+-//       arm->setInboardJoint(rj);
+-//       rj->setJointAxis(Vector3(0, 1, 0));
+-//       rj->setJointPos(0);
+-//       rj->setJointVel(0);
+-//       rj->setPosition(structToBody(compressJointPos));
+-//       rj->setOrientation(Quaternion::unit());
+-
+-// #if 0
+-//       // Well, we use an air spring for that. It is directly in the
+-//       // revolute joint. That is wrong, but at the moment aprioriate.
+-//       AirSpring* aoDamp = new AirSpring(name + " Air Spring Force");
+-//       aoDamp->setPullPressure(pullPress);
+-//       aoDamp->setPushPressure(pushPress);
+-//       aoDamp->setArea(area);
+-//       aoDamp->setMinCompression(minCompr);
+-//       aoDamp->setMaxCompression(maxCompr);
+-//       aoDamp->setMinDamperConstant(minDamp);
+-//       aoDamp->setMaxDamperConstant(maxDamp);
+-//       // That one reads the joint position and velocity ...
+-//       aoDamp->getInputPort(0)->connect(rj->getOutputPort(0));
+-//       aoDamp->getInputPort(1)->connect(rj->getOutputPort(1));
+-//       // ... and provides an output force
+-//       rj->getInputPort(0)->connect(aoDamp->getOutputPort(0));
+-//       addMultiBodyModel(aoDamp);
+-// #else
+-//       LineForce* lineForce = new LineForce(name + " Air Spring LineForce");
+-//       /// FIXME that ordering in attachment is messy!
+-//       lineForce->setPosition0(structToBody(compressJointPos) - Vector3(0.1, 0, 0.5));
+-//       lineForce->setPosition1(Vector3(-0.5, 0, 0));
+-//       mVehicle->getTopBody()->addInteract(lineForce);
+-//       arm->addInteract(lineForce);
+-
+-//       AirSpring* aoDamp = new AirSpring(name + " Air Spring Force");
+-//       aoDamp->setPullPressure(pullPress);
+-//       aoDamp->setPushPressure(pushPress);
+-//       aoDamp->setArea(area);
+-//       aoDamp->setMinCompression(minCompr);
+-//       aoDamp->setMaxCompression(maxCompr);
+-//       aoDamp->setMinDamperConstant(minDamp);
+-//       aoDamp->setMaxDamperConstant(maxDamp);
+-//       addMultiBodyModel(aoDamp);
+-
+-//       // That one reads the joint position and velocity ...
+-//       aoDamp->getInputPort(0)->connect(lineForce->getOutputPort(0));
+-//       aoDamp->getInputPort(1)->connect(lineForce->getOutputPort(1));
+-//       // ... and provides an output force
+-//       lineForce->getInputPort(0)->connect(aoDamp->getOutputPort(0));
+-// #endif
+-
+-//       // Attach a wheel to that strut part.
+-//       attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
+-//                   tireSpring, tireDamp, arm);
+-
+-//       Port* port = rj->getOutputPort(0);
+-//       addOutputModel(port, "Gear " + numStr + " Compression",
+-//                      "gear/gear[" + numStr + "]/compression-rad");
+-
+-//       /// FIXME add a retract joint ...
+-//       port = lookupJSBExpression("gear/gear-pos-norm");
+-//       addOutputModel(port, "Gear " + numStr + " Position",
+-//                      "gear/gear[" + numStr + "]/position-norm");
+-
+-//     } else if (uctype == "AC_CLG") {
+-//       std::string name, brake, steer;
+-//       Vector3 compressJointPos;
+-//       real_type pullPress;
+-//       real_type pushPress;
+-//       real_type area;
+-//       real_type minCompr;
+-//       real_type maxCompr;
+-//       real_type minDamp;
+-//       real_type maxDamp;
+-//       real_type wheelDiam;
+-//       real_type tireSpring, tireDamp;
+-
+-//       datastr >> name >> brake
+-//               >> compressJointPos(1)
+-//               >> compressJointPos(2)
+-//               >> compressJointPos(3)
+-//               >> pullPress >> pushPress
+-//               >> area
+-//               >> minCompr
+-//               >> maxCompr
+-//               >> minDamp
+-//               >> maxDamp
+-//               >> wheelDiam
+-//               >> tireSpring >> tireDamp
+-//               >> steer;
+-
+-//       // Well this is come hardcoding, but as a demo built from within the
+-//       // legacy JSBSim format this is ok :)
+-
+-//       // Model steering here ...
+-//       // normally we connect the compressible part to the top level body, but
+-//       // in case of steering this is no longer true.
+-//       RigidBody* strutParent = mVehicle->getTopBody();
+-//       if (steer == "STEERABLE") {
+-//         // A new part modelling the steering
+-//         RigidBody* steer = new RigidBody(name + " Steer");
+-//         mVehicle->getMultiBodySystem()->addRigidBody(steer);
+-
+-//         // connect that via a revolute joint to the toplevel body.
+-//         // Note the 0.05m below, most steering wheels have some kind of
+-//         // castering auto line up behavour. That is doe with this 0.05m.
+-//         RevoluteActuator* sj = new RevoluteActuator(name + " Steer Joint");
+-//         strutParent->addInteract(sj);
+-//         steer->setInboardJoint(sj);
+-//         sj->setJointAxis(Vector3(0, 0, 1));
+-//         sj->setJointPos(0);
+-//         sj->setJointVel(0);
+-//         sj->setPosition(structToBody(compressJointPos)
+-//                         + Vector3(0.05, 0, 0));
+-//         sj->setOrientation(Quaternion::unit());
+-
+-//         Port* port = lookupJSBExpression("fcs/steer-cmd-norm");
+-//         sj->getInputPort(0)->connect(port);
+-        
+-//         strutParent = steer;
+-        
+-//         // Prepare outputs
+-//         port = sj->getOutputPort(0);
+-//         std::string nameBase = "Steering " + numStr + " Position";
+-//         addOutputModel(port, nameBase,
+-//                        "gear/gear[" + numStr + "]/steering-pos-rad");
+-//         UnitConversionModel* unitModel
+-//           = new UnitConversionModel(nameBase + " converter",
+-//                                     UnitConversionModel::SiToUnit, uDegree);
+-//         unitModel->getInputPort(0)->connect(port);
+-//         addFCSModel(unitModel);
+-//         addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
+-//                        "gear/gear[" + numStr + "]/steering-pos-deg");
+-//       }
+-
+-
+-//       // Now the compressible part of the strut
+-//       RigidBody* arm = new RigidBody(name + " Strut");
+-//       mVehicle->getMultiBodySystem()->addRigidBody(arm);
+-//       arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(0, 0, 1), SpatialInertia(100))));
+-
+-//       // This time it is a prismatic joint
+-//       PrismaticJoint* pj = new PrismaticJoint(name + " Compress Joint");
+-//       strutParent->addInteract(pj);
+-//       arm->setInboardJoint(pj);
+-//       pj->setJointAxis(Vector3(0, 0, -1));
+-//       if (strutParent == mVehicle->getTopBody())
+-//         pj->setPosition(structToBody(compressJointPos));
+-//       else
+-//         pj->setPosition(Vector3(-0.05, 0, 0));
+-
+-//       // With an air spring
+-//       AirSpring* aoDamp = new AirSpring(name + " Air Spring Force");
+-//       aoDamp->setPullPressure(pullPress);
+-//       aoDamp->setPushPressure(pushPress);
+-//       aoDamp->setArea(area);
+-//       aoDamp->setMinCompression(minCompr);
+-//       aoDamp->setMaxCompression(maxCompr);
+-//       aoDamp->setMinDamperConstant(minDamp);
+-//       aoDamp->setMaxDamperConstant(maxDamp);
+-//       pj->getInputPort(0)->connect(aoDamp->getOutputPort(0));
+-//       aoDamp->getInputPort(0)->connect(pj->getOutputPort(0));
+-//       aoDamp->getInputPort(1)->connect(pj->getOutputPort(1));
+-//       addMultiBodyModel(aoDamp);
+-
+-//       // Attach a wheel to that strut part.
+-//       attachWheel(name, Vector3::zeros(), brake, numStr, wheelDiam,
+-//                   tireSpring, tireDamp, arm);
+-
+-//       // Prepare some outputs ...
+-//       Port* port = pj->getOutputPort(0);
+-//       addOutputModel(port, "Gear " + numStr + " Compression",
+-//                      "gear/gear[" + numStr + "]/compression-m");
+-
+-//       port = lookupJSBExpression("gear/gear-pos-norm");
+-//       addOutputModel(port, "Gear " + numStr + " Position",
+-//                      "gear/gear[" + numStr + "]/position-norm");
+-
+-//     } else if (uctype == "AC_CONTACT") {
+-//       std::string name, type, brake, retract;
+-//       real_type x, y, z, k, d, fs, fd, rr, sa;
+-//       datastr >> name >> x >> y >> z >> k >> d >> fs >> fd >> rr
+-//               >> type >> brake >> sa >> retract;
+-
+-//       // Very simple contact force. Penalty method.
+-//       SimpleContact* sc = new SimpleContact(name);
+-//       sc->setPosition(structToBody(Vector3(x, y, z)));
+-
+-//       sc->setSpringConstant(convertFrom(uPoundForcePFt, k));
+-//       // FIXME: conversion factor:
+-//       // Works since it is used as N/(m/s)=Ns/m (seconds don't change)
+-//       // Note that friction coefficients are different from that but
+-//       // viscosous friction is just used in that way ...
+-//       sc->setSpringDamping(convertFrom(uPoundForcePFt, d));
+-//       sc->setFrictionCoeficient(fs);
+-
+-//       mVehicle->getTopBody()->addInteract(sc);
+-//     }
+-//   }
+-
+   return true;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-04 19:25:15 UTC (rev 235)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.h	2006-02-05 12:01:41 UTC (rev 236)
+@@ -42,6 +42,9 @@
+   bool convertMassBalance(const XMLElement* massBalanceElement);
+   bool convertFCSList(const XMLElement* fcsElem);
+   bool convertFCSComponent(const XMLElement* fcsComponent);
++  bool attachWheel(const XMLElement* wheelElem, const std::string& name,
++                   const std::string& numStr, RigidBody* parent,
++                   const Vector3& parentDesignPos);
+   bool convertGroundReactionsElem(const XMLElement* gr);
+   bool convertPropulsion(const XMLElement* prop);
+   bool convertTank(const XMLElement* tElem, const std::string& number);
+
+
+
+From frohlich at berlios.de  Sun Feb  5 13:46:51 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 5 Feb 2006 13:46:51 +0100
+Subject: [OpenFDM-svn] r237 - trunk/OpenFDM/src/JSBSim
+Message-ID: <200602051246.k15CkpBP015434@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-05 13:45:42 +0100 (Sun, 05 Feb 2006)
+New Revision: 237
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/Makefile.am
+Log:
+Rename libJSBReader to libOpenFDMJSBReader
+
+
+Modified: trunk/OpenFDM/src/JSBSim/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/Makefile.am	2006-02-05 12:01:41 UTC (rev 236)
++++ trunk/OpenFDM/src/JSBSim/Makefile.am	2006-02-05 12:45:42 UTC (rev 237)
+@@ -3,7 +3,7 @@
+ bin_PROGRAMS = jsb2openfdm
+ jsb2openfdm_SOURCES = jsb2openfdm.cpp
+ jsb2openfdm_LDFLAGS = 
+-jsb2openfdm_LDADD = libJSBReader.la ../OpenFDM/libOpenFDM.la
++jsb2openfdm_LDADD = libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la
+ 
+ ### FIXME!!!
+ OpenFDMincludedir = $(includedir)/JSBSim
+@@ -19,8 +19,8 @@
+   Tablereader.h \
+   XMLReader.h
+ 
+-lib_LTLIBRARIES = libJSBReader.la
+-libJSBReader_la_SOURCES = \
++lib_LTLIBRARIES = libOpenFDMJSBReader.la
++libOpenFDMJSBReader_la_SOURCES = \
+   JSBSimAerosurfaceScale.cpp \
+   JSBSimFCSComponent.cpp \
+   JSBSimKinemat.cpp \
+@@ -30,6 +30,6 @@
+   LegacyJSBSimReader.cpp \
+   Tablereader.cpp \
+   XMLReader.cpp
+-libJSBReader_la_LIBADD = ../OpenFDM/XML/libOpenFDMeasyxmlXML.la \
+-                         ../OpenFDM/XML/libOpenFDMXML.la \
+-                         ../OpenFDM/libOpenFDM.la
++libOpenFDMJSBReader_la_LIBADD = ../OpenFDM/XML/libOpenFDMeasyxmlXML.la \
++                                ../OpenFDM/XML/libOpenFDMXML.la \
++                                ../OpenFDM/libOpenFDM.la
+
+
+
+From frohlich at berlios.de  Sun Feb  5 13:48:26 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 5 Feb 2006 13:48:26 +0100
+Subject: [OpenFDM-svn] r238 - trunk/flightgear
+Message-ID: <200602051248.k15CmQ7i015832@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-05 13:48:23 +0100 (Sun, 05 Feb 2006)
+New Revision: 238
+
+Modified:
+   trunk/flightgear/flightgear.diff
+Log:
+Update the fg patch to the current state.
+
+
+Modified: trunk/flightgear/flightgear.diff
+===================================================================
+--- trunk/flightgear/flightgear.diff	2006-02-05 12:45:42 UTC (rev 237)
++++ trunk/flightgear/flightgear.diff	2006-02-05 12:48:23 UTC (rev 238)
+@@ -1,11 +1,11 @@
+ Index: configure.ac
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/configure.ac,v
+-retrieving revision 1.96
+-diff -u -r1.96 configure.ac
+---- configure.ac	24 Sep 2005 12:31:41 -0000	1.96
+-+++ configure.ac	5 Oct 2005 15:17:44 -0000
+-@@ -444,6 +444,14 @@
++retrieving revision 1.110
++diff -u -r1.110 configure.ac
++--- configure.ac	21 Jan 2006 10:06:09 -0000	1.110
+++++ configure.ac	5 Feb 2006 12:39:39 -0000
++@@ -459,6 +468,14 @@
+  fi
+  AM_CONDITIONAL(ENABLE_JPEG_SERVER, test "x$ac_cv_header_simgear_screen_jpgfactory_hxx" = "xyes")
+  
+@@ -20,9 +20,9 @@
+  AC_LANG_POP
+  
+  dnl Check for system installed zlib
+-@@ -519,6 +527,7 @@
+- 	src/FDM/JSBSim/Makefile \
+- 	src/FDM/JSBSim/filtersjb/Makefile \
++@@ -539,6 +556,7 @@
++ 	src/FDM/JSBSim/models/atmosphere/Makefile \
++ 	src/FDM/JSBSim/models/propulsion/Makefile \
+  	src/FDM/LaRCsim/Makefile \
+ +	src/FDM/OpenFDM/Makefile \
+  	src/FDM/SP/Makefile \
+@@ -34,7 +34,7 @@
+ retrieving revision 1.7
+ diff -u -r1.7 Makefile.am
+ --- src/FDM/Makefile.am	22 Nov 2004 10:10:33 -0000	1.7
+-+++ src/FDM/Makefile.am	5 Oct 2005 15:17:44 -0000
+++++ src/FDM/Makefile.am	5 Feb 2006 12:39:41 -0000
+ @@ -4,8 +4,14 @@
+  SP_DIR =
+  endif
+@@ -54,10 +54,10 @@
+ Index: src/FDM/flight.hxx
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/FDM/flight.hxx,v
+-retrieving revision 1.9
+-diff -u -r1.9 flight.hxx
+---- src/FDM/flight.hxx	3 Jul 2005 09:39:14 -0000	1.9
+-+++ src/FDM/flight.hxx	5 Oct 2005 15:17:45 -0000
++retrieving revision 1.11
++diff -u -r1.11 flight.hxx
++--- src/FDM/flight.hxx	20 Jan 2006 17:19:02 -0000	1.11
+++++ src/FDM/flight.hxx	5 Feb 2006 12:39:42 -0000
+ @@ -433,7 +433,10 @@
+  	FG_PARACHUTE = 9,
+  
+@@ -73,17 +73,17 @@
+ Index: src/Main/Makefile.am
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/Main/Makefile.am,v
+-retrieving revision 1.54
+-diff -u -r1.54 Makefile.am
+---- src/Main/Makefile.am	25 Jun 2005 11:21:18 -0000	1.54
+-+++ src/Main/Makefile.am	5 Oct 2005 15:17:45 -0000
++retrieving revision 1.63
++diff -u -r1.63 Makefile.am
++--- src/Main/Makefile.am	20 Jan 2006 17:19:02 -0000	1.63
+++++ src/Main/Makefile.am	5 Feb 2006 12:39:43 -0000
+ @@ -13,6 +13,13 @@
+  SP_FDM_LIBS = 
+  endif
+  
+ +if ENABLE_OpenFDM_FDM
+ +OpenFDM_LIBS = $(top_builddir)/src/FDM/OpenFDM/libFGOpenFDM.a \
+-+               -lJSBReader -lOpenFDM
+++               -lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM
+ +else
+ +OpenFDM_LIBS = 
+ +endif
+@@ -91,7 +91,7 @@
+  if WITH_THREADS
+  THREAD_LIBS = -lsgthreads $(thread_LIBS)
+  else
+-@@ -70,6 +77,7 @@
++@@ -84,6 +91,7 @@
+  	$(top_builddir)/src/FDM/LaRCsim/libLaRCsim.a \
+  	$(top_builddir)/src/FDM/UIUCModel/libUIUCModel.a \
+  	$(SP_FDM_LIBS) \
+@@ -102,11 +102,11 @@
+ Index: src/Main/fg_init.cxx
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/Main/fg_init.cxx,v
+-retrieving revision 1.131
+-diff -u -r1.131 fg_init.cxx
+---- src/Main/fg_init.cxx	4 Oct 2005 20:36:38 -0000	1.131
+-+++ src/Main/fg_init.cxx	5 Oct 2005 15:17:46 -0000
+-@@ -91,6 +91,9 @@
++retrieving revision 1.150
++diff -u -r1.150 fg_init.cxx
++--- src/Main/fg_init.cxx	30 Jan 2006 13:29:50 -0000	1.150
+++++ src/Main/fg_init.cxx	5 Feb 2006 12:39:44 -0000
++@@ -90,6 +90,9 @@
+  #include <FDM/UFO.hxx>
+  #include <FDM/NullFDM.hxx>
+  #include <FDM/YASim/YASim.hxx>
+@@ -116,7 +116,7 @@
+  #include <GUI/new_gui.hxx>
+  #include <Include/general.hxx>
+  #include <Input/input.hxx>
+-@@ -1382,6 +1385,10 @@
++@@ -1361,6 +1364,10 @@
+              cur_fdm_state = new FGNullFDM( dt );
+          } else if ( model == "yasim" ) {
+              cur_fdm_state = new YASim( dt );
+
+
+
+From frohlich at berlios.de  Sun Feb  5 23:11:10 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 5 Feb 2006 23:11:10 +0100
+Subject: [OpenFDM-svn] r239 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602052211.k15MBAfO023643@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-05 23:10:46 +0100 (Sun, 05 Feb 2006)
+New Revision: 239
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/Bias.cpp
+   trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Force.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Gain.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+   trunk/OpenFDM/src/OpenFDM/Mass.cpp
+   trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/Object.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Product.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+   trunk/OpenFDM/src/OpenFDM/SimpleContact.cpp
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/Table.cpp
+   trunk/OpenFDM/src/OpenFDM/Tank.cpp
+   trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+Log:
+Add second argument to reflection macro
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(AeroForce)
++BEGIN_OPENFDM_OBJECT_DEF(AeroForce, ExternalForce)
+   END_OPENFDM_OBJECT_DEF
+ 
+ AeroForce::AeroForce(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -8,7 +8,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(AirSpring)
++BEGIN_OPENFDM_OBJECT_DEF(AirSpring, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ AirSpring::AirSpring(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Bias.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -15,7 +15,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Bias)
++BEGIN_OPENFDM_OBJECT_DEF(Bias, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Bias::Bias(const std::string& name) : Model(name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -43,7 +43,7 @@
+ };
+ 
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(BinaryFunctionModel)
++BEGIN_OPENFDM_OBJECT_DEF(BinaryFunctionModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ BinaryFunctionModel::BinaryFunctionModel(const std::string& name, Type type) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/ConstModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/ConstModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -6,7 +6,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(ConstModel)
++BEGIN_OPENFDM_OBJECT_DEF(ConstModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ ConstModel::ConstModel(const std::string& name, const Matrix& value) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -13,7 +13,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Contact)
++BEGIN_OPENFDM_OBJECT_DEF(Contact, ExternalForce)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Contact::Contact(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -14,7 +14,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(DeadBand)
++BEGIN_OPENFDM_OBJECT_DEF(DeadBand, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ DeadBand::DeadBand(const std::string& name) : Model(name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -8,7 +8,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(DiscBrake)
++BEGIN_OPENFDM_OBJECT_DEF(DiscBrake, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ DiscBrake::DiscBrake(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -7,7 +7,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(DiscreteIntegrator)
++BEGIN_OPENFDM_OBJECT_DEF(DiscreteIntegrator, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ DiscreteIntegrator::DiscreteIntegrator(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/ExternalForceModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -7,7 +7,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(ExternalForceModel)
++BEGIN_OPENFDM_OBJECT_DEF(ExternalForceModel, ExternalForce)
+   END_OPENFDM_OBJECT_DEF
+ 
+ ExternalForceModel::ExternalForceModel(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Force.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -6,15 +6,15 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Force)
++BEGIN_OPENFDM_OBJECT_DEF(Force, Interact)
+   END_OPENFDM_OBJECT_DEF
+ 
+ // FIXME
+-BEGIN_OPENFDM_OBJECT_DEF(ExternalForce)
++BEGIN_OPENFDM_OBJECT_DEF(ExternalForce, Force)
+   END_OPENFDM_OBJECT_DEF
+-BEGIN_OPENFDM_OBJECT_DEF(InternalForce)
++BEGIN_OPENFDM_OBJECT_DEF(InternalForce, Force)
+   END_OPENFDM_OBJECT_DEF
+-BEGIN_OPENFDM_OBJECT_DEF(LineForce)
++BEGIN_OPENFDM_OBJECT_DEF(LineForce, InternalForce)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Force::Force(const std::string& name, unsigned numParents) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -15,11 +15,11 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Frame)
++BEGIN_OPENFDM_OBJECT_DEF(Frame, Object)
+   END_OPENFDM_OBJECT_DEF
+ 
+ /// FIXME
+-BEGIN_OPENFDM_OBJECT_DEF(FreeFrame)
++BEGIN_OPENFDM_OBJECT_DEF(FreeFrame, Frame)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Frame::Frame(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Gain.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -14,7 +14,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Gain)
++BEGIN_OPENFDM_OBJECT_DEF(Gain, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Gain::Gain(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -6,7 +6,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Input)
++BEGIN_OPENFDM_OBJECT_DEF(Input, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Input::Input(const std::string& name) :
+@@ -97,7 +97,7 @@
+ 
+ 
+ /// FIXME
+-BEGIN_OPENFDM_OBJECT_DEF(Output)
++BEGIN_OPENFDM_OBJECT_DEF(Output, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Output::Output(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -7,7 +7,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Integrator)
++BEGIN_OPENFDM_OBJECT_DEF(Integrator, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Integrator::Integrator(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -18,7 +18,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Interact)
++BEGIN_OPENFDM_OBJECT_DEF(Interact, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Interact::Interact(const std::string& name, unsigned numParents) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,7 +17,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Joint)
++BEGIN_OPENFDM_OBJECT_DEF(Joint, Interact)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Joint::Joint(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -8,7 +8,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(LinearSpringDamper)
++BEGIN_OPENFDM_OBJECT_DEF(LinearSpringDamper, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ LinearSpringDamper::LinearSpringDamper(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Mass.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mass.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Mass.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -6,7 +6,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Mass)
++BEGIN_OPENFDM_OBJECT_DEF(Mass, Interact)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Mass::Mass(const std::string& name, const SpatialInertia& inertia) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(MaxModel)
++BEGIN_OPENFDM_OBJECT_DEF(MaxModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MaxModel::MaxModel(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(MinModel)
++BEGIN_OPENFDM_OBJECT_DEF(MinModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MinModel::MinModel(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ const SampleTime SampleTime::Inherited(-1);
+ const SampleTime SampleTime::Continous(0);
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Model)
++BEGIN_OPENFDM_OBJECT_DEF(Model, Object)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Model::Model(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(ModelGroup)
++BEGIN_OPENFDM_OBJECT_DEF(ModelGroup, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ ModelGroup::ModelGroup(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,7 +17,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(MultiBodySystem)
++BEGIN_OPENFDM_OBJECT_DEF(MultiBodySystem, ModelGroup)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MultiBodySystem::MultiBodySystem(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.h	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Object.h	2006-02-05 22:10:46 UTC (rev 239)
+@@ -22,7 +22,7 @@
+ #define OPENFDM_OBJECT(classname, baseclassname)                \
+ public: virtual const char* getTypeName(void) const
+ 
+-#define BEGIN_OPENFDM_OBJECT_DEF(classname)                     \
++#define BEGIN_OPENFDM_OBJECT_DEF(classname, baseclassname)      \
+ const char*                                                     \
+ classname::getTypeName(void) const                              \
+ {                                                               \
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,10 +17,10 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(PrismaticJoint)
++BEGIN_OPENFDM_OBJECT_DEF(PrismaticJoint, Joint)
+   END_OPENFDM_OBJECT_DEF
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(PrismaticJointFrame)
++BEGIN_OPENFDM_OBJECT_DEF(PrismaticJointFrame, Frame)
+   END_OPENFDM_OBJECT_DEF
+ 
+ PrismaticJoint::PrismaticJoint(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Product.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Product)
++BEGIN_OPENFDM_OBJECT_DEF(Product, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Product::Product(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,10 +17,10 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuator)
++BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuator, Joint)
+   END_OPENFDM_OBJECT_DEF
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuatorFrame)
++BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuatorFrame, Frame)
+   END_OPENFDM_OBJECT_DEF
+ 
+ RevoluteActuator::RevoluteActuator(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,10 +17,10 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(RevoluteJoint)
++BEGIN_OPENFDM_OBJECT_DEF(RevoluteJoint, Joint)
+   END_OPENFDM_OBJECT_DEF
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(RevoluteJointFrame)
++BEGIN_OPENFDM_OBJECT_DEF(RevoluteJointFrame, Frame)
+   END_OPENFDM_OBJECT_DEF
+ 
+ RevoluteJoint::RevoluteJoint(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -15,7 +15,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Saturation)
++BEGIN_OPENFDM_OBJECT_DEF(Saturation, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Saturation::Saturation(const std::string& name) : Model(name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleContact.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/SimpleContact.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(SimpleContact)
++BEGIN_OPENFDM_OBJECT_DEF(SimpleContact, Contact)
+   END_OPENFDM_OBJECT_DEF
+ 
+ SimpleContact::SimpleContact(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -14,7 +14,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(SimpleGear)
++BEGIN_OPENFDM_OBJECT_DEF(SimpleGear, Contact)
+   END_OPENFDM_OBJECT_DEF
+ 
+ SimpleGear::SimpleGear(const std::string& name)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Summer)
++BEGIN_OPENFDM_OBJECT_DEF(Summer, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Summer::Summer(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -17,7 +17,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(System)
++BEGIN_OPENFDM_OBJECT_DEF(System, ModelGroup)
+   END_OPENFDM_OBJECT_DEF
+ 
+ System::System(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Table.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -11,7 +11,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(TablePreLookup)
++BEGIN_OPENFDM_OBJECT_DEF(TablePreLookup, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ TablePreLookup::TablePreLookup(const std::string& name) :
+@@ -59,7 +59,7 @@
+   return mOutput;
+ }
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Table1D)
++BEGIN_OPENFDM_OBJECT_DEF(Table1D, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table1D::Table1D(const std::string& name) :
+@@ -109,7 +109,7 @@
+   return mOutput;
+ }
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Table2D)
++BEGIN_OPENFDM_OBJECT_DEF(Table2D, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table2D::Table2D(const std::string& name) :
+@@ -164,7 +164,7 @@
+   return mOutput;
+ }
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Table3D)
++BEGIN_OPENFDM_OBJECT_DEF(Table3D, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table3D::Table3D(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tank.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -6,7 +6,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Tank)
++BEGIN_OPENFDM_OBJECT_DEF(Tank, Mass)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Tank::Tank(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -7,7 +7,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(TimeDerivative)
++BEGIN_OPENFDM_OBJECT_DEF(TimeDerivative, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ TimeDerivative::TimeDerivative(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -8,7 +8,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(DiscreteTransferFunction)
++BEGIN_OPENFDM_OBJECT_DEF(DiscreteTransferFunction, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ DiscreteTransferFunction::DiscreteTransferFunction(const std::string& name) :
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -120,7 +120,7 @@
+   { return tan(mRealPortHandle.getRealValue()); }
+ };
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(UnaryFunctionModel)
++BEGIN_OPENFDM_OBJECT_DEF(UnaryFunctionModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ UnaryFunctionModel::UnaryFunctionModel(const std::string& name, Type type) :
+@@ -222,7 +222,7 @@
+   return mType;
+ }
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(UnitConversionModel)
++BEGIN_OPENFDM_OBJECT_DEF(UnitConversionModel, Model)
+   END_OPENFDM_OBJECT_DEF
+ 
+ UnitConversionModel::UnitConversionModel(const std::string& name,
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-02-05 12:48:23 UTC (rev 238)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-02-05 22:10:46 UTC (rev 239)
+@@ -13,7 +13,7 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(WheelContact)
++BEGIN_OPENFDM_OBJECT_DEF(WheelContact, ExternalForce)
+   END_OPENFDM_OBJECT_DEF
+ 
+ WheelContact::WheelContact(const std::string& name)
+
+
+
+From frohlich at berlios.de  Mon Feb  6 22:51:47 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Mon, 6 Feb 2006 22:51:47 +0100
+Subject: [OpenFDM-svn] r240 - trunk/OpenFDM/src/builder
+Message-ID: <200602062151.k16Lpl0E006904@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-06 22:51:45 +0100 (Mon, 06 Feb 2006)
+New Revision: 240
+
+Modified:
+   trunk/OpenFDM/src/builder/Makefile.am
+Log:
+Update makefile to new JSBSim importer name
+
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-02-05 22:10:46 UTC (rev 239)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-02-06 21:51:45 UTC (rev 240)
+@@ -27,7 +27,7 @@
+ 	QOsgWidget.h \
+ 	QOsgWidget.cpp
+ 
+-openfdm_LDADD = ../JSBSim/libJSBReader.la ../OpenFDM/libOpenFDM.la \
++openfdm_LDADD = ../JSBSim/libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+                 -lQtGui -lQtOpenGL -lQtCore \
+                 -lGL -lGLU
+
+
+
+From frohlich at berlios.de  Sat Feb 11 15:01:54 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 11 Feb 2006 15:01:54 +0100
+Subject: [OpenFDM-svn] r241 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602111401.k1BE1sZ2014371@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-11 15:01:48 +0100 (Sat, 11 Feb 2006)
+New Revision: 241
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+Log:
+More consistent error returns
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2006-02-06 21:51:45 UTC (rev 240)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2006-02-11 14:01:48 UTC (rev 241)
+@@ -19,11 +19,11 @@
+   { return *this; }
+ 
+   static unsigned get(const Referenced* ref)
+-  { if (ref) return ++(ref->_refcount); else return ~0u; }
++  { if (ref) return ++(ref->_refcount); else return 0u; }
+   static unsigned put(const Referenced* ref)
+   { if (ref) return --(ref->_refcount); else return ~0u; }
+   static unsigned count(const Referenced* ref)
+-  { if (ref) return ref->_refcount; else return ~0u; }
++  { if (ref) return ref->_refcount; else return 0u; }
+   static bool shared(const Referenced* ref)
+   { if (ref) return 1u < ref->_refcount; else return false; }
+ 
+
+
+
+From frohlich at berlios.de  Sun Feb 12 11:47:06 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 12 Feb 2006 11:47:06 +0100
+Subject: [OpenFDM-svn] r242 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602121047.k1CAl6K2006425@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-12 11:47:04 +0100 (Sun, 12 Feb 2006)
+New Revision: 242
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+Log:
+Add setter for reference positions
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2006-02-11 14:01:48 UTC (rev 241)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2006-02-12 10:47:04 UTC (rev 242)
+@@ -460,6 +460,14 @@
+     else
+       setPosition(p);
+   }
++  void setRefVel(const Vector6& vel)
++  {
++    if (hasParent()) {
++      setRelVel(vel - motionFromParent(getParentFrame()->getRefVel()));
++    } else {
++      setRelVel(vel);
++    }
++  }
+ 
+ public:
+   Quaternion getRelOrientation(const Frame* frame) const
+@@ -610,6 +618,9 @@
+   void setRefOrientation(const Quaternion& o)
+   { Frame::setRefOrientation(o); }
+ 
++  void setRefVel(const Vector6& vel)
++  { Frame::setRefVel(vel); }
++
+ private:
+   // The spatial acceleration of this frame wrt the parent frame.
+   // True? more the relative acceleration ...
+
+
+
+From frohlich at berlios.de  Sun Feb 12 15:45:35 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 12 Feb 2006 15:45:35 +0100
+Subject: [OpenFDM-svn] r243 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200602121445.k1CEjZYG005144@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-12 15:45:14 +0100 (Sun, 12 Feb 2006)
+New Revision: 243
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+A first cut of a carrier launchbar.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-12 14:45:14 UTC (rev 243)
+@@ -22,6 +22,7 @@
+ #include <OpenFDM/Gain.h>
+ #include <OpenFDM/Input.h>
+ #include <OpenFDM/Mass.h>
++#include <OpenFDM/Launchbar.h>
+ #include <OpenFDM/LinearSpringDamper.h>
+ #include <OpenFDM/MaxModel.h>
+ #include <OpenFDM/AirSpring.h>
+@@ -678,6 +679,7 @@
+         std::string numStr = sstr.str();
+         std::string name = (*it)->getAttribute("name");
+ 
++        Vector3 parentPos = structToBody(Vector3::zeros());
+         Vector3 compressJointPos = locationData((*it)->getElement("location"));
+         // Model steering here ...
+         // normally we connect the compressible part to the top level body, but
+@@ -698,13 +700,13 @@
+           sj->setJointAxis(Vector3(0, 0, 1));
+           sj->setJointPos(0);
+           sj->setJointVel(0);
+-          sj->setPosition(structToBody(compressJointPos)
+-                          + Vector3(0.05, 0, 0));
++          parentPos = structToBody(compressJointPos) + Vector3(0.05, 0, 0);
++          sj->setPosition(parentPos);
+           sj->setOrientation(Quaternion::unit());
+           
+           Port* port = lookupJSBExpression("fcs/steer-cmd-norm");
+           sj->getInputPort(0)->connect(port);
+-          
++  
+           strutParent = steer;
+           
+           // Prepare outputs
+@@ -721,6 +723,40 @@
+                          "gear/gear[" + numStr + "]/steering-pos-deg");
+         }
+         
++        const XMLElement* launchbarElem = (*it)->getElement("launchbar");
++        if (launchbarElem) {
++          Launchbar* launchbar = new Launchbar(name + " Launchbar");
++          real_type length = realData(launchbarElem->getElement("length"), 0.5);
++          launchbar->setLength(length);
++          real_type upAngle = realData(launchbarElem->getElement("upAngle"), 30);
++          launchbar->setUpAngle(convertFrom(uDegree, upAngle));
++          real_type downAngle = realData(launchbarElem->getElement("downAngle"), -50);
++          launchbar->setDownAngle(convertFrom(uDegree, downAngle));
++          real_type force = realData(launchbarElem->getElement("launchForce"), 1000);
++          launchbar->setLaunchForce(force);
++          Vector3 loc = structToBody(locationData(launchbarElem->getElement("location")));
++          launchbar->setPosition(loc - parentPos);
++          addMultiBodyModel(launchbar);
++          strutParent->addInteract(launchbar);
++
++          Port* port = lookupJSBExpression("/controls/gear/launchbar");
++          launchbar->getInputPort("tryMount")->connect(port);
++          port = lookupJSBExpression("/controls/gear/catapult-launch-cmd");
++          launchbar->getInputPort("launchCommand")->connect(port);
++
++          // expose the launchbar position
++          port = launchbar->getOutputPort(0);
++          std::string nameBase = "Launchbar Position";
++          addOutputModel(port, nameBase, "gear/launchbar-pos-rad");
++          UnitConversionModel* unitModel
++            = new UnitConversionModel(nameBase + " converter",
++                                      UnitConversionModel::SiToUnit, uDegree);
++          unitModel->getInputPort(0)->connect(port);
++          addFCSModel(unitModel);
++          addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
++                         "gear/launchbar-pos-deg");
++        }
++
+         
+         // Now the compressible part of the strut
+         RigidBody* arm = new RigidBody(name + " Strut");
+@@ -732,10 +768,8 @@
+         strutParent->addInteract(pj);
+         arm->setInboardJoint(pj);
+         pj->setJointAxis(Vector3(0, 0, -1));
+-        if (strutParent == mVehicle->getTopBody())
+-          pj->setPosition(structToBody(compressJointPos));
+-        else
+-          pj->setPosition(Vector3(-0.05, 0, 0));
++        pj->setPosition(structToBody(compressJointPos) - parentPos);
++        parentPos = structToBody(compressJointPos);
+         
+         // The damper element
+         const XMLElement* airSpringElem = (*it)->getElement("damper");
+@@ -746,8 +780,7 @@
+         addMultiBodyModel(aoDamp);
+         
+         // Attach a wheel to that strut part.
+-        attachWheel((*it)->getElement("wheel"), name, numStr, arm,
+-                    structToBody(compressJointPos));
++        attachWheel((*it)->getElement("wheel"), name, numStr, arm, parentPos);
+         
+         // Prepare some outputs ...
+         Port* port = pj->getOutputPort(0);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-12 14:45:14 UTC (rev 243)
+@@ -13,14 +13,24 @@
+ 
+ struct GroundValues {
+   GroundValues(const Plane& p = Plane(), const Vector6& v = Vector6::zeros(),
+-               real_type fr = 1)
+-    : plane(p), vel(v), friction(fr)
+-  {}
++               real_type fr = 1) :
++    plane(p), vel(v), friction(fr) {}
+   Plane plane;
+   Vector6 vel;
+   real_type friction;
+ };
+ 
++struct CatapultValues {
++  /// The position of the catapult start in reference coordinates
++  Vector3 position;
++  /// The orientation of the catapult frame
++  Quaternion orientation;
++  /// The spatial velocity of the catapult frame
++  Vector6 velocity;
++  /// The catapult length
++  real_type length;
++};
++
+ /**
+  * The Ground class.
+  */
+@@ -37,6 +47,15 @@
+ 
+   virtual GroundValues
+   getGroundPlane(real_type t, const Vector3& refPos) const = 0;
++
++  /** Returns true if a catapult is within some reasonable range to
++      the reference position. The reference position is usually the
++      position of the launchbar.
++   */
++  virtual bool
++  getCatapultValues(real_type t, const Vector3& refPos,
++                    CatapultValues& catVal) const
++  { return false; }
+ };
+ 
+ } // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-12 14:45:14 UTC (rev 243)
+@@ -0,0 +1,302 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include "Assert.h"
++#include "LogStream.h"
++#include "Object.h"
++#include "Vector.h"
++#include "Frame.h"
++#include "Force.h"
++#include "Environment.h"
++#include "Launchbar.h"
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Launchbar, ExternalForce)
++  END_OPENFDM_OBJECT_DEF
++
++Launchbar::Launchbar(const std::string& name)
++  : ExternalForce(name),
++    mLength(0.6),
++    mHoldbackLength(1.5),
++    mHoldBackMount(0, 0, 0.1),
++    mUpAngle(0.5),
++    mDownAngle(-0.5),
++    mAngularVelocity(1),
++    mLaunchForce(0)
++{
++  mCatFrame = new FreeFrame("Catapult frame");
++  mMountFrame->addChildFrame(mCatFrame);
++
++  setNumDiscreteStates(1);
++
++  // FIXME??
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++
++  setNumInputPorts(2);
++  setInputPortName(0, "tryMount");
++  setInputPortName(1, "launchCommand");
++
++  setNumOutputPorts(1);
++  setOutputPort(0, "angle", this, &Launchbar::getAngle);
++}
++
++Launchbar::~Launchbar(void)
++{
++}
++
++bool
++Launchbar::init(void)
++{
++  mState = Unmounted;
++  mAngleCommand = mUpAngle;
++
++  mTryMountPort = getInputPort(0)->toRealPortHandle();
++  if (!mTryMountPort.isConnected()) {
++    Log(Model, Error) << "Initialization of Launchbar model \"" << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  mLaunchCommandPort = getInputPort(1)->toRealPortHandle();
++  if (!mLaunchCommandPort.isConnected()) {
++    Log(Model, Error) << "Initialization of Launchbar model \"" << getName()
++                      << "\" failed: Input port \"" << getInputPortName(1)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  mEnvironment = getEnvironment();
++  if (!mEnvironment)
++    return false;
++  return ExternalForce::init();
++}
++
++void
++Launchbar::output(const TaskInfo& taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) << "Launchbar::output(): \"" << getName()
++                      << "\" computing ground plane below" << endl;
++    getGround(taskInfo.getTime());
++  }
++
++  // The launchbar angle
++  mAngle = computeCurrentLaunchbarAngle();
++
++  // Ok, apply the tension at the launchbar and have the holdback
++  if (mState != Mounted && mState != Launching) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // Query the catapult, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type catLen;
++  if (!computeCatFrame(taskInfo.getTime(), catLen)) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // The catapult direction vector
++  Vector3 catPos0 = mCatFrame->posToParent(Vector3::zeros());
++  Vector3 catDir = mCatFrame->rotToParent(Vector3::unit(1));
++
++  // The launchbar's tip position
++  Vector3 lbTip(cos(mAngle)*mLength, 0, -sin(mAngle)*mLength);
++  
++  // The tension applied over the launchbar
++  // allways pulls the aircraft back to the cat ...
++  // project the launchbar tip to the catpult line ...
++  Vector3 lbTipOnCat = catPos0 + dot(lbTip - catPos0, catDir)*catDir;
++  Vector6 force = Vector6::zeros();
++  if (mState == Mounted) {
++    force.setLinear(mLaunchForce/5*normalize(lbTipOnCat));
++  } else {
++    force.setLinear(mLaunchForce*normalize(lbTipOnCat));
++  }
++  
++  if (mState == Mounted) {
++    // the position of the holdback's deck mount
++    Vector3 hbDeckMount = mCatFrame->posToParent(mPosOnCat*Vector3::unit(1));
++
++    // ok, for now the holback is a stiff spring, will model that different
++    // when loop closure contranits are availble ...
++    Vector3 hbDir = mHoldBackMount - hbDeckMount;
++    real_type hbLen = norm(hbDir);
++    if (mHoldbackLength < hbLen) {
++      Vector3 hbForce = (2*mLaunchForce*(mHoldbackLength - hbLen)/hbLen)*hbDir;
++      force += forceFrom(mHoldBackMount, hbForce);
++    }
++
++    // Some damping force, just at the position the launchbar applies its force
++    force += mLaunchForce/2*mCatFrame->motionToParent(mCatFrame->getRelVel());
++  }
++  
++  setForce(force);
++}
++
++void
++Launchbar::update(const TaskInfo& taskInfo)
++{
++  real_type unlagedAngleCommand = mUpAngle;
++
++  // Query the catapult, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type catLen;
++  if (!computeCatFrame(taskInfo.getTime(), catLen)) {
++    mState = Unmounted;
++    unlagedAngleCommand = mUpAngle;
++  } else {
++    // Ok, here we know that the catapult frame contains some sensible values
++
++    // The catapult direction vector
++    Vector3 catPos0 = mCatFrame->posToParent(Vector3::zeros());
++    Vector3 catDir = mCatFrame->rotToParent(Vector3::unit(1));
++    
++    real_type angle = computeCurrentLaunchbarAngle();
++    // The launchbar's tip position
++    Vector3 lbTip(cos(angle)*mLength, 0, -sin(angle)*mLength);
++    
++    // Compute the distance from the launchbar tip to the catapult
++    real_type dist = norm(lbTip-catPos0-dot(catDir, lbTip - catPos0)*catDir);
++    
++    if (mState == Unmounted) {
++      bool tryMount = mTryMountPort.getRealValue();
++      if (tryMount) {
++        unlagedAngleCommand = mDownAngle;
++        
++        // can only mount if we are near enough
++        if (dist < 0.1) {
++          // Now compute a reference position on the catapult line which
++          // will be used as the reference for the holdback
++          
++          // compute the nearest point on the catapult line to the holdback
++          // mount
++          Vector3 hbNearest = catPos0
++            + dot(mHoldBackMount - catPos0, catDir)*catDir;
++          
++          // Find the distance backwards from that point matching
++          // the holdback length
++          real_type sqrCatx = mHoldbackLength*mHoldbackLength
++            - dot(hbNearest, hbNearest);
++          /// There is something wrong if the holdback mount is too far
++          if (0 <= sqrCatx) {
++            Vector3 hbDeckMount = hbNearest - sqrt(sqrCatx)*catDir;
++            
++            // The reference position
++            mPosOnCat = dot(catDir, hbDeckMount - catPos0);
++            //           if (mPosOnCat < 30)
++            
++            // Ok, survived, mounted now ...
++            mState = Mounted;
++          }
++        }
++      } else
++        unlagedAngleCommand = mUpAngle;
++      
++    } else if (mState == Mounted) {
++      if (mLaunchCommandPort.getRealValue())
++        mState = Launching;
++      
++      if (dist > 1)
++        mState = Unmounted;
++      
++      unlagedAngleCommand = mDownAngle;
++    } else {
++      // Launching
++      if (dist > 1)
++        mState = Unmounted;
++      
++      Vector3 catPos1 = mCatFrame->posToParent(catLen*Vector3::unit(1));
++      if (dot(catPos1, catDir) < 0)
++        mState = Unmounted;
++      
++      unlagedAngleCommand = mDownAngle;
++    }
++  }
++
++  real_type angleError = unlagedAngleCommand - mAngleCommand;
++  angleError = sign(angleError)*min(mAngularVelocity, 40*fabs(angleError));
++  /// FIXME: isPerTimestep sample times do not contain the step size ...
++  /// hardwire that ATM
++  mAngleCommand += 1/120.0*angleError;
++}
++
++void
++Launchbar::setDiscreteState(const StateStream& state)
++{
++  state.readSubState(mAngleCommand);
++}
++
++void
++Launchbar::getDiscreteState(StateStream& state) const
++{
++  state.writeSubState(mAngleCommand);
++}
++
++void
++Launchbar::getGround(real_type t)
++{
++  // FIXME
++  if (!mEnvironment) {
++    mEnvironment = getEnvironment();
++  }
++
++  // Get the position of the contact in the reference system.
++  Vector3 pos = mMountFrame->getRefPosition();
++  // Query for the ground parameters at this point.
++  mGroundVal = mEnvironment->getGround()->getGroundPlane(t, pos);
++}
++
++bool
++Launchbar::computeCatFrame(real_type t, real_type& catLen)
++{
++  Vector3 refPos = mMountFrame->getRefPosition();
++  CatapultValues catVals;
++  const Ground* ground = mEnvironment->getGround();
++  // Early return if no cat in range
++  if (!ground->getCatapultValues(t, refPos, catVals))
++    return false;
++
++  mCatFrame->setRefPosition(catVals.position);
++  mCatFrame->setRefOrientation(catVals.orientation);
++  Vector6 locVel(mCatFrame->rotFromRef(catVals.velocity.getAngular()),
++                 mCatFrame->rotFromRef(catVals.velocity.getLinear()));
++  mCatFrame->setRefVel(locVel);
++  catLen = catVals.length;
++
++  return true;
++}
++
++real_type
++Launchbar::computeCurrentLaunchbarAngle(void)
++{
++  // Transform the plane equation to the local frame.
++  Plane lp = mMountFrame->planeFromRef(mGroundVal.plane);
++  
++  // Get the distance to ground
++  // negative values are above ground
++  real_type distToGround = lp.getDist(Vector3::zeros());
++  // The angle between the local x-axis and the launchbar, positive upwards
++  real_type aCosAngle = distToGround/mLength;
++  if (aCosAngle < -1)
++    aCosAngle = -1;
++  if (1 < aCosAngle)
++    aCosAngle = 1;
++  /// FIXME: could be done different ????
++  real_type angle = - acos(aCosAngle) + pi05;
++  // limit to the range of movement
++  if (angle < mAngleCommand)
++    angle = mAngleCommand;
++  if (mUpAngle < angle)
++    angle = mUpAngle;
++
++  return angle;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-12 14:45:14 UTC (rev 243)
+@@ -0,0 +1,95 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Launchbar_H
++#define OpenFDM_Launchbar_H
++
++#include "Assert.h"
++#include "Object.h"
++#include "Vector.h"
++#include "Frame.h"
++#include "Force.h"
++#include "Ground.h"
++#include "Environment.h"
++
++namespace OpenFDM {
++
++class Launchbar : public ExternalForce {
++  OPENFDM_OBJECT(Launchbar, ExternalForce);
++public:
++  Launchbar(const std::string& name);
++  virtual ~Launchbar(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&);
++  virtual void update(const TaskInfo&);
++
++  virtual void setDiscreteState(const StateStream& state);
++  virtual void getDiscreteState(StateStream& state) const;
++
++  const real_type& getAngle(void) const
++  { return mAngle; }
++
++  const real_type& getLength(void) const
++  { return mLength; }
++  void setLength(const real_type& length)
++  { mLength = length; }
++
++  const real_type& getUpAngle(void) const
++  { return mUpAngle; }
++  void setUpAngle(const real_type& upAngle)
++  { mUpAngle = upAngle; }
++
++  const real_type& getDownAngle(void) const
++  { return mDownAngle; }
++  void setDownAngle(const real_type& downAngle)
++  { mDownAngle = downAngle; }
++
++  const real_type& getLaunchForce(void) const
++  { return mLaunchForce; }
++  void setLaunchForce(const real_type& launchForce)
++  { mLaunchForce = launchForce; }
++
++private:
++  void getGround(real_type t);
++  bool computeCatFrame(real_type t, real_type& catLen);
++  real_type computeCurrentLaunchbarAngle(void);
++
++  enum State {
++    Unmounted,
++    Mounted,
++    Launching
++  };
++
++  real_type mLength;
++  real_type mHoldbackLength;
++  // The mount point of the holdback at the strut
++  Vector3 mHoldBackMount;
++  real_type mUpAngle;
++  real_type mDownAngle;
++  real_type mAngularVelocity;
++  // The launch force
++  real_type mLaunchForce;
++
++  /// Continous output of the launchbar angle
++  real_type mAngle;
++  /// discrete state of the laged launchbar position following the command
++  real_type mAngleCommand;
++
++  real_type mPosOnCat;
++  State mState;
++
++  RealPortHandle mTryMountPort;
++  RealPortHandle mLaunchCommandPort;
++
++  /// The frame where the catapult values are put in
++  SharedPtr<FreeFrame> mCatFrame;
++
++  GroundValues mGroundVal;
++  SharedPtr<Environment> mEnvironment;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 14:45:14 UTC (rev 243)
+@@ -59,6 +59,7 @@
+   ImplicitEuler.h \
+   Inertia.h \
+   Joint.h \
++  Launchbar.h \
+   Limits.h \
+   LinAlg/Algorithm.h \
+   LinAlg/Array.h \
+@@ -163,6 +164,7 @@
+   Interact.cpp \
+   ImplicitEuler.cpp \
+   Joint.cpp \
++  Launchbar.cpp \
+   LinearSpringDamper.cpp \
+   Logger.cpp \
+   Mass.cpp \
+
+
+
+From frohlich at berlios.de  Sun Feb 12 15:53:52 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 12 Feb 2006 15:53:52 +0100
+Subject: [OpenFDM-svn] r244 - trunk/flightgear
+Message-ID: <200602121453.k1CErqQS009514@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-12 15:53:08 +0100 (Sun, 12 Feb 2006)
+New Revision: 244
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Make the launchbar available in flightgear.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-12 14:45:14 UTC (rev 243)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-12 14:53:08 UTC (rev 244)
+@@ -55,6 +55,41 @@
+     return GroundValues(p, v, ff);
+   }
+ 
++  virtual bool
++  getCatapultValues(real_type t, const Vector3& refPos,
++                    CatapultValues& catVal) const
++  {
++    if (!mIfce)
++      return Limits<real_type>::max();
++
++    double pt[3] = { refPos(1), refPos(2), refPos(3) };
++    double end[2][3];
++    double vel[2][3];
++    real_type dist = mIfce->get_cat_m(t, pt, end, vel);
++
++    Vector3 p0 = Vector3(end[0][0], end[0][1], end[0][2]);
++    Vector3 p1 = Vector3(end[1][0], end[1][1], end[1][2]);
++
++    catVal.position = p0;
++    catVal.orientation = Quaternion::fromRotateTo(p1 - p0, Vector3::unit(1));
++    /// FIXME: wrong ...
++    catVal.velocity = Vector6(Vector3::zeros(),
++                              Vector3(vel[0][0], vel[0][1], vel[0][2]));
++    catVal.length = norm(p1 - p0);
++
++    return dist < 5;
++  }
++
++//     // the FDM calls release_wire().
++//     bool caught_wire(double t, const double pt[4][3]);
++  
++//     // Return the location and speed of the wire endpoints.
++//     bool get_wire_ends(double t, double end[2][3], double vel[2][3]);
++
++//     // Tell the cache code that it does no longer need to care for
++//     // the wire end position.
++//     void release_wire(void);
++
+   void setInterface(FGInterface *ifce)
+   { mIfce = ifce; }
+   
+
+
+
+From frohlich at berlios.de  Sun Feb 12 16:37:58 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 12 Feb 2006 16:37:58 +0100
+Subject: [OpenFDM-svn] r245 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602121537.k1CFbwBK019824@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-12 16:37:37 +0100 (Sun, 12 Feb 2006)
+New Revision: 245
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Object.cpp
+   trunk/OpenFDM/src/OpenFDM/Object.h
+   trunk/OpenFDM/src/OpenFDM/Property.h
+Log:
+split out weak referenced and weak ptr class
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 15:37:37 UTC (rev 245)
+@@ -127,6 +127,8 @@
+   Variant.h \
+   Vector.h \
+   Vehicle.h \
++  WeakPtr.h \
++  WeakReferenced.h \
+   WheelContact.h \
+   Wind.h \
+   XMLDumpModelVisitor.h
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.cpp	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/Object.cpp	2006-02-12 15:37:37 UTC (rev 245)
+@@ -8,15 +8,13 @@
+ namespace OpenFDM {
+ 
+ Object::Object(const std::string& name) :
+-  mName(name),
+-  mWeakDataPtr(new WeakData(this))
++  mName(name)
+ {
+   addStoredProperty("name", Property(this, &Object::getName, &Object::setName));
+ }
+ 
+ Object::~Object(void)
+ {
+-  mWeakDataPtr->object = 0;
+ }
+ 
+ const char*
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.h	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/Object.h	2006-02-12 15:37:37 UTC (rev 245)
+@@ -7,17 +7,15 @@
+ 
+ #include <list>
+ #include <map>
+-#include "Referenced.h"
++#include <string>
++
++#include "SharedPtr.h"
++#include "WeakReferenced.h"
+ #include "Variant.h"
+ #include "Property.h"
+ 
+ namespace OpenFDM {
+ 
+-template<typename T>
+-class SharedPtr;
+-template<typename T>
+-class WeakPtr;
+-
+ /// Macros for the reflection stuff
+ #define OPENFDM_OBJECT(classname, baseclassname)                \
+ public: virtual const char* getTypeName(void) const
+@@ -33,7 +31,7 @@
+ 
+ 
+ /// The OpenFDM object base class.
+-class Object : public Referenced {
++class Object : public WeakReferenced {
+ public:
+   Object(const std::string& name = std::string());
+   virtual ~Object(void);
+@@ -87,85 +85,8 @@
+ 
+   /// Userdata ...
+   SharedPtr<Object> mUserData;
+-
+-  /// Support for weak references, not increasing the reference count
+-  /// that is done through that small helper class which holds an uncounted
+-  /// reference which is zeroed out on destruction of the current object
+-  struct WeakData : public Referenced {
+-    WeakData(Object* o) : object(o) {}
+-    Object* object;
+-  private:
+-    WeakData(void);
+-    WeakData(const WeakData&);
+-    WeakData& operator=(const WeakData&);
+-  };
+-  SharedPtr<WeakData> mWeakDataPtr;
+-
+-  template<typename T>
+-  friend class SharedPtr;
+-  template<typename T>
+-  friend class WeakPtr;
+ };
+ 
+-
+-/// FIXME: remove the direct accessors, only copy to a SharedPtr
+-/// where you can access then, may be similar to the std::tr2::weak_ptr::lock()
+-/// function. That is to avoid deletion of a currently used object
+-template<typename T>
+-class WeakPtr {
+-public:
+-  WeakPtr(void)
+-  {}
+-  WeakPtr(T* ptr)
+-  { assign(ptr); }
+-  WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
+-  { }
+-  template<typename U>
+-  WeakPtr(const SharedPtr<U>& p)
+-  { assign(p.ptr()); }
+-  ~WeakPtr(void)
+-  { }
+-  
+-  template<typename U>
+-  WeakPtr& operator=(const SharedPtr<U>& p)
+-  { assign(p.ptr()); return *this; }
+-  template<typename U>
+-  WeakPtr& operator=(U* p)
+-  { assign(p); return *this; }
+-  WeakPtr& operator=(const WeakPtr& p)
+-  { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+-
+-  T* operator->(void) const
+-  { return ptr(); }
+-
+-  T& operator*(void) const
+-  { return *ptr(); }
+-
+-  operator T*(void) const
+-  { return ptr(); }
+-
+-private:
+-  Object* objectPtr(void) const
+-  { return mWeakDataPtr ? mWeakDataPtr->object : 0; }
+-  T* ptr(void) const
+-  { return reinterpret_cast<T*>(objectPtr()); }
+-  void assign(T* p)
+-  {
+-    if (p)
+-      mWeakDataPtr = p->mWeakDataPtr;
+-    else
+-      mWeakDataPtr = 0;
+-  }
+-  
+-  // The indirect reference itself.
+-  SharedPtr<Object::WeakData> mWeakDataPtr;
+-
+-  template<typename U>
+-  friend class SharedPtr;
+-  template<typename U>
+-  friend class WeakPtr;
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Property.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Property.h	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/Property.h	2006-02-12 15:37:37 UTC (rev 245)
+@@ -7,6 +7,7 @@
+ 
+ #include "Assert.h"
+ #include "Referenced.h"
++#include "WeakPtr.h"
+ #include "Vector.h"
+ #include "Matrix.h"
+ #include "Quaternion.h"
+
+Added: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-12 15:37:37 UTC (rev 245)
+@@ -0,0 +1,68 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WeakPtr_H
++#define OpenFDM_WeakPtr_H
++
++#include "WeakReferenced.h"
++
++namespace OpenFDM {
++
++/// FIXME: remove the direct accessors, only copy to a SharedPtr
++/// where you can access then, may be similar to the std::tr2::weak_ptr::lock()
++/// function. That is to avoid deletion of a currently used object
++template<typename T>
++class WeakPtr {
++public:
++  WeakPtr(void)
++  {}
++  WeakPtr(T* ptr)
++  { assign(ptr); }
++  WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
++  { }
++  template<typename U>
++  WeakPtr(const SharedPtr<U>& p)
++  { assign(p.ptr()); }
++  ~WeakPtr(void)
++  { }
++  
++  template<typename U>
++  WeakPtr& operator=(const SharedPtr<U>& p)
++  { assign(p.ptr()); return *this; }
++  template<typename U>
++  WeakPtr& operator=(U* p)
++  { assign(p); return *this; }
++  WeakPtr& operator=(const WeakPtr& p)
++  { mWeakDataPtr = p.mWeakDataPtr; return *this; }
++
++  T* operator->(void) const
++  { return ptr(); }
++
++  T& operator*(void) const
++  { return *ptr(); }
++
++  operator T*(void) const
++  { return ptr(); }
++
++private:
++  T* ptr(void) const
++  { return reinterpret_cast<T*>(objectPtr()); }
++
++  WeakReferenced* objectPtr(void) const
++  { return mWeakDataPtr ? mWeakDataPtr->object : 0; }
++  void assign(T* p)
++  { mWeakDataPtr = p ? p->mWeakDataPtr : 0; }
++  
++  // The indirect reference itself.
++  SharedPtr<WeakReferenced::WeakData> mWeakDataPtr;
++
++  template<typename U>
++  friend class SharedPtr;
++  template<typename U>
++  friend class WeakPtr;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-12 14:53:08 UTC (rev 244)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-12 15:37:37 UTC (rev 245)
+@@ -0,0 +1,51 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WeakReferenced_H
++#define OpenFDM_WeakReferenced_H
++
++#include "Referenced.h"
++#include "SharedPtr.h"
++
++namespace OpenFDM {
++
++template<typename T>
++class WeakPtr;
++
++class WeakReferenced : public Referenced {
++public:
++  WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
++  {}
++  /// Do not copy the weak backward references ...
++  WeakReferenced(const WeakReferenced&) : mWeakDataPtr(new WeakData(this))
++  {}
++  ~WeakReferenced(void)
++  { mWeakDataPtr->object = 0; }
++
++  /// Do not copy the weak backward references ...
++  WeakReferenced& operator=(const WeakReferenced& wr)
++  { return *this; }
++
++private:
++  /// Support for weak references, not increasing the reference count
++  /// that is done through that small helper class which holds an uncounted
++  /// reference which is zeroed out on destruction of the current object
++  struct WeakData : public Referenced {
++    WeakData(WeakReferenced* o) : object(o) {}
++    WeakReferenced* object;
++  private:
++    WeakData(void);
++    WeakData(const WeakData&);
++    WeakData& operator=(const WeakData&);
++  };
++
++  SharedPtr<WeakData> mWeakDataPtr;
++
++  template<typename T>
++  friend class WeakPtr;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+
+From frohlich at berlios.de  Mon Feb 13 20:40:22 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Mon, 13 Feb 2006 20:40:22 +0100
+Subject: [OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602131940.k1DJeMnG010732@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-13 20:40:16 +0100 (Mon, 13 Feb 2006)
+New Revision: 246
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Fix a cast error
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -6,11 +6,10 @@
+ #define OpenFDM_EnvironmentObject_H
+ 
+ #include "Object.h"
++#include "Environment.h"
+ 
+ namespace OpenFDM {
+ 
+-class Environment;
+-
+ class EnvironmentObject :
+     public Object {
+ public:
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -10,8 +10,6 @@
+ namespace OpenFDM {
+ 
+ template<typename T>
+-class SharedPtr;
+-template<typename T>
+ class WeakPtr;
+ 
+ template<typename T>
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -36,6 +36,9 @@
+   WeakPtr& operator=(const WeakPtr& p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
++  SharedPtr<T> lock(void) const
++  { return SharedPtr<T>(ptr()); }
++
+   T* operator->(void) const
+   { return ptr(); }
+ 
+@@ -47,12 +50,22 @@
+ 
+ private:
+   T* ptr(void) const
+-  { return reinterpret_cast<T*>(objectPtr()); }
++  { return static_cast<T*>(objectPtr()); }
+ 
+   WeakReferenced* objectPtr(void) const
+-  { return mWeakDataPtr ? mWeakDataPtr->object : 0; }
++  {
++    if (mWeakDataPtr)
++      return mWeakDataPtr->object;
++    else
++      return 0;
++  }
+   void assign(T* p)
+-  { mWeakDataPtr = p ? p->mWeakDataPtr : 0; }
++  {
++    if (p)
++      mWeakDataPtr = p->mWeakDataPtr;
++    else
++      mWeakDataPtr = 0;
++  }
+   
+   // The indirect reference itself.
+   SharedPtr<WeakReferenced::WeakData> mWeakDataPtr;
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -24,7 +24,7 @@
+   { mWeakDataPtr->object = 0; }
+ 
+   /// Do not copy the weak backward references ...
+-  WeakReferenced& operator=(const WeakReferenced& wr)
++  WeakReferenced& operator=(const WeakReferenced&)
+   { return *this; }
+ 
+ private:
+
+
+
+From frohlich at berlios.de  Sun Feb 19 15:54:28 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 19 Feb 2006 15:54:28 +0100
+Subject: [OpenFDM-svn] r248 - trunk/flightgear
+Message-ID: <200602191454.k1JEsSRq020690@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-19 15:54:23 +0100 (Sun, 19 Feb 2006)
+New Revision: 248
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Reflect the chages in the interface
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-19 14:53:22 UTC (rev 247)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-19 14:54:23 UTC (rev 248)
+@@ -467,37 +467,39 @@
+ 
+   // The usual, whole object reflection so that one can take a look into
+   // OpenFDM's internal modules ...
+-  std::list<std::string> propertyList = object->listProperties();
+-  std::list<std::string>::const_iterator it = propertyList.begin();
+-  while (it != propertyList.end()) {
++  std::vector<PropertyInfo> props;
++  object->getPropertyInfoList(props);
++  std::vector<PropertyInfo>::iterator it = props.begin();
++  while (it != props.end()) {
+     // ... well, FIXME cleanup ...
+-    std::string pName = toPropname(*it);
++    std::string pName = toPropname(it->getName());
+     SGPropertyNode* sgProp = base->getChild(pName.c_str(), 0, true);
+-    Variant value = object->getPropertyValue(*it);
++    Variant value;
++    object->getPropertyValue(it->getName(), value);
+ 
+     if (value.isString())
+-      sgProp->tie(FGStringPropertyAdapter(object, *it));
++      sgProp->tie(FGStringPropertyAdapter(object, it->getName()));
+     else if (value.isReal())
+-      sgProp->tie(FGRealPropertyAdapter(object, *it));
++      sgProp->tie(FGRealPropertyAdapter(object, it->getName()));
+     else if (value.isInteger())
+-      sgProp->tie(FGIntegerPropertyAdapter(object, *it));
++      sgProp->tie(FGIntegerPropertyAdapter(object, it->getName()));
+     else if (value.isUnsigned())
+-      sgProp->tie(FGIntegerPropertyAdapter(object, *it));
++      sgProp->tie(FGIntegerPropertyAdapter(object, it->getName()));
+ 
+     else if (value.isMatrix()) {
+       Matrix m = value.toMatrix();
+       unsigned reshapeSize = rows(m) * cols(m);
+ 
+-      sgProp->tie(FGRealPropertyAdapter(object, *it));
++      sgProp->tie(FGRealPropertyAdapter(object, it->getName()));
+       for (unsigned i = 2; i <= reshapeSize; ++i) {
+         sgProp = base->getChild(pName.c_str(), i-1, true);
+-        sgProp->tie(FGRealPropertyAdapter(object, *it, i));
++        sgProp->tie(FGRealPropertyAdapter(object, it->getName(), i));
+       }
+     }
+     else if (value.isValid()) {
+       SG_LOG(SG_FLIGHT, SG_WARN,
+              "Found unexpected property type with property named \""
+-             << *it << "\"");
++             << it->getName() << "\"");
+     }
+     ++it;
+   }
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2006-02-19 14:53:22 UTC (rev 247)
++++ trunk/flightgear/FGPropertyAdapter.h	2006-02-19 14:54:23 UTC (rev 248)
+@@ -7,7 +7,6 @@
+ 
+ #include <string>
+ #include <simgear/props/props.hxx>
+-#include <OpenFDM/Property.h>
+ #include <OpenFDM/Model.h>
+ 
+ namespace OpenFDM {
+@@ -21,21 +20,18 @@
+   {}
+ 
+ protected:
+-  Variant getPropertyValue(void) const
++  bool getPropertyValue(Variant& value) const
+   {
+     if (!mObject)
+-      return Variant();
+-
+-    return mObject->getPropertyValue(mPropertyName);
++      return false;
++    return mObject->getPropertyValue(mPropertyName, value);
+   }
+   bool setPropertyValue(const Variant& value)
+   {
+     if (!mObject)
+       return false;
+ 
+-    // FIXME: check if settable ...
+-    mObject->setPropertyValue(mPropertyName, value);
+-    return true;
++    return mObject->setPropertyValue(mPropertyName, value);
+   }
+ 
+ private:
+@@ -57,7 +53,12 @@
+   { return setPropertyValue(Variant(std::string(value))); }
+   /// Implements the SimGear property interface.
+   virtual const char* getValue(void) const
+-  { mValue = getPropertyValue().toString(); return mValue.c_str(); }
++  {
++    Variant variantValue;
++    if (getPropertyValue(variantValue))
++      mValue = variantValue.toString();
++    return mValue.c_str();
++  }
+   
+   virtual FGStringPropertyAdapter* clone(void) const
+   { return new FGStringPropertyAdapter(*this); }
+@@ -79,7 +80,10 @@
+   /// Implements the SimGear property interface.
+   virtual bool setValue(double value)
+   {
+-    Matrix m = getPropertyValue().toMatrix();
++    Variant variantValue;
++    if (getPropertyValue(variantValue))
++      return false;
++    Matrix m = variantValue.toMatrix();
+     unsigned r = mIndex % rows(m) + 1;
+     unsigned c = mIndex / rows(m) + 1;
+     if (r < 1 || rows(m) < r)
+@@ -93,10 +97,16 @@
+   /// Implements the SimGear property interface.
+   virtual double getValue(void) const
+   {
+-    if (mIndex == 1)
+-      return getPropertyValue().toReal();
+-    else {
+-      Matrix m = getPropertyValue().toMatrix();
++    if (mIndex == 1) {
++      Variant variantValue;
++      if (!getPropertyValue(variantValue))
++        return 0;
++      return variantValue.toReal();
++    } else {
++      Variant variantValue;
++      if (!getPropertyValue(variantValue))
++        return 0;
++      Matrix m = variantValue.toMatrix();
+       unsigned r = mIndex % rows(m) + 1;
+       unsigned c = mIndex / rows(m) + 1;
+       if (r < 1 || rows(m) < r)
+@@ -126,7 +136,12 @@
+   { return setPropertyValue(Variant(value)); }
+   /// Implements the SimGear property interface.
+   virtual int getValue(void) const
+-  { return getPropertyValue().toInteger(); }
++  {
++    Variant variantValue;
++    if (!getPropertyValue(variantValue))
++      return 0;
++    return variantValue.toInteger();
++  }
+ 
+   virtual FGIntegerPropertyAdapter* clone(void) const
+   { return new FGIntegerPropertyAdapter(*this); }
+
+
+
+From frohlich at berlios.de  Sun Feb 19 16:47:38 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 19 Feb 2006 16:47:38 +0100
+Subject: [OpenFDM-svn] r249 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200602191547.k1JFlciW031247@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-19 16:47:35 +0100 (Sun, 19 Feb 2006)
+New Revision: 249
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/LogStream.h
+Log:
+Fix compilation with older gcc's
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/LogStream.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-02-19 14:54:23 UTC (rev 248)
++++ trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-02-19 15:47:35 UTC (rev 249)
+@@ -120,7 +120,7 @@
+   static Logger* Instance(void);
+ 
+ private:
+-  Logger(std::basic_ostream<char>* stream);
++  Logger(std::basic_ostream<char>* stream = 0);
+ 
+   std::basic_ostream<char>* mStream;
+   unsigned mCategory;
+
+
+
+From frohlich at berlios.de  Sun Feb 19 16:48:14 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 19 Feb 2006 16:48:14 +0100
+Subject: [OpenFDM-svn] r250 - trunk/OpenFDM
+Message-ID: <200602191548.k1JFmEst031397@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-19 16:48:11 +0100 (Sun, 19 Feb 2006)
+New Revision: 250
+
+Modified:
+   trunk/OpenFDM/autogen.sh
+   trunk/OpenFDM/configure.ac
+Log:
+Small configury updates
+
+
+Modified: trunk/OpenFDM/autogen.sh
+===================================================================
+--- trunk/OpenFDM/autogen.sh	2006-02-19 15:47:35 UTC (rev 249)
++++ trunk/OpenFDM/autogen.sh	2006-02-19 15:48:11 UTC (rev 250)
+@@ -1,4 +1,6 @@
+ rm -rf autom4te.cache
++rm -f src/OpenFDM/OpenFDMConfig.h.in src/OpenFDM/config.h.in
++touch src/OpenFDM/OpenFDMConfig.h.in src/OpenFDM/config.h.in
+ libtoolize
+ aclocal
+ autoconf
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-02-19 15:47:35 UTC (rev 249)
++++ trunk/OpenFDM/configure.ac	2006-02-19 15:48:11 UTC (rev 250)
+@@ -55,15 +55,16 @@
+   [AC_CHECK_LIB([expat],[XML_ExpatVersion],
+      [openfdm_expat_enabled="yes"])
+   ])
+-save_LIBS=$LIBS
+-LIBS=-lexpat
+-AC_CHECK_FUNC([XML_SetSkippedEntityHandler],
+-              AC_DEFINE([HAVE_XML_SETSKIPPEDENTITYHANDLER], [1],
+-                        [Define if expat provides XML_SetSkippedEntityHandler]))
+-LIBS=$save_LIBS
+ AM_CONDITIONAL([ENABLE_EXPAT], [test "x$openfdm_expat_enabled" = "xyes"])
+ if test "x$openfdm_expat_enabled" = "xyes"
+ then
++  save_LIBS=$LIBS
++  LIBS=-lexpat
++  AC_CHECK_FUNC([XML_SetSkippedEntityHandler],
++    AC_DEFINE([HAVE_XML_SETSKIPPEDENTITYHANDLER], [1],
++              [Define if expat provides XML_SetSkippedEntityHandler]))
++  LIBS=$save_LIBS
++
+   OpenFDM_HAVE_EXPAT_XMLREADER=1
+ else
+   OpenFDM_HAVE_EXPAT_XMLREADER=0
+
+
+
+From frohlich at berlios.de  Sun Feb 19 17:31:26 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sun, 19 Feb 2006 17:31:26 +0100
+Subject: [OpenFDM-svn] r251 - trunk/flightgear
+Message-ID: <200602191631.k1JGVQsq009836@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-19 17:31:24 +0100 (Sun, 19 Feb 2006)
+New Revision: 251
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Dont crash if an aircraft cannot be loaded
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-19 15:48:11 UTC (rev 250)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-19 16:31:24 UTC (rev 251)
+@@ -218,6 +218,9 @@
+ {
+   SG_LOG(SG_FLIGHT, SG_INFO, "FGOpenFDM::init()");
+ 
++  // FIXME: this is clearly wrong, but avoids ending in an endless init loop
++  set_inited(true);
++
+   std::string aircraftDir = fgGetString("/sim/aircraft-dir");
+   std::string engineDir = aircraftDir + "/Engines";
+   std::string aircraftFile = std::string(fgGetString("/sim/aero")) + ".xml";
+@@ -236,11 +239,19 @@
+     legReader.loadAircraft(aircraftFile);
+     if (legReader.getErrorState()) {
+       SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
+-      const ReaderWriter::StringList errors = legReader.getErrors();
++
++      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from JSBSim reader:");
++      ReaderWriter::StringList errors = reader.getErrors();
+       ReaderWriter::StringList::const_iterator it;
+       for (it = errors.begin(); it != errors.end(); ++it) {
+         SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+       }
++
++      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from legacy JSBSim reader:");
++      errors = legReader.getErrors();
++      for (it = errors.begin(); it != errors.end(); ++it) {
++        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++      }
+       return;
+     }
+     mData->vehicle = legReader.getVehicle();
+@@ -298,8 +309,6 @@
+   Rotation geodOr = vehicle->getGeodOrientation();
+   Vector3 euler = geodOr.getEuler();
+   _set_Euler_Angles(euler(1), euler(2), euler(3));
+-
+-  set_inited(true);
+ }
+ 
+ void FGOpenFDM::bind()
+@@ -308,10 +317,12 @@
+ 
+   FGInterface::bind();
+ 
+-  SGPropertyNode* sgProp = mAircraftRootNode->getChild("fdm", 0, true);
+-  sgProp = sgProp->getChild("vehicle", 0, true);
+-  sgProp = sgProp->getChild("system", 0, true);
+-  tieModelGroup(sgProp, mData->vehicle->getSystem());
++  if (mData->vehicle) {
++    SGPropertyNode* sgProp = mAircraftRootNode->getChild("fdm", 0, true);
++    sgProp = sgProp->getChild("vehicle", 0, true);
++    sgProp = sgProp->getChild("system", 0, true);
++    tieModelGroup(sgProp, mData->vehicle->getSystem());
++  }
+ }
+ 
+ void FGOpenFDM::unbind()
+@@ -332,7 +343,7 @@
+   // Get a local vehicle pointer
+   Vehicle* vehicle = mData->vehicle;
+   if (!vehicle) {
+-    SG_LOG(SG_FLIGHT, SG_ALERT,
++    SG_LOG(SG_FLIGHT, SG_WARN,
+            "FGOpenFDM::update(double) is called without an aircraft loaded!");
+     return;
+   }
+
+
+
+From frohlich at berlios.de  Mon Feb 27 12:46:14 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Mon, 27 Feb 2006 12:46:14 +0100
+Subject: [OpenFDM-svn] r252 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200602271146.k1RBkEda022387@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-27 12:45:47 +0100 (Mon, 27 Feb 2006)
+New Revision: 252
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+   trunk/OpenFDM/src/OpenFDM/Tailhook.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.h
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+Include a simple tailhook
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -36,6 +36,7 @@
+ #include <OpenFDM/SimpleGear.h>
+ #include <OpenFDM/Summer.h>
+ #include <OpenFDM/Table.h>
++#include <OpenFDM/Tailhook.h>
+ #include <OpenFDM/TimeDerivative.h>
+ #include <OpenFDM/UnaryFunctionModel.h>
+ #include <OpenFDM/Units.h>
+@@ -846,8 +847,37 @@
+         addOutputModel(port, "Gear " + numStr + " Position",
+                        "gear/gear[" + numStr + "]/position-norm");
+         
+-      } else if (type == "TAILHOOK") /*FIXME*/ {
+-      } else if (type == "LAUNCHBAR") {
++      } else if (type == "TAILHOOK") {
++        const XMLElement* tailhookElem = (*it);
++        std::string name = (*it)->getAttribute("name");
++
++        Tailhook* tailhook = new Tailhook(name + " Tailhook");
++        real_type length = realData(tailhookElem->getElement("length"), 0.5);
++        tailhook->setLength(length);
++        real_type upAngle = realData(tailhookElem->getElement("upAngle"), 10);
++        tailhook->setUpAngle(convertFrom(uDegree, upAngle));
++        real_type downAngle = realData(tailhookElem->getElement("downAngle"), -75);
++        tailhook->setDownAngle(convertFrom(uDegree, downAngle));
++        Vector3 loc = structToBody(locationData(tailhookElem->getElement("location")));
++        tailhook->setPosition(loc);
++        addMultiBodyModel(tailhook);
++        mVehicle->getTopBody()->addInteract(tailhook);
++        
++        Port* port = lookupJSBExpression("/controls/gear/tailhook");
++        tailhook->getInputPort(0)->connect(port);
++        
++        // expose the tailhook position
++        port = tailhook->getOutputPort(0);
++        std::string nameBase = "Tailhook Position";
++        addOutputModel(port, nameBase, "gear/tailhook/position-rad");
++        UnitConversionModel* unitModel
++          = new UnitConversionModel(nameBase + " converter",
++                                    UnitConversionModel::SiToUnit, uDegree);
++        unitModel->getInputPort(0)->connect(port);
++        addFCSModel(unitModel);
++        addOutputModel(unitModel->getOutputPort(0), nameBase + " Deg",
++                       "gear/tailhook/position-deg");
++
+       } else {
+         return error("Unknown groundreactions component of type " + type);
+       }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Ground.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -16,4 +16,28 @@
+ {
+ }
+ 
++bool
++Ground::getCatapultValues(real_type t, const Vector3& refPos,
++                          CatapultValues& catVal) const
++{
++  return false;
++}
++
++bool
++Ground::caughtWire(const HookPosition& old, const HookPosition& current) const
++{
++  return false;
++}
++
++bool
++Ground::getWireEnds(real_type t, WireValues& wireVal) const
++{
++  return false;
++}
++
++void
++Ground::releaseWire(void) const
++{
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -32,6 +32,27 @@
+   real_type length;
+ };
+ 
++struct HookPosition {
++  /// The time it is meant for
++  real_type t;
++  /// The hooks base position in reference frames coordinates
++  Vector3 basePosition;
++  /// The hooks direction and length in reference frames coordinates
++  /// That is basePosition + hookVector = hookTip
++  Vector3 hookVector;
++};
++
++struct WireValues {
++  /// The position of the wire midpoint in reference coordinates
++  Vector3 position;
++  /// The orientation of the wire frame
++  Quaternion orientation;
++  /// The spatial velocity of the wire frame
++  Vector6 velocity;
++  /// The wire mounts width, they are assumed to be mounted along the y axis
++  real_type width;
++};
++
+ /**
+  * The Ground class.
+  */
+@@ -55,8 +76,24 @@
+    */
+   virtual bool
+   getCatapultValues(real_type t, const Vector3& refPos,
+-                    CatapultValues& catVal) const
+-  { return false; }
++                    CatapultValues& catVal) const;
++
++  /** Returns true if we caught a wire while traversing the given rectangle
++      given in reference cordinates.
++   */
++  virtual bool
++  caughtWire(const HookPosition& old, const HookPosition& current) const;
++
++  /** Writes the motions values for the wires we have caught.
++      Returns false if the wires are lost somehow.
++   */
++  virtual bool
++  getWireEnds(real_type t, WireValues& wireVal) const;
++
++  /** Called if the wire values are no longer used.
++   */
++  virtual void
++  releaseWire(void) const;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -15,20 +15,22 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Launchbar, ExternalForce)
+   DEF_OPENFDM_PROPERTY(Real, Length, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, HoldbackLength, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, HoldbackMount, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, UpAngle, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, DownAngle, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, LaunchForce, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Launchbar::Launchbar(const std::string& name)
+-  : ExternalForce(name),
+-    mLength(0.6),
+-    mHoldbackLength(1.5),
+-    mHoldBackMount(0, 0, 0.1),
+-    mUpAngle(0.5),
+-    mDownAngle(-0.5),
+-    mAngularVelocity(1),
+-    mLaunchForce(0)
++Launchbar::Launchbar(const std::string& name) :
++  ExternalForce(name),
++  mLength(0.6),
++  mHoldbackLength(1.5),
++  mHoldbackMount(0, 0, 0.1),
++  mUpAngle(0.5),
++  mDownAngle(-0.5),
++  mAngularVelocity(1),
++  mLaunchForce(0)
+ {
+   mCatFrame = new FreeFrame("Catapult frame");
+   mMountFrame->addChildFrame(mCatFrame);
+@@ -130,11 +132,11 @@
+ 
+     // ok, for now the holback is a stiff spring, will model that different
+     // when loop closure contranits are availble ...
+-    Vector3 hbDir = mHoldBackMount - hbDeckMount;
++    Vector3 hbDir = mHoldbackMount - hbDeckMount;
+     real_type hbLen = norm(hbDir);
+     if (mHoldbackLength < hbLen) {
+       Vector3 hbForce = (2*mLaunchForce*(mHoldbackLength - hbLen)/hbLen)*hbDir;
+-      force += forceFrom(mHoldBackMount, hbForce);
++      force += forceFrom(mHoldbackMount, hbForce);
+     }
+ 
+     // Some damping force, just at the position the launchbar applies its force
+@@ -182,7 +184,7 @@
+           // compute the nearest point on the catapult line to the holdback
+           // mount
+           Vector3 hbNearest = catPos0
+-            + dot(mHoldBackMount - catPos0, catDir)*catDir;
++            + dot(mHoldbackMount - catPos0, catDir)*catDir;
+           
+           // Find the distance backwards from that point matching
+           // the holdback length
+@@ -282,18 +284,44 @@
+ {
+   // Transform the plane equation to the local frame.
+   Plane lp = mMountFrame->planeFromRef(mGroundVal.plane);
+-  
+-  // Get the distance to ground
+-  // negative values are above ground
+-  real_type distToGround = lp.getDist(Vector3::zeros());
+-  // The angle between the local x-axis and the launchbar, positive upwards
+-  real_type aCosAngle = distToGround/mLength;
+-  if (aCosAngle < -1)
+-    aCosAngle = -1;
+-  if (1 < aCosAngle)
+-    aCosAngle = 1;
+-  /// FIXME: could be done different ????
+-  real_type angle = - acos(aCosAngle) + pi05;
++
++  // Now compute the intersection of the circle where the tip can move
++  // with the ground plane. If there is no intersection movement is free
++
++  // The trick is to find a xz = (x, 0, z) with |xz| = r and dot(xz, n) + d = 0
++  // where n is the plane normal and d is the plane distance
++
++  Vector n = lp.getNormal();
++  real_type d = lp.getDist();
++
++  // we are paralell to the plane
++  if (fabs(n(3)) <= Limits<real_type>::min())
++    return mAngleCommand;
++
++  // that leads to a quadratic equation where we pick the solution pointing
++  // backwards:
++  real_type nx2nz2 = n(1)*n(1) + n(3)*n(3);
++
++  // we need to didive through that later, with exact operations it should
++  // be safe to not check that because of n(3) being bounded away from zero,
++  // but due to the square the value can underflow
++  if (fabs(nx2nz2) <= Limits<real_type>::min())
++    return mAngleCommand;
++
++  // the discriminant (rought german translation ...)
++  real_type discr = nx2nz2*mLength*mLength - d*d;
++  // Unconstraint angle position
++  if (discr <= 0)
++    return mAngleCommand;
++
++  // the x coorinate of the tip
++  real_type x = -(d*n(1) - fabs(n(3))*sqrt(discr))/nx2nz2;
++
++  // get the z coordinate of the tip from the plane equation
++  real_type z = -(d + x*n(1))/n(3);
++
++  // ok, now the angle ...
++  real_type angle = atan2(-z, x);
+   // limit to the range of movement
+   if (angle < mAngleCommand)
+     angle = mAngleCommand;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -36,6 +36,16 @@
+   void setLength(const real_type& length)
+   { mLength = length; }
+ 
++  const real_type& getHoldbackLength(void) const
++  { return mHoldbackLength; }
++  void setHoldbackLength(const real_type& length)
++  { mHoldbackLength = length; }
++
++  const Vector3& getHoldbackMount(void) const
++  { return mHoldbackMount; }
++  void setHoldbackMount(const Vector3& mount)
++  { mHoldbackMount = mount; }
++
+   const real_type& getUpAngle(void) const
+   { return mUpAngle; }
+   void setUpAngle(const real_type& upAngle)
+@@ -65,7 +75,7 @@
+   real_type mLength;
+   real_type mHoldbackLength;
+   // The mount point of the holdback at the strut
+-  Vector3 mHoldBackMount;
++  Vector3 mHoldbackMount;
+   real_type mUpAngle;
+   real_type mDownAngle;
+   real_type mAngularVelocity;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-27 11:45:47 UTC (rev 252)
+@@ -116,6 +116,7 @@
+   System.h \
+   Table.h \
+   TableData.h \
++  Tailhook.h \
+   Tank.h \
+   TaskInfo.h \
+   TimeDerivative.h \
+@@ -197,6 +198,7 @@
+   Summer.cpp \
+   System.cpp \
+   Table.cpp \
++  Tailhook.cpp \
+   Tank.cpp \
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-02-27 11:45:47 UTC (rev 252)
+@@ -1,33 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_Config_H
+-#define OpenFDM_Config_H
+-
+-#ifdef OpenFDM_ENABLE_DEBUG
+-#undef OpenFDM_ENABLE_DEBUG
+-#endif
+-#define OpenFDM_ENABLE_DEBUG @enable_debug@
+-
+-#ifdef OpenFDM_ENABLE_RANGE_CHECKING
+-#undef OpenFDM_ENABLE_RANGE_CHECKING
+-#endif
+-#define OpenFDM_ENABLE_RANGE_CHECKING @enable_range_checking@
+-
+-#ifdef OpenFDM_HAVE_EXPAT_XMLREADER
+-#undef OpenFDM_HAVE_EXPAT_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_EXPAT_XMLREADER @OpenFDM_HAVE_EXPAT_XMLREADER@
+-
+-#ifdef OpenFDM_HAVE_EASYXML_XMLREADER
+-#undef OpenFDM_HAVE_EASYXML_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_EASYXML_XMLREADER @OpenFDM_HAVE_EASYXML_XMLREADER@
+-
+-#ifdef OpenFDM_HAVE_LIBXML2_XMLREADER
+-#undef OpenFDM_HAVE_LIBXML2_XMLREADER
+-#endif
+-#define OpenFDM_HAVE_LIBXML2_XMLREADER @OpenFDM_HAVE_LIBXML2_XMLREADER@
+-
+-#endif
+
+Added: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-02-27 11:45:47 UTC (rev 252)
+@@ -0,0 +1,278 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include "Assert.h"
++#include "LogStream.h"
++#include "Object.h"
++#include "Vector.h"
++#include "Frame.h"
++#include "Force.h"
++#include "Environment.h"
++#include "Tailhook.h"
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Tailhook, ExternalForce)
++  DEF_OPENFDM_PROPERTY(Real, Length, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, UpAngle, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, DownAngle, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++Tailhook::Tailhook(const std::string& name) :
++  ExternalForce(name),
++  mLength(0.6),
++  mUpAngle(0.5),
++  mDownAngle(-0.5),
++  mAngularVelocity(1)
++{
++  mWireFrame = new FreeFrame("Wire frame");
++  mMountFrame->addChildFrame(mWireFrame);
++
++  setNumDiscreteStates(1);
++
++  // FIXME??
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++
++  setNumInputPorts(1);
++  setInputPortName(0, "hookPosition");
++
++  setNumOutputPorts(1);
++  setOutputPort(0, "angle", this, &Tailhook::getAngle);
++}
++
++Tailhook::~Tailhook(void)
++{
++}
++
++bool
++Tailhook::init(void)
++{
++  mHasWire = false;
++  mFirstTime = true;
++  mAngleCommand = mUpAngle;
++
++  mHookPositionPort = getInputPort(0)->toRealPortHandle();
++  if (!mHookPositionPort.isConnected()) {
++    Log(Model, Error) << "Initialization of Tailhook model \"" << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  mEnvironment = getEnvironment();
++  if (!mEnvironment)
++    return false;
++  return ExternalForce::init();
++}
++
++void
++Tailhook::output(const TaskInfo& taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) << "Tailhook::output(): \"" << getName()
++                      << "\" computing ground plane below" << endl;
++    getGround(taskInfo.getTime());
++  }
++
++  // The tailhook angle corrected for no ground intersection
++  mAngle = computeCurrentTailhookAngle();
++
++  if (!mHasWire || mFirstTime) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // Query the wire, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type width;
++  if (!computeWireFrame(taskInfo.getTime(), width)) {
++    Log(Model,Error) << "1" << endl;
++    mHasWire = false;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // The wire endpoints
++  Vector3 wireEnd0 = mWireFrame->posToParent(width*0.5*Vector3::unit(2));
++  Vector3 wireEnd1 = mWireFrame->posToParent(-width*0.5*Vector3::unit(2));
++
++//   Log(Model,Error) << trans(wireEnd0) << trans(wireEnd1) << endl;
++
++  // The intersection of the x/z plane with the line between the wire ends
++  Vector3 wireDir = wireEnd1 - wireEnd0;
++  Vector3 hookWireInters = (1/width*wireDir(2))*wireDir + wireEnd0;
++  // Ok, the hook intersects the wire but the aircraft is sufficiently
++  // far that the hook tip has reached the wire
++  if (norm(hookWireInters) < mLength) {
++    Log(Model,Error) << "2" << endl;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // from the hooks mount together with the wire endpoints we get a plane
++  // The plane normal is:
++  Vector3 normal = normalize(cross(wireEnd0, wireEnd1));
++  // make the normal point downwards
++
++  // now determine the hooks pos position as it lies axactly in this plane
++  mAngle = atan(-normal(1)/normal(3));
++
++  // now the relative velocities
++  Vector3 linVel = cross(mWireFrame->getRelVel().getAngular(), Vector3::unit(2));
++  Vector6 relVel0 = mWireFrame->motionToParent(mWireFrame->getRelVel() + Vector6(Vector3::zeros(), width*0.5*linVel));
++  Vector6 relVel1 = mWireFrame->motionToParent(mWireFrame->getRelVel() - Vector6(Vector3::zeros(), width*0.5*linVel));
++
++//   Vector3 tipPos(-mLength*cos(mAngle), 0, -mLength*sin(mAngle));
++
++  Vector3 wireDir0 = normalize(wireEnd0);
++  Vector3 wireDir1 = normalize(wireEnd1);
++
++  real_type vel0 = dot(relVel0.getLinear(), wireDir0);
++  real_type vel1 = dot(relVel0.getLinear(), wireDir1);
++
++// Log(Model,Error) << vel0 << "  " << vel1 << endl;
++  
++  real_type v = 0.5*(vel0 + vel1);
++  if (v < 0.1) {
++    mHasWire = false;
++    Log(Model,Error) << "3" << endl;
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  setForce(Vector6(Vector3::zeros(), (5e4 + v*5e3)*(wireDir0 + wireDir1)));
++}
++
++void
++Tailhook::update(const TaskInfo& taskInfo)
++{
++  /// The current hook tip's position
++  Vector3 tipPos(-cos(mAngle)*mLength, 0, -sin(mAngle)*mLength);
++
++  /// The current hooks position and time
++  HookPosition currentPosition;
++  currentPosition.t = taskInfo.getTime();
++  currentPosition.basePosition = mMountFrame->getRefPosition();
++  currentPosition.hookVector = mMountFrame->rotToRef(tipPos);
++
++  if (!mFirstTime && !mHasWire) {
++    const Ground* ground = mEnvironment->getGround();
++    mHasWire = ground->caughtWire(mOldHookPosition, currentPosition);
++    if (mHasWire)
++      Log(Model,Error) << "Caught wire!" << endl;
++  }
++  mOldHookPosition = currentPosition;
++  mFirstTime = false;
++
++  real_type hookCommand = mHookPositionPort.getRealValue();
++  hookCommand = hookCommand*mDownAngle + (1-hookCommand)*mUpAngle;
++  real_type angleError = hookCommand - mAngleCommand;
++  angleError = sign(angleError)*min(mAngularVelocity, 40*fabs(angleError));
++  /// FIXME: isPerTimestep sample times do not contain the step size ...
++  /// hardwire that ATM
++  mAngleCommand += 1/120.0*angleError;
++}
++
++void
++Tailhook::setDiscreteState(const StateStream& state)
++{
++  state.readSubState(mAngleCommand);
++}
++
++void
++Tailhook::getDiscreteState(StateStream& state) const
++{
++  state.writeSubState(mAngleCommand);
++}
++
++void
++Tailhook::getGround(real_type t)
++{
++  // FIXME
++  if (!mEnvironment) {
++    mEnvironment = getEnvironment();
++  }
++
++  // Get the position of the contact in the reference system.
++  Vector3 pos = mMountFrame->getRefPosition();
++  // Query for the ground parameters at this point.
++  mGroundVal = mEnvironment->getGround()->getGroundPlane(t, pos);
++}
++
++bool
++Tailhook::computeWireFrame(real_type t, real_type& width)
++{
++  WireValues wireVals;
++  const Ground* ground = mEnvironment->getGround();
++  // Early return if no cat in range
++  if (!ground->getWireEnds(t, wireVals)) {
++    mHasWire = false;
++    return false;
++  }
++
++  mWireFrame->setRefPosition(wireVals.position);
++  mWireFrame->setRefOrientation(wireVals.orientation);
++  Vector6 locVel(mWireFrame->rotFromRef(wireVals.velocity.getAngular()),
++                 mWireFrame->rotFromRef(wireVals.velocity.getLinear()));
++  mWireFrame->setRefVel(locVel);
++  width = wireVals.width;
++
++  return true;
++}
++
++real_type
++Tailhook::computeCurrentTailhookAngle(void)
++{
++  // Transform the plane equation to the local frame.
++  Plane lp = mMountFrame->planeFromRef(mGroundVal.plane);
++
++  // Now compute the intersection of the circle where the tip can move
++  // with the ground plane. If there is no intersection movement is free
++
++  // The trick is to find a xz = (x, 0, z) with |xz| = r and dot(xz, n) + d = 0
++  // where n is the plane normal and d is the plane distance
++
++  Vector n = lp.getNormal();
++  real_type d = lp.getDist();
++
++  // we are paralell to the plane
++  if (fabs(n(3)) <= Limits<real_type>::min())
++    return mAngleCommand;
++
++  // that leads to a quadratic equation where we pick the solution pointing
++  // backwards:
++  real_type nx2nz2 = n(1)*n(1) + n(3)*n(3);
++
++  // we need to didive through that later, with exact operations it should
++  // be safe to not check that because of n(3) being bounded away from zero,
++  // but due to the square the value can underflow
++  if (fabs(nx2nz2) <= Limits<real_type>::min())
++    return mAngleCommand;
++
++  // the discriminant (rought german translation ...)
++  real_type discr = nx2nz2*mLength*mLength - d*d;
++  // Unconstraint angle position
++  if (discr <= 0)
++    return mAngleCommand;
++
++  // the x coorinate of the tip
++  real_type x = -(d*n(1) + fabs(n(3))*sqrt(discr))/nx2nz2;
++
++  // get the z coordinate of the tip from the plane equation
++  real_type z = -(d + x*n(1))/n(3);
++
++  // ok, now the angle ...
++  real_type angle = atan2(-z, -x);
++  // limit to the range of movement
++  if (angle < mAngleCommand)
++    angle = mAngleCommand;
++  if (mUpAngle < angle)
++    angle = mUpAngle;
++
++  return angle;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-02-19 16:31:24 UTC (rev 251)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-02-27 11:45:47 UTC (rev 252)
+@@ -0,0 +1,82 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Tailhook_H
++#define OpenFDM_Tailhook_H
++
++#include "Assert.h"
++#include "Object.h"
++#include "Vector.h"
++#include "Frame.h"
++#include "Force.h"
++#include "Ground.h"
++#include "Environment.h"
++
++namespace OpenFDM {
++
++class Tailhook : public ExternalForce {
++  OPENFDM_OBJECT(Tailhook, ExternalForce);
++public:
++  Tailhook(const std::string& name);
++  virtual ~Tailhook(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&);
++  virtual void update(const TaskInfo&);
++
++  virtual void setDiscreteState(const StateStream& state);
++  virtual void getDiscreteState(StateStream& state) const;
++
++  const real_type& getAngle(void) const
++  { return mAngle; }
++
++  const real_type& getLength(void) const
++  { return mLength; }
++  void setLength(const real_type& length)
++  { mLength = length; }
++
++  const real_type& getUpAngle(void) const
++  { return mUpAngle; }
++  void setUpAngle(const real_type& upAngle)
++  { mUpAngle = upAngle; }
++
++  const real_type& getDownAngle(void) const
++  { return mDownAngle; }
++  void setDownAngle(const real_type& downAngle)
++  { mDownAngle = downAngle; }
++
++private:
++  void getGround(real_type t);
++  bool computeWireFrame(real_type t, real_type& width);
++  real_type computeCurrentTailhookAngle(void);
++
++  real_type mLength;
++  real_type mUpAngle;
++  real_type mDownAngle;
++  real_type mAngularVelocity;
++
++  bool mHasWire;
++  bool mFirstTime;
++
++  /// Continous output of the launchbar angle
++  real_type mAngle;
++  /// discrete state of the laged tailhook position following the command
++  /// the hooks position is immediately corrected for no ground intersection
++  real_type mAngleCommand;
++
++  /// The hooks position at the prevous step
++  HookPosition mOldHookPosition;
++
++  RealPortHandle mHookPositionPort;
++
++  /// The frame where the catapult values are put in
++  SharedPtr<FreeFrame> mWireFrame;
++
++  GroundValues mGroundVal;
++  SharedPtr<Environment> mEnvironment;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+
+From frohlich at berlios.de  Mon Feb 27 13:19:44 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Mon, 27 Feb 2006 13:19:44 +0100
+Subject: [OpenFDM-svn] r253 - trunk/OpenFDM
+Message-ID: <200602271219.k1RCJiFK012340@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-02-27 13:19:39 +0100 (Mon, 27 Feb 2006)
+New Revision: 253
+
+Modified:
+   trunk/OpenFDM/configure.ac
+Log:
+Avoid compilation problems if no prefix given
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-02-27 11:45:47 UTC (rev 252)
++++ trunk/OpenFDM/configure.ac	2006-02-27 12:19:39 UTC (rev 253)
+@@ -5,8 +5,11 @@
+ 
+ AC_CONFIG_SRCDIR([src/OpenFDM/Object.h])
+ 
+-CPPFLAGS="$CPPFLAGS -I$prefix/include"
+-LDFLAGS="$LDFLAGS -L$prefix/lib"
++dnl try to append the prefix path to the include and library paths if present
++if test "x$prefix" != "xNONE" ; then
++  CPPFLAGS="$CPPFLAGS -I$prefix/include"
++  LDFLAGS="$LDFLAGS -L$prefix/lib"
++fi
+ 
+ AC_CANONICAL_HOST
+ 
+
+
+

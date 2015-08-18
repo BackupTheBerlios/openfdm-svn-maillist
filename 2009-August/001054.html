@@ -1,0 +1,270 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1096%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200908141946.n7EJk99Y026034%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001053.html">
+   <LINK REL="Next"  HREF="001055.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1096%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200908141946.n7EJk99Y026034%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 14 21:46:09 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001053.html">[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001055.html">[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1054">[ date ]</a>
+              <a href="thread.html#1054">[ thread ]</a>
+              <a href="subject.html#1054">[ subject ]</a>
+              <a href="author.html#1054">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-14 21:46:08 +0200 (Fri, 14 Aug 2009)
+New Revision: 1096
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h
+Log:
+Add climb speed sensing.
+
+M    src/JSBSim/JSBSimAerodynamic.cpp
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimAerodynamic.h
+M    src/OpenFDM/ExternalInteract.h
+M    src/OpenFDM/ExternalInteract.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.cpp	2009-08-13 20:46:12 UTC (rev 1095)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.cpp	2009-08-14 19:46:08 UTC (rev 1096)
+@@ -162,6 +162,13 @@
+   mGroup-&gt;connect(mExternalInteract-&gt;getPort(&quot;groundSpeed&quot;),
+                   mGroundSpeedOutputModel-&gt;getPort(&quot;input&quot;));
+ 
++  mClimbSpeedOutputModel = new GroupOutput(&quot;Climb Speed Output&quot;);
++  mGroup-&gt;addChild(mClimbSpeedOutputModel);
++  mClimbSpeedOutputModel-&gt;setExternalPortName(&quot;climbSpeed&quot;);
++  mExternalInteract-&gt;setEnableClimbSpeed(true);
++  mGroup-&gt;connect(mExternalInteract-&gt;getPort(&quot;climbSpeed&quot;),
++                  mClimbSpeedOutputModel-&gt;getPort(&quot;input&quot;));
++
+   mCalibratedAirSpeedOutputModel = new GroupOutput(&quot;Calibrated Air Speed Output&quot;);
+   mGroup-&gt;addChild(mCalibratedAirSpeedOutputModel);
+   mCalibratedAirSpeedOutputModel-&gt;setExternalPortName(&quot;calibratedAirSpeed&quot;);
+@@ -484,6 +491,12 @@
+ }
+ 
+ const Port*
++JSBSimAerodynamic::getClimbSpeedPort(void)
++{
++  return mGroup-&gt;getPort(mClimbSpeedOutputModel-&gt;getExternalPortIndex());
++}
++
++const Port*
+ JSBSimAerodynamic::getCalibratedAirSpeedPort(void)
+ {
+   return mGroup-&gt;getPort(mCalibratedAirSpeedOutputModel-&gt;getExternalPortIndex());
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.h	2009-08-13 20:46:12 UTC (rev 1095)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerodynamic.h	2009-08-14 19:46:08 UTC (rev 1096)
+@@ -53,6 +53,7 @@
+   const Port* getBetaDotPort(void);
+   const Port* getTrueAirSpeedPort(void);
+   const Port* getGroundSpeedPort(void);
++  const Port* getClimbSpeedPort(void);
+   const Port* getCalibratedAirSpeedPort(void);
+   const Port* getEquivalentAirSpeedPort(void);
+   const Port* getMachPort(void);
+@@ -120,6 +121,7 @@
+   SharedPtr&lt;GroupOutput&gt; mBetaDotOutputModel;
+   SharedPtr&lt;GroupOutput&gt; mTrueAirSpeedOutputModel;
+   SharedPtr&lt;GroupOutput&gt; mGroundSpeedOutputModel;
++  SharedPtr&lt;GroupOutput&gt; mClimbSpeedOutputModel;
+   SharedPtr&lt;GroupOutput&gt; mCalibratedAirSpeedOutputModel;
+   SharedPtr&lt;GroupOutput&gt; mEquivalentAirSpeedOutputModel;
+   SharedPtr&lt;GroupOutput&gt; mMachOutputModel;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-13 20:46:12 UTC (rev 1095)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-14 19:46:08 UTC (rev 1096)
+@@ -348,6 +348,10 @@
+     registerExpression(propName, mAeroForce-&gt;getGroundSpeedPort());
+     return true;
+ 
++  } else if (propName == &quot;fdm/jsbsim/velocities/hdot-mps&quot;) {
++    registerExpression(propName, mAeroForce-&gt;getClimbSpeedPort());
++    return true;
++
+   } else if (propName == &quot;fdm/jsbsim/velocities/mach-norm&quot; ||
+              propName == &quot;fdm/jsbsim/velocities/mach&quot;) {
+     registerExpression(propName, mAeroForce-&gt;getMachPort());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-08-13 20:46:12 UTC (rev 1095)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-08-14 19:46:08 UTC (rev 1096)
+@@ -25,6 +25,7 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnableLinearWindVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableAngularWindVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableGroundSpeed, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableClimbSpeed, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableTemperature, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableStaticPressure, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableDensity, Serialized)
+@@ -53,6 +54,7 @@
+     mLinearWindVelocity(portValueList.getPortValue(externalInteract-&gt;mLinearWindVelocityPort)),
+     mAngularWindVelocity(portValueList.getPortValue(externalInteract-&gt;mAngularWindVelocityPort)),
+     mGroundSpeed(portValueList.getPortValue(externalInteract-&gt;mGroundSpeedPort)),
++    mClimbSpeed(portValueList.getPortValue(externalInteract-&gt;mClimbSpeedPort)),
+     mTemperature(portValueList.getPortValue(externalInteract-&gt;mTemperaturePort)),
+     mStaticPressure(portValueList.getPortValue(externalInteract-&gt;mStaticPressurePort)),
+     mDensity(portValueList.getPortValue(externalInteract-&gt;mDensityPort)),
+@@ -125,9 +127,10 @@
+     bool enableLinearWindVelocity = mLinearWindVelocity.isConnected();
+     bool enableAngularWindVelocity = mAngularWindVelocity.isConnected();
+     bool enableGroundSpeed = mGroundSpeed.isConnected();
++    bool enableClimbSpeed = mClimbSpeed.isConnected();
+     if (enableLinearVelocity || enableAngularVelocity
+         || enableLinearWindVelocity || enableAngularWindVelocity
+-        || enableGroundSpeed) {
++        || enableGroundSpeed || enableClimbSpeed) {
+       Vector6 refVelocity = getLink().getVelocity(mCoordinateSystem);
+       if (enableLinearVelocity)
+         mLinearVelocity = refVelocity.getLinear();
+@@ -146,12 +149,16 @@
+           mAngularWindVelocity = wind.getAngular();
+       }
+ 
+-      if (enableGroundSpeed) {
++      if (enableGroundSpeed || enableClimbSpeed) {
++        Vector3 linVel = mCoordinateSystem.rotToReference(refVelocity.getLinear());
+         Plane plane = getEnvironment().getHorizontalLocalPlane(mCoordinateSystem.getPosition());
+-        mGroundSpeed = norm(plane.projectToPlane(refVelocity.getLinear()));
++        if (enableGroundSpeed)
++          mGroundSpeed = norm(plane.projectToPlane(linVel));
++        if (enableClimbSpeed)
++          mClimbSpeed = -dot(plane.getNormal(), linVel);
+       }
+     }
+-    
++
+     // Atmosphere related sensing
+     bool enableAltitude = mAltitude.isConnected();
+     
+@@ -245,6 +252,7 @@
+   MatrixOutputPortHandle mAngularWindVelocity;
+ 
+   RealOutputPortHandle mGroundSpeed;
++  RealOutputPortHandle mClimbSpeed;
+ 
+   RealOutputPortHandle mTemperature;
+   RealOutputPortHandle mStaticPressure;
+@@ -487,7 +495,24 @@
+   return !mGroundSpeedPort.empty();
+ }
+ 
++void
++ExternalInteract::setEnableClimbSpeed(bool enable)
++{
++  if (enable == getEnableClimbSpeed())
++    return;
++  if (enable)
++    mClimbSpeedPort = RealOutputPort(this, &quot;climbSpeed&quot;);
++  else
++    mClimbSpeedPort.clear();
++}
+ 
++bool
++ExternalInteract::getEnableClimbSpeed() const
++{
++  return !mClimbSpeedPort.empty();
++}
++
++
+ void
+ ExternalInteract::setEnableTemperature(bool enable)
+ {
+@@ -655,6 +680,7 @@
+   setEnableLoad(enable);
+   setEnableAngularAcceleration(enable);
+   setEnableGroundSpeed(enable);
++  setEnableClimbSpeed(enable);
+   setEnableTemperature(enable);
+   setEnableStaticPressure(enable);
+   setEnableDensity(enable);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h	2009-08-13 20:46:12 UTC (rev 1095)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.h	2009-08-14 19:46:08 UTC (rev 1096)
+@@ -97,7 +97,12 @@
+   /// Get availabilty of the ground speed output port
+   bool getEnableGroundSpeed() const;
+ 
++  /// Set availabilty of the climb speed output port
++  void setEnableClimbSpeed(bool enable);
++  /// Get availabilty of the climb speed output port
++  bool getEnableClimbSpeed() const;
+ 
++
+   /// Set availabilty of the temperature output port
+   void setEnableTemperature(bool enable);
+   /// Get availabilty of the temperature output port
+@@ -176,6 +181,7 @@
+   MatrixOutputPort mAngularWindVelocityPort;
+ 
+   RealOutputPort mGroundSpeedPort;
++  RealOutputPort mClimbSpeedPort;
+ 
+   RealOutputPort mTemperaturePort;
+   RealOutputPort mStaticPressurePort;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001053.html">[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001055.html">[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1054">[ date ]</a>
+              <a href="thread.html#1054">[ thread ]</a>
+              <a href="subject.html#1054">[ subject ]</a>
+              <a href="author.html#1054">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

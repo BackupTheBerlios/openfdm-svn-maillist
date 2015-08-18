@@ -1,0 +1,550 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r158 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r158%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021507.k02F7IPn026031%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000141.html">
+   <LINK REL="Next"  HREF="000143.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r158 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r158%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021507.k02F7IPn026031%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r158 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan  2 16:07:18 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000141.html">[OpenFDM-svn] r157 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000143.html">[OpenFDM-svn] r159 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#142">[ date ]</a>
+              <a href="thread.html#142">[ thread ]</a>
+              <a href="subject.html#142">[ subject ]</a>
+              <a href="author.html#142">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-02 16:07:11 +0100 (Mon, 02 Jan 2006)
+New Revision: 158
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+   trunk/OpenFDM/src/OpenFDM/Port.cpp
+   trunk/OpenFDM/src/OpenFDM/Port.h
+   trunk/OpenFDM/src/OpenFDM/Table.h
+Log:
+Seperate table index lookups from index interpolations.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-01-02 15:07:11 UTC (rev 158)
+@@ -21,7 +21,7 @@
+ {
+   // Such a component is a simple table lookup
+   //
+-  // -|InputSaturation|-|TableLookup|-
++  // -|InputSaturation|-|TablePreLookup|-|Table1D|-
+   //
+ 
+   Saturation* inputSaturation = new Saturation(&quot;Input Saturation&quot;);
+@@ -32,12 +32,16 @@
+   tmp(1, 1) = 1;
+   inputSaturation-&gt;setMaxSaturation(tmp);
+ 
+-  mTable = new Table1D(&quot;Table&quot;);
++  TablePreLookup* tablePreLookup = new TablePreLookup(&quot;Table Lookup&quot;);
+   TableLookup tl;
+   tl.setAtIndex(1, -1);
+   tl.setAtIndex(2, 0);
+   tl.setAtIndex(3, 1);
+-  mTable-&gt;setTableLookup(tl);
++  tablePreLookup-&gt;setTableLookup(tl);
++  tablePreLookup-&gt;getInputPort(0)-&gt;connect(inputSaturation-&gt;getOutputPort(0));
++  getModelGroup()-&gt;addModel(tablePreLookup);
++
++  mTable = new Table1D(&quot;Table&quot;);
+   TableData&lt;1&gt;::SizeVector sv;
+   sv(1) = 3;
+   TableData&lt;1&gt; tableData(sv);
+@@ -49,7 +53,7 @@
+   iv(1) = 3;
+   tableData(iv) = 1;
+   mTable-&gt;setTableData(tableData);
+-  mTable-&gt;getInputPort(0)-&gt;connect(inputSaturation-&gt;getOutputPort(0));
++  mTable-&gt;getInputPort(0)-&gt;connect(tablePreLookup-&gt;getOutputPort(0));
+   getModelGroup()-&gt;addModel(mTable);
+ 
+   // Now connect the input and the output to this groups in and outputs
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp	2006-01-02 15:07:11 UTC (rev 158)
+@@ -15,21 +15,25 @@
+ {
+   // Such a component is a simple product and a table lookup
+   //
+-  // -----------|
+-  // --|Table|-|Product|-
++  // -------------------------------|
++  // --|TablePreLookup|-|Table|-|Product|-
+   //
+ 
+   Product* product = new Product(&quot;Product&quot;);
+   getModelGroup()-&gt;addModel(product);
+ 
++  mTablePreLookup = new TablePreLookup(&quot;Table Lookup&quot;);
++  getModelGroup()-&gt;addModel(mTablePreLookup);
++
+   mTable = new Table1D(&quot;Table&quot;);
+   getModelGroup()-&gt;addModel(mTable);
+   product-&gt;getInputPort(0)-&gt;connect(mTable-&gt;getOutputPort(0));
++  mTable-&gt;getInputPort(0)-&gt;connect(mTablePreLookup-&gt;getOutputPort(0));
+ 
+   // Now connect the input and the output to this groups in and outputs
+   getModelGroup()-&gt;setNumInputPorts(2);
+   getModelGroup()-&gt;getInputPort(1)-&gt;setName(&quot;Schedule Input&quot;);
+-  mTable-&gt;getInputPort(0)-&gt;connect(getModelGroup()-&gt;getInputPort(1));
++  mTablePreLookup-&gt;getInputPort(0)-&gt;connect(getModelGroup()-&gt;getInputPort(1));
+ 
+   getModelGroup()-&gt;getInputPort(0)-&gt;setName(&quot;Input&quot;);
+   product-&gt;getInputPort(1)-&gt;connect(getModelGroup()-&gt;getInputPort(0));
+@@ -47,7 +51,7 @@
+                                   const TableLookup&amp; lookup)
+ {
+   mTable-&gt;setTableData(tableData);
+-  mTable-&gt;setTableLookup(lookup);
++  mTablePreLookup-&gt;setTableLookup(lookup);
+ }
+ 
+ } //namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h	2006-01-02 15:07:11 UTC (rev 158)
+@@ -25,6 +25,7 @@
+   void setTableData(const TableData&lt;1&gt;&amp; tableData, const TableLookup&amp; lookup);
+ 
+ private:
++  SharedPtr&lt;TablePreLookup&gt; mTablePreLookup;
+   SharedPtr&lt;Table1D&gt; mTable;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 15:07:11 UTC (rev 158)
+@@ -2263,8 +2263,8 @@
+       = new Table1D(prod-&gt;getName() + &quot; Table&quot;);
+     addMultiBodyModel(table1D);
+     table1D-&gt;setTableData(table);
+-    table1D-&gt;setTableLookup(lookup);
+-    table1D-&gt;getInputPort(0)-&gt;connect(inVal[0]);
++    Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[0], lookup);
++    table1D-&gt;getInputPort(0)-&gt;connect(lPort);
+ 
+     unsigned nf = prod-&gt;getNumFactors();
+     prod-&gt;setNumFactors(nf+1);
+@@ -2285,8 +2285,8 @@
+     addMultiBodyModel(table2D);
+     table2D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 2; ++i) {
+-      table2D-&gt;setTableLookup(i, lookup[i]);
+-      table2D-&gt;getInputPort(i)-&gt;connect(inVal[i]);
++      Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[i], lookup[i]);
++      table2D-&gt;getInputPort(i)-&gt;connect(lPort);
+     }
+ 
+     unsigned nf = prod-&gt;getNumFactors();
+@@ -2309,8 +2309,8 @@
+     addMultiBodyModel(table3D);
+     table3D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 3; ++i) {
+-      table3D-&gt;setTableLookup(i, lookup[i]);
+-      table3D-&gt;getInputPort(i)-&gt;connect(inVal[i]);
++      Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[i], lookup[i]);
++      table3D-&gt;getInputPort(i)-&gt;connect(lPort);
+     }
+ 
+     unsigned nf = prod-&gt;getNumFactors();
+@@ -2321,4 +2321,28 @@
+   return prod-&gt;getOutputPort(0);
+ }
+ 
++Port*
++LegacyJSBSimReader::getTablePrelookup(const std::string&amp; name, Port* in,
++                                      const TableLookup&amp; tl)
++{
++  // First check if we already have a table lookup for this port/brakepoint
++  // combination. If so return that output port
++  std::vector&lt;SharedPtr&lt;TablePreLookup&gt; &gt;::iterator it;
++  for (it = mTableLookups.begin(); it != mTableLookups.end(); ++it) {
++    if (tl == (*it)-&gt;getTableLookup() &amp;&amp;
++        in-&gt;hasSameSource((*it)-&gt;getInputPort(0))) {
++      return (*it)-&gt;getOutputPort(0);
++    }
++  }
++
++  // No sharable table lookup found, we need to create a new one
++  TablePreLookup* tablePreLookup
++    = new TablePreLookup(name + &quot; Table Prelookup&quot;);
++  addMultiBodyModel(tablePreLookup);
++  tablePreLookup-&gt;setTableLookup(tl);
++  tablePreLookup-&gt;getInputPort(0)-&gt;connect(in);
++  mTableLookups.push_back(tablePreLookup);
++  return tablePreLookup-&gt;getOutputPort(0);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 15:07:11 UTC (rev 158)
+@@ -13,6 +13,7 @@
+ #include &lt;OpenFDM/AeroForce.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/ReaderWriter.h&gt;
++#include &lt;OpenFDM/Table.h&gt;
+ 
+ namespace OpenFDM {
+ 
+@@ -207,6 +208,7 @@
+ 
+   Port* convertCoefficient(const std::string&amp; data, const std::string&amp; type);
+ 
++  Port* getTablePrelookup(const std::string&amp; name, Port* in, const TableLookup&amp; tl);
+ 
+ 
+   /// List for the aircraft search path.
+@@ -225,6 +227,7 @@
+   PropertyMap mExpressionTable;
+   SharedPtr&lt;AeroForce&gt; mAeroForce;
+   Vector3 mBodyReference;
++  std::vector&lt;SharedPtr&lt;TablePreLookup&gt; &gt; mTableLookups;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.cpp	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/OpenFDM/Port.cpp	2006-01-02 15:07:11 UTC (rev 158)
+@@ -41,19 +41,29 @@
+   return false;
+ }
+ 
++bool
++Port::hasSameSource(const Port* otherPort) const
++{
++  OpenFDMAssert(mPortInterface);
++  return otherPort &amp;&amp; otherPort-&gt;mPortInterface == mPortInterface;
++}
++
+ Variant
+ Port::getValue(void)
+ {
+-  if (mPortInterface) {
+-    RealPortInterface* realPortInterface
+-      = mPortInterface-&gt;toRealPortInterface();
+-    if (realPortInterface)
+-      return Variant(realPortInterface-&gt;getRealValue());
+-    MatrixPortInterface* matrixPortInterface
+-      = mPortInterface-&gt;toMatrixPortInterface();
+-    if (matrixPortInterface)
+-      return Variant(matrixPortInterface-&gt;getMatrixValue());
+-  }
++  if (!mPortInterface)
++    return Variant();
++
++  RealPortInterface* realPortInterface
++    = mPortInterface-&gt;toRealPortInterface();
++  if (realPortInterface)
++    return Variant(realPortInterface-&gt;getRealValue());
++
++  MatrixPortInterface* matrixPortInterface
++    = mPortInterface-&gt;toMatrixPortInterface();
++  if (matrixPortInterface)
++    return Variant(matrixPortInterface-&gt;getMatrixValue());
++
+   return Variant();
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-01-02 15:07:11 UTC (rev 158)
+@@ -136,6 +136,10 @@
+   /// current port
+   bool isConnectedTo(const Port* sourcePort) const;
+ 
++  /// returns true if the source port sourcePort is the value source for the
++  /// current port
++  bool hasSameSource(const Port* otherPort) const;
++
+   RealPortHandle toRealPortHandle(void)
+   { return RealPortHandle(mPortInterface-&gt;toRealPortInterface()); }
+   MatrixPortHandle toMatrixPortHandle(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.h	2006-01-02 12:52:37 UTC (rev 157)
++++ trunk/OpenFDM/src/OpenFDM/Table.h	2006-01-02 15:07:11 UTC (rev 158)
+@@ -146,6 +146,11 @@
+     return loIdx + theta;
+   }
+ 
++  bool operator==(const TableLookup&amp; tl) const
++  {
++    mTable == tl.mTable;
++  }
++
+ private:
+   Table mTable;
+ };
+@@ -269,6 +274,55 @@
+   SizeVector mSize;
+ };
+ 
++class TablePreLookup : public Model {
++public:
++  TablePreLookup(const std::string&amp; name) :
++    Model(name)
++  {
++    setDirectFeedThrough(true);
++
++    setNumInputPorts(1);
++    setInputPortName(0, &quot;input&quot;);
++    
++    setNumOutputPorts(1);
++    setOutputPort(0, &quot;output&quot;, this, &amp;TablePreLookup::getOutput);
++
++    addProperty(&quot;output&quot;, Property(this, &amp;TablePreLookup::getOutput));
++  }
++  virtual ~TablePreLookup(void)
++  { }
++
++  virtual bool init(void)
++  {
++    mInputPortHandle = getInputPort(0)-&gt;toRealPortHandle();
++    if (!mInputPortHandle.isConnected()) {
++      Log(Model,Error) &lt;&lt; &quot;Input port to TablePreLookup Model \&quot;&quot;
++                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
++      return false;
++    }
++    return true;
++  }
++
++  virtual void output(const TaskInfo&amp;)
++  {
++    OpenFDMAssert(mInputPortHandle.isConnected());
++    mOutput = mTableLookup.lookup(mInputPortHandle.getRealValue());
++  }
++
++  const real_type&amp; getOutput(void) const
++  { return mOutput; }
++
++  void setTableLookup(const TableLookup&amp; tl)
++  { mTableLookup = tl; }
++  const TableLookup&amp; getTableLookup(void) const
++  { return mTableLookup; }
++
++private:
++  real_type mOutput;
++  TableLookup mTableLookup;
++  RealPortHandle mInputPortHandle;
++};
++
+ class Table1D : public Model {
+ public:
+   Table1D(const std::string&amp; name) :
+@@ -288,17 +342,20 @@
+   
+   virtual bool init(void)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  
+-    return getInputPort(0)-&gt;isConnected();
++    mInputPortHandle = getInputPort(0)-&gt;toRealPortHandle();
++    if (!mInputPortHandle.isConnected()) {
++      Log(Model,Error) &lt;&lt; &quot;Input port to Table1D Model \&quot;&quot;
++                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
++      return false;
++    }
++    return true;
+   }
+ 
+   virtual void output(const TaskInfo&amp;)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    OpenFDMAssert(mInputPortHandle.isConnected());
+     TableData&lt;1&gt;::InterpVector interpVec;
+-    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+-    interpVec(1) = mTableLookup.lookup(rh.getRealValue());
++    interpVec(1) = mInputPortHandle.getRealValue();
+     mOutput = mTableData.interpolate(interpVec);
+   }
+ 
+@@ -312,13 +369,10 @@
+   TableData&lt;1&gt;&amp; getTableData(void)
+   { return mTableData; }
+ 
+-  void setTableLookup(const TableLookup&amp; tl)
+-  { mTableLookup = tl; }
+-
+ private:
+   real_type mOutput;
+   TableData&lt;1&gt; mTableData;
+-  TableLookup mTableLookup;
++  RealPortHandle mInputPortHandle;
+ };
+ 
+ class Table2D : public Model {
+@@ -341,19 +395,24 @@
+   
+   virtual bool init(void)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-    OpenFDMAssert(getInputPort(1)-&gt;isConnected());
+-    return getInputPort(0)-&gt;isConnected() &amp;&amp; getInputPort(1)-&gt;isConnected();
++    for (unsigned idx = 0; idx &lt; 2; ++idx) {
++      mInputPortHandle[idx] = getInputPort(idx)-&gt;toRealPortHandle();
++      if (!mInputPortHandle[idx].isConnected()) {
++        Log(Model,Error) &lt;&lt; &quot;Input port to Table2D Model \&quot;&quot;
++                         &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
++    return true;
+   }
+ 
+   virtual void output(const TaskInfo&amp;)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    OpenFDMAssert(mInputPortHandle[0].isConnected());
++    OpenFDMAssert(mInputPortHandle[1].isConnected());
+     TableData&lt;2&gt;::InterpVector interpVec;
+-    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+-    interpVec(1) = mTableLookup[0].lookup(rh.getRealValue());
+-    rh = getInputPort(1)-&gt;toRealPortHandle();
+-    interpVec(2) = mTableLookup[1].lookup(rh.getRealValue());
++    interpVec(1) = mInputPortHandle[0].getRealValue();
++    interpVec(2) = mInputPortHandle[1].getRealValue();
+     mOutput = mTableData.interpolate(interpVec);
+   }
+ 
+@@ -367,13 +426,10 @@
+   TableData&lt;2&gt;&amp; getTableData(void)
+   { return mTableData; }
+ 
+-  void setTableLookup(unsigned idx, const TableLookup&amp; tl)
+-  { mTableLookup[idx] = tl; }
+-
+ private:
+   real_type mOutput;
+   TableData&lt;2&gt; mTableData;
+-  TableLookup mTableLookup[2];
++  RealPortHandle mInputPortHandle[2];
+ };
+ 
+ class Table3D : public Model {
+@@ -397,23 +453,26 @@
+   
+   virtual bool init(void)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-    OpenFDMAssert(getInputPort(1)-&gt;isConnected());
+-    OpenFDMAssert(getInputPort(3)-&gt;isConnected());
+-    return getInputPort(0)-&gt;isConnected() &amp;&amp; getInputPort(1)-&gt;isConnected()
+-      &amp;&amp; getInputPort(2)-&gt;isConnected();
++    for (unsigned idx = 0; idx &lt; 3; ++idx) {
++      mInputPortHandle[idx] = getInputPort(idx)-&gt;toRealPortHandle();
++      if (!mInputPortHandle[idx].isConnected()) {
++        Log(Model,Error) &lt;&lt; &quot;Input port to Table3D Model \&quot;&quot;
++                         &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
++    return true;
+   }
+ 
+   virtual void output(const TaskInfo&amp;)
+   {
+-    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    OpenFDMAssert(mInputPortHandle[0].isConnected());
++    OpenFDMAssert(mInputPortHandle[1].isConnected());
++    OpenFDMAssert(mInputPortHandle[2].isConnected());
+     TableData&lt;3&gt;::InterpVector interpVec;
+-    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+-    interpVec(1) = mTableLookup[0].lookup(rh.getRealValue());
+-    rh = getInputPort(1)-&gt;toRealPortHandle();
+-    interpVec(2) = mTableLookup[1].lookup(rh.getRealValue());
+-    rh = getInputPort(2)-&gt;toRealPortHandle();
+-    interpVec(3) = mTableLookup[2].lookup(rh.getRealValue());
++    interpVec(1) = mInputPortHandle[0].getRealValue();
++    interpVec(2) = mInputPortHandle[1].getRealValue();
++    interpVec(3) = mInputPortHandle[2].getRealValue();
+     mOutput = mTableData.interpolate(interpVec);
+   }
+ 
+@@ -427,13 +486,10 @@
+   TableData&lt;3&gt;&amp; getTableData(void)
+   { return mTableData; }
+ 
+-  void setTableLookup(unsigned idx, const TableLookup&amp; tl)
+-  { mTableLookup[idx] = tl; }
+-
+ private:
+   real_type mOutput;
+   TableData&lt;3&gt; mTableData;
+-  TableLookup mTableLookup[3];
++  RealPortHandle mInputPortHandle[3];
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000141.html">[OpenFDM-svn] r157 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000143.html">[OpenFDM-svn] r159 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#142">[ date ]</a>
+              <a href="thread.html#142">[ thread ]</a>
+              <a href="subject.html#142">[ subject ]</a>
+              <a href="author.html#142">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

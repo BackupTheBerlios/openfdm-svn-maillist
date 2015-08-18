@@ -1,0 +1,408 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r189 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r189%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051501.k05F1YdL028253%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000172.html">
+   <LINK REL="Next"  HREF="000174.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r189 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r189%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051501.k05F1YdL028253%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r189 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 16:01:34 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000172.html">[OpenFDM-svn] r188 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000174.html">[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#173">[ date ]</a>
+              <a href="thread.html#173">[ thread ]</a>
+              <a href="subject.html#173">[ subject ]</a>
+              <a href="author.html#173">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 16:01:25 +0100 (Thu, 05 Jan 2006)
+New Revision: 189
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/ConstFrameVisitor.h
+   trunk/OpenFDM/src/OpenFDM/FrameVisitor.h
+Removed:
+   trunk/OpenFDM/src/OpenFDM/ConstVisitor.h
+   trunk/OpenFDM/src/OpenFDM/Visitor.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+Rename Visitor to FrameVisitor
+and ConstVisitor to ConstFrameVisitor
+
+
+Copied: trunk/OpenFDM/src/OpenFDM/ConstFrameVisitor.h (from rev 187, trunk/OpenFDM/src/OpenFDM/ConstVisitor.h)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstVisitor.h	2006-01-05 12:41:34 UTC (rev 187)
++++ trunk/OpenFDM/src/OpenFDM/ConstFrameVisitor.h	2006-01-05 15:01:25 UTC (rev 189)
+@@ -0,0 +1,24 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ConstFrameVisitor_H
++#define OpenFDM_ConstFrameVisitor_H
++
++#include &quot;Frame.h&quot;
++
++namespace OpenFDM {
++
++class ConstFrameVisitor {
++public:
++  virtual ~ConstFrameVisitor(void)
++  {}
++  virtual void apply(const Frame&amp; frame)
++  { traverse(frame); }
++  inline void traverse(const Frame&amp; frame)
++  { frame.traverse(*this); }
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Deleted: trunk/OpenFDM/src/OpenFDM/ConstVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstVisitor.h	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/ConstVisitor.h	2006-01-05 15:01:25 UTC (rev 189)
+@@ -1,28 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ConstVisitor_H
+-#define OpenFDM_ConstVisitor_H
+-
+-#include &quot;Frame.h&quot;
+-
+-namespace OpenFDM {
+-
+-class RigidBody;
+-
+-class ConstVisitor {
+-public:
+-  virtual ~ConstVisitor(void)
+-  {}
+-  virtual void apply(const Frame&amp; frame)
+-  { traverse(frame); }
+-  virtual void apply(const RigidBody&amp; rigidBody)
+-  { apply((const Frame&amp;)rigidBody); }
+-  inline void traverse(const Frame&amp; frame)
+-  { frame.traverse(*this); }
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-01-05 15:01:25 UTC (rev 189)
+@@ -10,8 +10,8 @@
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+ #include &quot;Frame.h&quot;
+-#include &quot;Visitor.h&quot;
+-#include &quot;ConstVisitor.h&quot;
++#include &quot;FrameVisitor.h&quot;
++#include &quot;ConstFrameVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -43,13 +43,13 @@
+ }
+ 
+ void
+-Frame::accept(Visitor&amp; visitor)
++Frame::accept(FrameVisitor&amp; visitor)
+ {
+   visitor.apply(*this);
+ }
+ 
+ void
+-Frame::traverse(Visitor&amp; visitor)
++Frame::traverse(FrameVisitor&amp; visitor)
+ {
+   ChildFrameList::iterator it = mChildFrames.begin();
+   ChildFrameList::iterator iEnd = mChildFrames.end();
+@@ -60,13 +60,13 @@
+ }
+ 
+ void
+-Frame::accept(ConstVisitor&amp; visitor) const
++Frame::accept(ConstFrameVisitor&amp; visitor) const
+ {
+   visitor.apply(*this);
+ }
+ 
+ void
+-Frame::traverse(ConstVisitor&amp; visitor) const
++Frame::traverse(ConstFrameVisitor&amp; visitor) const
+ {
+   ChildFrameList::const_iterator it = mChildFrames.begin();
+   ChildFrameList::const_iterator iEnd = mChildFrames.end();
+@@ -142,24 +142,12 @@
+   return mChildFrames[i];
+ }
+ 
+-// class PrintVisitor : public ConstVisitor {
+-// public:
+-//   virtual void apply(const Frame&amp; frame)
+-//   {
+-//     Log(Model,Error) &lt;&lt; frame.getName() &lt;&lt; endl;
+-//     traverse(frame);
+-//   }
+-// };
+-
+ void
+ Frame::reparentChildren(Frame* frame)
+ {
+   if (!frame)
+     return;
+ 
+-//   PrintVisitor pv;
+-//   frame-&gt;accept(pv);
+-
+   ChildFrameList::iterator it = frame-&gt;mChildFrames.begin();
+   while (it != frame-&gt;mChildFrames.end()) {
+     Log(Model,Error) &lt;&lt; &quot;Moving Frame &quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot; from &quot;
+@@ -168,8 +156,6 @@
+     mChildFrames.push_back(*it);
+     it = frame-&gt;mChildFrames.erase(it);
+   }
+-
+-//   frame-&gt;accept(pv);
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-05 15:01:25 UTC (rev 189)
+@@ -25,8 +25,8 @@
+ class Joint;
+ class Interact;
+ 
+-class Visitor;
+-class ConstVisitor;
++class FrameVisitor;
++class ConstFrameVisitor;
+ 
+ /** 
+ The \ref Frame class is the basic tool to model a tree of moving and
+@@ -56,13 +56,13 @@
+   virtual ~Frame(void);
+ 
+   /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(Visitor&amp; visitor);
++  virtual void accept(FrameVisitor&amp; visitor);
+   /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(Visitor&amp; visitor);
++  virtual void traverse(FrameVisitor&amp; visitor);
+   /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ConstVisitor&amp; visitor) const;
++  virtual void accept(ConstFrameVisitor&amp; visitor) const;
+   /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(ConstVisitor&amp; visitor) const;
++  virtual void traverse(ConstFrameVisitor&amp; visitor) const;
+ 
+   /// Return the parent frame.
+   Frame* getParentFrame(void)
+
+Copied: trunk/OpenFDM/src/OpenFDM/FrameVisitor.h (from rev 187, trunk/OpenFDM/src/OpenFDM/Visitor.h)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Visitor.h	2006-01-05 12:41:34 UTC (rev 187)
++++ trunk/OpenFDM/src/OpenFDM/FrameVisitor.h	2006-01-05 15:01:25 UTC (rev 189)
+@@ -0,0 +1,24 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_FrameVisitor_H
++#define OpenFDM_FrameVisitor_H
++
++#include &quot;Frame.h&quot;
++
++namespace OpenFDM {
++
++class FrameVisitor {
++public:
++  virtual ~FrameVisitor(void)
++  {}
++  virtual void apply(Frame&amp; frame)
++  { traverse(frame); }
++  inline void traverse(Frame&amp; frame)
++  { frame.traverse(*this); }
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-05 15:01:25 UTC (rev 189)
+@@ -36,7 +36,7 @@
+   Contact.h \
+   ConstantForce.h \
+   ConstSystem.h \
+-  ConstVisitor.h \
++  ConstFrameVisitor.h \
+   CowPtr.h \
+   DeadBand.h \
+   DefaultGravity.h \
+@@ -52,7 +52,7 @@
+   ExplicitEuler.h \
+   Force.h \
+   Frame.h \
+-  MobileRootJoint.h \
++  FrameVisitor.h \
+   Function.h \
+   Gain.h \
+   Gravity.h \
+@@ -80,6 +80,7 @@
+   MaxModel.h \
+   MidpointRule.h \
+   MinModel.h \
++  MobileRootJoint.h \
+   MobileRootJointFrame.h \
+   Model.h \
+   ModelGroup.h \
+@@ -127,7 +128,6 @@
+   Variant.h \
+   Vector.h \
+   Vehicle.h \
+-  Visitor.h \
+   WheelContact.h \
+   Wind.h \
+   XML/Tablereader.h \
+@@ -158,7 +158,6 @@
+   ExplicitEuler.cpp \
+   Force.cpp \
+   Frame.cpp \
+-  MobileRootJoint.cpp \
+   Function.cpp \
+   Gain.cpp \
+   Gravity.cpp \
+@@ -174,6 +173,7 @@
+   MaxModel.cpp \
+   MidpointRule.cpp \
+   MinModel.cpp \
++  MobileRootJoint.cpp \
+   Model.cpp \
+   ModelGroup.cpp \
+   MultiBodySystem.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-01-05 15:01:25 UTC (rev 189)
+@@ -10,7 +10,6 @@
+ #include &quot;Inertia.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+-#include &quot;ConstVisitor.h&quot;
+ #include &quot;ModelVisitor.h&quot;
+ #include &quot;Mass.h&quot;
+ #include &quot;Force.h&quot;
+
+Deleted: trunk/OpenFDM/src/OpenFDM/Visitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Visitor.h	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/Visitor.h	2006-01-05 15:01:25 UTC (rev 189)
+@@ -1,28 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_Visitor_H
+-#define OpenFDM_Visitor_H
+-
+-#include &quot;Frame.h&quot;
+-
+-namespace OpenFDM {
+-
+-class RigidBody;
+-
+-class Visitor {
+-public:
+-  virtual ~Visitor(void)
+-  {}
+-  virtual void apply(Frame&amp; frame)
+-  { traverse(frame); }
+-  virtual void apply(RigidBody&amp; rigidBody)
+-  { apply((Frame&amp;)rigidBody); }
+-  inline void traverse(Frame&amp; frame)
+-  { frame.traverse(*this); }
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-05 14:35:55 UTC (rev 188)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2006-01-05 15:01:25 UTC (rev 189)
+@@ -39,8 +39,6 @@
+ #include &lt;OpenFDM/LogStream.h&gt;
+ #include &lt;OpenFDM/Variant.h&gt;
+ #include &lt;OpenFDM/Property.h&gt;
+-#include &lt;OpenFDM/Visitor.h&gt;
+-#include &lt;OpenFDM/ConstVisitor.h&gt;
+ 
+ // Model includes
+ #include &lt;OpenFDM/Model.h&gt;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000172.html">[OpenFDM-svn] r188 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000174.html">[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#173">[ date ]</a>
+              <a href="thread.html#173">[ thread ]</a>
+              <a href="subject.html#173">[ subject ]</a>
+              <a href="author.html#173">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

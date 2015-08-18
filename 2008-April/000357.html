@@ -1,0 +1,258 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r384 - trunk/OpenFDM/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-April/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r384%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200804200815.m3K8FWdu028067%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000356.html">
+   <LINK REL="Next"  HREF="000358.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r384 - trunk/OpenFDM/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r384%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200804200815.m3K8FWdu028067%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r384 - trunk/OpenFDM/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Apr 20 10:15:32 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000356.html">[OpenFDM-svn] r383 - trunk/OpenFDM/src/test
+</A></li>
+        <LI>Next message: <A HREF="000358.html">[OpenFDM-svn] r385 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#357">[ date ]</a>
+              <a href="thread.html#357">[ thread ]</a>
+              <a href="subject.html#357">[ subject ]</a>
+              <a href="author.html#357">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-04-20 10:15:32 +0200 (Sun, 20 Apr 2008)
+New Revision: 384
+
+Added:
+   trunk/OpenFDM/src/test/CSVWriter.h
+Modified:
+   trunk/OpenFDM/src/test/Makefile.am
+   trunk/OpenFDM/src/test/tiretestrig.cpp
+Log:
+Move CSV dumper into an own file. Use the HDF5 one for the testrig.
+
+
+Added: trunk/OpenFDM/src/test/CSVWriter.h
+===================================================================
+--- trunk/OpenFDM/src/test/CSVWriter.h	2008-04-20 08:14:53 UTC (rev 383)
++++ trunk/OpenFDM/src/test/CSVWriter.h	2008-04-20 08:15:32 UTC (rev 384)
+@@ -0,0 +1,55 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_CSVWriter_H
++#define OpenFDM_CSVWriter_H
++
++#include &lt;fstream&gt;
++#include &lt;OpenFDM/ModelGroup.h&gt;
++#include &lt;OpenFDM/ModelVisitor.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++
++namespace OpenFDM {
++
++class CSVWriter : public ModelVisitor {
++public:
++  CSVWriter(const std::string&amp; filename) :
++    _csvFile(filename.c_str())
++  { }
++  virtual void apply(Model&amp; model)
++  {
++    unsigned numOutputs = model.getNumOutputPorts();
++    for (unsigned i = 0; i &lt; numOutputs; ++i) {
++      NumericPortProvider* numericPort = model.getOutputPort(i);
++      if (!numericPort)
++        continue;
++      PortInterface* portInterface = numericPort-&gt;getPortInterface();
++      if (!portInterface)
++        continue;
++      MatrixPortInterface* matrixPortInterface;
++      matrixPortInterface = portInterface-&gt;toMatrixPortInterface();
++      if (!matrixPortInterface)
++        continue;
++
++      const Matrix&amp; m = matrixPortInterface-&gt;getMatrixValue();
++      for (unsigned i = 0; i &lt; rows(m); ++i)
++        for (unsigned j = 0; j &lt; cols(m); ++j)
++          _csvFile &lt;&lt; &quot;, &quot; &lt;&lt; m(i, j);
++    }
++  }
++  virtual void apply(ModelGroup&amp; modelGroup)
++  { traverse(modelGroup); }
++  virtual void apply(System&amp; system)
++  {
++    _csvFile &lt;&lt; system.getTime();
++    ModelVisitor::apply(system);
++    _csvFile &lt;&lt; std::endl;
++  }
++private:
++  std::ofstream _csvFile;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/test/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/test/Makefile.am	2008-04-20 08:14:53 UTC (rev 383)
++++ trunk/OpenFDM/src/test/Makefile.am	2008-04-20 08:15:32 UTC (rev 384)
+@@ -8,7 +8,7 @@
+ TESTS          = $(check_PROGRAMS)
+ 
+ tiretestrig_SOURCES = tiretestrig.cpp
+-tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
++tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la -lhdf5
+ 
+ unitstest_SOURCES = unitstest.cpp
+ unitstest_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: trunk/OpenFDM/src/test/tiretestrig.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/tiretestrig.cpp	2008-04-20 08:14:53 UTC (rev 383)
++++ trunk/OpenFDM/src/test/tiretestrig.cpp	2008-04-20 08:15:32 UTC (rev 384)
+@@ -2,9 +2,6 @@
+  *
+  */
+ 
+-#include &lt;cstdlib&gt;
+-#include &lt;iostream&gt;
+-#include &lt;fstream&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/DoPri5.h&gt;
+ #include &lt;OpenFDM/FixedRootJoint.h&gt;
+@@ -27,46 +24,10 @@
+ #include &lt;OpenFDM/UnaryFunctionModel.h&gt;
+ #include &lt;OpenFDM/WheelContact.h&gt;
+ 
++#include &quot;HDF5Writer.h&quot;
++
+ using namespace OpenFDM;
+ 
+-class CSVWriter : public ModelVisitor {
+-public:
+-  CSVWriter(const std::string&amp; filename) :
+-    _csvFile(filename.c_str())
+-  { }
+-  virtual void apply(Model&amp; model)
+-  {
+-    unsigned numOutputs = model.getNumOutputPorts();
+-    for (unsigned i = 0; i &lt; numOutputs; ++i) {
+-      NumericPortProvider* numericPort = model.getOutputPort(i);
+-      if (!numericPort)
+-        continue;
+-      PortInterface* portInterface = numericPort-&gt;getPortInterface();
+-      if (!portInterface)
+-        continue;
+-      MatrixPortInterface* matrixPortInterface;
+-      matrixPortInterface = portInterface-&gt;toMatrixPortInterface();
+-      if (!matrixPortInterface)
+-        continue;
+-
+-      const Matrix&amp; m = matrixPortInterface-&gt;getMatrixValue();
+-      for (unsigned i = 0; i &lt; rows(m); ++i)
+-        for (unsigned j = 0; j &lt; cols(m); ++j)
+-          _csvFile &lt;&lt; &quot;, &quot; &lt;&lt; m(i, j);
+-    }
+-  }
+-  virtual void apply(ModelGroup&amp; modelGroup)
+-  { traverse(modelGroup); }
+-  virtual void apply(System&amp; system)
+-  {
+-    _csvFile &lt;&lt; system.getTime();
+-    ModelVisitor::apply(system);
+-    _csvFile &lt;&lt; std::endl;
+-  }
+-private:
+-  std::ofstream _csvFile;
+-};
+-
+ class MovingGround : public Ground {
+ public:
+   MovingGround(const Vector3&amp; linearVelocity) : mVelocity(linearVelocity)
+@@ -111,12 +72,13 @@
+ 
+   Summer* normalForceSum = new Summer(&quot;Normal Force Sum&quot;);
+   normalForceSum-&gt;setNumSummands(2);
++  normalForceSum-&gt;setInputSign(0, Summer::Minus);
+   system-&gt;addModel(normalForceSum);
+   Connection::connect(prismaticJoint-&gt;getInputPort(0),
+                       normalForceSum-&gt;getOutputPort(0));
+ 
+   ConstModel* normalForce = new ConstModel(&quot;Normal force&quot;);
+-  normalForce-&gt;setScalarValue(5000);
++  normalForce-&gt;setScalarValue(2000);
+   system-&gt;addModel(normalForce);
+   Connection::connect(normalForceSum-&gt;getInputPort(0),
+                       normalForce-&gt;getOutputPort(0));
+@@ -177,11 +139,11 @@
+   hubStrut-&gt;setInboardJoint(sideActuator);
+   hubStrut-&gt;addInteract(hubJoint);
+ 
+-  RigidBody* rimAndTire = new RigidBody(&quot;Rim and Tire&quot;);
++  RigidBody* rimAndTire = new RigidBody(&quot;Rim And Tire&quot;);
+   system-&gt;addModel(rimAndTire);
+   rimAndTire-&gt;setInboardJoint(hubJoint);
+ 
+-  Mass* tireAndRimMass = new Mass(&quot;Tire And Rim Mass&quot;);
++  Mass* tireAndRimMass = new Mass(&quot;Rim And Tire Mass&quot;);
+   tireAndRimMass-&gt;setInertia(1, InertiaMatrix(1, 0, 0, 1, 0, 1));
+   system-&gt;addModel(tireAndRimMass);
+   rimAndTire-&gt;addInteract(tireAndRimMass);
+@@ -198,11 +160,11 @@
+     return EXIT_FAILURE;
+   }
+ 
+-  CSVWriter writer(&quot;out.csv&quot;);
+-  system-&gt;accept(writer);
+-  while (system-&gt;getTime() &lt; 100) {
++  HDF5Writer hwriter(&quot;system.h5&quot;);
++  system-&gt;accept(hwriter);
++  while (system-&gt;getTime() &lt; 10) {
+     system-&gt;simulate(system-&gt;getTime() + 0.01);
+-    system-&gt;accept(writer);
++    system-&gt;accept(hwriter);
+   }
+   
+   return EXIT_SUCCESS;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000356.html">[OpenFDM-svn] r383 - trunk/OpenFDM/src/test
+</A></li>
+	<LI>Next message: <A HREF="000358.html">[OpenFDM-svn] r385 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#357">[ date ]</a>
+              <a href="thread.html#357">[ thread ]</a>
+              <a href="subject.html#357">[ subject ]</a>
+              <a href="author.html#357">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

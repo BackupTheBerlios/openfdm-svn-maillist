@@ -1,0 +1,201 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r817 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r817%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300904.mAU94pHS019874%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000784.html">
+   <LINK REL="Next"  HREF="000786.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r817 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r817%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300904.mAU94pHS019874%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r817 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 30 10:04:51 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000784.html">[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000786.html">[OpenFDM-svn] r818 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#785">[ date ]</a>
+              <a href="thread.html#785">[ thread ]</a>
+              <a href="subject.html#785">[ subject ]</a>
+              <a href="author.html#785">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-30 10:04:51 +0100 (Sun, 30 Nov 2008)
+New Revision: 817
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h
+Log:
+Derive Binary functions from SimpleDirectModel
+
+M    src/OpenFDM/BinaryFunction.h
+M    src/OpenFDM/BinaryFunction.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp	2008-11-30 08:56:04 UTC (rev 816)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp	2008-11-30 09:04:51 UTC (rev 817)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich
+  *
+  */
+ 
+@@ -9,61 +9,36 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(BinaryFunction, Model)
++BEGIN_OPENFDM_OBJECT_DEF(BinaryFunction, SimpleDirectModel)
+   END_OPENFDM_OBJECT_DEF
+ 
+ BinaryFunction::BinaryFunction(const std::string&amp; name, Type type) :
+-  Model(name),
+-  mInput0Port(newMatrixInputPort(&quot;input0&quot;, true)),
+-  mInput1Port(newMatrixInputPort(&quot;input1&quot;, true)),
+-  mOutputPort(newMatrixOutputPort(&quot;output&quot;))
++  SimpleDirectModel(name)
+ {
++  setNumInputPorts(2);
+ }
+ 
+ BinaryFunction::~BinaryFunction(void)
+ {
+ }
+ 
+-bool
+-BinaryFunction::alloc(ModelContext&amp; context) const
+-{
+-  Size sz = size(context.getPortValueList()[mInput0Port]);
+-  Log(Initialization, Debug)
+-    &lt;&lt; &quot;Size for BinaryFunction is detemined by input0 &quot;
+-    &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+-  if (!context.getPortValueList().setOrCheckPortSize(mInput1Port, sz)) {
+-    Log(Initialization, Error)
+-      &lt;&lt; &quot;Size for input1 port does not match!&quot; &lt;&lt; std::endl;
+-    return false;
+-  }
+-  if (!context.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+-    Log(Initialization, Error)
+-      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
+-    return false;
+-  }
+-  return true;
+-}
+-
+ void
+-BinaryFunction::output(const Task&amp;,const DiscreteStateValueVector&amp;,
+-                       const ContinousStateValueVector&amp;,
+-                       PortValueList&amp; portValues) const
++BinaryFunction::output(Context&amp; context) const
+ {
+-  Size sz = size(portValues[mOutputPort]);
++  Size sz = size(context.getInputValue(0));
+   for (unsigned j = 0; j &lt; sz(1); ++j) {
+     for (unsigned i = 0; i &lt; sz(0); ++i) {
++      real_type input0 = context.getInputValue(0)(i, j);
++      real_type input1 = context.getInputValue(1)(i, j);
+       switch (mType) {
+       case Atan2:
+-        portValues[mOutputPort](i, j) =
+-          atan2(portValues[mInput0Port](i, j), portValues[mInput1Port](i, j));
++        context.getOutputValue()(i, j) = atan2(input0, input1);
+         break;
+       case Pow:
+-        portValues[mOutputPort](i, j) =
+-          pow(portValues[mInput0Port](i, j), portValues[mInput1Port](i, j));
++        context.getOutputValue()(i, j) = pow(input0, input1);
+         break;
+       case Div:
+-        portValues[mOutputPort](i, j) =
+-          portValues[mInput0Port](i, j) / portValues[mInput1Port](i, j);
++        context.getOutputValue()(i, j) = input0 / input1;
+         break;
+       default:
+         OpenFDMAssert(false);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h	2008-11-30 08:56:04 UTC (rev 816)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h	2008-11-30 09:04:51 UTC (rev 817)
+@@ -6,13 +6,13 @@
+ #define OpenFDM_BinaryFunction_H
+ 
+ #include &lt;string&gt;
+-#include &quot;Model.h&quot;
++#include &quot;SimpleDirectModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /// Class representing a model with exactly two inputs.
+-class BinaryFunction : public Model {
+-  OPENFDM_OBJECT(BinaryFunction, Model);
++class BinaryFunction : public SimpleDirectModel {
++  OPENFDM_OBJECT(BinaryFunction, SimpleDirectModel);
+ public:
+   enum Type {
+     Atan2,
+@@ -23,19 +23,12 @@
+   BinaryFunction(const std::string&amp; name, Type type);
+   virtual ~BinaryFunction(void);
+ 
+-  virtual bool alloc(ModelContext&amp;) const;
+-  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
+-                      const ContinousStateValueVector&amp;,
+-                      PortValueList&amp; portValues) const;
++  virtual void output(Context&amp; context) const;
+ 
+   void setType(const Type&amp; type);
+   const Type&amp; getType(void) const;
+ 
+ private:
+-  MatrixInputPort mInput0Port;
+-  MatrixInputPort mInput1Port;
+-  MatrixOutputPort mOutputPort;
+-  
+   Type mType;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000784.html">[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000786.html">[OpenFDM-svn] r818 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#785">[ date ]</a>
+              <a href="thread.html#785">[ thread ]</a>
+              <a href="subject.html#785">[ subject ]</a>
+              <a href="author.html#785">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,204 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r786 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r786%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240612.mAO6CEWe029561%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000754.html">
+   <LINK REL="Next"  HREF="000756.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r786 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r786%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240612.mAO6CEWe029561%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r786 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 24 07:12:14 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000754.html">[OpenFDM-svn] r785 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000756.html">[OpenFDM-svn] r787 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#755">[ date ]</a>
+              <a href="thread.html#755">[ thread ]</a>
+              <a href="subject.html#755">[ subject ]</a>
+              <a href="author.html#755">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-24 07:12:10 +0100 (Mon, 24 Nov 2008)
+New Revision: 786
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+Log:
+Update to match the other files.
+Duh, should now be again up to date past the git-svn problems ...
+
+M    Environment.cpp
+M    Environment.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp	2008-11-24 06:09:48 UTC (rev 785)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.cpp	2008-11-24 06:12:10 UTC (rev 786)
+@@ -5,6 +5,7 @@
+ #include &quot;Environment.h&quot;
+ 
+ #include &quot;FlatPlanet.h&quot;
++#include &quot;AtmosphereSTD1976.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -12,7 +13,9 @@
+   mInertial(new AbstractInertial),
+   mGravity(new AbstractGravity),
+   mWind(new AbstractWind),
+-  mPlanet(new FlatPlanet)
++  mPlanet(new FlatPlanet),
++  mAtmosphere(new AtmosphereSTD1976),
++  mGround(new AbstractGround)
+ {
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-11-24 06:09:48 UTC (rev 785)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-11-24 06:12:10 UTC (rev 786)
+@@ -5,11 +5,14 @@
+ #ifndef OpenFDM_Environment_H
+ #define OpenFDM_Environment_H
+ 
++#include &quot;AbstractAtmosphere.h&quot;
+ #include &quot;AbstractGravity.h&quot;
++#include &quot;AbstractGround.h&quot;
+ #include &quot;AbstractInertial.h&quot;
+ #include &quot;AbstractPlanet.h&quot;
+ #include &quot;AbstractWind.h&quot;
+ #include &quot;Matrix.h&quot;
++#include &quot;Plane.h&quot;
+ #include &quot;Referenced.h&quot;
+ #include &quot;SharedPtr.h&quot;
+ #include &quot;Vector.h&quot;
+@@ -21,6 +24,10 @@
+   Environment();
+   virtual ~Environment();
+ 
++  ///////////////////////////////////////////////////////////////////////////
++  // Inertial related
++  // FIXME may be this can be split out???
++
+   // The the global coordinate frames angular velocity and acceleration.
+   // Note that the acceleration and velocity must fit together to simulate
+   // something useful.
+@@ -29,21 +36,70 @@
+   Vector6 getAcceleration(const real_type&amp; t) const
+   { return mInertial-&gt;getAcceleration(t); }
+ 
++  ///////////////////////////////////////////////////////////////////////////
++  // Gravity related
++
+   // The gravity acceleration vector in the global coordinate system
+   Vector3 getGravityAcceleration(const Vector3&amp; position) const
+   { return mGravity-&gt;getGravityAcceleration(*this, position); }
+ 
++  ///////////////////////////////////////////////////////////////////////////
++  // Wind sensing related
++
+   // The wind velocity vector in the global coordinate system
+   Vector6 getWindVelocity(const real_type&amp; t, const Vector3&amp; position) const
+   { return mWind-&gt;getWindVelocity(*this, t, position); }
+ 
++  ///////////////////////////////////////////////////////////////////////////
++  // Planet related
++  // FIXME: find out what we really need here, may be some kind of
++  // abstract horizontal local coordinates?
++  // Is responsible for altitude computations ...
++
++  // From the planet these are so far what we need.
++  // FIXME, invent an abstraction for that, may be optimize???
++protected:
++  Vector3 getHorizontalLocalDown(const Vector3&amp; position) const
++  {
++    Quaternion hlOr = mPlanet-&gt;getGeodHLOrientation(position);
++    return hlOr.backTransform(Vector3::unit(3));
++  }
++  Vector3 getHorizontalLocalOffset(const Vector3&amp; position) const
++  {
++    Geodetic geod = mPlanet-&gt;toGeod(position);
++    geod.altitude = 0;
++    return mPlanet-&gt;toCart(geod);
++  }
++public:
++  Plane getHorizontalLocalPlane(const Vector3&amp; position) const
++  {
++    // Get the unit down vector.
++    Vector3 unitDown = getHorizontalLocalDown(position);
++    // Get the distance from the planets center.
++    Vector3 groundOff = getHorizontalLocalOffset(position);
++    // Then we know the plane ...
++    return Plane(unitDown, groundOff);
++  }
++
++  ///////////////////////////////////////////////////////////////////////////
++  // Atmosphere sensing related
++  AtmosphereData getAtmosphereData(const Vector3&amp; position) const
++  {
++    Geodetic geod = mPlanet-&gt;toGeod(position);
++    return mAtmosphere-&gt;getData(geod.altitude);
++  }
++
++  ///////////////////////////////////////////////////////////////////////////
++  // Intersection interaction related
++
++
+ private:
+   SharedPtr&lt;const AbstractInertial&gt; mInertial;
+   SharedPtr&lt;const AbstractGravity&gt; mGravity;
+   SharedPtr&lt;const AbstractWind&gt; mWind;
+   SharedPtr&lt;const AbstractPlanet&gt; mPlanet;
+-//   SharedPtr&lt;const AbstractAtmosphere&gt; mAtmosphere;
+-//   SharedPtr&lt;const AbstractGround&gt; mGround;
++  SharedPtr&lt;const AbstractAtmosphere&gt; mAtmosphere;
++  SharedPtr&lt;const AbstractGround&gt; mGround;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000754.html">[OpenFDM-svn] r785 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000756.html">[OpenFDM-svn] r787 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#755">[ date ]</a>
+              <a href="thread.html#755">[ thread ]</a>
+              <a href="subject.html#755">[ subject ]</a>
+              <a href="author.html#755">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

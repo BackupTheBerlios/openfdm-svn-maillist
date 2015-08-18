@@ -1,0 +1,470 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1061 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1061%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200908040536.n745aOYP031585%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001020.html">
+   <LINK REL="Next"  HREF="001022.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1061 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1061%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200908040536.n745aOYP031585%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1061 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Aug  4 07:36:24 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001020.html">[OpenFDM-svn] r1060 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001022.html">[OpenFDM-svn] r1062 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1021">[ date ]</a>
+              <a href="thread.html#1021">[ thread ]</a>
+              <a href="subject.html#1021">[ subject ]</a>
+              <a href="author.html#1021">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-04 07:36:21 +0200 (Tue, 04 Aug 2009)
+New Revision: 1061
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TopologySort.h
+   branches/OpenFDM-StateSeparation/src/test/tsort.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Split out tsort.
+Add test for tsort.
+
+M    OpenFDM/Makefile.am
+M    OpenFDM/System.cpp
+AM   OpenFDM/TopologySort.h
+AM   test/tsort.cpp
+M    test/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-08-03 19:54:55 UTC (rev 1060)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-08-04 05:36:21 UTC (rev 1061)
+@@ -118,6 +118,7 @@
+   TemplateStateInfo.h \
+   TemplateValueVector.h \
+   Time.h \
++  TopologySort.h \
+   Transform.h \
+   TypeInfo.h \
+   Types.h \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-08-03 19:54:55 UTC (rev 1060)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-08-04 05:36:21 UTC (rev 1061)
+@@ -17,6 +17,7 @@
+ #include &quot;RootJoint.h&quot;
+ #include &quot;SystemOutput.h&quot;
+ #include &quot;Task.h&quot;
++#include &quot;TopologySort.h&quot;
+ #include &quot;TypeInfo.h&quot;
+ #include &quot;Variant.h&quot;
+ 
+@@ -77,47 +78,6 @@
+ /// FIXME: IMO THIS MUST WORK THIS WAY
+ ///
+ 
+-/// Topological sorting.
+-/// On success, the sourceList is empty and the sortedList contains the sorted
+-/// entries.
+-/// On failure, the sourceList contains those entries that could be sorted, and
+-/// the sourceList still contains those that have cycles.
+-template&lt;typename T, typename D&gt;
+-static inline void
+-tsort(std::list&lt;T&gt;&amp; sortedList, std::list&lt;T&gt;&amp; sourceList, const D&amp; dependency)
+-{
+-  /// The algorithm is simple.
+-  /// Just push all those items from the sourceList into the sortedList
+-  /// that do not depend on any item still in the sourceList.
+-  /// Items that do depend on anything still in the source list are
+-  /// moved to the tail of the sourceList.
+-  /// Do that until sourceList is empty or until we do no longer find any
+-  /// independent item.
+-  typename std::list&lt;T&gt;::size_type size = sourceList.size();
+-  typename std::list&lt;T&gt;::size_type tryCount = 0;
+-  while (!sourceList.empty() &amp;&amp; tryCount &lt; size) {
+-    
+-    // Check if the front item is independent of sourceList
+-    typename std::list&lt;T&gt;::iterator i = sourceList.begin();
+-    for (; i != sourceList.end(); ++i) {
+-      if (dependency(sourceList.front(), *i))
+-        break;
+-    }
+-    // If we came here with i == end, the front item is independent so
+-    // schedule it now
+-    if (i == sourceList.end()) {
+-      sortedList.splice(sortedList.end(), sourceList, sourceList.begin());
+-      --size;
+-      tryCount = 0;
+-    }
+-    // Else defer that item
+-    else {
+-      sourceList.splice(sourceList.end(), sourceList, sourceList.begin());
+-      ++tryCount;
+-    }
+-  }
+-}
+-
+ class ContinousSystemFunction : public Function {
+ public:
+   virtual size_type inSize(void) const
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/TopologySort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TopologySort.h	2009-08-03 19:54:55 UTC (rev 1060)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TopologySort.h	2009-08-04 05:36:21 UTC (rev 1061)
+@@ -0,0 +1,55 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_TopologySort_H
++#define OpenFDM_TopologySort_H
++
++#include &lt;list&gt;
++
++namespace OpenFDM {
++
++/// Topological sorting.
++/// On success, the sourceList is empty and the sortedList contains the sorted
++/// entries.
++/// On failure, the sourceList contains those entries that could be sorted, and
++/// the sourceList still contains those that have cycles.
++template&lt;typename T, typename D&gt;
++static inline void
++tsort(std::list&lt;T&gt;&amp; sortedList, std::list&lt;T&gt;&amp; sourceList, const D&amp; dependency)
++{
++  /// The algorithm is simple.
++  /// Just push all those items from the sourceList into the sortedList
++  /// that do not depend on any item still in the sourceList.
++  /// Items that do depend on anything still in the source list are
++  /// moved to the tail of the sourceList.
++  /// Do that until sourceList is empty or until we do no longer find any
++  /// independent item.
++  typename std::list&lt;T&gt;::size_type size = sourceList.size();
++  typename std::list&lt;T&gt;::size_type tryCount = 0;
++  while (!sourceList.empty() &amp;&amp; tryCount &lt; size) {
++    
++    // Check if the front item is independent of sourceList
++    typename std::list&lt;T&gt;::iterator i = sourceList.begin();
++    for (; i != sourceList.end(); ++i) {
++      if (dependency(sourceList.front(), *i))
++        break;
++    }
++    // If we came here with i == end, the front item is independent so
++    // schedule it now
++    if (i == sourceList.end()) {
++      sortedList.splice(sortedList.end(), sourceList, sourceList.begin());
++      --size;
++      tryCount = 0;
++    }
++    // Else defer that item
++    else {
++      sourceList.splice(sourceList.end(), sourceList, sourceList.begin());
++      ++tryCount;
++    }
++  }
++}
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/TopologySort.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-08-03 19:54:55 UTC (rev 1060)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-08-04 05:36:21 UTC (rev 1061)
+@@ -10,6 +10,7 @@
+ 	mechanicstructure \
+ 	simulationtime \
+ 	structure \
++	tsort \
+ 	unitstest
+ 
+ # define some util programs
+@@ -22,6 +23,7 @@
+ 	mechanicstructure \
+ 	structure \
+ 	tiretestrig \
++	tsort \
+ 	coordsys \
+ 	$(TESTS)
+ 
+@@ -70,5 +72,8 @@
+ tiretestrig_SOURCES = tiretestrig.cpp
+ tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++tsort_SOURCES = tsort.cpp
++tsort_LDADD = ../OpenFDM/libOpenFDM.la
++
+ unitstest_SOURCES = unitstest.cpp
+ unitstest_LDADD = ../OpenFDM/libOpenFDM.la
+
+Added: branches/OpenFDM-StateSeparation/src/test/tsort.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tsort.cpp	2009-08-03 19:54:55 UTC (rev 1060)
++++ branches/OpenFDM-StateSeparation/src/test/tsort.cpp	2009-08-04 05:36:21 UTC (rev 1061)
+@@ -0,0 +1,204 @@
++#include &lt;vector&gt;
++#include &lt;list&gt;
++#include &lt;iostream&gt;
++#include &lt;cstdlib&gt;
++
++#include &lt;OpenFDM/TopologySort.h&gt;
++
++using namespace OpenFDM;
++
++struct Test {
++  Test(unsigned i) :
++    id(i)
++  { }
++  Test(unsigned i, unsigned d) :
++    id(i)
++  { depends.push_back(d); }
++  Test(unsigned i, unsigned d1, unsigned d2) :
++    id(i)
++  { depends.push_back(d1); depends.push_back(d2); }
++  Test(unsigned i, unsigned d1, unsigned d2, unsigned d3) :
++    id(i)
++  { depends.push_back(d1); depends.push_back(d2); depends.push_back(d3); }
++
++  void addDependency(unsigned d)
++  { depends.push_back(d); }
++
++  bool dependsOn(const Test&amp; other) const
++  {
++    for (unsigned i = 0; i &lt; depends.size(); ++i)
++      if (depends[i] == other.id)
++        return true;
++    return false;
++  }
++
++  unsigned id;
++  std::vector&lt;unsigned&gt; depends;
++};
++
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; s, const Test&amp; t)
++{
++  s &lt;&lt; &quot;(&quot; &lt;&lt; t.id;
++  for (unsigned i = 0; i &lt; t.depends.size(); ++i)
++    s &lt;&lt; &quot; &quot; &lt;&lt; t.depends[i];
++  return s &lt;&lt; &quot;)&quot;;
++}
++
++template&lt;typename T&gt;
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; s, const std::list&lt;T&gt;&amp; l)
++{
++  for (typename std::list&lt;T&gt;::const_iterator i = l.begin(); i != l.end(); ++i)
++    s &lt;&lt; &quot; &quot; &lt;&lt; *i;
++  return s;
++}
++
++struct Depends {
++  bool operator()(const Test&amp; t0, const Test&amp; t1) const
++  { return t0.dependsOn(t1); }
++};
++
++template&lt;typename T, typename D&gt;
++inline bool
++verify(const std::list&lt;T&gt;&amp; sortedList, const D&amp; depends)
++{
++  for (typename std::list&lt;T&gt;::const_iterator i = sortedList.begin();
++       i != sortedList.end(); ++i) {
++    for (typename std::list&lt;T&gt;::const_iterator j = i;
++         j != sortedList.end(); ++j) {
++      if (depends(*i, *j))
++        return false;
++    }
++  }
++  return true;
++}
++
++template&lt;typename T, typename D&gt;
++bool
++testrun(std::list&lt;T&gt;&amp; source, const D&amp; depends)
++{
++  std::list&lt;T&gt; orig = source;
++  std::list&lt;T&gt; sorted;
++  tsort(sorted, source, depends);
++  if (verify(sorted, depends))
++    return true;
++  std::cout &lt;&lt; &quot;---- FAIL ----&quot; &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Original:&quot; &lt;&lt; orig &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Sorted:&quot; &lt;&lt; sorted &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Cycles:&quot; &lt;&lt; source &lt;&lt; std::endl;
++  std::cout &lt;&lt; std::endl;
++  return false;
++}
++
++bool
++randomTest(unsigned num, unsigned maxNumDeps)
++{
++  // Build up a direct acyclic graph
++  std::vector&lt;Test&gt; source0;
++  source0.reserve(num);
++  for (unsigned i = 0; i &lt; num; ++i) {
++    Test t(i);
++    unsigned numdeps = rand() % (maxNumDeps + 1);
++    if (i &lt; numdeps)
++      numdeps = i;
++    for (unsigned j = 0; j &lt; numdeps; ++j)
++      t.addDependency(rand()%i);
++    source0.push_back(t);
++  }
++
++  // Build a permutation of 0:num-1
++  std::vector&lt;unsigned&gt; perm(num);
++  for (unsigned i = 0; i &lt; num; ++i)
++    perm[i] = i;
++  for (unsigned i = 0; i &lt; num*num; ++i)
++    std::swap(perm[rand()%num], perm[rand()%num]);
++
++  // Now permute the dag
++  std::list&lt;Test&gt; source;
++  for (unsigned i = 0; i &lt; num; ++i)
++    source.push_back(source0[perm[i]]);
++
++  // Test if the algorithm works
++  return testrun(source, Depends());
++}
++
++int main()
++{
++  std::list&lt;Test&gt; hmm;
++
++  /////////////////////////////////////////////
++  hmm.clear();
++  hmm.push_back(Test(0, 0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++  /////////////////////////////////////////////
++  hmm.clear();
++  hmm.push_back(Test(0, 1));
++  hmm.push_back(Test(1, 0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++  /////////////////////////////////////////////
++  /// Breaks at pure depth first
++  hmm.clear();
++  hmm.push_back(Test(3, 1, 2));
++  hmm.push_back(Test(2, 1));
++  hmm.push_back(Test(1, 0));
++  hmm.push_back(Test(0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++  /////////////////////////////////////////////
++  /// Breaks at pure broad first
++  hmm.clear();
++  hmm.push_back(Test(3, 2, 1));
++  hmm.push_back(Test(1, 0));
++  hmm.push_back(Test(2, 1));
++  hmm.push_back(Test(0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++  /////////////////////////////////////////////
++  /// Breaks with bread first and depth first
++  hmm.clear();
++  hmm.push_back(Test(5, 3, 4));
++  hmm.push_back(Test(4, 1));
++  hmm.push_back(Test(3, 1, 2));
++  hmm.push_back(Test(2, 1));
++  hmm.push_back(Test(1, 0));
++  hmm.push_back(Test(0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++
++  /////////////////////////////////////////////
++  /// Breaks ???
++  hmm.clear();
++  hmm.push_back(Test(3, 0, 2));
++  hmm.push_back(Test(0));
++  hmm.push_back(Test(2, 1));
++  hmm.push_back(Test(1, 0));
++
++  if (!testrun(hmm, Depends()))
++    return EXIT_FAILURE;
++
++  /// Random tests ...
++  unsigned numTests = 100;
++  for (unsigned maxNumDeps = 1; maxNumDeps &lt; 10; ++maxNumDeps) {
++    for (unsigned num = 2; num &lt; 100; ++num) {
++      for (unsigned count = 0; count &lt; numTests; ++count) {
++        if (!randomTest(num, maxNumDeps))
++          return EXIT_FAILURE;
++      }
++    }
++  }
++
++  return EXIT_SUCCESS;
++}
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/test/tsort.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001020.html">[OpenFDM-svn] r1060 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001022.html">[OpenFDM-svn] r1062 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1021">[ date ]</a>
+              <a href="thread.html#1021">[ thread ]</a>
+              <a href="subject.html#1021">[ subject ]</a>
+              <a href="author.html#1021">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

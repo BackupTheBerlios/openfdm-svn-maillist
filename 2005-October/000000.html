@@ -1,0 +1,976 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Openfdm-svn] r7 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r7%20-%20trunk/flightgear&In-Reply-To=%3C200510051411.j95EBC9G027824%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000001.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Openfdm-svn] r7 - trunk/flightgear</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r7%20-%20trunk/flightgear&In-Reply-To=%3C200510051411.j95EBC9G027824%40sheep.berlios.de%3E"
+       TITLE="[Openfdm-svn] r7 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Oct  5 16:11:12 CEST 2005</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000001.html">[Openfdm-svn] r8 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#0">[ date ]</a>
+              <a href="thread.html#0">[ thread ]</a>
+              <a href="subject.html#0">[ subject ]</a>
+              <a href="author.html#0">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-05 16:11:12 +0200 (Wed, 05 Oct 2005)
+New Revision: 7
+
+Added:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGOpenFDM.h
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Initial import to berlios.
+
+
+Added: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2005-10-05 14:10:06 UTC (rev 6)
++++ trunk/flightgear/FGOpenFDM.cpp	2005-10-05 14:11:12 UTC (rev 7)
+@@ -0,0 +1,482 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &lt;simgear/misc/sg_path.hxx&gt;
++#include &lt;simgear/math/sg_geodesy.hxx&gt;
++#include &lt;simgear/props/props.hxx&gt;
++
++#include &lt;Controls/controls.hxx&gt;
++#include &lt;Main/globals.hxx&gt;
++#include &lt;Main/fg_props.hxx&gt;
++
++#include &lt;JSBSim/JSBReader.h&gt;
++#include &lt;OpenFDM/Units.h&gt;
++#include &lt;OpenFDM/Vehicle.h&gt;
++#include &lt;OpenFDM/Input.h&gt;
++#include &lt;OpenFDM/Ground.h&gt;
++#include &lt;OpenFDM/Model.h&gt;
++#include &lt;OpenFDM/ModelGroup.h&gt;
++
++#include &quot;FGPropertyAdapter.h&quot;
++
++#include &quot;FGOpenFDM.h&quot;
++
++namespace OpenFDM {
++
++class FGGround
++  : public Ground {
++public:
++  FGGround(FGInterface *ifce)
++    : mIfce(ifce)
++  { }
++  virtual ~FGGround(void)
++  { }
++
++  virtual GroundValues
++  getGroundPlane(real_type t, const Vector3&amp; refPos) const
++  {
++    double loc_cart[3] = { refPos(1), refPos(2), refPos(3) };
++    double contact[3], normal[3], vel[3], lc, ff, agl;
++    int groundtype;
++    // FIXME!!!!!!!
++    bool ok = false;
++    if (mIfce)
++      ok = mIfce-&gt;get_agl_m(t, loc_cart, contact, normal, vel,
++                            &amp;groundtype, &amp;lc, &amp;ff, &amp;agl);
++    Vector3 unitDown(-normal[0], -normal[1], -normal[2]);
++    Vector3 groundOff(contact[0], contact[1], contact[2]);
++    // FIXME: why is this not normalized?? ...
++    Plane p(normalize(unitDown), groundOff);
++    Vector6 v(Vector3::zeros(), Vector3(vel[0], vel[1], vel[2]));
++    return GroundValues(p, v, ff);
++  }
++
++  void setInterface(FGInterface *ifce)
++  { mIfce = ifce; }
++  
++private:
++  FGInterface *mIfce;
++};
++
++
++class FGPlanet
++  : public Planet {
++public:
++  /** Default constructor.
++   */
++  FGPlanet(void) {}
++
++  /** Default destructor.
++   */
++  virtual ~FGPlanet(void) {}
++
++  /** Gravity acceleration at the cartesion position cart.
++   */
++  virtual Vector3 gravityAccel(const Vector3&amp; cart) const
++  {
++    real_type planetMass = 5.9742e24;
++    real_type dist = norm(cart);
++    return (-planetMass*gravity_constant/(dist*dist*dist))*cart;
++  }
++
++  /** Transform cartesian coordinates to geodetic coordinates.
++   */
++  virtual Geodetic toGeod(const Vector3&amp; cart) const
++  {
++    double xyz[3] = { cart(1), cart(2), cart(3) };
++    double lat, lon, alt;
++    sgCartToGeod(xyz, &amp;lat, &amp;lon, &amp;alt);
++    return Geodetic(lat, lon, alt);
++  }
++
++  /** Transform geodetic coordinates to cartesian coordinates.
++   */
++  virtual Vector3 toCart(const Geodetic&amp; geod) const
++  {
++    double xyz[3];
++    sgGeodToCart(geod.latitude, geod.longitude, geod.altitude, xyz);
++    return Vector3(xyz[0], xyz[1], xyz[2]);
++  }
++};
++
++class FGWind
++  : public Wind {
++public:
++  FGWind(void) {}
++  virtual ~FGWind(void) {}
++
++  // Return the wind velocity in the global coordinate frame.
++  // ????
++  // FIXME: make pure virtual
++  virtual Vector3 getWindVel(const Vector3&amp; pos) const
++  {
++    double xyz[3] = { pos(1), pos(2), pos(3) };
++    double lat, lon, alt;
++    sgCartToGeod(xyz, &amp;lat, &amp;lon, &amp;alt);
++
++    real_type cosLat = cos(lat);
++    real_type sinLat = sin(lat);
++    real_type cosLon = cos(lon);
++    real_type sinLon = sin(lon);
++
++    Matrix33 T(-cosLon*sinLat, -sinLon, -cosLon*cosLat,
++               -sinLon*sinLat, cosLon , -sinLon*cosLat,
++               cosLat        , 0.0    , -sinLat);
++
++    double north = fgGetDouble(&quot;/environment/wind-from-north-fps&quot;);
++    double east = fgGetDouble(&quot;/environment/wind-from-east-fps&quot;);
++    double down = fgGetDouble(&quot;/environment/wind-from-down-fps&quot;);
++
++    return convertFrom(uFeetPSecond, T*Vector3(north, east, down));
++  }
++};
++
++
++//     temperature = fgGetNode(&quot;/environment/temperature-degc&quot;,true);
++//     pressure = fgGetNode(&quot;/environment/pressure-inhg&quot;,true);
++//     density = fgGetNode(&quot;/environment/density-slugft3&quot;,true);
++//     turbulence_gain = fgGetNode(&quot;/environment/turbulence/magnitude-norm&quot;,true);
++//     turbulence_rate = fgGetNode(&quot;/environment/turbulence/rate-hz&quot;,true);
++
++
++
++class FGPropertyImpl : public PropertyImpl&lt;real_type&gt; {
++public:
++  FGPropertyImpl(SGPropertyNode* ptr) : mPropertyNode(ptr) {}
++  virtual void setValue(const real_type&amp; value) { if (mPropertyNode.valid()) mPropertyNode-&gt;setDoubleValue(value); }
++  virtual const Object* getObject(void) const { return 0; }
++  virtual Object* getObject(void) { return 0; }
++  virtual bool isValid(void) const { return true; }
++  virtual real_type getValue(void) const { if (mPropertyNode.valid()) return mPropertyNode-&gt;getDoubleValue(); else return 0; }
++private:
++  SGPropertyNode_ptr mPropertyNode;
++};
++
++// Our local storage covers the pointer to our vehicle.
++// A list of the property to expression adaptors.
++struct FGOpenFDMData {
++  OpenFDM::shared_ptr&lt;OpenFDM::Vehicle&gt; vehicle;
++  OpenFDM::shared_ptr&lt;OpenFDM::FGGround&gt; ground;
++};
++
++FGOpenFDM::FGOpenFDM(SGPropertyNode* fdmRootNode) :
++  mAircraftRootNode(fdmRootNode)
++{
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::FGOpenFDM(...)&quot;);
++
++  mData = new FGOpenFDMData;
++
++  // FIXME: this is the place where we can plug in our stuff into an other
++  // base directory. For example if this will get an AI aircraft or what ever.
++  if (!mAircraftRootNode)
++    mAircraftRootNode = SGPropertyNode_ptr(fgGetNode(&quot;/&quot;, true));
++}
++
++FGOpenFDM::~FGOpenFDM(void)
++{
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::~FGOpenFDM()&quot;);
++  mData-&gt;ground-&gt;setInterface(0);
++  delete mData;
++}
++
++void FGOpenFDM::init()
++{
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::init()&quot;);
++
++  // Call what needs to be done ... ;-(
++  common_init();
++
++  SGPath fdmConfig(fgGetString(&quot;/sim/aircraft-dir&quot;));
++  fdmConfig.append(fgGetString(&quot;/sim/aero&quot;));
++  fdmConfig.concat(&quot;.xml&quot;);
++
++  // Try to read JSBSim legacy files.
++  JSBReader reader;
++  try {
++    readXML(fdmConfig.str(), reader);
++  } catch (const sg_exception&amp; e) {
++    SG_LOG(SG_IO, SG_ALERT, &quot;While loading \&quot;&quot; &lt;&lt; fdmConfig.str()
++           &lt;&lt; &quot;\&quot;:\nGot an sg_exception from &quot; &lt;&lt; e.getOrigin() &lt;&lt; &quot;: &quot;
++           &lt;&lt; e.getFormattedMessage());
++    return;
++  }
++
++  mData-&gt;vehicle = reader.getVehicle();
++  mData-&gt;ground = new FGGround(this);
++  mData-&gt;vehicle-&gt;setGround(mData-&gt;ground);
++  mData-&gt;vehicle-&gt;setPlanet(new FGPlanet);
++  mData-&gt;vehicle-&gt;setWind(new FGWind);
++
++  mData-&gt;vehicle-&gt;init();
++
++  set_inited(true);
++}
++
++void FGOpenFDM::bind()
++{
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::bind()&quot;);
++
++  FGInterface::bind();
++
++  SGPropertyNode* sgProp = mAircraftRootNode-&gt;getChild(&quot;fdm/vehicle&quot;, 0, true);
++  sgProp = sgProp-&gt;getChild(&quot;system&quot;, 0, true);
++  tieModelGroup(sgProp, mData-&gt;vehicle-&gt;getSystem());
++}
++
++void FGOpenFDM::unbind()
++{
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::unbind()&quot;);
++
++  untieNamed(mAircraftRootNode, &quot;fdm/vehicle&quot;);
++
++  FGInterface::unbind();
++}
++
++void FGOpenFDM::update(double dt)
++{
++  if (is_suspended() || dt == 0)
++    return;
++
++  // Get a local vehicle pointer
++  Vehicle* vehicle = mData-&gt;vehicle;
++
++  if (!vehicle) {
++    SG_LOG(SG_FLIGHT, SG_ALERT,
++           &quot;FGOpenFDM::update(double) is called without an aircraft loaded!&quot;);
++    return;
++  }
++
++
++  // Check if somebody has fiddled with the state values since the past step...
++  bool stateChanged = false;
++
++  // Check the position
++  Geodetic gp = Geodetic(get_Latitude(),
++                         get_Longitude(),
++                         convertFrom(uFoot, get_Altitude()));
++  if (!equal(vehicle-&gt;getPlanet()-&gt;toCart(gp), vehicle-&gt;getCartPosition())) {
++    stateChanged = true;
++    SG_LOG(SG_FLIGHT, SG_INFO,
++           &quot;Geod Pos set, error = &quot;
++           &lt;&lt; norm(vehicle-&gt;getPlanet()-&gt;toCart(gp)-vehicle-&gt;getCartPosition())
++           &lt;&lt; &quot;\n\tprevous: &quot; &lt;&lt; vehicle-&gt;getGeodPosition()
++           &lt;&lt; &quot;\n\tcurrent: &quot;&lt;&lt; gp );
++    vehicle-&gt;setGeodPosition(gp);
++  }
++
++  // Check the orientation 
++  Vector3 euler = vehicle-&gt;getGeodOrientation().getEuler();
++  if (!equal(euler, Vector3(get_Phi(), get_Theta(), get_Psi()))) {
++    stateChanged = true;
++    Quaternion
++      go = Quaternion::fromHeadAttBank(get_Psi(), get_Theta(), get_Phi());
++    SG_LOG(SG_FLIGHT, SG_INFO,
++           &quot;Geod Or set, error = &quot;
++           &lt;&lt; norm(vehicle-&gt;getGeodOrientation() - go)
++           &lt;&lt; &quot;\n\tprevous: &quot; &lt;&lt; vehicle-&gt;getGeodOrientation()
++           &lt;&lt; &quot;\n\tcurrent: &quot;&lt;&lt; go );
++    vehicle-&gt;setGeodOrientation(go);
++  }
++  
++  if (stateChanged)
++    SG_LOG(SG_FLIGHT, SG_INFO, &quot;State changed ------------------------------&quot;);
++
++  double acrad = vehicle-&gt;getRadius();
++  double groundCacheRadius = acrad
++    + 2*dt*norm(vehicle-&gt;getVelocity().getLinear());
++  Vector3 cart = vehicle-&gt;getCartPosition();
++  double cart_pos[3] = { cart(1), cart(2), cart(3) };
++  double t = vehicle-&gt;getTime();
++  if (!prepare_ground_cache_m(t, cart_pos, groundCacheRadius))
++    SG_LOG(SG_FLIGHT, SG_WARN,
++           &quot;FGInterface is beeing called without scenery below the aircraft!&quot;);
++
++  vehicle-&gt;output();
++  vehicle-&gt;update(dt);
++
++  // Now write the newly computed values into the interface class.
++  gp = vehicle-&gt;getGeodPosition();
++  _updateGeodeticPosition(gp.latitude, gp.longitude,
++                          convertTo(uFoot, gp.altitude));
++
++  euler = vehicle-&gt;getGeodOrientation().getEuler();
++  _set_Euler_Angles(euler(1), euler(2), euler(3));
++
++
++  _set_V_rel_wind(convertTo(uFeetPSecond,
++                            norm(vehicle-&gt;getVelocity().getLinear())));
++
++  _set_V_equiv_kts(convertTo(uKnots,
++                             norm(vehicle-&gt;getVelocity().getLinear())));
++  
++  _set_V_calibrated_kts(convertTo(uKnots,
++                                  norm(vehicle-&gt;getVelocity().getLinear())));
++
++  _set_V_ground_speed(convertTo(uFeetPSecond,
++                                norm(vehicle-&gt;getVelocity().getLinear())));
++
++  // Velocities
++//   _set_Velocities_Local( Propagate-&gt;GetVel(eNorth),
++//                          Propagate-&gt;GetVel(eEast),
++//                          Propagate-&gt;GetVel(eDown) );
++
++//     _set_Velocities_Wind_Body( Propagate-&gt;GetUVW(1),
++//                                Propagate-&gt;GetUVW(2),
++//                                Propagate-&gt;GetUVW(3) );
++
++//     _set_Velocities_Ground( Propagate-&gt;GetVel(eNorth),
++//                             Propagate-&gt;GetVel(eEast),
++//                             -Propagate-&gt;GetVel(eDown) );
++
++}
++
++
++void
++FGOpenFDM::tieObject(SGPropertyNode* base, Object* object)
++{
++  // Check for output models
++  // If so, we want to reflect that in flightgears property tree
++  Output* outputModel = dynamic_cast&lt;Output*&gt;(object);
++  if (outputModel) {
++    std::string pName = outputModel-&gt;getOutputName();
++    SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
++    Property prop = object-&gt;getProperty(&quot;value&quot;);
++    sgProp-&gt;tie(FGRealPropertyAdapter(prop.toRealProperty()));
++  }
++
++  // Check for input models
++  // If so, we need to register a change notifier in flightgears property tree
++  Input* inputModel = dynamic_cast&lt;Input*&gt;(object);
++  if (inputModel) {
++    SG_LOG(SG_FLIGHT, SG_INFO,
++           &quot;Registering input for \&quot;&quot; &lt;&lt; inputModel-&gt;getName() &lt;&lt; &quot;\&quot;&quot;);
++    std::string pName = inputModel-&gt;getInputName();
++    SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
++    // That adds a change listener to the property node which in turn
++    // writes changes to the property back to the input model.
++    inputModel-&gt;setUserData(new InputChangeUserData(inputModel, sgProp));
++  }
++
++  // The usual, whole object reflection so that one can take a look into
++  // OpenFDM's internal modules ...
++  std::list&lt;std::string&gt; propertyList = object-&gt;listProperties();
++  std::list&lt;std::string&gt;::const_iterator it = propertyList.begin();
++  while (it != propertyList.end()) {
++    // ... well, FIXME cleanup ...
++    std::string pName = toPropname(*it);
++    SGPropertyNode* sgProp = base-&gt;getChild(pName.c_str(), 0, true);
++    Property prop = object-&gt;getProperty(*it);
++    if (prop.isStringProperty())
++      sgProp-&gt;tie(FGStringPropertyAdapter(prop.toStringProperty()));
++    else if (prop.isRealProperty())
++      sgProp-&gt;tie(FGRealPropertyAdapter(prop.toRealProperty()));
++    else if (prop.isIntegerProperty())
++      sgProp-&gt;tie(FGIntPropertyAdapter(prop.toIntegerProperty()));
++    else if (prop.isUnsignedProperty())
++      sgProp-&gt;tie(FGUnsignedPropertyAdapter(prop.toUnsignedProperty()));
++    else if (prop.isVector2Property()) {
++      sgProp-&gt;tie(FGVector2PropertyAdapter(prop.toVector2Property(), 1));
++      sgProp = base-&gt;getChild(pName.c_str(), 1, true);
++      sgProp-&gt;tie(FGVector2PropertyAdapter(prop.toVector2Property(), 2));
++    }
++    else if (prop.isVector3Property()) {
++      sgProp-&gt;tie(FGVector3PropertyAdapter(prop.toVector3Property(), 1));
++      sgProp = base-&gt;getChild(pName.c_str(), 1, true);
++      sgProp-&gt;tie(FGVector3PropertyAdapter(prop.toVector3Property(), 2));
++      sgProp = base-&gt;getChild(pName.c_str(), 2, true);
++      sgProp-&gt;tie(FGVector3PropertyAdapter(prop.toVector3Property(), 3));
++    }
++    else if (prop.isQuaternionProperty()) {
++      sgProp-&gt;tie(FGQuaternionPropertyAdapter(prop.toQuaternionProperty(), 1));
++      sgProp = base-&gt;getChild(pName.c_str(), 1, true);
++      sgProp-&gt;tie(FGQuaternionPropertyAdapter(prop.toQuaternionProperty(), 2));
++      sgProp = base-&gt;getChild(pName.c_str(), 2, true);
++      sgProp-&gt;tie(FGQuaternionPropertyAdapter(prop.toQuaternionProperty(), 3));
++      sgProp = base-&gt;getChild(pName.c_str(), 3, true);
++      sgProp-&gt;tie(FGQuaternionPropertyAdapter(prop.toQuaternionProperty(), 4));
++    }
++    else if (prop.isVector6Property()) {
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 1));
++      sgProp = base-&gt;getChild(pName.c_str(), 1, true);
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 2));
++      sgProp = base-&gt;getChild(pName.c_str(), 2, true);
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 3));
++      sgProp = base-&gt;getChild(pName.c_str(), 3, true);
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 4));
++      sgProp = base-&gt;getChild(pName.c_str(), 4, true);
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 5));
++      sgProp = base-&gt;getChild(pName.c_str(), 5, true);
++      sgProp-&gt;tie(FGVector6PropertyAdapter(prop.toVector6Property(), 6));
++    }
++    else
++      sgProp-&gt;tie(FGVariantPropertyAdapter(prop));
++    ++it;
++  }
++}
++
++void
++FGOpenFDM::tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup)
++{
++  unsigned numModels = modelGroup-&gt;getNumModels();
++  for (unsigned i = 0; i &lt; numModels; ++i) {
++    Model* model = modelGroup-&gt;getModel(i);
++    std::string pName = toPropname(model-&gt;getName());
++    SGPropertyNode* sgProp = base-&gt;getNode(pName.c_str(), true);
++    tieObject(sgProp, model);
++
++    ModelGroup* nestedGroup = model-&gt;toModelGroup();
++    if (nestedGroup) {
++      tieModelGroup(sgProp, nestedGroup);
++    }
++  }
++}
++
++void
++FGOpenFDM::untieRecursive(SGPropertyNode* base)
++{
++  // Unties and removes a whole tree.
++  // Sadly, it is not possible to remove the properties, so following models
++  // will see the properties even if they are no longer usefull.
++  int nChildren = base-&gt;nChildren();
++  for (int i = nChildren-1; 0 &lt;= i; --i) {
++    SGPropertyNode* child = base-&gt;getChild(i);
++    if (!child)
++      continue;
++
++    child-&gt;clearValue();
++    untieRecursive(child);
++  }
++}
++
++void
++FGOpenFDM::untieNamed(SGPropertyNode* base, const char* name)
++{
++  int sz = base-&gt;getChildren(name).size();
++  for (int j = sz - 1; 0 &lt;= j; --j) {
++    SGPropertyNode* tmpChild = base-&gt;getChild(name, j);
++    if (!tmpChild)
++      continue;
++    untieRecursive(tmpChild);
++    tmpChild-&gt;clearValue();
++  }
++}
++
++std::string
++FGOpenFDM::toPropname(const std::string&amp; name)
++{
++  std::string pName = name;
++  std::string::size_type pos;
++  while ((pos = pName.find(' ')) != std::string::npos) {
++    pName.replace(pos, 1, 1, '_');
++  }
++  while ((pos = pName.find('&lt;')) != std::string::npos) {
++    pName.replace(pos, 1, 1, '[');
++  }
++  while ((pos = pName.find('&gt;')) != std::string::npos) {
++    pName.replace(pos, 1, 1, ']');
++  }
++  return pName;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/flightgear/FGOpenFDM.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/flightgear/FGOpenFDM.h
+===================================================================
+--- trunk/flightgear/FGOpenFDM.h	2005-10-05 14:10:06 UTC (rev 6)
++++ trunk/flightgear/FGOpenFDM.h	2005-10-05 14:11:12 UTC (rev 7)
+@@ -0,0 +1,51 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef FGOpenFDM_H
++#define FGOpenFDM_H
++
++#include &lt;FDM/flight.hxx&gt;
++
++namespace OpenFDM {
++
++struct FGOpenFDMData;
++class Object;
++class ModelGroup;
++
++///
++/// Interface to an OpenFDM flightmodel.
++///
++class FGOpenFDM
++  : public FGInterface {
++public:
++  FGOpenFDM(SGPropertyNode* fdmRootNode = 0);
++  virtual ~FGOpenFDM(void);
++
++  /// Initializes the fdm
++  virtual void init();
++
++  /// Connects the fdm with the flightgear property tree
++  virtual void bind();
++
++  /// Disconnects the fdm from the flightgear property tree
++  virtual void unbind();
++  
++  /// Advances the FDM by dt seconds
++  virtual void update(double dt);
++
++private:
++  void tieObject(SGPropertyNode* base, Object* object);
++  void tieModelGroup(SGPropertyNode* base, ModelGroup* modelGroup);
++  static void untieNamed(SGPropertyNode* base, const char* name);
++  static void untieRecursive(SGPropertyNode* base);
++
++  static std::string toPropname(const std::string&amp; name);
++
++  FGOpenFDMData* mData;
++  SGPropertyNode_ptr mAircraftRootNode;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/flightgear/FGOpenFDM.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2005-10-05 14:10:06 UTC (rev 6)
++++ trunk/flightgear/FGPropertyAdapter.h	2005-10-05 14:11:12 UTC (rev 7)
+@@ -0,0 +1,336 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef FGPropertyAdapter_H
++#define FGPropertyAdapter_H
++
++#include &lt;string&gt;
++#include &lt;simgear/props/props.hxx&gt;
++#include &lt;OpenFDM/Property.h&gt;
++#include &lt;OpenFDM/Model.h&gt;
++
++namespace OpenFDM {
++
++class FGStringPropertyAdapter :
++    public SGRawValue&lt;const char*&gt; {
++public:
++  FGStringPropertyAdapter(const StringProperty&amp; stringProperty) :
++    mStringProperty(stringProperty)
++  {}
++  virtual ~FGStringPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(const char* value)
++  { return false; }
++  /// Implements the SimGear property interface.
++  virtual const char* getValue(void) const
++  { mValue = mStringProperty.getValue(); return mValue.c_str(); }
++  
++  virtual FGStringPropertyAdapter* clone(void) const
++  { return new FGStringPropertyAdapter(*this); }
++
++private:
++  mutable std::string mValue;
++  mutable StringProperty mStringProperty; /*FIXME*/
++};
++
++class FGRealPropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGRealPropertyAdapter(const RealProperty&amp; realProperty) :
++    mRealProperty(realProperty)
++  { }
++  virtual ~FGRealPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { mRealProperty.setValue(value); return mRealProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { return mRealProperty.getValue(); }
++  
++  virtual FGRealPropertyAdapter* clone(void) const
++  { return new FGRealPropertyAdapter(*this); }
++
++private:
++  mutable RealProperty mRealProperty; /*FIXME*/
++};
++
++class FGIntPropertyAdapter :
++    public SGRawValue&lt;int&gt; {
++public:
++  FGIntPropertyAdapter(const IntegerProperty&amp; intProperty) :
++    mIntProperty(intProperty)
++  { }
++  virtual ~FGIntPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(int value)
++  { mIntProperty.setValue(value); return mIntProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual int getValue(void) const
++  { return mIntProperty.getValue(); }
++  
++  virtual FGIntPropertyAdapter* clone(void) const
++  { return new FGIntPropertyAdapter(*this); }
++
++private:
++  mutable IntegerProperty mIntProperty; /*FIXME*/
++};
++
++class FGUnsignedPropertyAdapter :
++    public SGRawValue&lt;int&gt; {
++public:
++  FGUnsignedPropertyAdapter(const UnsignedProperty&amp; unsignedProperty) :
++    mUnsignedProperty(unsignedProperty)
++  { }
++  virtual ~FGUnsignedPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(int value)
++  { if (value &lt; 0) return false; mUnsignedProperty.setValue(value); return mUnsignedProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual int getValue(void) const
++  { return mUnsignedProperty.getValue(); }
++  
++  virtual FGUnsignedPropertyAdapter* clone(void) const
++  { return new FGUnsignedPropertyAdapter(*this); }
++
++private:
++  mutable UnsignedProperty mUnsignedProperty; /*FIXME*/
++};
++
++class FGVector2PropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGVector2PropertyAdapter(const Vector2Property&amp; property, unsigned idx) :
++    mProperty(property), mIndex(idx)
++  { if (mIndex &lt; 1 || 2 &lt; mIndex) mIndex = 1; }
++  virtual ~FGVector2PropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { Vector2 tmp = mProperty.getValue(); tmp(mIndex) = value; mProperty.setValue(tmp); return mProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { Vector2 value = mProperty.getValue(); return value(mIndex); }
++  
++  virtual FGVector2PropertyAdapter* clone(void) const
++  { return new FGVector2PropertyAdapter(*this); }
++
++private:
++  mutable Vector2Property mProperty; /*FIXME*/
++  unsigned mIndex;
++};
++
++class FGVector3PropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGVector3PropertyAdapter(const Vector3Property&amp; property, unsigned idx) :
++    mProperty(property), mIndex(idx)
++  { if (mIndex &lt; 1 || 3 &lt; mIndex) mIndex = 1; }
++  virtual ~FGVector3PropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { Vector3 tmp = mProperty.getValue(); tmp(mIndex) = value; mProperty.setValue(tmp); return mProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { Vector3 value = mProperty.getValue(); return value(mIndex); }
++  
++  virtual FGVector3PropertyAdapter* clone(void) const
++  { return new FGVector3PropertyAdapter(*this); }
++
++private:
++  mutable Vector3Property mProperty; /*FIXME*/
++  unsigned mIndex;
++};
++
++class FGQuaternionPropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGQuaternionPropertyAdapter(const QuaternionProperty&amp; property, unsigned idx) :
++    mProperty(property), mIndex(idx)
++  { if (mIndex &lt; 1 || 4 &lt; mIndex) mIndex = 1; }
++  virtual ~FGQuaternionPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { Quaternion tmp = mProperty.getValue(); tmp(mIndex) = value; mProperty.setValue(tmp); return mProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { Quaternion value = mProperty.getValue(); return value(mIndex); }
++  
++  virtual FGQuaternionPropertyAdapter* clone(void) const
++  { return new FGQuaternionPropertyAdapter(*this); }
++
++private:
++  mutable QuaternionProperty mProperty; /*FIXME*/
++  unsigned mIndex;
++};
++
++class FGVector6PropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGVector6PropertyAdapter(const Vector6Property&amp; property, unsigned idx) :
++    mProperty(property), mIndex(idx)
++  { if (mIndex &lt; 1 || 6 &lt; mIndex) mIndex = 1; }
++  virtual ~FGVector6PropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { Vector6 tmp = mProperty.getValue(); tmp(mIndex) = value; mProperty.setValue(tmp); return mProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { Vector6 value = mProperty.getValue(); return value(mIndex); }
++  
++  virtual FGVector6PropertyAdapter* clone(void) const
++  { return new FGVector6PropertyAdapter(*this); }
++
++private:
++  mutable Vector6Property mProperty; /*FIXME*/
++  unsigned mIndex;
++};
++
++class FGVariantPropertyAdapter :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGVariantPropertyAdapter(const Property&amp; property) :
++    mProperty(property)
++  { }
++  virtual ~FGVariantPropertyAdapter(void) {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { mProperty.setValue(Variant(value)); return mProperty.isValid(); }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  { return mProperty.getValue().toReal(); }
++  
++  virtual FGVariantPropertyAdapter* clone(void) const
++  { return new FGVariantPropertyAdapter(*this); }
++
++private:
++  mutable Property mProperty; /*FIXME*/
++};
++
++class FGRealInputModel :
++    public Model {
++public:
++  FGRealInputModel(const std::string&amp; name, SGPropertyNode* propertyNode) :
++    Model(name),
++    mPropertyNode(propertyNode)
++  {
++    setDirectFeedThrough(false);
++  
++//   setNumInputPorts(1);
++//   setInputPortName(0, &quot;input&quot;);
++  
++    setNumOutputPorts(1);
++    setOutputPort(0, &quot;value&quot;, Property(this, &amp;FGRealInputModel::getValue));
++  }
++  virtual ~FGRealInputModel(void)
++  {
++  }
++
++  void setPropertyNode(SGPropertyNode* propertyNode)
++  { mPropertyNode = propertyNode; }
++  SGPropertyNode* getPropertyNode(void)
++  { return mPropertyNode.ptr(); }
++
++  real_type getValue(void) const
++  {
++    if (mPropertyNode.valid())
++      return mPropertyNode-&gt;getDoubleValue();
++    else
++      return 0;
++  }
++private:
++  SGPropertyNode_ptr mPropertyNode;
++};
++
++class FGRealOutputModel :
++    public Model {
++public:
++  FGRealOutputModel(const std::string&amp; name, SGPropertyNode* propertyNode) :
++    Model(name),
++    mPropertyNode(propertyNode)
++  {
++    setDirectFeedThrough(false);
++  
++    setNumInputPorts(1);
++    setInputPortName(0, &quot;input&quot;);
++  }
++  virtual ~FGRealOutputModel(void)
++  { }
++
++  void setPropertyNode(SGPropertyNode* propertyNode)
++  { mPropertyNode = propertyNode; }
++  SGPropertyNode* getPropertyNode(void)
++  { return mPropertyNode.ptr(); }
++
++  virtual bool init(void)
++  {
++    OpenFDMAssert(getInputPort(0).isValid());
++    return getInputPort(0).isValid();
++  }
++
++  virtual void output(void)
++  {
++    OpenFDMAssert(getInputPort(0).isValid());
++    if (mPropertyNode.valid())
++      mPropertyNode-&gt;setDoubleValue(getInputPort(0).getValue().toReal());
++  }
++
++private:
++  SGPropertyNode_ptr mPropertyNode;
++};
++
++// This one is used to write changes to input properties into their input
++// models
++class InputChangeListener : public SGPropertyChangeListener {
++public:
++  InputChangeListener(Input* inputModel) : mInputModel(inputModel) {}
++  virtual ~InputChangeListener(void) {}
++  virtual void valueChanged(SGPropertyNode * node)
++  {
++    // Just to be sure
++    if (!node)
++      return;
++    // Check if it is still valid
++    if (!mInputModel)
++      return;
++    // Set the input from the nodes's value.
++    mInputModel-&gt;setInputValue(node-&gt;getDoubleValue());
++  }
++private:
++  // Holds the input model where it should write the value
++  // Note that this shal not be a shared_ptr, since we get a recursive
++  // ref count loop in that case.
++  managed_ptr&lt;Input&gt; mInputModel;
++};
++
++// That class just takes care that the listeners to a specific Input are
++// cleaned up past the input is deleted.
++class InputChangeUserData : public Object {
++public:
++  InputChangeUserData(Input* inputModel, SGPropertyNode* node) :
++    mListener(new InputChangeListener(inputModel))
++  {
++    node-&gt;addChangeListener(mListener);
++    // Don't forget to set the initial value
++    mListener-&gt;valueChanged(node);
++  }
++  virtual ~InputChangeUserData(void)
++  {
++    // Also deregisters itself at the SGPropertyNode.
++    delete mListener;
++  }
++private:
++  InputChangeListener* mListener;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/flightgear/FGPropertyAdapter.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000001.html">[Openfdm-svn] r8 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#0">[ date ]</a>
+              <a href="thread.html#0">[ thread ]</a>
+              <a href="subject.html#0">[ subject ]</a>
+              <a href="author.html#0">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,152 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r102 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r102%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512182024.jBIKOLWT029832%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000085.html">
+   <LINK REL="Next"  HREF="000087.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r102 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r102%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512182024.jBIKOLWT029832%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r102 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Dec 18 21:24:21 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000085.html">[OpenFDM-svn] r101 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000087.html">[OpenFDM-svn] r103 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#86">[ date ]</a>
+              <a href="thread.html#86">[ thread ]</a>
+              <a href="subject.html#86">[ subject ]</a>
+              <a href="author.html#86">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-18 21:24:18 +0100 (Sun, 18 Dec 2005)
+New Revision: 102
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Make the parent of a Model a Model.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-17 09:04:30 UTC (rev 101)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-18 20:24:18 UTC (rev 102)
+@@ -3,7 +3,6 @@
+  */
+ 
+ #include &quot;LogStream.h&quot;
+-#include &quot;ModelGroup.h&quot;
+ #include &quot;ModelVisitor.h&quot;
+ #include &quot;Model.h&quot;
+ 
+@@ -37,13 +36,6 @@
+   visitor.apply(*this);
+ }
+ 
+-void
+-Model::ascend(ModelVisitor&amp; visitor)
+-{
+-  if (mParentModel)
+-    mParentModel-&gt;accept(visitor);
+-}
+-
+ const ModelGroup*
+ Model::toModelGroup(void) const
+ {
+@@ -276,13 +268,13 @@
+ }
+ 
+ void
+-Model::setParent(ModelGroup* modelGroup)
++Model::setParent(Model* model)
+ {
+   if (mParentModel) {
+     mParentModel-&gt;adjustNumDiscreteStates(0, getNumDiscreteStates());
+     mParentModel-&gt;adjustNumContinousStates(0, getNumContinousStates());
+   }
+-  mParentModel = modelGroup;
++  mParentModel = model;
+   if (mParentModel) {
+     mParentModel-&gt;adjustNumDiscreteStates(getNumDiscreteStates(), 0);
+     mParentModel-&gt;adjustNumContinousStates(getNumContinousStates(), 0);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-17 09:04:30 UTC (rev 101)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-18 20:24:18 UTC (rev 102)
+@@ -39,7 +39,8 @@
+ //   virtual void accept(ConstModelVisitor&amp; visitor) const;
+ 
+   /// Hmm ...
+-  void ascend(ModelVisitor&amp; visitor);
++  void ascend(ModelVisitor&amp; visitor)
++  { if (mParentModel) mParentModel-&gt;accept(visitor); }
+ 
+   virtual const ModelGroup* toModelGroup(void) const;
+   virtual ModelGroup* toModelGroup(void);
+@@ -142,16 +143,17 @@
+   void setOutputPort(unsigned i, const std::string&amp; name, M* model,
+                      const Matrix&amp; (M::*getter)(void) const)
+   { setOutputPort(i, name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
++
+ private:
+   // Sets the parent model.
+   // That is the one which is informed if the number of states changes.
+-  void setParent(ModelGroup* modelGroup);
+-  const ModelGroup* getParent(void) const { return mParentModel; }
+-  ModelGroup* getParent(void) { return mParentModel; }
++  const Model* getParent(void) const { return mParentModel; }
++  Model* getParent(void) { return mParentModel; }
++  void setParent(Model* model);
+   void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+   void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+ 
+-  managed_ptr&lt;ModelGroup&gt; mParentModel;
++  managed_ptr&lt;Model&gt; mParentModel;
+   unsigned mNumContinousStates;
+   unsigned mNumDiscreteStates;
+   bool mDirectFeedThrough;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000085.html">[OpenFDM-svn] r101 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000087.html">[OpenFDM-svn] r103 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#86">[ date ]</a>
+              <a href="thread.html#86">[ thread ]</a>
+              <a href="subject.html#86">[ subject ]</a>
+              <a href="author.html#86">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

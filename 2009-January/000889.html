@@ -1,0 +1,263 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r922 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r922%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041446.n04Ekpig030435%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000888.html">
+   <LINK REL="Next"  HREF="000890.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r922 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r922%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041446.n04Ekpig030435%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r922 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jan  4 15:46:51 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000888.html">[OpenFDM-svn] r921 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+        <LI>Next message: <A HREF="000890.html">[OpenFDM-svn] r923 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#889">[ date ]</a>
+              <a href="thread.html#889">[ thread ]</a>
+              <a href="subject.html#889">[ subject ]</a>
+              <a href="author.html#889">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-04 15:46:50 +0100 (Sun, 04 Jan 2009)
+New Revision: 922
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/InternalInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.h
+Log:
+Add PortHandles.
+Use them.
+
+M    src/OpenFDM/InternalInteract.cpp
+M    src/OpenFDM/NumericPortValue.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/InternalInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/InternalInteract.cpp	2009-01-04 14:43:59 UTC (rev 921)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/InternalInteract.cpp	2009-01-04 14:46:50 UTC (rev 922)
+@@ -24,12 +24,11 @@
+   Context(const InternalInteract* internalInteract,
+           const Environment* environment, PortValueList&amp; portValueList) :
+     DoubleLinkInteract::Context(internalInteract, environment, portValueList),
+-    mInternalSensor(internalInteract)
+-  {
+-    mDistanceValue = portValueList.getPortValue(internalInteract-&gt;mDistancePort);
+-    mVelocityValue = portValueList.getPortValue(internalInteract-&gt;mVelocityPort);
+-    mForceValue = portValueList.getPortValue(internalInteract-&gt;mForcePort);
+-  }
++    mInternalSensor(internalInteract),
++    mDistanceValue(portValueList.getPortValue(internalInteract-&gt;mDistancePort)),
++    mVelocityValue(portValueList.getPortValue(internalInteract-&gt;mVelocityPort)),
++    mForceValue(portValueList.getPortValue(internalInteract-&gt;mForcePort))
++  { }
+   virtual ~Context() {}
+     
+   virtual const InternalInteract&amp; getNode() const
+@@ -53,28 +52,28 @@
+       mDirection = (1/nrmRelPos)*relPos;
+ 
+     // The relative distance of these two points
+-    if (mDistanceValue)
+-      mDistanceValue-&gt;getValue()(0, 0) = nrmRelPos;
++    if (mDistanceValue.isConnected())
++      mDistanceValue = nrmRelPos;
+ 
+-    if (mVelocityValue) {
++    if (mVelocityValue.isConnected()) {
+       // The motion of link1 measured in link0
+       Vector6 relVel = mRelCoordSys.motionToReference(getLink1().getRefVel());
+       // The relative motion of link1 wrt link0 measured in link0
+       relVel -= getLink0().getRefVel();
+       // The scalar product is what we need.
+       // Here the additional cross product term cancels out
+-      mVelocityValue-&gt;getValue()(0, 0) = dot(mDirection, relVel.getLinear());
++      mVelocityValue = dot(mDirection, relVel.getLinear());
+     }
+   }
+   virtual void articulation(const Task&amp;)
+   {
+-    if (!mForceValue)
++    if (!mForceValue.isConnected())
+       return;
+ 
+     // Since we assume positive input forces to push the two attached
+     // RigidBodies, we need that minus sign to negate the current position
+     // offset
+-    real_type force = mForceValue-&gt;getValue()(0, 0);
++    real_type force = mForceValue;
+     Vector3 force0 = (-force)*mDirection;
+     getLink0().applyBodyForce(force0);
+     
+@@ -84,9 +83,9 @@
+ 
+ private:
+   SharedPtr&lt;const InternalInteract&gt; mInternalSensor;
+-  SharedPtr&lt;NumericPortValue&gt; mDistanceValue;
+-  SharedPtr&lt;NumericPortValue&gt; mVelocityValue;
+-  SharedPtr&lt;const NumericPortValue&gt; mForceValue;
++  RealOutputPortHandle mDistanceValue;
++  RealOutputPortHandle mVelocityValue;
++  RealInputPortHandle mForceValue;
+   CoordinateSystem mRelCoordSys;
+   Vector3 mDirection;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.h	2009-01-04 14:43:59 UTC (rev 921)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.h	2009-01-04 14:46:50 UTC (rev 922)
+@@ -32,6 +32,110 @@
+   Matrix mMatrix;
+ };
+ 
++class RealInputPortHandle {
++public:
++  RealInputPortHandle(const NumericPortValue* numericPortValue = 0) :
++    mNumericPortValue(numericPortValue)
++  { }
++
++  bool isConnected() const
++  { return mNumericPortValue; }
++
++  operator const real_type&amp;() const
++  {
++    OpenFDMAssert(mNumericPortValue);
++    OpenFDMAssert(size(mNumericPortValue-&gt;getValue()) == Size(1, 1));
++    return mNumericPortValue-&gt;getValue()(0, 0);
++  }
++
++private: 
++  SharedPtr&lt;const NumericPortValue&gt; mNumericPortValue;
++};
++
++class RealOutputPortHandle {
++public:
++  RealOutputPortHandle(NumericPortValue* numericPortValue = 0) :
++    mNumericPortValue(numericPortValue)
++  { }
++
++  bool isConnected() const
++  { return mNumericPortValue; }
++
++  operator const real_type&amp;() const
++  {
++    OpenFDMAssert(mNumericPortValue);
++    OpenFDMAssert(size(mNumericPortValue-&gt;getValue()) == Size(1, 1));
++    return mNumericPortValue-&gt;getValue()(0, 0);
++  }
++  operator real_type&amp;()
++  {
++    OpenFDMAssert(mNumericPortValue);
++    OpenFDMAssert(size(mNumericPortValue-&gt;getValue()) == Size(1, 1));
++    return mNumericPortValue-&gt;getValue()(0, 0);
++  }
++  RealOutputPortHandle&amp; operator=(const real_type&amp; value)
++  {
++    OpenFDMAssert(mNumericPortValue);
++    OpenFDMAssert(size(mNumericPortValue-&gt;getValue()) == Size(1, 1));
++    mNumericPortValue-&gt;getValue()(0, 0) = value;
++    return *this;
++  }
++
++private: 
++  SharedPtr&lt;NumericPortValue&gt; mNumericPortValue;
++};
++
++class MatrixInputPortHandle {
++public:
++  MatrixInputPortHandle(const NumericPortValue* numericPortValue = 0) :
++    mNumericPortValue(numericPortValue)
++  { }
++
++  bool isConnected() const
++  { return mNumericPortValue; }
++
++  operator const Matrix&amp;() const
++  {
++    OpenFDMAssert(mNumericPortValue);
++    return mNumericPortValue-&gt;getValue();
++  }
++
++private: 
++  SharedPtr&lt;const NumericPortValue&gt; mNumericPortValue;
++};
++
++class MatrixOutputPortHandle {
++public:
++  MatrixOutputPortHandle(NumericPortValue* numericPortValue = 0) :
++    mNumericPortValue(numericPortValue)
++  { }
++
++  bool isConnected() const
++  { return mNumericPortValue; }
++
++  operator const Matrix&amp;() const
++  {
++    OpenFDMAssert(mNumericPortValue);
++    return mNumericPortValue-&gt;getValue();
++  }
++  operator Matrix&amp;()
++  {
++    OpenFDMAssert(mNumericPortValue);
++    return mNumericPortValue-&gt;getValue();
++  }
++  template&lt;typename Impl, LinAlg::size_type m, LinAlg::size_type n&gt;
++  MatrixOutputPortHandle&amp; operator=(const LinAlg::MatrixRValue&lt;Impl,m,n&gt;&amp; value)
++  {
++    OpenFDMAssert(mNumericPortValue);
++    OpenFDMAssert(size(mNumericPortValue-&gt;getValue()) == Size(value));
++    mNumericPortValue-&gt;getValue() = value;
++    return *this;
++  }
++
++private: 
++  SharedPtr&lt;NumericPortValue&gt; mNumericPortValue;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000888.html">[OpenFDM-svn] r921 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+	<LI>Next message: <A HREF="000890.html">[OpenFDM-svn] r923 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#889">[ date ]</a>
+              <a href="thread.html#889">[ thread ]</a>
+              <a href="subject.html#889">[ subject ]</a>
+              <a href="author.html#889">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

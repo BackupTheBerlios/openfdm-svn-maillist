@@ -1,0 +1,203 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r142 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r142%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512291633.jBTGX5XW007799%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000125.html">
+   <LINK REL="Next"  HREF="000127.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r142 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r142%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512291633.jBTGX5XW007799%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r142 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Dec 29 17:33:05 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000125.html">[OpenFDM-svn] r141 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000127.html">[OpenFDM-svn] r143 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#126">[ date ]</a>
+              <a href="thread.html#126">[ thread ]</a>
+              <a href="subject.html#126">[ subject ]</a>
+              <a href="author.html#126">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-29 17:32:59 +0100 (Thu, 29 Dec 2005)
+New Revision: 142
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+Log:
+Make parent/child checks a bit more readable and flexible
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-29 16:32:59 UTC (rev 142)
+@@ -77,6 +77,20 @@
+ }
+ 
+ bool
++Frame::isParentFrameOf(const Frame* const frame) const
++{
++  return isDirectParentFrameOf(frame) ||
++    (frame &amp;&amp; isParentFrameOf(frame-&gt;mParentFrame));
++}
++
++bool
++Frame::isChildFrameOf(const Frame* const frame) const
++{
++  return isDirectChildFrameOf(frame) ||
++    (mParentFrame &amp;&amp; mParentFrame-&gt;isChildFrameOf(frame));
++}
++
++bool
+ Frame::addChildFrame(Frame* child)
+ {
+   if (!child) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-29 16:32:59 UTC (rev 142)
+@@ -70,15 +70,34 @@
+   /// Return the parent frame.
+   const Frame* getParentFrame(void) const
+   { return mParentFrame; }
+-  /// Return true if the given frame is the parent frame.
+-  /// FIXME: it will read more intuitive if it is called
+-  /// this-&gt;isParentFrameOf(that)
+-  bool isParentFrame(const Frame* frame) const
+-  { return frame == mParentFrame; }
+   /// True if the current frame has a parent frame.
+   bool hasParent(void) const
+   { return getParentFrame(); }
+ 
++  /// Return true if this Frame is the direct parent Frame of the Frame given
++  /// in the argument frame.
++  /// That means it reads:
++  ///  this-&gt;isDirectParentFrameOf(frame)
++  bool isDirectParentFrameOf(const Frame* const frame) const
++  { return frame &amp;&amp; this == frame-&gt;mParentFrame; }
++  /// Return true if this Frame is a parent Frame of the Frame given
++  /// in the argument frame. It does not need to be the direct parent.
++  /// That means it reads:
++  ///  this-&gt;isParentFrameOf(frame)
++  bool isParentFrameOf(const Frame* const frame) const;
++
++  /// Return true if this Frame is a direct child Frame of the Frame given
++  /// in the argument frame.
++  /// That means it reads:
++  ///  this-&gt;isDirectChildFrameOf(frame)
++  bool isDirectChildFrameOf(const Frame* const frame) const
++  { return frame &amp;&amp; frame == mParentFrame; }
++  /// Return true if this Frame is a child Frame of the Frame given
++  /// in the argument frame. It does not need to be a direct child.
++  /// That means it reads:
++  ///  this-&gt;isChildFrameOf(frame)
++  bool isChildFrameOf(const Frame* const frame) const;
++
+   /// Adds the given frame to the list of child frames.
+   /// returns true if that completed sucessfully.
+   bool addChildFrame(Frame* child);
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-29 16:32:59 UTC (rev 142)
+@@ -70,7 +70,7 @@
+   rigidBody = getInboardBody();
+   if (rigidBody) {
+     Frame* frame = rigidBody-&gt;getFrame();
+-    if (frame &amp;&amp; !frame-&gt;isParentFrame(mFrame))
++    if (frame &amp;&amp; !frame-&gt;isDirectParentFrameOf(mFrame))
+       frame-&gt;addChildFrame(mFrame);
+   } else {
+     Environment* environment = getEnvironment();
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-29 16:32:59 UTC (rev 142)
+@@ -49,7 +49,7 @@
+     getOutboardBody()-&gt;setFrame(mPrismaticJointFrame);
+   }
+   outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame-&gt;isParentFrame(inFrame)) {
++  if (!outFrame-&gt;isDirectChildFrameOf(inFrame)) {
+     inFrame-&gt;addChildFrame(mPrismaticJointFrame);
+   }
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2005-12-29 16:32:59 UTC (rev 142)
+@@ -55,7 +55,7 @@
+     getOutboardBody()-&gt;setFrame(mRevoluteActuatorFrame);
+   }
+   outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame-&gt;isParentFrame(inFrame)) {
++  if (!outFrame-&gt;isDirectChildFrameOf(inFrame)) {
+     inFrame-&gt;addChildFrame(mRevoluteActuatorFrame);
+   }
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-29 16:12:34 UTC (rev 141)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-29 16:32:59 UTC (rev 142)
+@@ -49,7 +49,7 @@
+     getOutboardBody()-&gt;setFrame(mRevoluteJointFrame);
+   }
+   outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame-&gt;isParentFrame(inFrame)) {
++  if (!outFrame-&gt;isDirectChildFrameOf(inFrame)) {
+     inFrame-&gt;addChildFrame(mRevoluteJointFrame);
+   }
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000125.html">[OpenFDM-svn] r141 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000127.html">[OpenFDM-svn] r143 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#126">[ date ]</a>
+              <a href="thread.html#126">[ thread ]</a>
+              <a href="subject.html#126">[ subject ]</a>
+              <a href="author.html#126">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

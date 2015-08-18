@@ -1,0 +1,450 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r465 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r465%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809121743.m8CHhg8R029850%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000436.html">
+   <LINK REL="Next"  HREF="000438.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r465 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r465%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809121743.m8CHhg8R029850%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r465 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Sep 12 19:43:42 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000436.html">[OpenFDM-svn] r464 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000438.html">[OpenFDM-svn] r466 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#437">[ date ]</a>
+              <a href="thread.html#437">[ thread ]</a>
+              <a href="subject.html#437">[ subject ]</a>
+              <a href="author.html#437">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-12 19:43:41 +0200 (Fri, 12 Sep 2008)
+New Revision: 465
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move Library nodes into the real implementation.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.cpp	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.cpp	2008-09-12 17:43:41 UTC (rev 465)
+@@ -0,0 +1,64 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;LibraryModel.h&quot;
++
++#include &quot;LibraryNode.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(LibraryModel, Object)
++  END_OPENFDM_OBJECT_DEF
++
++LibraryModel::LibraryModel(const std::string&amp; name, Node* node) :
++  Object(name),
++  mNode(node)
++{
++}
++
++LibraryModel::~LibraryModel()
++{
++}
++
++unsigned
++LibraryModel::getNumParentNodes() const
++{
++  return mParentNodes.size();
++}
++  
++WeakPtr&lt;LibraryNode&gt;
++LibraryModel::getParent(unsigned i)
++{
++  if (mParentNodes.size() &lt;= i)
++    return 0;
++  return mParentNodes[i];
++}
++
++WeakPtr&lt;const LibraryNode&gt;
++LibraryModel::getParent(unsigned i) const
++{
++  if (mParentNodes.size() &lt;= i)
++    return 0;
++  return mParentNodes[i];
++}
++
++SharedPtr&lt;Node&gt;
++LibraryModel::getNode()
++{
++  return mNode;
++}
++
++SharedPtr&lt;const Node&gt;
++LibraryModel::getNode() const
++{
++  return mNode;
++}
++
++void
++LibraryModel::setNode(Node* node)
++{
++  mNode = node;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h	2008-09-12 17:43:41 UTC (rev 465)
+@@ -0,0 +1,40 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LibraryModel_H
++#define OpenFDM_LibraryModel_H
++
++#include &lt;string&gt;
++#include &lt;vector&gt;
++#include &quot;Object.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++class LibraryNode;
++
++class LibraryModel : public Object {
++  OPENFDM_OBJECT(LibraryModel, Object);
++public:
++  LibraryModel(const std::string&amp; name, Node* node = 0);
++  virtual ~LibraryModel();
++
++  unsigned getNumParentNodes() const;
++  
++  WeakPtr&lt;LibraryNode&gt; getParent(unsigned i);
++  WeakPtr&lt;const LibraryNode&gt; getParent(unsigned i) const;
++
++  SharedPtr&lt;Node&gt; getNode();
++  SharedPtr&lt;const Node&gt; getNode() const;
++  void setNode(Node* node);
++
++private:
++  SharedPtr&lt;Node&gt; mNode;
++  std::vector&lt;WeakPtr&lt;LibraryNode&gt; &gt; mParentNodes;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-12 17:43:41 UTC (rev 465)
+@@ -0,0 +1,48 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;LibraryNode.h&quot;
++
++#include &quot;NodeVisitor.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(LibraryNode, Node)
++  END_OPENFDM_OBJECT_DEF
++
++LibraryNode::LibraryNode(const std::string&amp; name, LibraryModel* libraryModel) :
++  Node(name),
++  mLibraryModel(libraryModel)
++{
++}
++
++LibraryNode::~LibraryNode()
++{
++}
++
++void
++LibraryNode::accept(NodeVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
++SharedPtr&lt;LibraryModel&gt;
++LibraryNode::getLibraryModel()
++{
++  return mLibraryModel;
++}
++
++SharedPtr&lt;const LibraryModel&gt;
++LibraryNode::getLibraryModel() const
++{
++  return mLibraryModel;
++}
++
++void
++LibraryNode::setLibraryModel(LibraryModel* libraryModel)
++{
++  mLibraryModel = libraryModel;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.h	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.h	2008-09-12 17:43:41 UTC (rev 465)
+@@ -0,0 +1,37 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LibraryNode_H
++#define OpenFDM_LibraryNode_H
++
++#include &lt;string&gt;
++#include &quot;LibraryModel.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++class LibraryNode : public Node {
++  OPENFDM_OBJECT(LibraryNode, Node);
++public:
++  LibraryNode(const std::string&amp; name, LibraryModel* libraryModel = 0);
++  virtual ~LibraryNode();
++
++  virtual void accept(NodeVisitor&amp; visitor);
++
++  // FIXME: Hmm, how do we map ports??
++  // May be the Node just gets virtuals for ports???
++  // May be changing ports means informing the parent about that???
++
++  SharedPtr&lt;LibraryModel&gt; getLibraryModel();
++  SharedPtr&lt;const LibraryModel&gt; getLibraryModel() const;
++  void setLibraryModel(LibraryModel* libraryModel);
++
++private:
++  SharedPtr&lt;LibraryModel&gt; mLibraryModel;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-12 17:43:41 UTC (rev 465)
+@@ -33,6 +33,8 @@
+   Interact.h \
+   LeafContext.h \
+   LeafNode.h \
++  LibraryModel.h \
++  LibraryNode.h \
+   Limits.h \
+   LinAlg/Algorithm.h \
+   LinAlg/Array.h \
+@@ -119,6 +121,8 @@
+   Group.cpp \
+   Interact.cpp \
+   LeafNode.cpp \
++  LibraryModel.cpp \
++  LibraryNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
+   MechanicNode.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-09-12 17:43:41 UTC (rev 465)
+@@ -6,6 +6,7 @@
+ 
+ #include &quot;Group.h&quot;
+ #include &quot;Interact.h&quot;
++#include &quot;LibraryNode.h&quot;
+ #include &quot;LeafNode.h&quot;
+ #include &quot;MechanicNode.h&quot;
+ #include &quot;Model.h&quot;
+@@ -41,6 +42,12 @@
+ }
+ 
+ void
++NodeVisitor::apply(LibraryNode&amp; libraryNode)
++{
++  apply(static_cast&lt;Node&amp;&gt;(libraryNode));
++}
++
++void
+ NodeVisitor::apply(LeafNode&amp; leafNode)
+ {
+   apply(static_cast&lt;Node&amp;&gt;(leafNode));
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-12 17:43:41 UTC (rev 465)
+@@ -11,6 +11,7 @@
+ class Group;
+ class GroupAcceptorNode;
+ class GroupProviderNode;
++class LibraryNode;
+ class LeafNode;
+ class Model;
+ class MechanicNode;
+@@ -22,11 +23,16 @@
+   virtual ~NodeVisitor();
+ 
+   virtual void apply(Node&amp;);
++
+   virtual void apply(Group&amp;);
+   virtual void apply(GroupAcceptorNode&amp;);
+   virtual void apply(GroupProviderNode&amp;);
++
++  virtual void apply(LibraryNode&amp;);
++
+   virtual void apply(LeafNode&amp;);
+   virtual void apply(Model&amp;);
++
+   virtual void apply(MechanicNode&amp;);
+   virtual void apply(RigidBody&amp;);
+   virtual void apply(Interact&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-12 12:36:55 UTC (rev 464)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-12 17:43:41 UTC (rev 465)
+@@ -438,6 +438,8 @@
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+   virtual void apply(LeafNode&amp; leaf)
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
++  virtual void apply(LibraryNode&amp; libraryNode)
++  { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+ 
+   // Aussen acceptor, innen provider
+   virtual void apply(GroupAcceptorNode&amp; leaf)
+@@ -708,64 +710,3 @@
+ // Kabelbaum &lt;-&gt; PortBundle ??? Original Kabelbaum == Cabel Bundle
+ // Oder Cable Set &lt;-&gt; Port Set???
+ 
+-// class CompositeNode : public Node {
+-//   // Might be something that behaves like a model, but depending on the input
+-//   // and output port types issues different final leafs scheduler ...
+-
+-//   // FIXME: is it possible to make 'Library models' from that one?
+-//   // would be good, would simplify groups enormous
+-// };
+-
+-// class Group : public CompositeNode {
+-// };
+-
+-// class LibraryNode;
+-
+-// class LibraryModel : public Object {
+-// public:
+-//   LibraryModel(const std::string&amp; name, Node* node = 0) :
+-//     Object(name),
+-//     mNode(node)
+-//   { }
+-
+-//   unsigned getNumParentNodes() const
+-//   { return mParentNodes.size(); }
+-  
+-//   WeakPtr&lt;LibraryNode&gt; getParent(unsigned i)
+-//   { if (mParentNodes.size() &lt;= i) return 0; return mParentNodes[i]; }
+-//   WeakPtr&lt;const LibraryNode&gt; getParent(unsigned i) const
+-//   { if (mParentNodes.size() &lt;= i) return 0; return mParentNodes[i]; }
+-
+-//   SharedPtr&lt;Node&gt; getNode()
+-//   { return mNode; }
+-//   SharedPtr&lt;const Node&gt; getNode() const
+-//   { return mNode; }
+-//   void setNode(Node* node)
+-//   { mNode = node; }
+-
+-// private:
+-//   SharedPtr&lt;Node&gt; mNode;
+-//   std::vector&lt;WeakPtr&lt;LibraryNode&gt; &gt; mParentNodes;
+-// };
+-
+-// class LibraryNode : public CompositeNode {
+-// public:
+-//   LibraryNode(const std::string&amp; name, LibraryModel* libraryModel = 0) :
+-//     Node(name),
+-//     mLibraryModel(libraryModel)
+-//   { }
+-
+-//   // Hmm, how do we map ports??
+-//   // May be the Node just gets virtuals for ports???
+-//   // May be changing ports means informing the parent about that???
+-
+-//   SharedPtr&lt;LibraryModel&gt; getLibraryModel()
+-//   { return mLibraryModel; }
+-//   SharedPtr&lt;const LibraryModel&gt; getLibraryModel() const
+-//   { return mLibraryModel; }
+-//   void setLibraryModel(LibraryModel* libraryModel)
+-//   { mLibraryModel = libraryModel; }
+-
+-// private:
+-//   SharedPtr&lt;LibraryModel&gt; mLibraryModel;
+-// };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000436.html">[OpenFDM-svn] r464 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000438.html">[OpenFDM-svn] r466 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#437">[ date ]</a>
+              <a href="thread.html#437">[ thread ]</a>
+              <a href="subject.html#437">[ subject ]</a>
+              <a href="author.html#437">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

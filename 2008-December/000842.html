@@ -1,0 +1,785 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r874 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r874%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812100618.mBA6IxFx020346%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000841.html">
+   <LINK REL="Next"  HREF="000843.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r874 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r874%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812100618.mBA6IxFx020346%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r874 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec 10 07:18:59 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000841.html">[OpenFDM-svn] r873 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000843.html">[OpenFDM-svn] r875 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#842">[ date ]</a>
+              <a href="thread.html#842">[ thread ]</a>
+              <a href="subject.html#842">[ subject ]</a>
+              <a href="author.html#842">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-10 07:18:57 +0100 (Wed, 10 Dec 2008)
+New Revision: 874
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h
+   branches/OpenFDM-StateSeparation/src/test/coordsys.cpp
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Introduce a CoordinateSystem class.
+
+AM   src/test/coordsys.cpp
+M    src/test/Makefile.am
+M    src/OpenFDM/MobileRootJoint.cpp
+M    src/OpenFDM/WheelContact.cpp
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/Makefile.am
+D    src/OpenFDM/Frame.cpp
+M    src/OpenFDM/Frame.h
+M    src/OpenFDM/MechanicLinkValue.h
+A    src/OpenFDM/CoordinateSystem.h
+M    src/OpenFDM/FixedRootJoint.cpp
+M    src/OpenFDM/Environment.h
+M    src/OpenFDM/HDF5SystemOutput.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -172,6 +172,13 @@
+     void setPosAndVel(const Vector3&amp; position, const Quaternion&amp; orientation,
+                       const VectorN&amp; velocity)
+     {
++      // Set up the local coordinate system of the joint
++      mRelativeCoordinateSystem.setPosition(mRelativeDesignPosition + position);
++      mRelativeCoordinateSystem.setOrientation(orientation);
++
++      // Propagate the reference coordinate system to the parent.
++      mChildLink-&gt;setCoordinateSystem(mParentLink-&gt;getCoordinateSystem().toReference(mRelativeCoordinateSystem));
++
+       mChildLink-&gt;setPosAndVel(*mParentLink, mRelativeDesignPosition + position,
+                                orientation, mJointMatrix*velocity);
+     }
+@@ -210,8 +217,10 @@
+       I -= SpatialInertia(Ih*hIh.solve(trans(Ih)));
+       
+       // Transform to parent link's coordinates and apply to the parent link
+-      mParentLink-&gt;applyForce(mChildLink-&gt;getFrame().forceToParent(force));
+-      mParentLink-&gt;applyInertia(mChildLink-&gt;getFrame().inertiaToParent(I));
++      force = mRelativeCoordinateSystem.forceToReference(force);
++      I = mRelativeCoordinateSystem.inertiaToReference(I);
++      mParentLink-&gt;applyForce(force);
++      mParentLink-&gt;applyInertia(I);
+     }
+ 
+     /** Compute the acceleration step for a given joint force.
+@@ -219,9 +228,9 @@
+      */
+     void accelerateDueToForce()
+     {
+-      Vector6 parentSpAccel
+-        = mChildLink-&gt;getFrame().motionFromParent(mParentLink-&gt;getFrame().getSpAccel());
+-    
++      Vector6 parentSpAccel = mParentLink-&gt;getFrame().getSpAccel();
++      parentSpAccel = mRelativeCoordinateSystem.motionToLocal(parentSpAccel);
++
+       Vector6 f = mChildLink-&gt;getInertia()*parentSpAccel + pAlpha;
+       velDot = hIh.solve(mJointForce - trans(mJointMatrix)*f);
+       mChildLink-&gt;setAccel(*mParentLink, mJointMatrix*velDot);
+@@ -244,8 +253,10 @@
+       force += I*(mChildLink-&gt;getFrame().getHdot() + mJointMatrix*velDot);
+       
+       // Transform to parent link's coordinates and apply to the parent link
+-      mParentLink-&gt;applyForce(mChildLink-&gt;getFrame().forceToParent(force));
+-      mParentLink-&gt;applyInertia(mChildLink-&gt;getFrame().inertiaToParent(I));
++      force = mRelativeCoordinateSystem.forceToReference(force);
++      I = mRelativeCoordinateSystem.inertiaToReference(I);
++      mParentLink-&gt;applyForce(force);
++      mParentLink-&gt;applyInertia(I);
+     }
+     
+     /** Compute the acceleration step for a given velocity derivative.
+@@ -306,6 +317,7 @@
+     VectorN mJointForce;
+ 
+     Vector3 mRelativeDesignPosition;
++    CoordinateSystem mRelativeCoordinateSystem;
+ 
+     Matrix6N mJointMatrix;
+     
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -0,0 +1,165 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_CoordinateSystem_H
++#define OpenFDM_CoordinateSystem_H
++
++#include &lt;iosfwd&gt;
++#include &quot;Vector.h&quot;
++#include &quot;Plane.h&quot;
++#include &quot;Transform.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Rotation.h&quot;
++#include &quot;Inertia.h&quot;
++
++// #include &quot;Frame.h&quot;
++
++namespace OpenFDM {
++
++class CoordinateSystem {
++public:
++  CoordinateSystem() :
++    mPosition(Vector3::zeros()),
++    mOrientation(Quaternion::unit())
++  { }
++  CoordinateSystem(const Vector3&amp; position) :
++    mPosition(position),
++    mOrientation(Quaternion::unit())
++  { }
++  CoordinateSystem(const Quaternion&amp; orientation) :
++    mPosition(Vector3::zeros()),
++    mOrientation(orientation)
++  { }
++  CoordinateSystem(const Vector3&amp; position, const Quaternion&amp; orientation) :
++    mPosition(position),
++    mOrientation(orientation)
++  { }
++  CoordinateSystem(const CoordinateSystem&amp; coordinateSystem) :
++    mPosition(coordinateSystem.mPosition),
++    mOrientation(coordinateSystem.mOrientation)
++  { }
++  /// For a transition time, this might be a good idea
++//   CoordinateSystem(const Frame&amp; frame) :
++//     mPosition(frame.getRefPos()),
++//     mOrientation(frame.getRefOr())
++//   { }
++
++  /// Return the position of this coordinate system wrt the reference coordinate
++  /// system. The position is measured in the reference coordinate
++  /// systems coordinates.
++  const Vector3&amp; getPosition() const
++  { return mPosition; }
++  void setPosition(const Vector3&amp; position)
++  { mPosition = position; }
++
++  /// Return the orientation of this coordinate system wrt the reference
++  /// coordinate system. The orientation is measured in the reference coordinate
++  /// systems coordinates.
++  const Rotation&amp; getOrientation() const
++  { return mOrientation; }
++  void setOrientation(const Rotation&amp; orientation)
++  { mOrientation = orientation; }
++  void setOrientation(const Quaternion&amp; orientation)
++  { mOrientation = orientation; }
++
++  /// Set up a new coordinate system with a relative position
++  /// and a relative orientation to this parent coordinate system.
++  /// ??? is that below ...
++  CoordinateSystem getRelative(const Vector3&amp; position) const
++  { return CoordinateSystem(toReference(position), mOrientation); }
++  CoordinateSystem getRelative(const Quaternion&amp; orientation) const
++  { return CoordinateSystem(mPosition, toReference(orientation)); }
++  CoordinateSystem getRelative(const Vector3&amp; p, const Quaternion&amp; o) const
++  { return CoordinateSystem(toReference(p), toReference(o)); }
++
++  // Returns the reference coordinates system in this coordinate systems
++  // coordinates.
++  CoordinateSystem referenceToLocal() const
++  { return toLocal(CoordinateSystem()); }
++
++  /// Conversion functions between local and reference coordinates
++  CoordinateSystem toReference(const CoordinateSystem&amp; coorinateSystem) const
++  { return CoordinateSystem(toReference(coorinateSystem.getPosition()),
++                            toReference(coorinateSystem.getOrientation())); }
++  CoordinateSystem toLocal(const CoordinateSystem&amp; coorinateSystem) const
++  { return CoordinateSystem(toLocal(coorinateSystem.getPosition()),
++                            toLocal(coorinateSystem.getOrientation())); }
++
++  Vector3 toReference(const Vector3&amp; position) const
++  { return mOrientation.backTransform(position) + mPosition; }
++  Vector3 toLocal(const Vector3&amp; position) const
++  { return mOrientation.transform(position - mPosition); }
++  Quaternion toReference(const Quaternion&amp; orientation) const
++  { return mOrientation*orientation; }
++  Quaternion toLocal(const Quaternion&amp; orientation) const
++  { return orientation*inverse(mOrientation); }
++
++  Vector3 rotToReference(const Vector3&amp; v) const
++  { return mOrientation.backTransform(v); }
++  Vector3 rotToLocal(const Vector3&amp; v) const
++  { return mOrientation.transform(v); }
++
++  Vector6 rotToReference(const Vector6&amp; v) const
++  { return Vector6(mOrientation.backTransform(v.getAngular()),
++                   mOrientation.backTransform(v.getLinear())); }
++  Vector6 rotToLocal(const Vector6&amp; v) const
++  { return Vector6(mOrientation.transform(v.getAngular()),
++                   mOrientation.transform(v.getLinear())); }
++
++
++  Vector6 motionToReference(const Vector6&amp; motion) const
++  { return motionFrom(mPosition, mOrientation, motion); }
++  Vector6 motionToLocal(const Vector6&amp; motion) const
++  { return motionTo(mPosition, mOrientation, motion); }
++
++  Vector6 forceToReference(const Vector6&amp; force) const
++  { return forceFrom(mPosition, mOrientation, force); }
++  Vector6 forceToLocal(const Vector6&amp; force) const
++  { return forceTo(mPosition, mOrientation, force); }
++
++  SpatialInertia inertiaToReference(const SpatialInertia&amp; inertia) const
++  {
++    if (mOrientation.isIdentity()) {
++      if (mPosition == Vector3::zeros()) {
++        return inertia;
++      } else {
++        return inertiaFrom(mPosition, inertia);
++      }
++    } else {
++      if (mPosition == Vector3::zeros()) {
++        return inertiaFrom(mOrientation, inertia);
++      } else {
++        return inertiaFrom(mPosition, mOrientation, inertia);
++      }
++    }
++  }
++  // Seldom used function, optimize at some time
++  SpatialInertia inertiaToLocal(const SpatialInertia&amp; inertia) const
++  { return referenceToLocal().inertiaToReference(inertia); }
++
++  Plane planeToReference(const Plane&amp; plane) const
++  { return planeFrom(mPosition, mOrientation, plane); }
++  Plane planeToLocal(const Plane&amp; plane) const
++  { return planeTo(mPosition, mOrientation, plane); }
++
++private:
++  Vector3 mPosition;
++  Rotation mOrientation;
++};
++
++template&lt;typename char_type, typename traits_type&gt;
++inline
++std::basic_ostream&lt;char_type, traits_type&gt;&amp;
++operator&lt;&lt;(std::basic_ostream&lt;char_type, traits_type&gt;&amp; os,
++           const CoordinateSystem&amp; coordinateSystem)
++{
++  os &lt;&lt; os.widen('(') &lt;&lt; trans(coordinateSystem.getPosition()) &lt;&lt; os.widen(' ')
++     &lt;&lt; coordinateSystem.getOrientation() &lt;&lt; os.widen(')');
++  return os;
++}
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -9,6 +9,7 @@
+ #include &quot;AbstractGround.h&quot;
+ #include &quot;AbstractPlanet.h&quot;
+ #include &quot;AbstractWind.h&quot;
++#include &quot;CoordinateSystem.h&quot;
+ #include &quot;Matrix.h&quot;
+ #include &quot;Plane.h&quot;
+ #include &quot;Referenced.h&quot;
+@@ -99,6 +100,18 @@
+     return mGround-&gt;getGroundPlane(*this, t, pos);
+   }
+ 
++
++  /// Return the plane at the position in the given coordinate system.
++  /// The plane is also returned in the given coordinate system
++  GroundValues
++  getGroundPlane(const CoordinateSystem&amp; cs, const real_type&amp; t) const
++  {
++    GroundValues groundValues = getGroundPlane(t, cs.getPosition());
++    return GroundValues(cs.planeToLocal(groundValues.plane),
++                        cs.rotToLocal(groundValues.vel),
++                        groundValues.friction);
++  }
++
+ private:
+   SharedPtr&lt;const AbstractWind&gt; mWind;
+   SharedPtr&lt;const AbstractPlanet&gt; mPlanet;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-12-10 06:18:57 UTC (rev 874)
+@@ -78,6 +78,8 @@
+   const Environment* environment;
+   environment = portValues[mMechanicLink].getEnvironment();
+   Vector3 angularBaseVelocity = environment-&gt;getAngularVelocity(task.getTime());
++  portValues[mMechanicLink].setCoordinateSystem(CoordinateSystem(mPosition,
++                                                                 mOrientation));
+   portValues[mMechanicLink].setPosAndVel(angularBaseVelocity, mPosition,
+                                          mOrientation, Vector6::zeros());
+ }
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp	2008-12-10 06:18:57 UTC (rev 874)
+@@ -1,52 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Frame.h&quot;
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-
+-namespace OpenFDM {
+-
+-Frame::Frame() :
+-  mPosition(Vector3::zeros()),
+-  mOrientation(Quaternion::unit()),
+-  mRelVel(Vector6::zeros()),
+-  mRelVelDot(Vector6::zeros()),
+-  mParentSpVel(Vector6::zeros()),
+-  mParentSpAccel(Vector6::zeros()),
+-  mRefOrient(Quaternion::unit()),
+-  mRefPos(Vector3::zeros()),
+-  mRefVel(Vector6::zeros())
+-{
+-}
+-
+-Frame::~Frame(void)
+-{
+-}
+-
+-SpatialInertia
+-Frame::inertiaToParent(const SpatialInertia&amp; I) const
+-{
+-  if (getOrientation().isIdentity()) {
+-    if (getPosition() == Vector3::zeros()) {
+-      return I;
+-    } else {
+-      return inertiaFrom(getPosition(), I);
+-    }
+-  } else {
+-    if (getPosition() == Vector3::zeros()) {
+-      return inertiaFrom(getOrientation(), I);
+-    } else {
+-      return inertiaFrom(getPosition(), getOrientation(), I);
+-    }
+-  }
+-}
+-
+-} // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -12,7 +12,6 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Rotation.h&quot;
+-#include &quot;Inertia.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,8 +22,19 @@
+ 
+ class Frame {
+ public:
+-  Frame();
+-  ~Frame(void);
++  Frame() :
++    mPosition(Vector3::zeros()),
++    mOrientation(Quaternion::unit()),
++    mRelVel(Vector6::zeros()),
++    mRelVelDot(Vector6::zeros()),
++    mParentSpVel(Vector6::zeros()),
++    mParentSpAccel(Vector6::zeros()),
++    mRefOrient(Quaternion::unit()),
++    mRefPos(Vector3::zeros()),
++    mRefVel(Vector6::zeros())
++  { }
++  ~Frame(void)
++  { }
+ 
+   void setPosAndVel(const Frame&amp; parent)
+   {
+@@ -243,7 +253,7 @@
+   }
+ 
+ 
+-  /** FIXME
++  /** FIXME belongs into the joints.
+    */
+   Vector6 getHdot(void) const
+   {
+@@ -317,14 +327,6 @@
+   Vector6 forceToParent(const Vector6&amp; v) const
+   { return forceFrom(getPosition(), getOrientation(), v); }
+ 
+-  /** Spatial inertia transform.
+-      Transforms a spatial inertia matrix from the current frame to the parent
+-      frame.
+-      @param I The inertia matrix in the current frame to be transformed.
+-      @return  The inertia matrix transformed to the parent frame.
+-   */
+-  SpatialInertia inertiaToParent(const SpatialInertia&amp; I) const;
+-
+   Plane planeFromParent(const Plane&amp; plane) const
+   { return planeTo(getPosition(), getOrientation(), plane); }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -363,11 +363,11 @@
+     virtual void append()
+     {
+       _position.append(mMechanicLinkValue-&gt;getFrame().getPosition());
+-      _refPosition.append(mMechanicLinkValue-&gt;getFrame().getRefPosition());
++      _refPosition.append(mMechanicLinkValue-&gt;getCoordinateSystem().getPosition());
+       _orientation.append(mMechanicLinkValue-&gt;getFrame().getOrientation());
+       _eulerAngle.append(mMechanicLinkValue-&gt;getFrame().getOrientation().getEuler());
+-      _refOrientation.append(mMechanicLinkValue-&gt;getFrame().getRefOrientation());
+-      _refEulerAngle.append(mMechanicLinkValue-&gt;getFrame().getRefOrientation().getEuler());
++      _refOrientation.append(mMechanicLinkValue-&gt;getCoordinateSystem().getOrientation());
++      _refEulerAngle.append(mMechanicLinkValue-&gt;getCoordinateSystem().getOrientation().getEuler());
+       _velocity.append(mMechanicLinkValue-&gt;getFrame().getSpVel());
+       _refVelocity.append(mMechanicLinkValue-&gt;getFrame().getRefVel());
+       _acceleration.append(mMechanicLinkValue-&gt;getFrame().getSpAccel());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-10 06:18:57 UTC (rev 874)
+@@ -28,6 +28,7 @@
+   ContinousStateInfoVector.h \
+   ContinousStateValue.h \
+   ContinousStateValueVector.h \
++  CoordinateSystem.h \
+   CowPtr.h \
+   DiscreteStateValueVector.h \
+   DoPri5.h \
+@@ -148,7 +149,6 @@
+   ExplicitAdams.cpp \
+   ExplicitEuler.cpp \
+   FlatPlanet.cpp \
+-  Frame.cpp \
+   Function.cpp \
+   Group.cpp \
+   GroupInterfaceNode.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-12-10 06:18:57 UTC (rev 874)
+@@ -5,10 +5,11 @@
+ #ifndef OpenFDM_MechanicLinkValue_H
+ #define OpenFDM_MechanicLinkValue_H
+ 
++#include &quot;CoordinateSystem.h&quot;
++#include &quot;Environment.h&quot;
++#include &quot;Frame.h&quot;
+ #include &quot;Inertia.h&quot;
+ #include &quot;PortValue.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Environment.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -25,6 +26,16 @@
+   Frame&amp; getFrame()
+   { return mFrame; }
+ 
++  /// Currently duplicate information from the Frame.
++  /// This is an attempt to seperate the coordinate system stuff away from
++  /// the reference frame handling.
++  const CoordinateSystem&amp; getCoordinateSystem() const
++  { return mCoordinateSystem; }
++  CoordinateSystem&amp; getCoordinateSystem()
++  { return mCoordinateSystem; }
++  void setCoordinateSystem(const CoordinateSystem&amp; coordinateSystem)
++  { mCoordinateSystem = coordinateSystem; }
++
+   const SpatialInertia&amp; getInertia() const
+   { return mArticulatedInertia; }
+   void setInertia(const SpatialInertia&amp; inertia)
+@@ -68,6 +79,12 @@
+   void setDesignPosition(const Vector3&amp; designPosition)
+   { mDesignPosition = designPosition; }
+ 
++  /// Returns the spatial reference velocity at the local position
++  Vector6 getReferenceVelocity(const Vector3&amp; position) const
++  { return motionTo(position, mFrame.getRefVel()); }
++  Vector6 getReferenceVelocity() const
++  { return mFrame.getRefVel(); }
++
+   // This is a per link value because of interacts that can be child of two
+   // different roots.
+   // FIXME, enforce setting that in the contructor
+@@ -78,9 +95,9 @@
+   { OpenFDMAssert(environment); mEnvironment = environment; }
+ 
+ protected:
+-  // May be build a class hierarchy that accounts for different inputs
+-  // and outputs a rigid body can have.
+-  // Example: force port, force and inertia, frame port, velocity port
++  /// The local coordinate system of the mechanic link.
++  CoordinateSystem mCoordinateSystem;
++
+   Frame mFrame;
+   Vector6 mArticulatedForce;
+   SpatialInertia mArticulatedInertia;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-12-10 06:18:57 UTC (rev 874)
+@@ -63,6 +63,8 @@
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
++  portValues[mMechanicLink].setCoordinateSystem(CoordinateSystem(position,
++                                                                 orientation));
+   portValues[mMechanicLink].setPosAndVel(angularBaseVelocity,
+                                          position, orientation, velocity);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2008-12-10 06:18:57 UTC (rev 874)
+@@ -43,28 +43,21 @@
+   const Environment* environment;
+   environment = portValues[mMechanicLink].getEnvironment();
+ 
+-  const Frame&amp; frame = portValues[mMechanicLink].getFrame();
++  const CoordinateSystem&amp; cs = portValues[mMechanicLink].getCoordinateSystem();
+ 
+   // FIXME, for now relative position
+   Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+ 
+-  // FIXME, frame is constant in its parameters move into a useful context.
+-  // Can also make use of that in the Sensor and so on..
+-  // Also need Coordinate systems within a frame
+-  Frame mountFrame;
+-  mountFrame.setPosAndVel(frame, position,
+-                          Quaternion::unit(), Vector6::zeros());
+-  mountFrame.setAccel(frame, Vector6::zeros());
++  // The coordinate system at the hub.
++  CoordinateSystem hubCoordinateSystem(cs.getRelative(position));
+ 
+-  // This might go into the environment???
+-  // Query at a position wrt a coordinate system
+-  Vector3 refPos = frame.posToRef(position);
+-  // Vector3 refPos = mountFrame.posToRef(Vector3::zeros());
+-  GroundValues groundValues = environment-&gt;getGroundPlane(task.getTime(), refPos);
++  // Get the ground values in the hub coordinate system.
++  GroundValues groundValues =
++    environment-&gt;getGroundPlane(hubCoordinateSystem, task.getTime());
+ 
+   // Transform the plane equation to the local frame.
+-  Plane lp = mountFrame.planeFromRef(groundValues.plane);
+-  
++  Plane lp = groundValues.plane;
++ 
+   // Get the intersection length.
+   real_type distHubGround = fabs(lp.getDist());
+   real_type compressLength = mWheelRadius - distHubGround;
+@@ -76,14 +69,10 @@
+   Vector3 contactPoint = distHubGround*lp.getNormal();
+   
+   // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel(mountFrame.rotFromRef(groundValues.vel.getAngular()),
+-                    mountFrame.rotFromRef(groundValues.vel.getLinear()));
+-  groundVel -= mountFrame.getRefVel();
++  Vector6 groundVel = groundValues.vel;
+   // Now get the relative velocity of the ground wrt the hub
+-  Vector6 relVel = - groundVel;
+-//   Log(Model,Error) &lt;&lt; trans(mountFrame.getRelVel()) &lt;&lt; &quot; &quot;
+-//                    &lt;&lt; trans(groundVel) &lt;&lt; &quot; &quot;
+-//                    &lt;&lt; trans(mountFrame.motionToParent(relVel)) &lt;&lt; endl;
++  Vector6 relVel
++    = portValues[mMechanicLink].getReferenceVelocity(position) - groundVel;
+ 
+ 
+   // The velocity perpandicular to the plane.
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-10 06:18:57 UTC (rev 874)
+@@ -1,7 +1,7 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some util programs
+-bin_PROGRAMS = foucault mechanic structure tiretestrig
++bin_PROGRAMS = foucault mechanic structure tiretestrig coordsys
+ 
+ # define some unit tests
+ check_PROGRAMS = constintegral harmonic limit linalg quattest simulationtime unitstest
+@@ -10,6 +10,9 @@
+ tiretestrig_SOURCES = tiretestrig.cpp
+ tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++coordsys_SOURCES = coordsys.cpp
++coordsys_LDADD = ../OpenFDM/libOpenFDM.la
++
+ unitstest_SOURCES = unitstest.cpp
+ unitstest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/coordsys.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/coordsys.cpp	2008-12-09 20:51:54 UTC (rev 873)
++++ branches/OpenFDM-StateSeparation/src/test/coordsys.cpp	2008-12-10 06:18:57 UTC (rev 874)
+@@ -0,0 +1,73 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iostream&gt;
++#include &lt;OpenFDM/CoordinateSystem.h&gt;
++#include &lt;OpenFDM/Quaternion.h&gt;
++#include &lt;OpenFDM/Matrix.h&gt;
++#include &lt;OpenFDM/Rotation.h&gt;
++#include &lt;OpenFDM/Transform.h&gt;
++#include &lt;OpenFDM/Vector.h&gt;
++
++namespace OpenFDM {
++
++class ReferenceFrame {
++public:
++  ReferenceFrame() :
++    mSpatialVelocity(Vector6::zeros()),
++    mSpatialAcceleration(Vector6::zeros())
++  { }
++  ReferenceFrame(const ReferenceFrame&amp; referenceFrame) :
++    mSpatialVelocity(referenceFrame.mSpatialVelocity),
++    mSpatialAcceleration(referenceFrame.mSpatialAcceleration)
++  { }
++
++  const Vector6&amp; getSpatialVelocity() const
++  { return mSpatialVelocity; }
++  void setSpatialVelocity(const Vector6&amp; spatialVelocity)
++  { mSpatialVelocity = spatialVelocity; }
++
++  const Vector6&amp; getSpatialAcceleration() const
++  { return mSpatialAcceleration; }
++  void setSpatialAcceleration(const Vector6&amp; spatialAcceleration)
++  { mSpatialAcceleration = spatialAcceleration; }
++
++  CoordinateSystem mCoordinateSystem; /// ????
++private:
++  Vector6 mSpatialVelocity;
++  Vector6 mSpatialAcceleration;
++};
++
++// LinkValue has a root coordinate system and a chain of them???
++
++}
++
++using namespace OpenFDM;
++
++int
++main(int argc, char *argv[])
++{
++  CoordinateSystem cs(Vector3(1, 0, 0));
++  CoordinateSystem cs2 = cs.getRelative(Vector3(1, 0, 0), Quaternion::fromEuler(Vector3(0, pi/2, 0)));
++  CoordinateSystem cs3 = cs2.getRelative(Vector3(1, 0, 0));
++
++  std::cout &lt;&lt; cs &lt;&lt; std::endl;
++  std::cout &lt;&lt; cs2 &lt;&lt; std::endl;
++  std::cout &lt;&lt; cs3 &lt;&lt; std::endl;
++  std::cout &lt;&lt; cs3.referenceToLocal() &lt;&lt; std::endl;
++
++  std::cout &lt;&lt; trans(cs.toReference(Vector3(1, 1, 1))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs2.toReference(Vector3(1, 1, 1))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs3.toReference(Vector3(1, 1, 1))) &lt;&lt; std::endl;
++
++  std::cout &lt;&lt; trans(cs.referenceToLocal().toReference(cs.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs2.referenceToLocal().toReference(cs2.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs3.referenceToLocal().toReference(cs3.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++
++  std::cout &lt;&lt; trans(cs.toLocal(cs.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs2.toLocal(cs2.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++  std::cout &lt;&lt; trans(cs3.toLocal(cs3.toReference(Vector3(1, 1, 1)))) &lt;&lt; std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/test/coordsys.cpp
+___________________________________________________________________
+Name: svn:executable
+   + *
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000841.html">[OpenFDM-svn] r873 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000843.html">[OpenFDM-svn] r875 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#842">[ date ]</a>
+              <a href="thread.html#842">[ thread ]</a>
+              <a href="subject.html#842">[ subject ]</a>
+              <a href="author.html#842">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

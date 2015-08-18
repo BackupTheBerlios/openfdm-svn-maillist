@@ -1,0 +1,191 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r505 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r505%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809270914.m8R9EdQT008366%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000476.html">
+   <LINK REL="Next"  HREF="000478.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r505 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r505%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809270914.m8R9EdQT008366%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r505 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 11:14:39 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000476.html">[OpenFDM-svn] r504 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000478.html">[OpenFDM-svn] r506 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#477">[ date ]</a>
+              <a href="thread.html#477">[ thread ]</a>
+              <a href="subject.html#477">[ subject ]</a>
+              <a href="author.html#477">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 11:14:38 +0200 (Sat, 27 Sep 2008)
+New Revision: 505
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+PortData holds a reference to the NodeInstance instead of
+its parent list. Use that directly.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 08:03:46 UTC (rev 504)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 09:14:38 UTC (rev 505)
+@@ -470,8 +470,8 @@
+ 
+   struct PortData : public WeakReferenced {
+   public:
+-    PortData(PortDataList* portDataList, const PortInfo* portInfo = 0) :
+-      mParentPortDataList(portDataList),
++    PortData(AbstractNodeInstance* nodeInstance, const PortInfo* portInfo) :
++      mNodeInstance(nodeInstance),
+       mPortInfo(portInfo)
+     { }
+     virtual ~PortData()
+@@ -493,25 +493,21 @@
+     {
+       if (!getPortInfo())
+         return;
+-      SharedPtr&lt;PortDataList&gt; portDataList = mParentPortDataList.lock();
+-      if (!portDataList)
++      if (!mNodeInstance)
+         return;
+-      SharedPtr&lt;AbstractNodeInstance&gt; nodeInstance = portDataList-&gt;mNodeInstance;
+-      if (!nodeInstance)
+-        return;
+       unsigned index = getPortInfo()-&gt;getIndex();
+-      nodeInstance-&gt;getPortValueList().setPortValue(index, portValue);
++      mNodeInstance-&gt;getPortValueList().setPortValue(index, portValue);
+     }
+ 
+   private:
+-    WeakPtr&lt;PortDataList&gt; mParentPortDataList;
++    SharedPtr&lt;AbstractNodeInstance&gt; mNodeInstance;
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+   };
+ 
+   struct ProviderPortData : public PortData {
+-    ProviderPortData(PortDataList* portDataList,
++    ProviderPortData(AbstractNodeInstance* nodeInstance,
+                      const ProviderPortInfo* providerPort) :
+-      PortData(portDataList, providerPort),
++      PortData(nodeInstance, providerPort),
+       _providerPort(providerPort)
+     { }
+     virtual ProviderPortData* toProviderPortData()
+@@ -546,9 +542,9 @@
+     std::vector&lt;SharedPtr&lt;AcceptorPortData&gt; &gt; _acceptorPortDataList;
+   };
+   struct AcceptorPortData : public PortData {
+-    AcceptorPortData(PortDataList* portDataList,
++    AcceptorPortData(AbstractNodeInstance* nodeInstance,
+                      const AcceptorPortInfo* acceptorPort) :
+-      PortData(portDataList, acceptorPort),
++      PortData(nodeInstance, acceptorPort),
+       _acceptorPort(acceptorPort)
+     { }
+     virtual AcceptorPortData* toAcceptorPortData()
+@@ -585,9 +581,9 @@
+   };
+   struct ProxyAcceptorPortData : public AcceptorPortData {
+   public:
+-    ProxyAcceptorPortData(PortDataList* portDataList,
++    ProxyAcceptorPortData(AbstractNodeInstance* nodeInstance,
+                           const AcceptorPortInfo* acceptorPortInfo) :
+-      AcceptorPortData(portDataList, acceptorPortInfo)
++      AcceptorPortData(nodeInstance, acceptorPortInfo)
+     { }
+     virtual ProxyAcceptorPortData* toProxyAcceptorPortData()
+     { return this; }
+@@ -600,9 +596,9 @@
+   };
+   struct ProxyProviderPortData : public ProviderPortData {
+   public:
+-    ProxyProviderPortData(PortDataList* portDataList,
++    ProxyProviderPortData(AbstractNodeInstance* nodeInstance,
+                           const ProviderPortInfo* providerPortInfo) :
+-      ProviderPortData(portDataList, providerPortInfo)
++      ProviderPortData(nodeInstance, providerPortInfo)
+     { }
+     virtual ProxyProviderPortData* toProxyProviderPortData()
+     { return this; }
+@@ -625,7 +621,7 @@
+     AcceptorPortData* newAcceptorPortData(const AcceptorPortInfo* acceptorPort)
+     {
+       AcceptorPortData* acceptorPortData;
+-      acceptorPortData = new AcceptorPortData(this, acceptorPort);
++      acceptorPortData = new AcceptorPortData(mNodeInstance, acceptorPort);
+       unsigned index = acceptorPort-&gt;getIndex();
+       if (mPortDataVector.size() &lt;= index)
+         mPortDataVector.resize(index + 1);
+@@ -635,7 +631,7 @@
+     ProviderPortData* newProviderPortData(const ProviderPortInfo* providerPort)
+     {
+       ProviderPortData* providerPortData;
+-      providerPortData = new ProviderPortData(this, providerPort);
++      providerPortData = new ProviderPortData(mNodeInstance, providerPort);
+       unsigned index = providerPort-&gt;getIndex();
+       if (mPortDataVector.size() &lt;= index)
+         mPortDataVector.resize(index + 1);
+@@ -645,7 +641,7 @@
+     ProxyAcceptorPortData* newProxyAcceptorPortData(const AcceptorPortInfo* acceptorPort)
+     {
+       ProxyAcceptorPortData* acceptorPortData;
+-      acceptorPortData = new ProxyAcceptorPortData(this, acceptorPort);
++      acceptorPortData = new ProxyAcceptorPortData(mNodeInstance, acceptorPort);
+       unsigned index = acceptorPort-&gt;getIndex();
+       if (mPortDataVector.size() &lt;= index)
+         mPortDataVector.resize(index + 1);
+@@ -655,7 +651,7 @@
+     ProxyProviderPortData* newProxyProviderPortData(const ProviderPortInfo* providerPort)
+     {
+       ProxyProviderPortData* providerPortData;
+-      providerPortData = new ProxyProviderPortData(this, providerPort);
++      providerPortData = new ProxyProviderPortData(mNodeInstance, providerPort);
+       unsigned index = providerPort-&gt;getIndex();
+       if (mPortDataVector.size() &lt;= index)
+         mPortDataVector.resize(index + 1);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000476.html">[OpenFDM-svn] r504 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000478.html">[OpenFDM-svn] r506 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#477">[ date ]</a>
+              <a href="thread.html#477">[ thread ]</a>
+              <a href="subject.html#477">[ subject ]</a>
+              <a href="author.html#477">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

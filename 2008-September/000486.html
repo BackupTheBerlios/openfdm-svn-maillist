@@ -1,0 +1,376 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r514%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271542.m8RFgl0N003360%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000485.html">
+   <LINK REL="Next"  HREF="000487.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r514%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271542.m8RFgl0N003360%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 17:42:47 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000485.html">[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+        <LI>Next message: <A HREF="000487.html">[OpenFDM-svn] r515 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#486">[ date ]</a>
+              <a href="thread.html#486">[ thread ]</a>
+              <a href="subject.html#486">[ subject ]</a>
+              <a href="author.html#486">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 17:42:47 +0200 (Sat, 27 Sep 2008)
+New Revision: 514
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Make port allocation work somehow.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-27 15:42:47 UTC (rev 514)
+@@ -23,7 +23,8 @@
+   Model(name),
+   mInputPort(newMatrixInputPort(&quot;input&quot;, true)),
+   mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
+-  mDelay(0)
++  mDelay(0),
++  mInitialValue(Matrix::zeros(1, 1))
+ {
+   mMatrixStateInfo = new MatrixListStateInfo;
+   addDiscreteStateInfo(mMatrixStateInfo);
+@@ -36,8 +37,20 @@
+ bool
+ Delay::alloc(LeafContext&amp; leafContext) const
+ {
+-  Size sz = size(leafContext.mPortValueList[mInputPort]);
+-  leafContext.mPortValueList.setPortSize(mOutputPort, sz);
++  Size sz = size(mInitialValue);
++  Log(Initialization, Debug)
++    &lt;&lt; &quot;Size for Delay is detemined by the static initial value &quot;
++    &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
+   leafContext.mDiscreteState.setValue(*mMatrixStateInfo, leafContext);
+   return true;
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-09-27 15:42:47 UTC (rev 514)
+@@ -35,7 +35,14 @@
+ Gain::alloc(LeafContext&amp; leafContext) const
+ {
+   Size sz = size(leafContext.mPortValueList[mInputPort]);
+-  leafContext.mPortValueList.setPortSize(mOutputPort, sz);
++  Log(Initialization, Debug)
++    &lt;&lt; &quot;Size for Gain is detemined by the input port with size: &quot;
++    &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
+   return true;
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 15:42:47 UTC (rev 514)
+@@ -17,7 +17,8 @@
+ Integrator::Integrator(const std::string&amp; name = std::string()) :
+   Model(name),
+   mInputPort(newMatrixInputPort(&quot;input&quot;, false)),
+-  mOutputPort(newMatrixOutputPort(&quot;output&quot;))
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
++  mInitialValue(Matrix::zeros(1, 1))
+ {
+   mMatrixStateInfo = new MatrixStateInfo;
+   addContinousStateInfo(mMatrixStateInfo);
+@@ -30,8 +31,28 @@
+ bool
+ Integrator::alloc(LeafContext&amp; leafContext) const
+ {
+-  Size sz = size(leafContext.mPortValueList[mInputPort]);
+-  leafContext.mPortValueList.setPortSize(mOutputPort, sz);
++  Size sz;
++  if (getEnableInitialValuePort()) {
++    sz = size(leafContext.mPortValueList[mInitialValuePort]);
++    Log(Initialization, Debug)
++      &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
++      &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  } else {
++    sz = size(mInitialValue);
++    Log(Initialization, Debug)
++      &lt;&lt; &quot;Size for Integrator is detemined by the static initial value &quot;
++      &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  }
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
+   leafContext.mContinousState.setValue(*mMatrixStateInfo, leafContext);
+   return true;
+ }
+@@ -43,13 +64,14 @@
+   // Needs to be done here. Need port values???
+   // FIXME, can I ensure that at least the direct dependent ones are
+   // available and the other ones are inaccessible at compile time?
+-//     if (portValues.isConnected(mInitialValuePort)) {
+-//       // external initial condition
+-//       continousState[*mMatrixStateInfo] = portValues[mInitialValuePort];
+-//     } else {
++  if (getEnableInitialValuePort()) {
++    // external initial condition
++//     continousState[*mMatrixStateInfo] = portValues[mInitialValuePort];
++    continousState[*mMatrixStateInfo].clear();
++  } else {
+     // internal initial condition
+-    continousState[*mMatrixStateInfo].clear(); // FIXME
+-//     }
++    continousState[*mMatrixStateInfo] = mInitialValue;
++  }
+ }
+ 
+ void
+@@ -57,7 +79,12 @@
+                    const ContinousStateValueVector&amp; continousState,
+                    PortValueList&amp; portValues) const
+ {
+-  portValues[mOutputPort] = continousState[*mMatrixStateInfo];
++  // FIXME
++  if (getEnableInitialValuePort()
++      &amp;&amp; size(continousState[*mMatrixStateInfo]) == Size(0, 0))
++    portValues[mOutputPort] = portValues[mInitialValuePort];
++  else
++    portValues[mOutputPort] = continousState[*mMatrixStateInfo];
+ }
+ 
+ void
+@@ -84,9 +111,12 @@
+ void
+ Integrator::setEnableInitialValuePort(bool enable)
+ {
+-  if (enable &amp;&amp; !mInitialValuePort.empty())
++  if (enable == getEnableInitialValuePort())
++    return;
++
++  if (enable)
+     mInitialValuePort = newMatrixInputPort(&quot;initialValue&quot;, true);
+-  else if (!enable &amp;&amp; mInitialValuePort.empty())
++  else 
+     mInitialValuePort.clear();
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixStateValue.h	2008-09-27 15:42:47 UTC (rev 514)
+@@ -12,13 +12,13 @@
+ 
+ class MatrixStateValue : public ContinousStateValue {
+ public:
+-  MatrixStateValue(const Size&amp; size) : mMatrix(size)
++  MatrixStateValue(const Size&amp; size) : mMatrix(size(0), size(1))
+   { }
+   MatrixStateValue()
+   { }
+ 
+   void resize(const Size&amp; size)
+-  { mMatrix.resize(size); }
++  { mMatrix.resize(size(0), size(1)); }
+ 
+   const Matrix&amp; getMatrix() const
+   { return mMatrix; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.cpp	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NumericPortValue.cpp	2008-09-27 15:42:47 UTC (rev 514)
+@@ -7,7 +7,7 @@
+ namespace OpenFDM {
+ 
+ NumericPortValue::NumericPortValue(const Size&amp; size) :
+-  mMatrix(size)
++  mMatrix(size(0), size(1))
+ {
+   mMatrix.clear();
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-27 15:42:47 UTC (rev 514)
+@@ -76,10 +76,30 @@
+       mPortValueVector.resize(idx+1);
+     mPortValueVector[idx] = portValue;
+   }
+-  void setPortSize(const MatrixOutputPort&amp; port, const Size&amp; size)
++  bool setOrCheckPortSize(const MatrixOutputPort&amp; port, const Size&amp; sz)
+   {
+-    port.getPortValue(mPortValueVector)-&gt;getValue().resize(size);
++    Size oldSize = size(port.getPortValue(mPortValueVector)-&gt;getValue());
++    // If the size is still 0x0, just set to the desired size
++    if (oldSize(0) == 0 || oldSize(1) == 0) {
++      port.getPortValue(mPortValueVector)-&gt;getValue().resize(sz(0), sz(1));
++      return true;
++    } else if (oldSize == sz)
++      return true;
++    else
++      return false;
+   }
++  bool setOrCheckPortSize(const MatrixInputPort&amp; port, const Size&amp; sz)
++  {
++    Size oldSize = size(port.getPortValue(mPortValueVector)-&gt;getValue());
++    // If the size is still 0x0, just set to the desired size
++    if (oldSize(0) == 0 || oldSize(1) == 0) {
++      port.getPortValue(mPortValueVector)-&gt;getValue().resize(sz(0), sz(1));
++      return true;
++    } else if (oldSize == sz)
++      return true;
++    else
++      return false;
++  }
+   const PortValue* getPortValue(unsigned idx) const
+   {
+     if (mPortValueVector.size() &lt;= idx)
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 15:30:14 UTC (rev 513)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 15:42:47 UTC (rev 514)
+@@ -613,46 +613,38 @@
+   class PortDataList : public WeakReferenced {
+   public:
+     void setNodeInstance(AbstractNodeInstance* nodeInstance)
+-    { mNodeInstance = nodeInstance; }
++    {
++      OpenFDMAssert(!mNodeInstance);
++      mNodeInstance = nodeInstance;
++      mPortDataVector.resize(nodeInstance-&gt;getNode().getNumPorts());
++    }
+     
+     AcceptorPortData* newAcceptorPortData(const AcceptorPortInfo* acceptorPort)
+     {
+       AcceptorPortData* acceptorPortData;
+       acceptorPortData = new AcceptorPortData(mNodeInstance, acceptorPort);
+-      unsigned index = acceptorPort-&gt;getIndex();
+-      if (mPortDataVector.size() &lt;= index)
+-        mPortDataVector.resize(index + 1);
+-      mPortDataVector[index] = acceptorPortData;
++      mPortDataVector[acceptorPort-&gt;getIndex()] = acceptorPortData;
+       return acceptorPortData;
+     }
+     ProviderPortData* newProviderPortData(const ProviderPortInfo* providerPort)
+     {
+       ProviderPortData* providerPortData;
+       providerPortData = new ProviderPortData(mNodeInstance, providerPort);
+-      unsigned index = providerPort-&gt;getIndex();
+-      if (mPortDataVector.size() &lt;= index)
+-        mPortDataVector.resize(index + 1);
+-      mPortDataVector[index] = providerPortData;
++      mPortDataVector[providerPort-&gt;getIndex()] = providerPortData;
+       return providerPortData;
+     }
+     ProxyAcceptorPortData* newProxyAcceptorPortData(const AcceptorPortInfo* acceptorPort)
+     {
+       ProxyAcceptorPortData* acceptorPortData;
+       acceptorPortData = new ProxyAcceptorPortData(mNodeInstance, acceptorPort);
+-      unsigned index = acceptorPort-&gt;getIndex();
+-      if (mPortDataVector.size() &lt;= index)
+-        mPortDataVector.resize(index + 1);
+-      mPortDataVector[index] = acceptorPortData;
++      mPortDataVector[acceptorPort-&gt;getIndex()] = acceptorPortData;
+       return acceptorPortData;
+     }
+     ProxyProviderPortData* newProxyProviderPortData(const ProviderPortInfo* providerPort)
+     {
+       ProxyProviderPortData* providerPortData;
+       providerPortData = new ProxyProviderPortData(mNodeInstance, providerPort);
+-      unsigned index = providerPort-&gt;getIndex();
+-      if (mPortDataVector.size() &lt;= index)
+-        mPortDataVector.resize(index + 1);
+-      mPortDataVector[index] = providerPortData;
++      mPortDataVector[providerPort-&gt;getIndex()] = providerPortData;
+       return providerPortData;
+     }
+     
+@@ -983,7 +975,8 @@
+     ModelInstanceList::const_iterator j;
+     for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+       if (!(*j)-&gt;getNodeContext().alloc()) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
++        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                             &lt;&lt; (*j)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+         return false;
+       }
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000485.html">[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+	<LI>Next message: <A HREF="000487.html">[OpenFDM-svn] r515 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#486">[ date ]</a>
+              <a href="thread.html#486">[ thread ]</a>
+              <a href="subject.html#486">[ subject ]</a>
+              <a href="author.html#486">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,562 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r235%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200602041925.k14JPM7F017955%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000214.html">
+   <LINK REL="Next"  HREF="000216.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r235%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200602041925.k14JPM7F017955%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r235 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Feb  4 20:25:22 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000214.html">[OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000216.html">[OpenFDM-svn] r236 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#215">[ date ]</a>
+              <a href="thread.html#215">[ thread ]</a>
+              <a href="subject.html#215">[ subject ]</a>
+              <a href="author.html#215">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-04 20:25:15 +0100 (Sat, 04 Feb 2006)
+New Revision: 235
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+Log:
+1D and 2D tables models from JSBSim's new format should now work
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -17,20 +17,21 @@
+ namespace OpenFDM {
+ 
+ JSBSimAerosurfaceScale::JSBSimAerosurfaceScale(const std::string&amp; name) :
+-  JSBSimFCSComponent(name, true)
++  JSBSimFCSComponent(name, true),
++  mGain(1)
+ {
+   // Such a component is a simple table lookup
+   //
+   // -|InputSaturation|-|TablePreLookup|-|Table1D|-
+   //
+ 
+-  Saturation* inputSaturation = new Saturation(&quot;Input Saturation&quot;);
+-  getModelGroup()-&gt;addModel(inputSaturation);
++  mInputSaturation = new Saturation(&quot;Input Saturation&quot;);
++  getModelGroup()-&gt;addModel(mInputSaturation);
+   Matrix tmp(1, 1);
+   tmp(1, 1) = -1;
+-  inputSaturation-&gt;setMinSaturation(tmp);
++  mInputSaturation-&gt;setMinSaturation(tmp);
+   tmp(1, 1) = 1;
+-  inputSaturation-&gt;setMaxSaturation(tmp);
++  mInputSaturation-&gt;setMaxSaturation(tmp);
+ 
+   mTablePreLookup = new TablePreLookup(&quot;Table Lookup&quot;);
+   TableLookup tl;
+@@ -38,7 +39,7 @@
+   tl.setAtIndex(2, 0);
+   tl.setAtIndex(3, 1);
+   mTablePreLookup-&gt;setTableLookup(tl);
+-  mTablePreLookup-&gt;getInputPort(0)-&gt;connect(inputSaturation-&gt;getOutputPort(0));
++  mTablePreLookup-&gt;getInputPort(0)-&gt;connect(mInputSaturation-&gt;getOutputPort(0));
+   getModelGroup()-&gt;addModel(mTablePreLookup);
+ 
+   mTable = new Table1D(&quot;Table&quot;);
+@@ -47,11 +48,11 @@
+   TableData&lt;1&gt; tableData(sv);
+   TableData&lt;1&gt;::Index iv;
+   iv(1) = 1;
+-  tableData(iv) = -1;
++  tableData(iv) = -mGain;
+   iv(1) = 2;
+   tableData(iv) = 0;
+   iv(1) = 3;
+-  tableData(iv) = 1;
++  tableData(iv) = mGain;
+   mTable-&gt;setTableData(tableData);
+   mTable-&gt;getInputPort(0)-&gt;connect(mTablePreLookup-&gt;getOutputPort(0));
+   getModelGroup()-&gt;addModel(mTable);
+@@ -59,10 +60,11 @@
+   // Now connect the input and the output to this groups in and outputs
+   getModelGroup()-&gt;setNumInputPorts(1);
+   getModelGroup()-&gt;getInputPort(0)-&gt;setName(&quot;Input&quot;);
+-  inputSaturation-&gt;getInputPort(0)-&gt;connect(getModelGroup()-&gt;getInputPort(0));
++  mInputSaturation-&gt;getInputPort(0)-&gt;connect(getModelGroup()-&gt;getInputPort(0));
+ 
+   getOutputPort()-&gt;connect(mTable-&gt;getOutputPort(0));
+-  getOutputNormPort()-&gt;connect(inputSaturation-&gt;getOutputPort(0));
++  // FIXME, is no longer normalized ...
++  getOutputNormPort()-&gt;connect(mInputSaturation-&gt;getOutputPort(0));
+ }
+ 
+ JSBSimAerosurfaceScale::~JSBSimAerosurfaceScale(void)
+@@ -72,6 +74,9 @@
+ void
+ JSBSimAerosurfaceScale::setMinDomain(real_type minDomain)
+ {
++  Matrix tmp(1, 1);
++  tmp(1, 1) = minDomain;
++  mInputSaturation-&gt;setMinSaturation(tmp);
+   TableLookup tl = mTablePreLookup-&gt;getTableLookup();
+   tl.setAtIndex(1, minDomain);
+   mTablePreLookup-&gt;setTableLookup(tl);
+@@ -80,6 +85,9 @@
+ void
+ JSBSimAerosurfaceScale::setMaxDomain(real_type maxDomain)
+ {
++  Matrix tmp(1, 1);
++  tmp(1, 1) = maxDomain;
++  mInputSaturation-&gt;setMaxSaturation(tmp);
+   TableLookup tl = mTablePreLookup-&gt;getTableLookup();
+   tl.setAtIndex(tl.size(), maxDomain);
+   mTablePreLookup-&gt;setTableLookup(tl);
+@@ -90,15 +98,43 @@
+ {
+   TableLookup tlOld = mTablePreLookup-&gt;getTableLookup();
+   TableLookup tl;
++
++  TableData&lt;1&gt; tableDataOld = mTable-&gt;getTableData();
++  TableData&lt;1&gt;::SizeVector sz;
++  TableData&lt;1&gt; tableData;
++  TableData&lt;1&gt;::Index iv;
++
+   if (centered) {
+     tl.setAtIndex(1, tlOld.getAtIndex(1));
+     tl.setAtIndex(2, 0);
+     tl.setAtIndex(3, tlOld.getAtIndex(tlOld.size()));
++
++    sz(1) = 3;
++    tableData = TableData&lt;1&gt;(sz);
++    iv(1) = 1;
++    tableData(iv) = tableDataOld(iv);
++    iv(1) = 2;
++    tableData(iv) = 0;
++    iv = tableDataOld.size();
++    real_type oldVal = tableDataOld(iv);
++    iv(1) = 3;
++    tableData(iv) = oldVal;
+   } else {
+     tl.setAtIndex(1, tlOld.getAtIndex(1));
+     tl.setAtIndex(2, tlOld.getAtIndex(tlOld.size()));
++
++    sz(1) = 2;
++    tableData = TableData&lt;1&gt;(sz);
++    iv(1) = 1;
++    tableData(iv) = tableDataOld(iv);
++    iv = tableDataOld.size();
++    real_type oldVal = tableDataOld(iv);
++    iv(1) = 2;
++    tableData(iv) = oldVal;
+   }
++
+   mTablePreLookup-&gt;setTableLookup(tl);
++  mTable-&gt;setTableData(tableData);
+ }
+ 
+ void
+@@ -107,18 +143,33 @@
+   TableData&lt;1&gt; tableData = mTable-&gt;getTableData();
+   TableData&lt;1&gt;::Index iv;
+   iv(1) = 1;
+-  tableData(iv) = minValue;
++  tableData(iv) = mGain*minValue;
+   mTable-&gt;setTableData(tableData);
+ }
+ 
+ void
+ JSBSimAerosurfaceScale::setMaxValue(real_type maxValue)
+ {
++  TableLookup tl = mTablePreLookup-&gt;getTableLookup();
+   TableData&lt;1&gt; tableData = mTable-&gt;getTableData();
+   TableData&lt;1&gt;::Index iv;
+-  iv(1) = 3;
+-  tableData(iv) = maxValue;
++  iv(1) = tl.size();
++  tableData(iv) = mGain*maxValue;
+   mTable-&gt;setTableData(tableData);
+ }
+ 
++void
++JSBSimAerosurfaceScale::setGain(real_type gain)
++{
++  TableLookup tl = mTablePreLookup-&gt;getTableLookup();
++  TableData&lt;1&gt; tableData = mTable-&gt;getTableData();
++  TableData&lt;1&gt;::Index iv;
++  iv(1) = 1;
++  tableData(iv) *= gain/mGain;
++  iv(1) = tl.size();
++  tableData(iv) *= gain/mGain;
++  mTable-&gt;setTableData(tableData);
++  mGain = gain;
++}
++
+ } //namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimAerosurfaceScale.h	2006-02-04 19:25:15 UTC (rev 235)
+@@ -26,9 +26,13 @@
+   void setMinValue(real_type minValue);
+   void setMaxValue(real_type maxValue);
+ 
++  void setGain(real_type gain);
++
+ private:
++  SharedPtr&lt;Saturation&gt; mInputSaturation;
+   SharedPtr&lt;TablePreLookup&gt; mTablePreLookup;
+   SharedPtr&lt;Table1D&gt; mTable;
++  real_type mGain;
+ };
+ 
+ } //namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -326,35 +326,35 @@
+   const XMLElement* iwElem = metricsElem-&gt;getElement(&quot;wing_incidence&quot;);
+   if (iwElem) {
+     real_type iw = realData(iwElem, 0);
+-    Port* port = addConstModel(&quot;Wing Incidence Constant&quot;, iw);
++    Port* port = addMultiBodyConstModel(&quot;Wing Incidence Constant&quot;, iw);
+     registerJSBExpression(&quot;metrics/iw-deg&quot;, port);
+   }
+ 
+   const XMLElement* htareaElem = metricsElem-&gt;getElement(&quot;htailarea&quot;);
+   if (htareaElem) {
+     real_type htailarea = realData(htareaElem, 0);
+-    Port* port = addConstModel(&quot;HTail Area Constant&quot;, htailarea);
++    Port* port = addMultiBodyConstModel(&quot;HTail Area Constant&quot;, htailarea);
+     registerJSBExpression(&quot;metrics/Sh-sqft&quot;, port);
+   }
+ 
+   const XMLElement* htarmElem = metricsElem-&gt;getElement(&quot;htailarm&quot;);
+   if (htarmElem) {
+     real_type htailarm = realData(htarmElem, 0);
+-    Port* port = addConstModel(&quot;HTail Arm Constant&quot;, htailarm);
++    Port* port = addMultiBodyConstModel(&quot;HTail Arm Constant&quot;, htailarm);
+     registerJSBExpression(&quot;metrics/lh-ft&quot;, port);
+   }
+ 
+   const XMLElement* vtareaElem = metricsElem-&gt;getElement(&quot;vtailarea&quot;);
+   if (vtareaElem) {
+     real_type vtailarea = realData(vtareaElem, 0);
+-    Port* port = addConstModel(&quot;VTail Area Constant&quot;, vtailarea);
++    Port* port = addMultiBodyConstModel(&quot;VTail Area Constant&quot;, vtailarea);
+     registerJSBExpression(&quot;metrics/Sv-sqft&quot;, port);
+   }
+ 
+   const XMLElement* vtarmElem = metricsElem-&gt;getElement(&quot;vtailarm&quot;);
+   if (vtarmElem) {
+     real_type vtailarm = realData(vtarmElem, 0);
+-    Port* port = addConstModel(&quot;VTail Arm Constant&quot;, vtailarm);
++    Port* port = addMultiBodyConstModel(&quot;VTail Arm Constant&quot;, vtailarm);
+     registerJSBExpression(&quot;metrics/lv-ft&quot;, port);
+   }
+ 
+@@ -1252,7 +1252,6 @@
+ 
+   // The final output property.
+   SharedPtr&lt;Port&gt; out;
+-  SharedPtr&lt;Port&gt; normOut;
+ 
+   // JSBSim FCS output values contain some implicit rules.
+   // From the component name a default output property is formed.
+@@ -1338,7 +1337,6 @@
+     model-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(token));
+     addFCSModel(model);
+     out = kinemat-&gt;getOutputPort();
+-    normOut = kinemat-&gt;getOutputNormPort();
+ 
+   } else if (type == &quot;PURE_GAIN&quot; || type == &quot;pure_gain&quot;) {
+     SharedPtr&lt;Gain&gt; gain = new Gain(name);
+@@ -1374,12 +1372,12 @@
+     }
+     std::string token = stringData(fcsComponent-&gt;getElement(&quot;zero_centered&quot;));
+     asScale-&gt;setCentered(!(token == &quot;0&quot; || token == &quot;false&quot;));
++    asScale-&gt;setGain(realData(fcsComponent-&gt;getElement(&quot;gain&quot;), 1));
+     model = asScale-&gt;getModelGroup();
+     token = stringData(fcsComponent-&gt;getElement(&quot;input&quot;));
+     model-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(token));
+     addFCSModel(model);
+     out = asScale-&gt;getOutputPort();
+-    normOut = asScale-&gt;getOutputNormPort();
+ 
+   } else if (type == &quot;SCHEDULED_GAIN&quot; || type == &quot;scheduled_gain&quot;) {
+     SharedPtr&lt;JSBSimScheduledGain&gt; sGain = new JSBSimScheduledGain(name);
+@@ -1512,36 +1510,14 @@
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+ 
+   OpenFDMAssert(out-&gt;isConnected());
+-  if (!normOut || !normOut-&gt;isConnected())
+-    normOut = out;
+ 
+   // Register all output property names.
+-  std::list&lt;std::string&gt; outlist;
+-  outlist.push_back(std::string(&quot;fcs/&quot;) + normalizeComponentName(name));
+-  if (fcsComponent-&gt;getElement(&quot;output&quot;))
+-    outlist.push_back(stringData(fcsComponent-&gt;getElement(&quot;output&quot;)));
+-  std::list&lt;std::string&gt;::iterator it;
+-  for (it = outlist.begin(); it != outlist.end(); ++it) {
+-    std::string propName = *it;
+-    registerJSBExpression(propName, out);
+-
+-    // Well, just an other kind of black magic ...
+-    if (propName == &quot;fcs/elevator-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/elevator-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/left-aileron-pos-rad&quot; ||
+-               propName == &quot;fcs/aileron-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/left-aileron-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/right-aileron-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/right-aileron-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/rudder-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/rudder-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/speedbrake-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/speedbrake-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/spoiler-pos-rad&quot;) {
+-      registerJSBExpression(&quot;fcs/spoiler-pos-norm&quot;, normOut);
+-    } else if (propName == &quot;fcs/flap-pos-deg&quot;) {
+-      registerJSBExpression(&quot;fcs/flap-pos-norm&quot;, normOut);
+-    }
++  std::string implicitOutname = normalizeComponentName(name);
++  registerJSBExpression(std::string(&quot;fcs/&quot;) + implicitOutname, out);
++  if (fcsComponent-&gt;getElement(&quot;output&quot;)) {
++    std::string outname = stringData(fcsComponent-&gt;getElement(&quot;output&quot;));
++    if (outname != implicitOutname)
++      registerJSBExpression(outname, out);
+   }
+ 
+   return true;
+@@ -1657,13 +1633,10 @@
+   std::list&lt;const XMLElement*&gt;::const_iterator ait;
+   for (ait = args.begin(); ait != args.end(); ++ait) {
+     if ((*ait)-&gt;getName() == &quot;value&quot;) {
+-      SharedPtr&lt;ConstModel&gt; constModel = new ConstModel(name + &quot; Constant&quot;);
+-      addMultiBodyModel(constModel);
+       std::stringstream stream((*ait)-&gt;getData());
+-      Matrix v(1, 1);
+-      stream &gt;&gt; v(1, 1);
+-      constModel-&gt;setValue(v);
+-      inputs.push_back(constModel-&gt;getOutputPort(0));
++      real_type value;
++      stream &gt;&gt; value;
++      inputs.push_back(addMultiBodyConstModel(name + &quot; Constant&quot;, value));
+     } else if ((*ait)-&gt;getName() == &quot;property&quot;) {
+       inputs.push_back(lookupJSBExpression(stringData(*ait)));
+     } else if ((*ait)-&gt;getName() == &quot;table&quot;) {
+@@ -1677,8 +1650,7 @@
+         }
+         std::string token = stringData((*ait)-&gt;getElement(&quot;independentVar&quot;));
+         Port* port = getTablePrelookup(name + &quot; lookup&quot;,
+-                                       lookupJSBExpression(token),
+-                                       lookup);
++                                       lookupJSBExpression(token), lookup);
+ 
+         SharedPtr&lt;Table1D&gt; table = new Table1D(name + &quot; Table&quot;);
+         table-&gt;getInputPort(0)-&gt;connect(port);
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-02-04 19:25:15 UTC (rev 235)
+@@ -175,15 +175,17 @@
+ }
+ 
+ Port*
+-JSBSimReaderBase::lookupJSBExpression(const std::string&amp; name)
++JSBSimReaderBase::lookupJSBExpression(const std::string&amp; name,
++                                      bool recheckAeroProp)
+ {
+   // Convert to something being able to look up
+   std::string propName = propNameFromJSBSim(name);
+   
+-  Port* port;
++  Port* port = 0;
+   if (mExpressionTable.count(propName) &lt;= 0) {
+     // Not yet available, so look and see if it is an input
+-    port = createAndScheduleAeroProp(propName);
++    if (recheckAeroProp)
++      port = createAndScheduleAeroProp(propName);
+ 
+     if (!port || !port-&gt;isConnected()) {
+       // Not yet available, so look and see if it is an input
+@@ -403,6 +405,46 @@
+       addFCSModel(maxModel);
+       port = maxModel-&gt;getOutputPort(0);
+ 
++    } else if (propName == &quot;fdm/jsbsim/fcs/elevator-pos-rad&quot;) {
++      port = lookupJSBExpression(&quot;fcs/elevator-pos-deg&quot;, false);
++      port = addFromUnit(&quot;elevator-pos-rad unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/elevator-pos-deg&quot;) {
++      port = lookupJSBExpression(&quot;fcs/elevator-pos-rad&quot;, false);
++      port = addToUnit(&quot;elevator-pos-deg unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/left-aileron-pos-rad&quot;) {
++      port = lookupJSBExpression(&quot;fcs/left-aileron-pos-deg&quot;, false);
++      port = addFromUnit(&quot;left-aileron-pos-rad unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/left-aileron-pos-deg&quot;) {
++      port = lookupJSBExpression(&quot;fcs/left-aileron-pos-rad&quot;, false);
++      port = addToUnit(&quot;left-aileron-pos-deg unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/right-aileron-pos-rad&quot;) {
++      port = lookupJSBExpression(&quot;fcs/right-aileron-pos-deg&quot;, false);
++      port = addFromUnit(&quot;right-aileron-pos-rad unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/right-aileron-pos-deg&quot;) {
++      port = lookupJSBExpression(&quot;fcs/right-aileron-pos-rad&quot;, false);
++      port = addToUnit(&quot;right-aileron-pos-deg unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/aileron-pos-rad&quot;) {
++      port = lookupJSBExpression(&quot;fcs/aileron-pos-deg&quot;, false);
++      port = addFromUnit(&quot;aileron-pos-rad unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/aileron-pos-deg&quot;) {
++      port = lookupJSBExpression(&quot;fcs/aileron-pos-rad&quot;, false);
++      port = addToUnit(&quot;aileron-pos-deg unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/rudder-pos-rad&quot;) {
++      port = lookupJSBExpression(&quot;fcs/rudder-pos-deg&quot;, false);
++      port = addFromUnit(&quot;rudder-pos-rad unit&quot;, uDegree, port);
++
++    } else if (propName == &quot;fdm/jsbsim/fcs/rudder-pos-deg&quot;) {
++      port = lookupJSBExpression(&quot;fcs/rudder-pos-rad&quot;, false);
++      port = addToUnit(&quot;rudder-pos-deg unit&quot;, uDegree, port);
++
+     } else if (propName.substr(0, 19) == &quot;fdm/jsbsim/fcs/mag-&quot;) {
+       // Special absolute modules for fcs/mag-*
+       // remove the 'mag-' substring here and use that as input for the
+@@ -643,6 +685,30 @@
+   return cModel-&gt;getOutputPort(0);
+ }
+ 
++Port*
++JSBSimReaderBase::addToUnit(const std::string&amp; name, Unit u, Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::SiToUnit, u);
++  addFCSModel(unitConv);
++  unitConv-&gt;getInputPort(0)-&gt;connect(in);
++  return unitConv-&gt;getOutputPort(0);
++}
++
++Port*
++JSBSimReaderBase::addFromUnit(const std::string&amp; name, Unit u, Port* in)
++{
++  if (!in)
++    return 0;
++  UnitConversionModel* unitConv
++    = new UnitConversionModel(name, UnitConversionModel::UnitToSi, u);
++  addFCSModel(unitConv);
++  unitConv-&gt;getInputPort(0)-&gt;connect(in);
++  return unitConv-&gt;getOutputPort(0);
++}
++
+ void
+ JSBSimReaderBase::addFCSModel(Model* model)
+ {
+@@ -686,6 +752,16 @@
+   return unary-&gt;getOutputPort(0);
+ }
+ 
++Port*
++JSBSimReaderBase::addMultiBodyConstModel(const std::string&amp; name, real_type value)
++{
++  Matrix m(1, 1);
++  m(1, 1) = value;
++  ConstModel* cModel = new ConstModel(name, m);
++  addMultiBodyModel(cModel);
++  return cModel-&gt;getOutputPort(0);
++}
++
+ void
+ JSBSimReaderBase::addMultiBodyModel(Model* model)
+ {
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2006-02-04 10:54:21 UTC (rev 234)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.h	2006-02-04 19:25:15 UTC (rev 235)
+@@ -146,7 +146,8 @@
+ 
+ 
+   /// &lt;FIXME&gt; document and rethink
+-  Port* lookupJSBExpression(const std::string&amp; name);
++  Port* lookupJSBExpression(const std::string&amp; name,
++                            bool recheckAeroProp = true);
+ 
+   void registerExpression(const std::string&amp; name, Port* expr);
+   void registerJSBExpression(const std::string&amp; name, Port* expr);
+@@ -162,12 +163,15 @@
+   Port* addInverterModel(const std::string&amp; name, Port* in);
+   Port* addAbsModel(const std::string&amp; name, Port* in);
+   Port* addConstModel(const std::string&amp; name, real_type value);
++  Port* addToUnit(const std::string&amp; name, Unit u, Port* in);
++  Port* addFromUnit(const std::string&amp; name, Unit u, Port* in);
+ 
+   void addFCSModel(Model* model);
+ 
+   Port* addMultiBodyToUnit(const std::string&amp; name, Unit u, Port* in);
+   Port* addMultiBodyFromUnit(const std::string&amp; name, Unit u, Port* in);
+   Port* addMultiBodyAbsModel(const std::string&amp; name, Port* in);
++  Port* addMultiBodyConstModel(const std::string&amp; name, real_type value);
+   void addMultiBodyModel(Model* model);
+   /// &lt;/FIXME&gt; document and rethink
+   Port* getTablePrelookup(const std::string&amp; name, Port* in, const TableLookup&amp; tl);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000214.html">[OpenFDM-svn] r234 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000216.html">[OpenFDM-svn] r236 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#215">[ date ]</a>
+              <a href="thread.html#215">[ thread ]</a>
+              <a href="subject.html#215">[ subject ]</a>
+              <a href="author.html#215">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

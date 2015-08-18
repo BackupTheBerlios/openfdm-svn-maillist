@@ -1,0 +1,334 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r839 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r839%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200812012143.mB1LhMio013246%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000806.html">
+   <LINK REL="Next"  HREF="000808.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r839 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r839%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200812012143.mB1LhMio013246%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r839 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Dec  1 22:43:22 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000806.html">[OpenFDM-svn] r838 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000808.html">[OpenFDM-svn] r840 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#807">[ date ]</a>
+              <a href="thread.html#807">[ thread ]</a>
+              <a href="subject.html#807">[ subject ]</a>
+              <a href="author.html#807">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-01 22:43:21 +0100 (Mon, 01 Dec 2008)
+New Revision: 839
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+tiretestrig.
+
+M    src/test/tiretestrig.cpp
+M    src/test/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-01 21:42:55 UTC (rev 838)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-01 21:43:21 UTC (rev 839)
+@@ -1,15 +1,14 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some util programs
+-# bin_PROGRAMS = tiretestrig
+-bin_PROGRAMS = structure mechanic foucault
++bin_PROGRAMS = foucault mechanic structure tiretestrig
+ 
+ # define some unit tests
+ check_PROGRAMS = constintegral harmonic limit linalg quattest simulationtime unitstest
+ TESTS          = $(check_PROGRAMS)
+ 
+-# tiretestrig_SOURCES = tiretestrig.cpp
+-# tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
++tiretestrig_SOURCES = tiretestrig.cpp
++tiretestrig_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+ unitstest_SOURCES = unitstest.cpp
+ unitstest_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2008-12-01 21:42:55 UTC (rev 838)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2008-12-01 21:43:21 UTC (rev 839)
+@@ -6,13 +6,10 @@
+ #include &lt;OpenFDM/DoPri5.h&gt;
+ #include &lt;OpenFDM/FixedRootJoint.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+-#include &lt;OpenFDM/Gravity.h&gt;
+-#include &lt;OpenFDM/Ground.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/LinearSpringDamper.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+-#include &lt;OpenFDM/ModelGroup.h&gt;
+-#include &lt;OpenFDM/ModelVisitor.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
+ #include &lt;OpenFDM/PrismaticJoint.h&gt;
+ #include &lt;OpenFDM/RevoluteActuator.h&gt;
+@@ -21,18 +18,18 @@
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/SystemOutput.h&gt;
+ #include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/WheelContact.h&gt;
+ 
+-#include &quot;HDF5Writer.h&quot;
+-
+ using namespace OpenFDM;
+ 
+-class MovingGround : public Ground {
++class MovingGround : public AbstractGround {
+ public:
+   MovingGround(const Vector3&amp; linearVelocity) : mVelocity(linearVelocity)
+   { }
+-  virtual GroundValues getGroundPlane(real_type, const Vector3&amp; refPos) const
++  virtual GroundValues getGroundPlane(const Environment&amp;, const real_type&amp; t,
++                                      const Vector3&amp; refPos) const
+   {
+     return GroundValues(Plane(Vector3(0, 0, -1), Vector3::zeros()),
+                         Vector6(Vector3::zeros(), mVelocity),
+@@ -42,130 +39,119 @@
+   Vector3 mVelocity;
+ };
+ 
+-class ZGravity : public Gravity {
+-public:
+-  virtual Vector3 gravityAccel(const Vector3&amp; cart) const
+-  { return Vector3(0, 0, 9.81); }
+-};
+-
+ int
+ main(int argc, char *argv[])
+ {
+-  real_type omega = 2;
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Tire Testrig&quot;);
+ 
+-  SharedPtr&lt;System&gt; system = new System(&quot;Tire Testrig&quot;);
+-  system-&gt;addSampleTime(real_type(1)/real_type(100));
+-  system-&gt;setTimestepper(new DoPri5);
+-
+-  // set the moving ground
+-  system-&gt;getEnvironment()-&gt;setGround(new MovingGround(Vector3(10, 0, 0)));
+-  system-&gt;getEnvironment()-&gt;setGravity(new ZGravity());
+-  
+   // First build up the mechanical system
+   FixedRootJoint* fixedRootJoint = new FixedRootJoint(&quot;Fixed Root Joint&quot;);
+-  system-&gt;addModel(fixedRootJoint);
+-  fixedRootJoint-&gt;setRefPosition(Vector3(0, 0, 1));
++  group-&gt;addChild(fixedRootJoint);
++  fixedRootJoint-&gt;setPosition(Vector3(0, 0, 1));
+ 
+   PrismaticJoint* prismaticJoint = new PrismaticJoint(&quot;Normal Force joint&quot;);
+-  prismaticJoint-&gt;setJointAxis(Vector3::unit(2));
+-  system-&gt;addModel(prismaticJoint);
++  prismaticJoint-&gt;setAxis(Vector3::unit(2));
++  group-&gt;addChild(prismaticJoint);
+ 
+   Summer* normalForceSum = new Summer(&quot;Normal Force Sum&quot;);
+   normalForceSum-&gt;setNumSummands(2);
+   normalForceSum-&gt;setInputSign(0, Summer::Minus);
+-  system-&gt;addModel(normalForceSum);
+-  Connection::connect(prismaticJoint-&gt;getInputPort(0),
+-                      normalForceSum-&gt;getOutputPort(0));
++  group-&gt;addChild(normalForceSum);
++  group-&gt;connect(prismaticJoint-&gt;getPort(&quot;input&quot;),
++                 normalForceSum-&gt;getPort(&quot;output&quot;));
+ 
+   ConstModel* normalForce = new ConstModel(&quot;Normal force&quot;);
+   normalForce-&gt;setScalarValue(2000);
+-  system-&gt;addModel(normalForce);
+-  Connection::connect(normalForceSum-&gt;getInputPort(0),
+-                      normalForce-&gt;getOutputPort(0));
++  group-&gt;addChild(normalForce);
++  group-&gt;connect(normalForceSum-&gt;getPort(&quot;input0&quot;),
++                 normalForce-&gt;getPort(&quot;output&quot;));
+  
+   LinearSpringDamper* strutDamper = new LinearSpringDamper(&quot;Strut Damper&quot;);
+   strutDamper-&gt;setSpringConstant(0);
+   strutDamper-&gt;setDamperConstant(-30);
+-  system-&gt;addModel(strutDamper);
+-  Connection::connect(normalForceSum-&gt;getInputPort(1),
+-                      strutDamper-&gt;getOutputPort(0));
+-  Connection::connect(strutDamper-&gt;getInputPort(0),
+-                      prismaticJoint-&gt;getOutputPort(0));
+-  Connection::connect(strutDamper-&gt;getInputPort(1),
+-                      prismaticJoint-&gt;getOutputPort(1));
++  group-&gt;addChild(strutDamper);
++  group-&gt;connect(normalForceSum-&gt;getPort(&quot;input1&quot;),
++                 strutDamper-&gt;getPort(&quot;force&quot;));
++  group-&gt;connect(strutDamper-&gt;getPort(&quot;velocity&quot;),
++                 prismaticJoint-&gt;getPort(&quot;velocity&quot;));
++  group-&gt;connect(strutDamper-&gt;getPort(&quot;position&quot;),
++                 prismaticJoint-&gt;getPort(&quot;position&quot;));
+ 
+   RigidBody* rootMount = new RigidBody(&quot;Root Mount&quot;);
+-  system-&gt;addModel(rootMount);
+-  rootMount-&gt;setInboardJoint(fixedRootJoint);
+-  rootMount-&gt;addInteract(prismaticJoint);
++  group-&gt;addChild(rootMount);
++  group-&gt;connect(rootMount-&gt;getPort(&quot;link0&quot;), fixedRootJoint-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rootMount-&gt;getPort(&quot;link1&quot;), prismaticJoint-&gt;getPort(&quot;link0&quot;));
+ 
+-
+   RevoluteActuator* camberActuator = new RevoluteActuator(&quot;Camber Actuator&quot;);
+-  system-&gt;addModel(camberActuator);
++  group-&gt;addChild(camberActuator);
+ 
+   ConstModel* camberAngle = new ConstModel(&quot;Camber Angle&quot;);
+   camberAngle-&gt;setScalarValue(0);
+-  system-&gt;addModel(camberAngle);
+-  Connection::connect(camberActuator-&gt;getInputPort(0),
+-                      camberAngle-&gt;getOutputPort(0));
++  group-&gt;addChild(camberAngle);
++  group-&gt;connect(camberActuator-&gt;getPort(&quot;input&quot;),
++                 camberAngle-&gt;getPort(&quot;output&quot;));
+ 
+   RigidBody* normalForceStrut = new RigidBody(&quot;Normal Force Strut&quot;);
+-  system-&gt;addModel(normalForceStrut);
+-  normalForceStrut-&gt;setInboardJoint(prismaticJoint);
+-  normalForceStrut-&gt;addInteract(camberActuator);
++  group-&gt;addChild(normalForceStrut);
++  group-&gt;connect(normalForceStrut-&gt;getPort(&quot;link0&quot;),
++                 prismaticJoint-&gt;getPort(&quot;link1&quot;));
++  group-&gt;connect(normalForceStrut-&gt;getPort(&quot;link1&quot;),
++                 camberActuator-&gt;getPort(&quot;link0&quot;));
+ 
+  
+   RevoluteActuator* sideActuator = new RevoluteActuator(&quot;Sideslip Actuator&quot;);
+-  system-&gt;addModel(sideActuator);
++  group-&gt;addChild(sideActuator);
+ 
+   ConstModel* sideslipAngle = new ConstModel(&quot;Sideslip Angle&quot;);
+   sideslipAngle-&gt;setScalarValue(0);
+-  system-&gt;addModel(sideslipAngle);
+-  Connection::connect(sideActuator-&gt;getInputPort(0),
+-                      sideslipAngle-&gt;getOutputPort(0));
++  group-&gt;addChild(sideslipAngle);
++  group-&gt;connect(sideActuator-&gt;getPort(&quot;input&quot;),
++                 sideslipAngle-&gt;getPort(&quot;output&quot;));
+ 
+   RigidBody* camberStrut = new RigidBody(&quot;Camber Strut&quot;);
+-  system-&gt;addModel(camberStrut);
+-  camberStrut-&gt;setInboardJoint(camberActuator);
+-  camberStrut-&gt;addInteract(sideActuator);
++  group-&gt;addChild(camberStrut);
++  group-&gt;connect(camberStrut-&gt;getPort(&quot;link0&quot;),
++                 camberActuator-&gt;getPort(&quot;link1&quot;));
++  group-&gt;connect(camberStrut-&gt;getPort(&quot;link1&quot;), sideActuator-&gt;getPort(&quot;link0&quot;));
+ 
+ 
+   RevoluteJoint* hubJoint = new RevoluteJoint(&quot;Hub Joint&quot;);
+-  hubJoint-&gt;setJointAxis(Vector3(0, 1, 0));
+-  system-&gt;addModel(hubJoint);
++  hubJoint-&gt;setAxis(Vector3(0, 1, 0));
++  group-&gt;addChild(hubJoint);
+ 
+   RigidBody* hubStrut = new RigidBody(&quot;Hub Strut&quot;);
+-  system-&gt;addModel(hubStrut);
+-  hubStrut-&gt;setInboardJoint(sideActuator);
+-  hubStrut-&gt;addInteract(hubJoint);
++  group-&gt;addChild(hubStrut);
++  group-&gt;connect(hubStrut-&gt;getPort(&quot;link0&quot;), sideActuator-&gt;getPort(&quot;link1&quot;));
++  group-&gt;connect(hubStrut-&gt;getPort(&quot;link1&quot;), hubJoint-&gt;getPort(&quot;link0&quot;));
+ 
+   RigidBody* rimAndTire = new RigidBody(&quot;Rim And Tire&quot;);
+-  system-&gt;addModel(rimAndTire);
+-  rimAndTire-&gt;setInboardJoint(hubJoint);
++  group-&gt;addChild(rimAndTire);
++  group-&gt;connect(hubJoint-&gt;getPort(&quot;link1&quot;), rimAndTire-&gt;getPort(&quot;link0&quot;));
+ 
+   Mass* tireAndRimMass = new Mass(&quot;Rim And Tire Mass&quot;);
+-  tireAndRimMass-&gt;setInertia(1, InertiaMatrix(1, 0, 0, 1, 0, 1));
+-  system-&gt;addModel(tireAndRimMass);
+-  rimAndTire-&gt;addInteract(tireAndRimMass);
++  tireAndRimMass-&gt;setMass(1);
++  tireAndRimMass-&gt;setInertia(InertiaMatrix(1, 0, 0, 1, 0, 1));
++  group-&gt;addChild(tireAndRimMass);
++  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link1&quot;), tireAndRimMass-&gt;getPort(&quot;link&quot;));
+   
+   WheelContact* wheelContact = new WheelContact(&quot;Wheel Contact&quot;);
+   wheelContact-&gt;setWheelRadius(0.3);
+   wheelContact-&gt;setSpringConstant(1000);
+   wheelContact-&gt;setSpringDamping(sqrt(wheelContact-&gt;getSpringConstant())/10);
+-  system-&gt;addModel(wheelContact);
+-  rimAndTire-&gt;addInteract(wheelContact);
++  group-&gt;addChild(wheelContact);
++  rimAndTire-&gt;addLink(&quot;link2&quot;);
++  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link2&quot;), wheelContact-&gt;getPort(&quot;link&quot;));
+ 
+-  if (!system-&gt;init()) {
+-    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
+-    return EXIT_FAILURE;
+-  }
++  SharedPtr&lt;System&gt; system = new System(&quot;Tire Testrig&quot;, group);
+ 
+-  HDF5Writer hwriter(&quot;system.h5&quot;);
+-  system-&gt;accept(hwriter);
+-  while (system-&gt;getTime() &lt; 10) {
+-    system-&gt;simulate(system-&gt;getTime() + 0.01);
+-    system-&gt;accept(hwriter);
+-  }
++  // set the moving ground
++  system-&gt;getEnvironment()-&gt;setGround(new MovingGround(Vector3(10, 0, 0)));
++
++  system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;tiretestrig.h5&quot;));
++  if (!system-&gt;init())
++    return 1;
++
++  system-&gt;simulate(60);
+   
+   return EXIT_SUCCESS;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000806.html">[OpenFDM-svn] r838 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000808.html">[OpenFDM-svn] r840 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#807">[ date ]</a>
+              <a href="thread.html#807">[ thread ]</a>
+              <a href="subject.html#807">[ subject ]</a>
+              <a href="author.html#807">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

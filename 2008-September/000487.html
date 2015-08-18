@@ -1,0 +1,203 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r515 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r515%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271553.m8RFrxVW004427%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000486.html">
+   <LINK REL="Next"  HREF="000488.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r515 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r515%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271553.m8RFrxVW004427%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r515 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 17:53:59 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000486.html">[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000488.html">[OpenFDM-svn] r516 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#487">[ date ]</a>
+              <a href="thread.html#487">[ thread ]</a>
+              <a href="subject.html#487">[ subject ]</a>
+              <a href="author.html#487">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 17:53:58 +0200 (Sat, 27 Sep 2008)
+New Revision: 515
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add a port value list to the init method.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-09-27 15:53:58 UTC (rev 515)
+@@ -57,7 +57,7 @@
+ 
+ void
+ Delay::init(DiscreteStateValueVector&amp; discreteState,
+-            ContinousStateValueVector&amp;) const
++            ContinousStateValueVector&amp;,const PortValueList&amp;) const
+ {
+   discreteState[*mMatrixStateInfo].clear();
+   for (unsigned i = 0; i &lt;= mDelay; ++i)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-09-27 15:53:58 UTC (rev 515)
+@@ -20,7 +20,7 @@
+ 
+   virtual bool alloc(LeafContext&amp; leafContext) const;
+   virtual void init(DiscreteStateValueVector&amp; discreteState,
+-                    ContinousStateValueVector&amp;) const;
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const;
+   virtual void output(const DiscreteStateValueVector&amp; discreteState,
+                       const ContinousStateValueVector&amp;,
+                       PortValueList&amp; portValues) const;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 15:53:58 UTC (rev 515)
+@@ -59,15 +59,12 @@
+ 
+ void
+ Integrator::init(DiscreteStateValueVector&amp; discreteState,
+-                 ContinousStateValueVector&amp; continousState) const
++                 ContinousStateValueVector&amp; continousState,
++                 const PortValueList&amp; portValues) const
+ {
+-  // Needs to be done here. Need port values???
+-  // FIXME, can I ensure that at least the direct dependent ones are
+-  // available and the other ones are inaccessible at compile time?
+   if (getEnableInitialValuePort()) {
+     // external initial condition
+-//     continousState[*mMatrixStateInfo] = portValues[mInitialValuePort];
+-    continousState[*mMatrixStateInfo].clear();
++    continousState[*mMatrixStateInfo] = portValues[mInitialValuePort];
+   } else {
+     // internal initial condition
+     continousState[*mMatrixStateInfo] = mInitialValue;
+@@ -79,12 +76,7 @@
+                    const ContinousStateValueVector&amp; continousState,
+                    PortValueList&amp; portValues) const
+ {
+-  // FIXME
+-  if (getEnableInitialValuePort()
+-      &amp;&amp; size(continousState[*mMatrixStateInfo]) == Size(0, 0))
+-    portValues[mOutputPort] = portValues[mInitialValuePort];
+-  else
+-    portValues[mOutputPort] = continousState[*mMatrixStateInfo];
++  portValues[mOutputPort] = continousState[*mMatrixStateInfo];
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-27 15:53:58 UTC (rev 515)
+@@ -19,7 +19,8 @@
+ 
+   virtual bool alloc(LeafContext&amp; leafContext) const;
+   virtual void init(DiscreteStateValueVector&amp; discreteState,
+-                    ContinousStateValueVector&amp; continousState) const;
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp; portValueList) const;
+ 
+   virtual void output(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; continousState, PortValueList&amp; portValues) const;
+   virtual void derivative(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp; state, const PortValueList&amp; portValues, ContinousStateValueVector&amp; deriv) const;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-09-27 15:53:58 UTC (rev 515)
+@@ -16,6 +16,7 @@
+ class NodeVisitor;
+ class ContinousStateValueVector;
+ class DiscreteStateValueVector;
++class PortValueList;
+ 
+ class LeafNode : public Node {
+   OPENFDM_OBJECT(LeafNode, Node);
+@@ -32,7 +33,8 @@
+   virtual bool alloc(LeafContext&amp;) const // = 0;
+   { return true; }
+ 
+-  virtual void init(DiscreteStateValueVector&amp;, ContinousStateValueVector&amp;) const // = 0;
++  virtual void init(DiscreteStateValueVector&amp;, ContinousStateValueVector&amp;,
++                    const PortValueList&amp;) const
+   { }
+ 
+   unsigned getNumContinousStateValues() const
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 15:42:47 UTC (rev 514)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 15:53:58 UTC (rev 515)
+@@ -227,7 +227,7 @@
+   bool alloc()
+   { return mModel-&gt;alloc(*this); }
+   void init()
+-  { mModel-&gt;init(mDiscreteState, mContinousState); }
++  { mModel-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
+   void output(const Task&amp;)
+   { mModel-&gt;output(mDiscreteState, mContinousState, mPortValueList); }
+   void update(const DiscreteTask&amp;)
+@@ -342,7 +342,7 @@
+   bool alloc()
+   { return mMechanicNode-&gt;alloc(*this); }
+   void init()
+-  { mMechanicNode-&gt;init(mDiscreteState, mContinousState); }
++  { mMechanicNode-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
+ 
+   void velocities(const ContinousTask&amp;)
+   { mMechanicNode-&gt;velocity(mContinousState, mPortValueList); }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000486.html">[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000488.html">[OpenFDM-svn] r516 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#487">[ date ]</a>
+              <a href="thread.html#487">[ thread ]</a>
+              <a href="subject.html#487">[ subject ]</a>
+              <a href="author.html#487">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

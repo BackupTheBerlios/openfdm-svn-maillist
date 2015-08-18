@@ -1,0 +1,480 @@
+From frohlich at mail.berlios.de  Sat Sep 16 07:20:09 2006
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 16 Sep 2006 07:20:09 +0200
+Subject: [OpenFDM-svn] r293 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200609160520.k8G5K9mB021566@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-09-16 07:20:08 +0200 (Sat, 16 Sep 2006)
+New Revision: 293
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Math.h
+Log:
+Do not need that functions anymore
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Math.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Math.h	2006-08-08 19:54:26 UTC (rev 292)
++++ trunk/OpenFDM/src/OpenFDM/Math.h	2006-09-16 05:20:08 UTC (rev 293)
+@@ -35,18 +35,19 @@
+ using std::tan;
+ using std::tanh;
+ 
+-using std::fpclassify;
++// Not stdc++ functions but hopefully present ...
++// using std::fpclassify;
+ using std::isfinite;
+-using std::isinf;
+-using std::isnan;
+-using std::isnormal;
+-using std::signbit;
+-using std::isgreater;
+-using std::isgreaterequal;
+-using std::isless;
+-using std::islessequal;
+-using std::islessgreater;
+-using std::isunordered;
++// using std::isinf;
++// using std::isnan;
++// using std::isnormal;
++// using std::signbit;
++// using std::isgreater;
++// using std::isgreaterequal;
++// using std::isless;
++// using std::islessequal;
++// using std::islessgreater;
++// using std::isunordered;
+ 
+ using std::min;
+ using std::max;
+@@ -154,7 +155,7 @@
+ inline
+ bool
+ equal(real_type a, real_type b, real_type sf)
+-{ return fabs(a-b) < max(fabs(a), fabs(b))*sf*Limits<real_type>::epsilon(); }
++{ return fabs(a-b) <= max(fabs(a), fabs(b))*sf*Limits<real_type>::epsilon(); }
+ 
+ /// Returns true if the floatingpoint values are equal to roundoff with a
+ /// security factor of 8.
+
+
+
+From frohlich at mail.berlios.de  Sat Sep 16 07:34:42 2006
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 16 Sep 2006 07:34:42 +0200
+Subject: [OpenFDM-svn] r294 - trunk/OpenFDM/src/OpenFDM/LinAlg
+Message-ID: <200609160534.k8G5YgiT022343@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-09-16 07:34:41 +0200 (Sat, 16 Sep 2006)
+New Revision: 294
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+Log:
+Dont use signbit
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2006-09-16 05:20:08 UTC (rev 293)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2006-09-16 05:34:41 UTC (rev 294)
+@@ -889,7 +889,8 @@
+     tau = 0;
+   else {
+     value_type beta = sqrt(alpha*alpha + xnorm*xnorm);
+-    beta = std::signbit(alpha) ? beta : -beta;
++    if (0 <= alpha)
++      beta = -beta;
+ 
+     value_type mn = Limits<value_type>::min();
+     value_type eps = Limits<value_type>::epsilon();
+@@ -907,7 +908,8 @@
+ 
+       xnorm = norm(x);
+       beta = sqrt(alpha*alpha + xnorm*xnorm);
+-      beta = std::signbit(alpha) ? beta : -beta;
++      if (0 <= alpha)
++        beta = -beta;
+       tau = (beta-alpha)/beta;
+       x *= 1/(alpha-beta);
+       alpha = beta;
+
+
+
+From frohlich at mail.berlios.de  Tue Sep 26 20:19:03 2006
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 26 Sep 2006 20:19:03 +0200
+Subject: [OpenFDM-svn] r295 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200609261819.k8QIJ3C2004206@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-09-26 20:19:03 +0200 (Tue, 26 Sep 2006)
+New Revision: 295
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Output.cpp
+   trunk/OpenFDM/src/OpenFDM/Output.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.h
+Log:
+Split files for different classes
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-09-16 05:34:41 UTC (rev 294)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-09-26 18:19:03 UTC (rev 295)
+@@ -21,6 +21,7 @@
+ #include <OpenFDM/TransferFunction.h>
+ #include <OpenFDM/Gain.h>
+ #include <OpenFDM/Input.h>
++#include <OpenFDM/Output.h>
+ #include <OpenFDM/Mass.h>
+ #include <OpenFDM/LinearSpringDamper.h>
+ #include <OpenFDM/MaxModel.h>
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-09-16 05:34:41 UTC (rev 294)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-09-26 18:19:03 UTC (rev 295)
+@@ -89,82 +89,4 @@
+   return mOutputValue;
+ }
+ 
+-
+-
+-
+-
+-/// FIXME
+-BEGIN_OPENFDM_OBJECT_DEF(Output, Model)
+-  DEF_OPENFDM_PROPERTY(Real, OutputGain, Serialized)
+-  DEF_OPENFDM_PROPERTY(String, OutputName, Serialized)
+-  END_OPENFDM_OBJECT_DEF
+-
+-Output::Output(const std::string& name) :
+-  Model(name),
+-  mOutputGain(1)
+-{
+-  setDirectFeedThrough(true);
+-  setNumInputPorts(1);
+-  setInputPortName(0, "input");
+-}
+-
+-Output::~Output(void)
+-{
+-}
+-
+-bool
+-Output::init(void)
+-{
+-  return Model::init();
+-}
+-
+-const Output*
+-Output::toOutput(void) const
+-{
+-  return this;
+-}
+-
+-Output*
+-Output::toOutput(void)
+-{
+-  return this;
+-}
+-
+-void
+-Output::output(const TaskInfo&)
+-{
+-  RealPortHandle rh = getInputPort(0)->toRealPortHandle();
+-  mValue = rh.getRealValue();
+-}
+-
+-const real_type&
+-Output::getValue(void) const
+-{
+-  return mValue;
+-}
+-
+-const real_type&
+-Output::getOutputGain(void) const
+-{
+-  return mOutputGain;
+-}
+-
+-void
+-Output::setOutputGain(const real_type& outputGain)
+-{
+-  mOutputGain = outputGain;
+-}
+-
+-const std::string&
+-Output::getOutputName(void) const
+-{
+-  return mOutputName;
+-}
+-
+-void
+-Output::setOutputName(const std::string& outputName)
+-{
+-  mOutputName = outputName;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.h	2006-09-16 05:34:41 UTC (rev 294)
++++ trunk/OpenFDM/src/OpenFDM/Input.h	2006-09-26 18:19:03 UTC (rev 295)
+@@ -39,32 +39,6 @@
+   std::string mInputName;
+ };
+ 
+-class Output : public Model {
+-  OPENFDM_OBJECT(Output, Model);
+-public:
+-  Output(const std::string& name);
+-  virtual ~Output(void);
+-  
+-  virtual const Output* toOutput(void) const;
+-  virtual Output* toOutput(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&);
+-
+-  const real_type& getValue(void) const;
+-
+-  const real_type& getOutputGain(void) const;
+-  void setOutputGain(const real_type& outputGain);
+-
+-  const std::string& getOutputName(void) const;
+-  void setOutputName(const std::string& outputName);
+-
+-private:
+-  real_type mValue;
+-  real_type mOutputGain;
+-  std::string mOutputName;
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Added: trunk/OpenFDM/src/OpenFDM/Output.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.cpp	2006-09-16 05:34:41 UTC (rev 294)
++++ trunk/OpenFDM/src/OpenFDM/Output.cpp	2006-09-26 18:19:03 UTC (rev 295)
+@@ -0,0 +1,89 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include "Output.h"
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Output, Model)
++  DEF_OPENFDM_PROPERTY(Real, OutputGain, Serialized)
++  DEF_OPENFDM_PROPERTY(String, OutputName, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++Output::Output(const std::string& name) :
++  Model(name),
++  mOutputGain(1)
++{
++  setDirectFeedThrough(true);
++  setNumInputPorts(1);
++  setInputPortName(0, "input");
++}
++
++Output::~Output(void)
++{
++}
++
++bool
++Output::init(void)
++{
++  mInputPort = getInputPort(0)->toRealPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) << "Initialization of Output model \"" << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  return Model::init();
++}
++
++const Output*
++Output::toOutput(void) const
++{
++  return this;
++}
++
++Output*
++Output::toOutput(void)
++{
++  return this;
++}
++
++void
++Output::output(const TaskInfo&)
++{
++  mValue = mInputPort.getRealValue();
++}
++
++const real_type&
++Output::getValue(void) const
++{
++  return mValue;
++}
++
++const real_type&
++Output::getOutputGain(void) const
++{
++  return mOutputGain;
++}
++
++void
++Output::setOutputGain(const real_type& outputGain)
++{
++  mOutputGain = outputGain;
++}
++
++const std::string&
++Output::getOutputName(void) const
++{
++  return mOutputName;
++}
++
++void
++Output::setOutputName(const std::string& outputName)
++{
++  mOutputName = outputName;
++}
++
++} // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/Output.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.h	2006-09-16 05:34:41 UTC (rev 294)
++++ trunk/OpenFDM/src/OpenFDM/Output.h	2006-09-26 18:19:03 UTC (rev 295)
+@@ -0,0 +1,41 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Output_H
++#define OpenFDM_Output_H
++
++#include "Model.h"
++
++namespace OpenFDM {
++
++class Output : public Model {
++  OPENFDM_OBJECT(Output, Model);
++public:
++  Output(const std::string& name);
++  virtual ~Output(void);
++  
++  virtual const Output* toOutput(void) const;
++  virtual Output* toOutput(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&);
++
++  const real_type& getValue(void) const;
++
++  const real_type& getOutputGain(void) const;
++  void setOutputGain(const real_type& outputGain);
++
++  const std::string& getOutputName(void) const;
++  void setOutputName(const std::string& outputName);
++
++private:
++  RealPortHandle mInputPort;
++  real_type mValue;
++  real_type mOutputGain;
++  std::string mOutputName;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+
+From frohlich at mail.berlios.de  Tue Sep 26 20:26:00 2006
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 26 Sep 2006 20:26:00 +0200
+Subject: [OpenFDM-svn] r296 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200609261826.k8QIQ0ZN004788@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-09-26 20:25:59 +0200 (Tue, 26 Sep 2006)
+New Revision: 296
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Add missing makefile change ...
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-09-26 18:19:03 UTC (rev 295)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-09-26 18:25:59 UTC (rev 296)
+@@ -93,6 +93,7 @@
+   Object.h \
+   ODESolver.h \
+   OpenFDMConfig.h \
++  Output.h \
+   Plane.h \
+   Planet.h \
+   Port.h \
+@@ -192,6 +193,7 @@
+   Newton.cpp \
+   Object.cpp \
+   ODESolver.cpp \
++  Output.cpp \
+   Planet.cpp \
+   Port.cpp \
+   PortAcceptor.cpp \
+
+
+
+From frohlich at mail.berlios.de  Tue Sep 26 20:29:34 2006
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 26 Sep 2006 20:29:34 +0200
+Subject: [OpenFDM-svn] r297 - trunk/flightgear
+Message-ID: <200609261829.k8QITYlA005184@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-09-26 20:29:34 +0200 (Tue, 26 Sep 2006)
+New Revision: 297
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Make it compile
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-09-26 18:25:59 UTC (rev 296)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-09-26 18:29:34 UTC (rev 297)
+@@ -14,6 +14,7 @@
+ #include <OpenFDM/Units.h>
+ #include <OpenFDM/Vehicle.h>
+ #include <OpenFDM/Input.h>
++#include <OpenFDM/Output.h>
+ #include <OpenFDM/Ground.h>
+ #include <OpenFDM/MobileRootJoint.h>
+ #include <OpenFDM/Model.h>
+
+
+

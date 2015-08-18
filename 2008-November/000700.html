@@ -1,0 +1,582 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r731 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r731%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811161413.mAGEDj5c005388%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000699.html">
+   <LINK REL="Next"  HREF="000701.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r731 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r731%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811161413.mAGEDj5c005388%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r731 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 16 15:13:45 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000699.html">[OpenFDM-svn] r730 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000701.html">[OpenFDM-svn] r732 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#700">[ date ]</a>
+              <a href="thread.html#700">[ thread ]</a>
+              <a href="subject.html#700">[ subject ]</a>
+              <a href="author.html#700">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-16 15:13:43 +0100 (Sun, 16 Nov 2008)
+New Revision: 731
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixOutputPort.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RealOutputPort.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+Log:
+Implement a sensor.
+
+M    src/test/foucault.cpp
+A    src/OpenFDM/Sensor.cpp
+M    src/OpenFDM/RealOutputPort.h
+M    src/OpenFDM/MatrixOutputPort.h
+M    src/OpenFDM/Group.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Sensor.h
+M    src/OpenFDM/Interact.h
+M    src/OpenFDM/PortInfo.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -61,7 +61,7 @@
+ public:
+   GroupInput(const std::string&amp; name) :
+     GroupInterfaceNode(name),
+-    mGroupInternalPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0)))
++    mGroupInternalPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0), false))
+   { }
+ protected:
+   virtual bool addParent(Node* parent)
+@@ -86,7 +86,7 @@
+   {
+     if (!GroupInterfaceNode::addParent(parent))
+       return false;
+-    setExternalPortInfo(new OutputPortInfo(parent, &quot;output&quot;, Size(0, 0)));
++    setExternalPortInfo(new OutputPortInfo(parent, &quot;output&quot;, Size(0, 0), false));
+     return true;
+   }
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -28,7 +28,6 @@
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+                             PortValueList&amp;, Matrix&amp;) const
+   { }
+-  // hmm, may be this should be output???
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+                             PortValueList&amp;, const Matrix&amp;, Vector&amp;) const
+   { }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-16 14:13:43 UTC (rev 731)
+@@ -242,6 +242,7 @@
+   PrismaticJoint.cpp \
+   RevoluteActuator.cpp \
+   RevoluteJoint.cpp \
++  Sensor.cpp \
+   UniversalJoint.cpp
+ 
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixOutputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixOutputPort.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixOutputPort.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -12,9 +12,12 @@
+ 
+ class MatrixOutputPort {
+ public:
+-  MatrixOutputPort(Node* node, const std::string&amp; name, const Size&amp; size) :
+-    mPort(new OutputPortInfo(node, name, size))
++  MatrixOutputPort()
+   { }
++  MatrixOutputPort(Node* node, const std::string&amp; name, const Size&amp; size,
++                   bool accelerationPort = false) :
++    mPort(new OutputPortInfo(node, name, size, accelerationPort))
++  { }
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
+     PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
+@@ -28,6 +31,10 @@
+   { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+   unsigned getPortIndex() const
+   { return mPort-&gt;getIndex(); }
++  bool getAccelerationOutput() const
++  { OpenFDMAssert(mPort); return mPort-&gt;getAccelerationOutput(); }
++  void setAccelerationOutput(bool accelerationOutput)
++  { OpenFDMAssert(mPort); mPort-&gt;setAccelerationOutput(accelerationOutput); }
+ private:
+   SharedPtr&lt;OutputPortInfo&gt; mPort;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -161,9 +161,10 @@
+ 
+ class OutputPortInfo : public NumericPortInfo {
+ public:
+-  OutputPortInfo(Node* node, const std::string&amp; name, const Size&amp; size) :
++  OutputPortInfo(Node* node, const std::string&amp; name, const Size&amp; size,
++                 bool accelerationOutput) :
+     NumericPortInfo(node, name, size),
+-    mAccelerationOutput(false)
++    mAccelerationOutput(accelerationOutput)
+   { }
+   virtual ~OutputPortInfo()
+   { }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RealOutputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RealOutputPort.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RealOutputPort.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -13,9 +13,12 @@
+ 
+ class RealOutputPort {
+ public:
+-  RealOutputPort(Node* node, const std::string&amp; name) :
+-    mPort(new OutputPortInfo(node, name, Size(1, 1)))
++  RealOutputPort()
+   { }
++  RealOutputPort(Node* node, const std::string&amp; name,
++                 bool accelerationPort = false) :
++    mPort(new OutputPortInfo(node, name, Size(1, 1), accelerationPort))
++  { }
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
+     PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
+@@ -29,6 +32,10 @@
+   { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+   unsigned getPortIndex() const
+   { return mPort-&gt;getIndex(); }
++  bool getAccelerationOutput() const
++  { OpenFDMAssert(mPort); return mPort-&gt;getAccelerationOutput(); }
++  void setAccelerationOutput(bool accelerationOutput)
++  { OpenFDMAssert(mPort); mPort-&gt;setAccelerationOutput(accelerationOutput); }
+ private:
+   SharedPtr&lt;OutputPortInfo&gt; mPort;
+ };
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-16 14:13:43 UTC (rev 731)
+@@ -0,0 +1,176 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Sensor.h&quot;
++
++#include &quot;MechanicLinkValue.h&quot;
++#include &quot;NumericPortValue.h&quot;
++#include &quot;PortValueList.h&quot;
++
++namespace OpenFDM {
++
++Sensor::Sensor(const std::string&amp; name) :
++  Interact(name),
++  mMechanicLink(newMechanicLink(&quot;link&quot;)),
++  mPosition(0, 0, 0)
++{
++}
++
++Sensor::~Sensor(void)
++{
++}
++
++void
++Sensor::initDesignPosition(PortValueList&amp; portValues) const
++{
++}
++
++void
++Sensor::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
++                 PortValueList&amp; portValues) const
++{
++  const Frame&amp; frame = portValues[mMechanicLink].getFrame();
++
++  // FIXME, for now relative position
++  Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
++  Vector3 refPosition = frame.posToRef(position);
++
++  if (getEnablePosition())
++    portValues[mPositionPort] = refPosition;
++
++  if (getEnableOrientation())
++    portValues[mOrientationPort] = frame.getRefOrientation();
++
++  
++  Vector6 refVelocity = motionTo(refPosition, frame.getRefOrientation(),
++                                 Vector6::zeros());
++  if (getEnableAngularVelocity())
++    portValues[mAngularVelocityPort] = refVelocity.getAngular();
++
++  if (getEnableLinearVelocity())
++    portValues[mLinearVelocityPort] = refVelocity.getLinear();
++}
++
++void
++Sensor::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++                     PortValueList&amp; portValues, const Matrix&amp;, Vector&amp;) const
++{
++  const Frame&amp; frame = portValues[mMechanicLink].getFrame();
++
++  // FIXME, for now relative position
++  Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
++
++  if (getEnableCentrifugalAcceleration()) {
++    Vector6 spatialVel = motionTo(position, frame.getSpVel());
++    Vector6 spatialAccel = motionTo(position, frame.getSpAccel());
++    Vector3 centrifugalAccel = spatialAccel.getLinear();
++    centrifugalAccel += cross(spatialVel.getAngular(), spatialVel.getLinear());
++
++    portValues[mCentrifugalAccelerationPort] = centrifugalAccel;
++  }
++
++//   if (getEnableLoadAcceleration())
++//     portValues[mLoadAccelerationPort] = centrifugalAccel + gravity;
++}
++
++void
++Sensor::setPosition(const Vector3&amp; position)
++{
++  mPosition = position;
++}
++
++const Vector3&amp;
++Sensor::getPosition() const
++{
++  return mPosition;
++}
++
++void
++Sensor::setEnablePosition(bool enable)
++{
++  if (enable == getEnablePosition())
++    return;
++  if (enable)
++    mPositionPort = MatrixOutputPort(this, &quot;position&quot;, Size(3, 1));
++  else
++    mPositionPort.clear();
++}
++
++bool
++Sensor::getEnablePosition() const
++{
++  return !mPositionPort.empty();
++}
++
++void
++Sensor::setEnableOrientation(bool enable)
++{
++  if (enable == getEnableOrientation())
++    return;
++  if (enable)
++    mOrientationPort = MatrixOutputPort(this, &quot;orientation&quot;, Size(4, 1));
++  else
++    mOrientationPort.clear();
++}
++
++bool
++Sensor::getEnableOrientation() const
++{
++  return !mOrientationPort.empty();
++}
++
++void
++Sensor::setEnableLinearVelocity(bool enable)
++{
++  if (enable == getEnableLinearVelocity())
++    return;
++  if (enable)
++    mLinearVelocityPort = MatrixOutputPort(this, &quot;linearVelocity&quot;, Size(3, 1));
++  else
++    mLinearVelocityPort.clear();
++}
++
++bool
++Sensor::getEnableLinearVelocity() const
++{
++  return !mLinearVelocityPort.empty();
++}
++
++void
++Sensor::setEnableAngularVelocity(bool enable)
++{
++  if (enable == getEnableAngularVelocity())
++    return;
++  if (enable)
++    mAngularVelocityPort
++      = MatrixOutputPort(this, &quot;angularVelocity&quot;, Size(3, 1));
++  else
++    mAngularVelocityPort.clear();
++}
++
++bool
++Sensor::getEnableAngularVelocity() const
++{
++  return !mAngularVelocityPort.empty();
++}
++
++void
++Sensor::setEnableCentrifugalAcceleration(bool enable)
++{
++  if (enable == getEnableCentrifugalAcceleration())
++    return;
++  if (enable)
++    mCentrifugalAccelerationPort
++      = MatrixOutputPort(this, &quot;centrifugalAcceleration&quot;, Size(3, 1), true);
++  else
++    mCentrifugalAccelerationPort.clear();
++}
++
++bool
++Sensor::getEnableCentrifugalAcceleration() const
++{
++  return !mCentrifugalAccelerationPort.empty();
++}
++
++} // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-16 14:13:43 UTC (rev 731)
+@@ -5,87 +5,66 @@
+ #ifndef OpenFDM_Sensor_H
+ #define OpenFDM_Sensor_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Gravity.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;Interact.h&quot;
++#include &quot;MatrixOutputPort.h&quot;
++#include &quot;MechanicLink.h&quot;
++#include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Sensor
+-  : public Interact {
++class Sensor : public Interact {
+ public:
+-  Sensor(const std::string&amp; name) :
+-    Interact(name, 1)
+-  {
+-    setNumOutputPorts(2);
+-    setOutputPort(0, &quot;nlfz&quot;, this, &amp;Sensor::getNlfz);
+-    setOutputPort(1, &quot;az&quot;, this, &amp;Sensor::getAz);
+-  }
+-  virtual ~Sensor(void)
+-  { }
++  Sensor(const std::string&amp; name);
++  virtual ~Sensor(void);
+ 
+-  virtual bool init(void)
+-  {
+-    mNextNlfz = 0;
+-    mNextAz = 0;
+-    return Interact::init();
+-  }
++  virtual void initDesignPosition(PortValueList&amp;) const;
++  virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
++                        PortValueList&amp;) const;
++  virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp;, const Matrix&amp;, Vector&amp;) const;
+ 
+-  virtual void output(const TaskInfo&amp; taskInfo)
+-  {
+-    mNlfz = mNextNlfz;
+-    mAz = mNextAz;
+-  }
++  /// Set the position of the sensor in design coordinates
++  void setPosition(const Vector3&amp; position);
++  /// Get the position of the sensor in design coordinates
++  const Vector3&amp; getPosition() const;
+ 
+-  virtual void update(const TaskInfo&amp; taskInfo)
+-  {
+-    if (!nonZeroIntersection(taskInfo.getSampleTimeSet(), getSampleTimeSet()))
+-        return;
++  /// Set availabilty of the position output port
++  void setEnablePosition(bool enable);
++  /// Get availabilty of the position output port
++  bool getEnablePosition() const;
+ 
+-    mNextNlfz = 0;
+-    mNextAz = 0;
+-    RigidBody* rigidBody = getParentRigidBody(0);
+-    if (!rigidBody)
+-      return;
+-    Frame* frame = rigidBody-&gt;getFrame();
+-    if (!frame)
+-      return;
+-    const Gravity* grav = mEnvironment-&gt;getGravity();
+-    if (!grav)
+-      return;
+-    Vector3 accel = frame-&gt;getClassicAccel().getLinear();
+-    // That is the acceleration like sensed by a gyro
+-    mNextAz = accel(2);
++  /// Set availabilty of the orientation output port
++  void setEnableOrientation(bool enable);
++  /// Get availabilty of the orientation output port
++  bool getEnableOrientation() const;
+ 
+-    // Now compute the acceleration like sensed by anything sensing the
+-    // gravitational stuff too
+-    accel -= frame-&gt;rotFromRef(grav-&gt;gravityAccel(frame-&gt;getRefPosition()));
+-    mNextNlfz = accel(2)/9.81;
+-  }
++  /// Set availabilty of the linear velocity output port
++  void setEnableLinearVelocity(bool enable);
++  /// Get availabilty of the linear velocity output port
++  bool getEnableLinearVelocity() const;
+ 
+-  const real_type&amp; getNlfz(void) const
+-  { return mNlfz; }
+-  const real_type&amp; getAz(void) const
+-  { return mAz; }
++  /// Set availabilty of the angular velocity output port
++  void setEnableAngularVelocity(bool enable);
++  /// Get availabilty of the angular velocity output port
++  bool getEnableAngularVelocity() const;
+ 
+-  virtual void interactWith(RigidBody*)
+-  {}
++  /// Set availabilty of the linear acceleration output port
++  void setEnableCentrifugalAcceleration(bool enable);
++  /// Get availabilty of the linear acceleration output port
++  bool getEnableCentrifugalAcceleration() const;
+ 
+-protected:
+-  virtual void setEnvironment(Environment* environment)
+-  { mEnvironment = environment; }
+-
+ private:
+-  SharedPtr&lt;Environment&gt; mEnvironment;
+-  real_type mNlfz;
+-  real_type mNextNlfz;
+-  real_type mAz;
+-  real_type mNextAz;
++  MechanicLink mMechanicLink;
++
++  Vector3 mPosition;
++
++  MatrixOutputPort mPositionPort;
++  MatrixOutputPort mOrientationPort;
++
++  MatrixOutputPort mLinearVelocityPort;
++  MatrixOutputPort mAngularVelocityPort;
++
++  MatrixOutputPort mCentrifugalAccelerationPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-16 08:25:33 UTC (rev 730)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-16 14:13:43 UTC (rev 731)
+@@ -4,6 +4,7 @@
+ #include &lt;OpenFDM/UniversalJoint.h&gt;
+ // #include &lt;OpenFDM/RevoluteJoint.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Sensor.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+ // #include &lt;OpenFDM/Planet.h&gt;
+@@ -28,14 +29,27 @@
+ //   RevoluteJoint* universalJoint = new RevoluteJoint(&quot;Revolute&quot;);
+ //   universalJoint-&gt;setAxis(Vector3(0, 1, 0));
+   Group::NodeId universal = group-&gt;addChild(universalJoint);
+-  Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
++
++  RigidBody* rigidBodyNode = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBodyNode-&gt;addLink(&quot;sensorLink&quot;);
++  Group::NodeId rigidBody = group-&gt;addChild(rigidBodyNode);
+   Mass* massModel = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
+   massModel-&gt;setPosition(Vector3(1, 0, 0));
+   Group::NodeId mass = group-&gt;addChild(massModel);
+ 
++  Sensor* sensorModel = new Sensor(&quot;Sensor&quot;);
++  sensorModel-&gt;setPosition(massModel-&gt;getPosition());
++  sensorModel-&gt;setEnablePosition(true);
++  sensorModel-&gt;setEnableOrientation(true);
++  sensorModel-&gt;setEnableLinearVelocity(true);
++  sensorModel-&gt;setEnableAngularVelocity(true);
++  sensorModel-&gt;setEnableCentrifugalAcceleration(true);
++  Group::NodeId sensor = group-&gt;addChild(sensorModel);
++
+   group-&gt;connect(root, 0, universal, 0);
+   group-&gt;connect(universal, 1, rigidBody, 0);
+   group-&gt;connect(rigidBody, 1, mass, 0);
++  group-&gt;connect(rigidBody, &quot;sensorLink&quot;, sensor, &quot;link&quot;);
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, group);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000699.html">[OpenFDM-svn] r730 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000701.html">[OpenFDM-svn] r732 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#700">[ date ]</a>
+              <a href="thread.html#700">[ thread ]</a>
+              <a href="subject.html#700">[ subject ]</a>
+              <a href="author.html#700">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

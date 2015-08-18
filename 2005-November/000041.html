@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r54 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r54%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511051610.jA5GAZRB012072%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000039.html">
+   <LINK REL="Next"  HREF="000042.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r54 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r54%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511051610.jA5GAZRB012072%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r54 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Nov  5 17:10:35 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000039.html">[OpenFDM-svn] r53 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000042.html">[OpenFDM-svn] r55 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#41">[ date ]</a>
+              <a href="thread.html#41">[ thread ]</a>
+              <a href="subject.html#41">[ subject ]</a>
+              <a href="author.html#41">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-05 17:10:23 +0100 (Sat, 05 Nov 2005)
+New Revision: 54
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+   trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+Log:
+Fix ABA. Still ugly ...
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-11-02 22:13:43 UTC (rev 53)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-11-05 16:10:23 UTC (rev 54)
+@@ -113,4 +113,27 @@
+                        &lt;&lt; &quot;\nInertia:\n&quot; &lt;&lt; mArtInertia &lt;&lt; endl;
+ }
+ 
++void
++RigidBody::computeAccel(void)
++{
++  Log(ArtBody, Debug) &lt;&lt; &quot;Entry of computeAccel of \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++
++  unsigned n = getNumMultiBodyModels();
++  for (unsigned i = 0; i &lt; n; ++i) {
++    Joint* joint = getMultiBodyModel(i)-&gt;toJoint();
++    if (joint) {
++      Log(ArtBody, Debug) &lt;&lt; &quot;Processing joint \&quot;&quot; &lt;&lt; joint-&gt;getName()
++                          &lt;&lt; &quot;\&quot; to body \&quot;&quot; &lt;&lt; getName()
++                          &lt;&lt; &quot;\&quot; for acceleration update&quot; &lt;&lt; endl;
++      // Check if this is an articulated joint and if we are the parent.
++      if (joint-&gt;isArticulatedJoint() &amp;&amp; this == joint-&gt;getOutboardGroup())
++        joint-&gt;updateAccels();
++    }
++  }
++  
++  Log(ArtBody, Debug3) &lt;&lt; &quot;On exit of computeAccel of \&quot;&quot; &lt;&lt; getName()
++                       &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-11-02 22:13:43 UTC (rev 53)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-11-05 16:10:23 UTC (rev 54)
+@@ -54,6 +54,8 @@
+    */
+   void computeArtValues(void);
+ 
++  void computeAccel(void);
++
+   /** Get the outboard articulated inertia.
+       Returns a reference to the outboard articulated inertia.
+       The returned inertia matrix is computed prevously by a call to
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-11-02 22:13:43 UTC (rev 53)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-11-05 16:10:23 UTC (rev 54)
+@@ -41,9 +41,12 @@
+ class AccelerationPropagationVisitor
+   : public Visitor {
+ public:
+-  virtual void apply(Joint&amp; joint)
++  virtual void apply(RigidBody&amp; body)
+   {
+-    joint.updateAccels();
++    body.computeAccel();
++    // Note the order. First compute the acceleration and than traverse
++    // to the children.
++    traverse(body);
+   }
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000039.html">[OpenFDM-svn] r53 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000042.html">[OpenFDM-svn] r55 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#41">[ date ]</a>
+              <a href="thread.html#41">[ thread ]</a>
+              <a href="subject.html#41">[ subject ]</a>
+              <a href="author.html#41">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

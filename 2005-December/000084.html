@@ -1,0 +1,197 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r100 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r100%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512170848.jBH8mg6G002150%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000083.html">
+   <LINK REL="Next"  HREF="000085.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r100 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r100%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512170848.jBH8mg6G002150%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r100 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Dec 17 09:48:42 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000083.html">[OpenFDM-svn] r99 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000085.html">[OpenFDM-svn] r101 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#84">[ date ]</a>
+              <a href="thread.html#84">[ thread ]</a>
+              <a href="subject.html#84">[ subject ]</a>
+              <a href="author.html#84">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-17 09:48:20 +0100 (Sat, 17 Dec 2005)
+New Revision: 100
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Table.h
+Log:
+Make prelookup indices real_type.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-16 20:19:36 UTC (rev 99)
++++ trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-17 08:48:20 UTC (rev 100)
+@@ -13,24 +13,10 @@
+ 
+ namespace OpenFDM {
+ 
+-struct InterploationData {
+-  InterploationData(void) {}
+-  InterploationData(unsigned index0, unsigned index1, real_type _theta)
+-  {
+-    weight[0] = 1 - _theta;
+-    weight[1] = _theta;
+-    index[0] = index0;
+-    index[1] = index1;
+-  }
+-  real_type weight[2];
+-  unsigned index[2];
+-};
+-
+ class TableLookup {
+   typedef std::map&lt;real_type, unsigned&gt; Table;
+   typedef std::pair&lt;real_type, unsigned&gt; Pair;
+-  
+-  
++ 
+ public:
+   TableLookup(void)
+   {}
+@@ -129,12 +115,12 @@
+     return true;
+   }
+ 
+-  InterploationData lookup(real_type input) const
++  real_type lookup(real_type input) const
+   {
+     // Empty table??
+     // FIXME
+     if (mTable.empty())
+-      return InterploationData(1, 1, 0);
++      return 1;
+ 
+     // Find the table bounds for the requested input.
+     Table::const_iterator upBoundIt = mTable.upper_bound(input);
+@@ -143,10 +129,10 @@
+ 
+     Table::const_iterator beg = mTable.begin();
+     if (upBoundIt == beg)
+-      return InterploationData(1, 1, 0);
++      return 1;
+     if (upBoundIt == mTable.end()) {
+       unsigned last = mTable.rbegin()-&gt;second;
+-      return InterploationData(last, last, 0);
++      return last;
+     }
+ 
+     // Just do linear interpolation.
+@@ -154,10 +140,10 @@
+     real_type upBound = upBoundIt-&gt;first;
+     unsigned loIdx = loBoundIt-&gt;second;
+     if (loBound == upBound)
+-      return InterploationData(loIdx, loIdx, 0);
++      return loIdx;
+     unsigned upIdx = upBoundIt-&gt;second;
+     real_type theta = (input - loBound)/(upBound-loBound);
+-    return InterploationData(loIdx, upIdx, theta);
++    return loIdx + theta;
+   }
+ 
+ private:
+@@ -169,7 +155,7 @@
+ public:
+   typedef LinAlg::Vector&lt;unsigned,numDims&gt;  Index;
+   typedef LinAlg::Vector&lt;unsigned,numDims&gt;  SizeVector;
+-  typedef LinAlg::Vector&lt;InterploationData,numDims&gt; InterpVector;
++  typedef LinAlg::Vector&lt;real_type,numDims&gt; InterpVector;
+ 
+   TableData(void) :
+     mData(0)
+@@ -244,17 +230,36 @@
+     if (indexNum == 0)
+       return at(curIndex);
+ 
+-    real_type value = 0;
++    real_type ridx = interp(indexNum);
+ 
+-    curIndex(indexNum) = interp(indexNum).index[0];
+-    value += interp(indexNum).weight[0] *
+-      interpolator(indexNum-1, curIndex, interp);
++    // Check for an out of range index
++    unsigned i0 = unsigned(floor(ridx));
++    if (i0 &lt; 1) {
++      curIndex(indexNum) = 1;
++      return interpolator(indexNum-1, curIndex, interp);
++    }
+ 
+-    curIndex(indexNum) = interp(indexNum).index[1];
+-    value += interp(indexNum).weight[1] *
+-      interpolator(indexNum-1, curIndex, interp);
++    // Check for an out of range index
++    unsigned sz = mSize(indexNum);
++    unsigned i1 = unsigned(ceil(ridx));
++    if (sz &lt; i1) {
++      curIndex(indexNum) = sz;
++      return interpolator(indexNum-1, curIndex, interp);
++    } else if (i0 == i1) {
++      // Exactly hit an integer valued index
++      curIndex(indexNum) = i0;
++      return interpolator(indexNum-1, curIndex, interp);
++    } else {
++      // Need interpolation in this dimension
++      curIndex(indexNum) = i0;
++      real_type value;
++      value = (i1 - ridx) * interpolator(indexNum-1, curIndex, interp);
+ 
+-    return value;
++      curIndex(indexNum) = i1;
++      value += (ridx - i0) * interpolator(indexNum-1, curIndex, interp);
++
++      return value;
++    }
+   }
+ 
+   real_type* mData;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000083.html">[OpenFDM-svn] r99 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000085.html">[OpenFDM-svn] r101 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#84">[ date ]</a>
+              <a href="thread.html#84">[ thread ]</a>
+              <a href="subject.html#84">[ subject ]</a>
+              <a href="author.html#84">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

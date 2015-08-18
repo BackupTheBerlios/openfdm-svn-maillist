@@ -1,0 +1,964 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1094 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1094%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908132019.n7DKJvbd020597%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001051.html">
+   <LINK REL="Next"  HREF="001053.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1094 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1094%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908132019.n7DKJvbd020597%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1094 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 13 22:19:57 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001051.html">[OpenFDM-svn] r1093 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001053.html">[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1052">[ date ]</a>
+              <a href="thread.html#1052">[ thread ]</a>
+              <a href="subject.html#1052">[ subject ]</a>
+              <a href="author.html#1052">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-13 22:19:56 +0200 (Thu, 13 Aug 2009)
+New Revision: 1094
+
+Added:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+Log:
+Factor out some implementation details.
+
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimReaderBase.h
+M    src/JSBSim/JSBSimReader.cpp
+AM   src/JSBSim/JSBSimPropertyManager.cpp
+M    src/JSBSim/Makefile.am
+AM   src/JSBSim/JSBSimPropertyManager.h
+
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -0,0 +1,149 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;JSBSimPropertyManager.h&quot;
++
++namespace OpenFDM {
++
++class PortSet {
++  struct PathPort {
++    NodePath modelPath;
++    SharedPtr&lt;const Port&gt; portProvider;
++  };
++public:
++  PortSet(const Port* sourcePort = 0)
++  {
++    if (!sourcePort)
++      return;
++    PathPort pathPort;
++    pathPort.portProvider = sourcePort;
++
++    SharedPtr&lt;const Node&gt; node = sourcePort-&gt;getNode();
++    if (node)
++      // FIXME
++      pathPort.modelPath = node-&gt;getNodePathList().front();
++
++    mPortList.push_back(pathPort);
++  }
++
++  const Port* routeTo(const NodePath&amp; path)
++  {
++    // could happen if the initialzer failed
++    if (mPortList.empty())
++      return 0;
++
++    // ok, shortcut for old style connections
++    if (path.empty())
++      return mPortList.front().portProvider;
++
++    const NodePath&amp; originatingPath = mPortList.front().modelPath;
++    // fast return if the models are not connected to the same root system
++    if (path.front() != originatingPath.front())
++      return 0;
++
++    // first check, if we already have a route
++    const Port* portProvider = findProvider(path);
++    if (portProvider)
++      return portProvider;
++
++    // Compute the iterators for seperating the common part of the model path
++    // from the different part
++    NodePath::const_iterator mi1 = path.begin();
++    NodePath::const_iterator mi2 = originatingPath.begin();
++    while (mi1 != path.end() &amp;&amp; mi2 != originatingPath.end()) {
++      if (*mi1 != *mi2)
++        break;
++      ++mi1;
++      ++mi2;
++    }
++
++    if (mi1 != path.end()) {
++      // that is: we must first go up that path and search again
++      NodePath pathUp = path;
++      pathUp.pop_back();
++      portProvider = routeTo(pathUp);
++      if (!portProvider)
++        return 0;
++      
++      GroupInput* groupInput = new GroupInput(portProvider-&gt;getName());
++      Group* group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(path.back().get()));
++      group-&gt;addChild(groupInput);
++
++      PathPort pathPort;
++      pathPort.modelPath = groupInput-&gt;getNodePathList().front();
++      pathPort.portProvider = group-&gt;getPort(groupInput-&gt;getExternalPortIndex());
++      mPortList.push_back(pathPort);
++
++      if (!group-&gt;connect(portProvider, groupInput-&gt;getPort(&quot;input&quot;)))
++        return 0;
++      
++      return pathPort.portProvider.get();
++
++    } else if (mi2 != originatingPath.end()) {
++      // that is: we need to step deeper towards the origin of that port
++      NodePath pathDown = path;
++      pathDown.push_back(*mi2);
++      portProvider = routeTo(pathDown);
++      if (!portProvider)
++        return 0;
++
++      GroupOutput* groupOutput = new GroupOutput(portProvider-&gt;getName());
++      Group* group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(pathDown.back().get()));
++      group-&gt;addChild(groupOutput);
++
++      PathPort pathPort;
++      pathPort.modelPath = groupOutput-&gt;getNodePathList().front();
++      pathPort.portProvider = group-&gt;getPort(groupOutput-&gt;getExternalPortIndex());
++      mPortList.push_back(pathPort);
++
++      if (!group-&gt;connect(portProvider, groupOutput-&gt;getPort(&quot;input&quot;)))
++        return 0;
++      
++      return pathPort.portProvider.get();
++
++    } else {
++      // should not happen, in this case the find provider must have been
++      // successful,
++      return 0;
++    }
++  }
++
++  const Port* findProvider(const NodePath&amp; path)
++  {
++    PortList::iterator i = mPortList.begin();
++    while (i != mPortList.end()) {
++      if (i-&gt;modelPath == path)
++        return i-&gt;portProvider;
++      ++i;
++    }
++
++    return 0;
++  }
++
++private:
++  typedef std::list&lt;PathPort&gt; PortList;
++  PortList mPortList;
++};
++
++/// Connect all the loose ends stored here
++bool
++JSBSimProperty::connect()
++{
++  if (!hasProviderPort())
++    return false;
++  
++  PortSet portSet(mProvider.first);
++  for (unsigned i = 0; i &lt; mConsumers.size(); ++i) {
++    SharedPtr&lt;const Node&gt; node = mConsumers[i].first-&gt;getNode();
++    OpenFDMAssert(node);
++    NodePathList nodePathList = node-&gt;getNodePathList();
++    const Port* p = portSet.routeTo(nodePathList.front());
++    if (!mConsumers[i].second-&gt;connect(p, mConsumers[i].first))
++      return false;
++  }
++  
++  return true;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -0,0 +1,162 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_JSBSimPropertyManager_H
++#define OpenFDM_JSBSimPropertyManager_H
++
++#include &lt;map&gt;
++#include &lt;string&gt;
++#include &lt;cstring&gt;
++#include &lt;list&gt;
++#include &lt;map&gt;
++#include &lt;iosfwd&gt;
++
++#include &lt;OpenFDM/Assert.h&gt;
++#include &lt;OpenFDM/ReaderWriter.h&gt;
++#include &lt;OpenFDM/BreakPointLookup.h&gt;
++#include &lt;OpenFDM/Table.h&gt;
++#include &lt;OpenFDM/Model.h&gt;
++#include &lt;OpenFDM/GroupInput.h&gt;
++#include &lt;OpenFDM/GroupOutput.h&gt;
++#include &lt;OpenFDM/Port.h&gt;
++
++#include &lt;OpenFDM/XML/XMLReader.h&gt;
++#include &lt;OpenFDM/XML/ContentHandler.h&gt;
++#include &lt;OpenFDM/XML/ErrorHandler.h&gt;
++#include &lt;OpenFDM/XML/Attributes.h&gt;
++
++#include &quot;JSBSimAerodynamic.h&quot;
++#include &quot;XMLReader.h&quot;
++
++namespace OpenFDM {
++
++class JSBSimProperty {
++public:
++  typedef std::pair&lt;SharedPtr&lt;const Port&gt;, SharedPtr&lt;Group&gt; &gt; PortGroupPair;
++
++  void setProvider(const Port* port)
++  {
++    if (!port)
++      return;
++    SharedPtr&lt;const Node&gt; node = port-&gt;getNode();
++    OpenFDMAssert(node);
++    NodePathList nodePathList = node-&gt;getNodePathList();
++    OpenFDMAssert(nodePathList.size() == 1);
++    Group* group = dynamic_cast&lt;Group*&gt;(const_cast&lt;Node*&gt;(nodePathList.front().back().get()));
++    setProvider(port, group);
++  }
++  void setProvider(const Port* port, Group* group)
++  { setProvider(PortGroupPair(port, group)); }
++  void setProvider(const PortGroupPair&amp; portPathPair)
++  { mProvider = portPathPair; }
++  const SharedPtr&lt;const Port&gt;&amp; getProviderPort() const
++  { return mProvider.first; }
++  const SharedPtr&lt;Group&gt;&amp; getProviderGroup() const
++  { return mProvider.second; }
++
++  bool hasProviderPort() const
++  { return mProvider.first.valid(); }
++
++  void addConsumer(const Port* port)
++  {
++    if (!port)
++      return;
++    SharedPtr&lt;const Node&gt; node = port-&gt;getNode();
++    OpenFDMAssert(node);
++    NodePathList nodePathList = node-&gt;getNodePathList();
++    OpenFDMAssert(nodePathList.size() == 1);
++    Group* group = dynamic_cast&lt;Group*&gt;(const_cast&lt;Node*&gt;(nodePathList.front().back().get()));
++    addConsumer(port, group);
++  }
++  void addConsumer(const Port* port, Group* group)
++  { addConsumer(PortGroupPair(port, group)); }
++  void addConsumer(const PortGroupPair&amp; portPathPair)
++  { mConsumers.push_back(portPathPair); }
++
++  /// Connect all the loose ends stored here
++  bool connect();
++
++  static std::string simplify(std::string path)
++  {
++    std::string::size_type idx;
++    while ((idx = path.find(&quot;[0]&quot;)) != std::string::npos) {
++      path.erase(idx, 3);
++    }
++    while ((idx = path.find(&quot;//&quot;)) != std::string::npos) {
++      path.erase(idx, 1);
++    }
++    return path;
++  }
++  static std::string propertyPath(const std::string&amp; path)
++  {
++    std::string simplePath = simplify(path);
++    std::string::size_type idx = simplePath.rfind('/');
++    if (idx == std::string::npos)
++      return std::string();
++    simplePath = simplePath.substr(0, idx);
++    while (!simplePath.empty() &amp;&amp; simplePath[simplePath.size() - 1] == '/')
++      simplePath = simplePath.substr(0, simplePath.size() - 1);
++    return simplePath.substr(0, idx);
++  }
++  static std::string propertyName(const std::string&amp; path)
++  {
++    std::string simplePath = simplify(path);
++    std::string::size_type idx = simplePath.rfind('/');
++    if (idx == std::string::npos)
++      return simplePath;
++    return simplePath.substr(idx+1);
++  }
++  static bool startsWith(const std::string&amp; path, const char* start)
++  {
++    return path.find(start) == 0;
++  }
++  static bool endsWith(const std::string&amp; path, const char* start)
++  {
++    return path.size() - path.rfind(start) == strlen(start);
++  }
++
++private:
++  /// The port that delivers the value
++  PortGroupPair mProvider;
++  /// The ports that need that value as input
++  std::vector&lt;PortGroupPair&gt; mConsumers;
++};
++
++class JSBSimPropertyManager {
++public:
++  typedef std::map&lt;std::string,JSBSimProperty&gt; PropertyMap;
++
++  const PropertyMap&amp; getPropertyMap() const
++  { return mPropertyMap; }
++  PropertyMap&amp; getPropertyMap()
++  { return mPropertyMap; }
++
++  /// Clears the property map. Is used in the readers to reuse a reader
++  void clear()
++  { mPropertyMap.clear(); }
++
++  /// Set the port providing this property value
++  void setProvider(const std::string&amp; name, const Port* port)
++  { mPropertyMap[JSBSimProperty::simplify(name)].setProvider(port); }
++
++  /// Add a port that consumes this property value
++  void addConsumer(const std::string&amp; name, const Port* port)
++  { mPropertyMap[JSBSimProperty::simplify(name)].addConsumer(port); }
++
++  /// Returns true if this property is already registered
++  bool exists(const std::string&amp; propertyName) const
++  {
++    PropertyMap::const_iterator i = mPropertyMap.find(JSBSimProperty::simplify(propertyName));
++    if (i == mPropertyMap.end())
++      return false;
++    return i-&gt;second.hasProviderPort();
++  }
++
++private:
++  PropertyMap mPropertyMap;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -310,7 +310,7 @@
+     return false;
+ 
+   // Finnaly connect all the collected properties ports together
+-  if (!mPropertyManager.connect())
++  if (!connect())
+     return false;
+ 
+   return true;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -205,10 +205,8 @@
+     mPropertyManager.addConsumer(canonicalJSBProperty(name), pa);
+   } else {
+     SharedPtr&lt;Group&gt; group = getGroup(pa);
+-    if (!group) {
+-      std::cerr &lt;&lt; &quot;Could not add output model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-      return false;
+-    }
++    if (!group)
++      return error(&quot;Could not add output model \&quot;&quot; + name + &quot;\&quot;&quot;);
+ 
+     Gain* gain = new Gain(&quot;Minus &quot; + canonicalJSBProperty(name), -1);
+     group-&gt;addChild(gain);
+@@ -222,19 +220,18 @@
+   return true;
+ }
+ 
+-void
++bool
+ JSBSimReaderBase::registerExpression(const std::string&amp; name, const Port* port)
+ {
+   if (name.empty())
+-    return;
++    return false;
+   if (!port)
+-    return;
+-  if (mPropertyManager.exists(name)) {
+-    std::cerr &lt;&lt; &quot;Already have an expression for &quot; &lt;&lt; name &lt;&lt; std::endl;
+-    return;
+-  }
++    return false;
++  if (mPropertyManager.exists(name))
++    return error(&quot;Already have an expression for \&quot;&quot; + name + &quot;\&quot;&quot;);
+ 
+   mPropertyManager.setProvider(name, port);
++  return true;
+ }
+ 
+ std::string
+@@ -257,13 +254,13 @@
+   return JSBSimProperty::simplify(path + '/' + name);
+ }
+ 
+-void
++bool
+ JSBSimReaderBase::registerJSBExpression(const std::string&amp; name, const Port* port)
+ {
+   if (name.empty())
+-    return;
++    return error(&quot;Registering empty property?&quot;);
+   if (!port)
+-    return;
++    return error(&quot;Registering zero port?&quot;);
+   if (name[0] == '/')
+     registerExpression(name.substr(1), port);
+   else
+@@ -295,6 +292,7 @@
+     addOutputModel(port, name.substr(4),
+                    &quot;surface-positions/flap-pos-norm&quot;);
+   }
++  return true;
+ }
+ 
+ bool
+@@ -308,7 +306,7 @@
+          i != mPropertyManager.getPropertyMap().end(); ++i) {
+       if (i-&gt;second.hasProviderPort())
+         continue;
+-      if (!provideSubstitute(i-&gt;first, i-&gt;second))
++      if (!provideSubstitute(i-&gt;first))
+         return false;
+       foundSubstitute = true;
+     }
+@@ -318,8 +316,7 @@
+ }
+ 
+ bool
+-JSBSimReaderBase::provideSubstitute(const std::string&amp; propName,
+-                                    const JSBSimProperty&amp; property)
++JSBSimReaderBase::provideSubstitute(const std::string&amp; propName)
+ {
+   if (propName.find(&quot;/&quot;) == 0) {
+     addInputModel(&quot;Property Input &quot; + propName, propName);
+@@ -673,6 +670,18 @@
+   return false;
+ }
+ 
++bool
++JSBSimReaderBase::connect()
++{
++  JSBSimPropertyManager::PropertyMap::iterator i;
++  for (i = mPropertyManager.getPropertyMap().begin();
++       i != mPropertyManager.getPropertyMap().end(); ++i) {
++    if (!i-&gt;second.connect())
++      return error(&quot;Error connecting \&quot;&quot; + i-&gt;first + &quot;\&quot;&quot;);
++  }
++  return true;
++}
++
+ const Port*
+ JSBSimReaderBase::addInputModel(const std::string&amp; name,
+                                 const std::string&amp; propName, real_type gain)
+@@ -693,7 +702,7 @@
+ {
+   SharedPtr&lt;Group&gt; group = getGroup(out);
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not add output model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    error(&quot;Could not add output model \&quot;&quot; + name + &quot;\&quot;&quot;);
+     return;
+   }
+   Output* output = new Output(name + &quot; Output&quot;);
+@@ -720,7 +729,7 @@
+ {
+   SharedPtr&lt;Group&gt; group = getGroup(in);
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    error(&quot;Could not add inverter model \&quot;&quot; + name + &quot;\&quot;&quot;);
+     return 0;
+   }
+   UnaryFunction *unary
+@@ -749,7 +758,7 @@
+ {
+   SharedPtr&lt;Group&gt; group = getGroup(in);
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    error(&quot;Could not add inverter model \&quot;&quot; + name + &quot;\&quot;&quot;);
+     return 0;
+   }
+   UnaryFunction *unary
+@@ -795,7 +804,7 @@
+ {
+   SharedPtr&lt;Group&gt; group = getGroup(in);
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    error(&quot;Could not add unit conversion model \&quot;&quot; + name + &quot;\&quot;&quot;);
+     return 0;
+   }
+   UnitConversion* unitConv
+@@ -824,7 +833,7 @@
+ {
+   SharedPtr&lt;Group&gt; group = getGroup(in);
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    error(&quot;Could not add unit conversion model \&quot;&quot; + name + &quot;\&quot;&quot;);
+     return 0;
+   }
+   UnitConversion* unitConv
+@@ -852,21 +861,20 @@
+ JSBSimReaderBase::getGroup(const Port* in)
+ {
+   if (!in) {
+-    std::cerr &lt;&lt; &quot;Could not find model group for input port: &quot;
+-      &quot;no port given!&quot; &lt;&lt; std::endl;
++    error(&quot;Could not find model group for input port: no port given!&quot;);
+     return 0;
+   }
+   SharedPtr&lt;const Node&gt; node = in-&gt;getNode();
+   if (!node) {
+-    std::cerr &lt;&lt; &quot;Could not find model group for input port: &quot;
+-      &quot;port does not belong to a Node!&quot; &lt;&lt; std::endl;
++    error(&quot;Could not find model group for input port: &quot;
++          &quot;port does not belong to a Node!&quot;);
+     return 0;
+   }
+   SharedPtr&lt;const Node&gt; parent = node-&gt;getParent(0).lock();
+   SharedPtr&lt;Group&gt; group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(parent.get()));
+   if (!group) {
+-    std::cerr &lt;&lt; &quot;Could not find model group for input port: &quot;
+-      &quot;model has no parent!&quot; &lt;&lt; std::endl;
++    error(&quot;Could not find model group for input port: &quot;
++          &quot;model has no parent!&quot;);
+     return 0;
+   }
+   return group;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -28,299 +28,12 @@
+ 
+ #include &lt;OpenFDM/XML/EasyXMLReader.h&gt; // FIXME
+ 
++#include &quot;JSBSimPropertyManager.h&quot;
+ #include &quot;JSBSimAerodynamic.h&quot;
+ #include &quot;XMLReader.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Summer;
+-class Product;
+-
+-class PortSet {
+-  struct PathPort {
+-    NodePath modelPath;
+-    SharedPtr&lt;const Port&gt; portProvider;
+-  };
+-public:
+-  PortSet(const Port* sourcePort = 0)
+-  {
+-    if (!sourcePort)
+-      return;
+-    PathPort pathPort;
+-    pathPort.portProvider = sourcePort;
+-
+-    SharedPtr&lt;const Node&gt; node = sourcePort-&gt;getNode();
+-    if (node)
+-      // FIXME
+-      pathPort.modelPath = node-&gt;getNodePathList().front();
+-
+-    mPortList.push_back(pathPort);
+-  }
+-
+-  const Port* routeTo(const NodePath&amp; path)
+-  {
+-    // could happen if the initialzer failed
+-    if (mPortList.empty())
+-      return 0;
+-
+-    // ok, shortcut for old style connections
+-    if (path.empty())
+-      return mPortList.front().portProvider;
+-
+-    const NodePath&amp; originatingPath = mPortList.front().modelPath;
+-    // fast return if the models are not connected to the same root system
+-    if (path.front() != originatingPath.front())
+-      return 0;
+-
+-    // first check, if we already have a route
+-    const Port* portProvider = findProvider(path);
+-    if (portProvider)
+-      return portProvider;
+-
+-    // Compute the iterators for seperating the common part of the model path
+-    // from the different part
+-    NodePath::const_iterator mi1 = path.begin();
+-    NodePath::const_iterator mi2 = originatingPath.begin();
+-    while (mi1 != path.end() &amp;&amp; mi2 != originatingPath.end()) {
+-      if (*mi1 != *mi2)
+-        break;
+-      ++mi1;
+-      ++mi2;
+-    }
+-
+-    if (mi1 != path.end()) {
+-      // that is: we must first go up that path and search again
+-      NodePath pathUp = path;
+-      pathUp.pop_back();
+-      portProvider = routeTo(pathUp);
+-      if (!portProvider)
+-        return 0;
+-      
+-      GroupInput* groupInput = new GroupInput(portProvider-&gt;getName());
+-      Group* group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(path.back().get()));
+-      group-&gt;addChild(groupInput);
+-
+-      PathPort pathPort;
+-      pathPort.modelPath = groupInput-&gt;getNodePathList().front();
+-      pathPort.portProvider = group-&gt;getPort(groupInput-&gt;getExternalPortIndex());
+-      mPortList.push_back(pathPort);
+-
+-      if (!group-&gt;connect(portProvider, groupInput-&gt;getPort(&quot;input&quot;)))
+-        return 0;
+-      
+-      return pathPort.portProvider.get();
+-
+-    } else if (mi2 != originatingPath.end()) {
+-      // that is: we need to step deeper towards the origin of that port
+-      NodePath pathDown = path;
+-      pathDown.push_back(*mi2);
+-      portProvider = routeTo(pathDown);
+-      if (!portProvider)
+-        return 0;
+-
+-      GroupOutput* groupOutput = new GroupOutput(portProvider-&gt;getName());
+-      Group* group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(pathDown.back().get()));
+-      group-&gt;addChild(groupOutput);
+-
+-      PathPort pathPort;
+-      pathPort.modelPath = groupOutput-&gt;getNodePathList().front();
+-      pathPort.portProvider = group-&gt;getPort(groupOutput-&gt;getExternalPortIndex());
+-      mPortList.push_back(pathPort);
+-
+-      if (!group-&gt;connect(portProvider, groupOutput-&gt;getPort(&quot;input&quot;)))
+-        return 0;
+-      
+-      return pathPort.portProvider.get();
+-
+-    } else {
+-      // should not happen, in this case the find provider must have been
+-      // successful,
+-      return 0;
+-    }
+-  }
+-
+-  const Port* findProvider(const NodePath&amp; path)
+-  {
+-    PortList::iterator i = mPortList.begin();
+-    while (i != mPortList.end()) {
+-      if (i-&gt;modelPath == path)
+-        return i-&gt;portProvider;
+-      ++i;
+-    }
+-
+-    return 0;
+-  }
+-
+-private:
+-  typedef std::list&lt;PathPort&gt; PortList;
+-  PortList mPortList;
+-};
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-class JSBSimProperty {
+-public:
+-  typedef std::pair&lt;SharedPtr&lt;const Port&gt;, SharedPtr&lt;Group&gt; &gt; PortGroupPair;
+-
+-  void setProvider(const Port* port)
+-  {
+-    if (!port)
+-      return;
+-    SharedPtr&lt;const Node&gt; node = port-&gt;getNode();
+-    OpenFDMAssert(node);
+-    NodePathList nodePathList = node-&gt;getNodePathList();
+-    OpenFDMAssert(nodePathList.size() == 1);
+-    Group* group = dynamic_cast&lt;Group*&gt;(const_cast&lt;Node*&gt;(nodePathList.front().back().get()));
+-    setProvider(port, group);
+-  }
+-  void setProvider(const Port* port, Group* group)
+-  { setProvider(PortGroupPair(port, group)); }
+-  void setProvider(const PortGroupPair&amp; portPathPair)
+-  { mProvider = portPathPair; }
+-  const SharedPtr&lt;const Port&gt;&amp; getProviderPort() const
+-  { return mProvider.first; }
+-  const SharedPtr&lt;Group&gt;&amp; getProviderGroup() const
+-  { return mProvider.second; }
+-
+-  bool hasProviderPort() const
+-  { return mProvider.first.valid(); }
+-
+-  void addConsumer(const Port* port)
+-  {
+-    if (!port)
+-      return;
+-    SharedPtr&lt;const Node&gt; node = port-&gt;getNode();
+-    OpenFDMAssert(node);
+-    NodePathList nodePathList = node-&gt;getNodePathList();
+-    OpenFDMAssert(nodePathList.size() == 1);
+-    Group* group = dynamic_cast&lt;Group*&gt;(const_cast&lt;Node*&gt;(nodePathList.front().back().get()));
+-    addConsumer(port, group);
+-  }
+-  void addConsumer(const Port* port, Group* group)
+-  { addConsumer(PortGroupPair(port, group)); }
+-  void addConsumer(const PortGroupPair&amp; portPathPair)
+-  { mConsumers.push_back(portPathPair); }
+-
+-  /// Connect all the loose ends stored here
+-  bool connect()
+-  {
+-    if (!hasProviderPort())
+-      return false;
+-
+-    PortSet portSet(mProvider.first);
+-    for (unsigned i = 0; i &lt; mConsumers.size(); ++i) {
+-      SharedPtr&lt;const Node&gt; node = mConsumers[i].first-&gt;getNode();
+-      OpenFDMAssert(node);
+-      NodePathList nodePathList = node-&gt;getNodePathList();
+-      const Port* p = portSet.routeTo(nodePathList.front());
+-      if (!mConsumers[i].second-&gt;connect(p, mConsumers[i].first))
+-        return false;
+-    }
+-
+-    return true;
+-  }
+-
+-  static std::string simplify(std::string path)
+-  {
+-    std::string::size_type idx;
+-    while ((idx = path.find(&quot;[0]&quot;)) != std::string::npos) {
+-      path.erase(idx, 3);
+-    }
+-    while ((idx = path.find(&quot;//&quot;)) != std::string::npos) {
+-      path.erase(idx, 1);
+-    }
+-    return path;
+-  }
+-  static std::string propertyPath(const std::string&amp; path)
+-  {
+-    std::string simplePath = simplify(path);
+-    std::string::size_type idx = simplePath.rfind('/');
+-    if (idx == std::string::npos)
+-      return std::string();
+-    simplePath = simplePath.substr(0, idx);
+-    while (!simplePath.empty() &amp;&amp; simplePath[simplePath.size() - 1] == '/')
+-      simplePath = simplePath.substr(0, simplePath.size() - 1);
+-    return simplePath.substr(0, idx);
+-  }
+-  static std::string propertyName(const std::string&amp; path)
+-  {
+-    std::string simplePath = simplify(path);
+-    std::string::size_type idx = simplePath.rfind('/');
+-    if (idx == std::string::npos)
+-      return simplePath;
+-    return simplePath.substr(idx+1);
+-  }
+-  static bool startsWith(const std::string&amp; path, const char* start)
+-  {
+-    return path.find(start) == 0;
+-  }
+-  static bool endsWith(const std::string&amp; path, const char* start)
+-  {
+-    return path.size() - path.rfind(start) == strlen(start);
+-  }
+-
+-private:
+-  /// The port that delivers the value
+-  PortGroupPair mProvider;
+-  /// The ports that need that value as input
+-  std::vector&lt;PortGroupPair&gt; mConsumers;
+-};
+-
+-class JSBSimPropertyManager {
+-public:
+-  typedef std::map&lt;std::string,JSBSimProperty&gt; PropertyMap;
+-
+-  const PropertyMap&amp; getPropertyMap() const
+-  { return mPropertyMap; }
+-  PropertyMap&amp; getPropertyMap()
+-  { return mPropertyMap; }
+-
+-  /// Clears the property map. Is used in the readers to reuse a reader
+-  void clear()
+-  { mPropertyMap.clear(); }
+-
+-  /// Set the port providing this property value
+-  void setProvider(const std::string&amp; name, const Port* port)
+-  { mPropertyMap[JSBSimProperty::simplify(name)].setProvider(port); }
+-
+-  /// Add a port that consumes this property value
+-  void addConsumer(const std::string&amp; name, const Port* port)
+-  { mPropertyMap[JSBSimProperty::simplify(name)].addConsumer(port); }
+-
+-  /// Returns true if this property is already registered
+-  bool exists(const std::string&amp; propertyName) const
+-  {
+-    PropertyMap::const_iterator i = mPropertyMap.find(JSBSimProperty::simplify(propertyName));
+-    if (i == mPropertyMap.end())
+-      return false;
+-    return i-&gt;second.hasProviderPort();
+-  }
+-
+-  bool connect()
+-  {
+-    for (PropertyMap::iterator i = mPropertyMap.begin();
+-         i != mPropertyMap.end(); ++i) {
+-      if (!i-&gt;second.connect()) {
+-        std::cerr &lt;&lt; &quot;Connecting &quot; &lt;&lt; i-&gt;first &lt;&lt; &quot; failed&quot; &lt;&lt; std::endl;
+-        return false;
+-      }
+-    }
+-    return true;
+-  }
+-
+-private:
+-  PropertyMap mPropertyMap;
+-};
+-
+ class JSBSimReaderBase : public ReaderWriter {
+ public:
+   JSBSimReaderBase(void);
+@@ -370,11 +83,12 @@
+ 
+   std::string canonicalJSBProperty(std::string name);
+ 
+-  void registerExpression(const std::string&amp; name, const Port* expr);
+-  void registerJSBExpression(const std::string&amp; name, const Port* expr);
++  bool registerExpression(const std::string&amp; name, const Port* expr);
++  bool registerJSBExpression(const std::string&amp; name, const Port* expr);
+ 
+   bool provideSubstitutes();
+-  bool provideSubstitute(const std::string&amp;, const JSBSimProperty&amp; property);
++  bool provideSubstitute(const std::string&amp;);
++  bool connect();
+ 
+   const Port* addInputModel(const std::string&amp; name,
+                             const std::string&amp; propName, real_type gain = 1);
+@@ -397,7 +111,7 @@
+   const Port* addFromUnit(const std::string&amp; name, Unit u,
+                           const std::string&amp; inProp);
+ 
+-  static SharedPtr&lt;Group&gt; getGroup(const Port* in);
++  SharedPtr&lt;Group&gt; getGroup(const Port* in);
+   void addFCSModel(Node* model);
+ 
+   const Port* addMultiBodyConstModel(const std::string&amp; name, real_type value);
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-13 19:53:46 UTC (rev 1093)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-13 20:19:56 UTC (rev 1094)
+@@ -20,6 +20,7 @@
+   JSBSimAerosurfaceScale.h \
+   JSBSimFCSComponent.h \
+   JSBSimKinemat.h \
++  JSBSimPropertyManager.h \
+   JSBSimReader.h \
+   JSBSimReaderBase.h \
+   JSBSimScheduledGain.h \
+@@ -32,6 +33,7 @@
+   JSBSimAerosurfaceScale.cpp \
+   JSBSimFCSComponent.cpp \
+   JSBSimKinemat.cpp \
++  JSBSimPropertyManager.cpp \
+   JSBSimReader.cpp \
+   JSBSimReaderBase.cpp \
+   JSBSimScheduledGain.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001051.html">[OpenFDM-svn] r1093 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001053.html">[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1052">[ date ]</a>
+              <a href="thread.html#1052">[ thread ]</a>
+              <a href="subject.html#1052">[ subject ]</a>
+              <a href="author.html#1052">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

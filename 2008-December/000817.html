@@ -1,0 +1,278 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r849 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r849%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812030621.mB36Lcqq013652%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000816.html">
+   <LINK REL="Next"  HREF="000818.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r849 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r849%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812030621.mB36Lcqq013652%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r849 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec  3 07:21:38 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000816.html">[OpenFDM-svn] r848 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000818.html">[OpenFDM-svn] r850 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#817">[ date ]</a>
+              <a href="thread.html#817">[ thread ]</a>
+              <a href="subject.html#817">[ subject ]</a>
+              <a href="author.html#817">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-03 07:21:33 +0100 (Wed, 03 Dec 2008)
+New Revision: 849
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Add altitude sensing to the sensor.
+
+M    src/OpenFDM/AtmosphereSTD1976.h
+M    src/OpenFDM/Sensor.cpp
+M    src/OpenFDM/AbstractAtmosphere.h
+M    src/OpenFDM/AbstractAtmosphere.cpp
+M    src/OpenFDM/Sensor.h
+M    src/OpenFDM/AtmosphereSTD1976.cpp
+M    src/OpenFDM/Environment.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp	2008-12-03 06:21:33 UTC (rev 849)
+@@ -16,7 +16,7 @@
+ }
+ 
+ AtmosphereData
+-AbstractAtmosphere::getData(const real_type&amp; alt) const
++AbstractAtmosphere::getData(const real_type&amp;, const real_type&amp; alt) const
+ {
+   AtmosphereData data;
+   // Sea level pressure = 101325 N/m2
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h	2008-12-03 06:21:33 UTC (rev 849)
+@@ -62,7 +62,8 @@
+   { return sqrt(getGamma(temperature)*temperature*getGasConstant()); }
+ 
+   // Get the atmosphere data for a given altitude alt.
+-  virtual AtmosphereData getData(const real_type&amp; alt) const;
++  virtual AtmosphereData
++  getData(const real_type&amp; t, const real_type&amp; alt) const;
+ 
+ protected:
+   AbstractAtmosphere(const real_type&amp; gasConstant);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp	2008-12-03 06:21:33 UTC (rev 849)
+@@ -41,7 +41,7 @@
+ }
+ 
+ AtmosphereData
+-AtmosphereSTD1976::getData(const real_type&amp; altitude) const
++AtmosphereSTD1976::getData(const real_type&amp;, const real_type&amp; altitude) const
+ {
+   real_type alt = altitude;
+   // We cannot compute data for negative altitudes, just treat them as 0 alt
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h	2008-12-03 06:21:33 UTC (rev 849)
+@@ -35,7 +35,7 @@
+   { mSlTemperature = temperature; }
+ 
+   // Get the atmosphere data for a given height.
+-  virtual AtmosphereData getData(const real_type&amp; alt) const;
++  virtual AtmosphereData getData(const real_type&amp;, const real_type&amp; alt) const;
+ private:
+ 
+   static const real_type mHydrostaticConstant;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-03 06:21:33 UTC (rev 849)
+@@ -101,6 +101,11 @@
+     return mPlanet-&gt;toCart(geod);
+   }
+ public:
++  real_type getAltitude(const Vector3&amp; position) const
++  {
++    Geodetic geod = mPlanet-&gt;toGeod(position);
++    return geod.altitude;
++  }
+   Plane getHorizontalLocalPlane(const Vector3&amp; position) const
+   {
+     // Get the unit down vector.
+@@ -124,11 +129,9 @@
+ 
+   ///////////////////////////////////////////////////////////////////////////
+   // Atmosphere sensing related
+-  AtmosphereData getAtmosphereData(const Vector3&amp; position) const
+-  {
+-    Geodetic geod = mPlanet-&gt;toGeod(position);
+-    return mAtmosphere-&gt;getData(geod.altitude);
+-  }
++  AtmosphereData
++  getAtmosphereData(const real_type&amp; t, const real_type&amp; altitude) const
++  { return mAtmosphere-&gt;getData(t, altitude); }
+ 
+   ///////////////////////////////////////////////////////////////////////////
+   // Intersection interaction related
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-12-03 06:21:33 UTC (rev 849)
+@@ -22,6 +22,7 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnableWindVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableTemperature, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnablePressure, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableAltitude, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableAboveGroundLevel, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+@@ -83,14 +84,22 @@
+   }
+ 
+   // Atmosphere related sensing
++  bool enableAltitude = getEnableAltitude();
+   bool enableTemperature = getEnableTemperature();
+   bool enablePressure = getEnablePressure();
+-  if (enableTemperature || enablePressure) {
+-    AtmosphereData data = environment-&gt;getAtmosphereData(refPosition);
+-    if (enableTemperature)
+-      portValues[mTemperaturePort] = data.temperature;
+-    if (enablePressure)
+-      portValues[mPressurePort] = data.pressure;
++  if (enableAltitude || enableTemperature || enablePressure) {
++    real_type altitude = environment-&gt;getAltitude(refPosition);
++    if (enableAltitude)
++      portValues[mAltitudePort] = altitude;
++
++    if (enableTemperature || enablePressure) {
++      AtmosphereData data
++        = environment-&gt;getAtmosphereData(task.getTime(), altitude);
++      if (enableTemperature)
++        portValues[mTemperaturePort] = data.temperature;
++      if (enablePressure)
++        portValues[mPressurePort] = data.pressure;
++    }
+   }
+ 
+   if (getEnableAboveGroundLevel()) {
+@@ -316,6 +325,23 @@
+ }
+ 
+ void
++Sensor::setEnableAltitude(bool enable)
++{
++  if (enable == getEnableAltitude())
++    return;
++  if (enable)
++    mAltitudePort = RealOutputPort(this, &quot;altitude&quot;);
++  else
++    mAltitudePort.clear();
++}
++
++bool
++Sensor::getEnableAltitude() const
++{
++  return !mAltitudePort.empty();
++}
++
++void
+ Sensor::setEnableAboveGroundLevel(bool enable)
+ {
+   if (enable == getEnableAboveGroundLevel())
+@@ -345,6 +371,7 @@
+   setEnableWindVelocity(enable);
+   setEnableTemperature(enable);
+   setEnablePressure(enable);
++  setEnableAltitude(enable);
+   setEnableAboveGroundLevel(enable);
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-12-02 21:48:56 UTC (rev 848)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-12-03 06:21:33 UTC (rev 849)
+@@ -82,9 +82,14 @@
+   /// Get availabilty of the pressure output port
+   bool getEnablePressure() const;
+ 
+-  /// Set availabilty of the pressure output port
++  /// Set availabilty of the altitude output port
++  void setEnableAltitude(bool enable);
++  /// Get availabilty of the altitude output port
++  bool getEnableAltitude() const;
++
++  /// Set availabilty of the above ground level output port
+   void setEnableAboveGroundLevel(bool enable);
+-  /// Get availabilty of the pressure output port
++  /// Get availabilty of the above ground level output port
+   bool getEnableAboveGroundLevel() const;
+ 
+   /// Set availabilty of all output ports
+@@ -112,6 +117,7 @@
+   RealOutputPort mPressurePort;
+ //   RealOutputPort mDensityPort;
+ 
++  RealOutputPort mAltitudePort;
+   RealOutputPort mAboveGroundLevelPort;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000816.html">[OpenFDM-svn] r848 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000818.html">[OpenFDM-svn] r850 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#817">[ date ]</a>
+              <a href="thread.html#817">[ thread ]</a>
+              <a href="subject.html#817">[ subject ]</a>
+              <a href="author.html#817">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

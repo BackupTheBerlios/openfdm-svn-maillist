@@ -1,0 +1,679 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r284%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20builder&In-Reply-To=%3C200605301942.k4UJgrox005643%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000261.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r284%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20builder&In-Reply-To=%3C200605301942.k4UJgrox005643%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder">frohlich at berlios.de
+       </A><BR>
+    <I>Tue May 30 21:42:53 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000261.html">[OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#262">[ date ]</a>
+              <a href="thread.html#262">[ thread ]</a>
+              <a href="subject.html#262">[ subject ]</a>
+              <a href="author.html#262">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-05-30 21:42:49 +0200 (Tue, 30 May 2006)
+New Revision: 284
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Connection.cpp
+   trunk/OpenFDM/src/OpenFDM/Connection.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+   trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h
+   trunk/OpenFDM/src/OpenFDM/Port.h
+   trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+   trunk/OpenFDM/src/OpenFDM/PortAcceptor.h
+   trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+   trunk/OpenFDM/src/OpenFDM/PortProvider.h
+   trunk/OpenFDM/src/builder/Makefile.am
+   trunk/OpenFDM/src/builder/QOsgWidget.h
+Log:
+Cleanup connections a little bit
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Connection.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -22,40 +22,22 @@
+ }
+ 
+ Port::ConnectResult
+-Connection::connect(Port* port)
++Connection::setPortProvider(PortProvider* portProvider)
+ {
+-  if (!port)
+-    return Port::NoPort;
+-  return port-&gt;addConnection(this);
+-}
++  if (mPortProvider &amp;&amp; portProvider)
++    return Port::AlreadyConnected;
+ 
+-bool
+-Connection::disconnect(Port* port)
+-{
+-  if (!port)
+-    return false;
+-  
+-  if (port == mPortProvider) {
+-    if (mPortAcceptor)
++  if (!portProvider) {
++    if (mPortAcceptor &amp;&amp; mPortProvider) {
+       mPortAcceptor-&gt;disconnect(mPortProvider);
++    } else {
++      // FIXME
++//       modelGroup-&gt;removeConnection(this);
++    }
+     mPortProvider = 0;
+-    return true;
++    return Port::Success;
+   }
+-  if (port == mPortAcceptor) {
+-    if (mPortProvider)
+-      mPortAcceptor-&gt;disconnect(mPortProvider);
+-    mPortAcceptor = 0;
+-    return true;
+-  }
+-  return false;
+-}
+ 
+-Port::ConnectResult
+-Connection::setPortProvider(PortProvider* portProvider)
+-{
+-  if (mPortProvider &amp;&amp; portProvider)
+-    return Port::AlreadyConnected;
+-
+   SharedPtr&lt;Model&gt; providerModel = portProvider-&gt;getModel().lock();
+   if (!providerModel)
+     return Port::StalePort;
+@@ -67,7 +49,6 @@
+     mPortProvider = portProvider;
+     ModelGroup* modelGroup = providerModel-&gt;getParent();
+     modelGroup-&gt;addConnection(this);
+-
+     return Port::Success;
+   }
+ 
+@@ -91,6 +72,17 @@
+   if (mPortAcceptor &amp;&amp; portAcceptor)
+     return Port::AlreadyConnected;
+ 
++  if (!portAcceptor) {
++    if (mPortAcceptor &amp;&amp; mPortProvider) {
++      mPortAcceptor-&gt;disconnect(mPortProvider);
++    } else {
++      // FIXME
++//       modelGroup-&gt;removeConnection(this);
++    }
++    mPortAcceptor = 0;
++    return Port::Success;
++  }
++    
+   SharedPtr&lt;Model&gt; acceptorModel = portAcceptor-&gt;getModel().lock();
+   if (!acceptorModel)
+     return Port::StalePort;
+@@ -124,10 +116,10 @@
+ Connection::connect(Port* port0, Port* port1)
+ {
+   SharedPtr&lt;Connection&gt; connection = new Connection;
+-  Port::ConnectResult result = connection-&gt;connect(port0);
++  Port::ConnectResult result = port0-&gt;addConnection(connection);
+   if (result != Port::Success)
+     return result;
+-  result = connection-&gt;connect(port1);
++  result = port1-&gt;addConnection(connection);
+   return result;
+ }
+ 
+@@ -184,8 +176,10 @@
+ void
+ Connection::disconnect()
+ {
+-  if (mPortProvider &amp;&amp; mPortAcceptor)
+-    mPortAcceptor-&gt;disconnect(mPortProvider);
++  SharedPtr&lt;PortProvider&gt; portProvider = mPortProvider.lock();
++  SharedPtr&lt;PortAcceptor&gt; portAcceptor = mPortAcceptor.lock();
++  if (portProvider &amp;&amp; portAcceptor)
++    portAcceptor-&gt;disconnect(portProvider);
+   mPortProvider = 0;
+   mPortAcceptor = 0;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Connection.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -25,11 +25,6 @@
+   Connection(const std::string&amp; name = std::string());
+   virtual ~Connection();
+ 
+-  /// Connect this connection to the given Port
+-  Port::ConnectResult connect(Port* port);
+-  /// Disconnect this connection from the given Port
+-  bool disconnect(Port* port);
+-
+   /// Set the PortProvider end.
+   /// Tries to complete the connection if the other end is already connected.
+   Port::ConnectResult setPortProvider(PortProvider* portProvider);
+@@ -38,10 +33,10 @@
+   Port::ConnectResult setPortAcceptor(PortAcceptor* portAcceptor);
+ 
+   /// Return the PortProvider of this connection
+-  const PortProvider* getPortProvider() const
++  WeakPtr&lt;const PortProvider&gt; getPortProvider() const
+   { return mPortProvider; }
+   /// Return the PortAcceptor of this connection
+-  const PortAcceptor* getPortAcceptor() const
++  WeakPtr&lt;const PortAcceptor&gt; getPortAcceptor() const
+   { return mPortAcceptor; }
+ 
+   /// Connect the two given ports, zero checks are done.
+@@ -50,7 +45,8 @@
+   /// Connect the two given ports, zero checks are done.
+   /// The two ports must just belong to models of the same system.
+   /// If required ModelGroup inputs or outputs are inserted.
+-  static Port::ConnectResult connectRoute(PortProvider* port0, PortAcceptor* port1);
++  static Port::ConnectResult connectRoute(PortProvider* port0,
++                                          PortAcceptor* port1);
+ 
+ private:
+   /// Disconnect this connection from all attached Ports
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -95,9 +95,9 @@
+ Model::init(void)
+ {
+   if (mEnablePort)
+-    mEnablePortInterface = mEnablePort-&gt;toRealPortHandle();
++    mEnablePortHandle = mEnablePort-&gt;toRealPortHandle();
+   else
+-    mEnablePortInterface = 0;
++    mEnablePortHandle = 0;
+   return true;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -87,9 +87,9 @@
+   /// Convinience functions may make the virtuals protected ...
+   void outputIfEnabled(const TaskInfo&amp; taskInfo)
+   {
+-    if (mEnablePortInterface.isConnected()) {
++    if (mEnablePortHandle.isConnected()) {
+       /// FIXME bool!!!!
+-      setEnabled(0.5 &lt; fabs(mEnablePortInterface.getRealValue()));
++      setEnabled(0.5 &lt; fabs(mEnablePortHandle.getRealValue()));
+     }
+     if (mEnabled)
+       output(taskInfo);
+@@ -268,7 +268,7 @@
+   bool mEnabled;
+   // the old obsolete one
+   SharedPtr&lt;NumericPortAcceptor&gt; mEnablePort;
+-  RealPortHandle mEnablePortInterface;
++  RealPortHandle mEnablePortHandle;
+   DisableMode mDisableMode;
+   SampleTimeSet mSampleTimeSet;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -9,6 +9,108 @@
+ 
+ namespace OpenFDM {
+ 
++class RealPortInterface;
++class MatrixPortInterface;
++
++class PortInterface : public Referenced {
++public:
++  virtual ~PortInterface(void) {}
++  virtual RealPortInterface* toRealPortInterface(void) { return 0; }
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return 0; }
++
++  virtual void evaluate(void) = 0;
++};
++
++class RealPortInterface : public PortInterface {
++public:
++  RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
++  virtual RealPortInterface* toRealPortInterface(void)
++  {
++    evaluate();
++    if (Size(1, 1) == size(mValue))
++      return this;
++    else
++      return 0;
++  }
++  // FIXME, move evaluate into seperate method
++  real_type getRealValue(void)
++  { evaluate(); return mValue(1, 1); }
++protected:
++  Matrix mValue;
++};
++
++class MatrixPortInterface : public RealPortInterface {
++public:
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
++  // FIXME, move evaluate into seperate method
++  const Matrix&amp; getMatrixValue(void)
++  { evaluate(); return mValue; }
++};
++
++
++/// Just a getter used for now
++template&lt;typename M&gt;
++class RealGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const real_type&amp; (M::*Getter) () const;
++  RealGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue(1, 1) = (mSourceModel-&gt;*mGetter)(); }
++private:
++  WeakPtr&lt;M&gt; mSourceModel;
++  Getter mGetter;
++};
++template&lt;typename M&gt;
++class MatrixGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const Matrix&amp; (M::*Getter) () const;
++  MatrixGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue = (mSourceModel-&gt;*mGetter)(); }
++private:
++  WeakPtr&lt;M&gt; mSourceModel;
++  Getter mGetter;
++};
++
++class RealPortHandle {
++public:
++  RealPortHandle(void)
++  { }
++  RealPortHandle(RealPortInterface* realPortInterface) :
++    mRealPortInterface(realPortInterface)
++  { }
++  real_type getRealValue(void)
++  { return mRealPortInterface-&gt;getRealValue(); }
++  bool isConnected(void) const
++  { return mRealPortInterface; }
++private:
++  SharedPtr&lt;RealPortInterface&gt; mRealPortInterface;
++};
++
++class MatrixPortHandle {
++public:
++  MatrixPortHandle(void)
++  { }
++  MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
++    mMatrixPortInterface(matrixPortInterface)
++  { }
++  const Matrix&amp; getMatrixValue(void)
++  { return mMatrixPortInterface-&gt;getMatrixValue(); }
++  bool isConnected(void) const
++  { return mMatrixPortInterface; }
++private:
++  SharedPtr&lt;MatrixPortInterface&gt; mMatrixPortInterface;
++};
++
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++
+ class NumericPortAcceptor :
+     public PortAcceptor {
+ public:
+@@ -24,10 +126,10 @@
+   }
+   virtual bool removeConnection(Connection* connection)
+   {
+-    if (connection &amp;&amp; connection == mConnection)
++    if (!connection || connection != mConnection)
+       return false;
+     setPortInterface(0);
+-    connection-&gt;disconnect(this);
++    PortAcceptor::removeConnection(connection);
+     mConnection = 0;
+     return true;
+   }
+@@ -42,6 +144,9 @@
+   virtual bool disconnect(PortProvider* port)
+   { return port-&gt;unprovide(this); }
+ 
++
++
++
+   PortInterface* getPortInterface() const
+   { return mPortInterface; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -30,7 +30,7 @@
+     if (i == mConnections.end())
+       return false;
+ 
+-    (*i)-&gt;disconnect(this);
++    PortProvider::removeConnection(*i);
+     mConnections.erase(i);
+     return true;
+   }
+@@ -38,7 +38,7 @@
+   {
+     ConnectionList::iterator i = mConnections.begin();
+     while (i != mConnections.end()) {
+-      (*i)-&gt;disconnect(this);
++      PortProvider::removeConnection(*i);
+       i = mConnections.erase(i);
+     }
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -6,113 +6,10 @@
+ #define OpenFDM_Port_H
+ 
+ #include &quot;Object.h&quot;
+-#include &quot;SharedPtr.h&quot;
+ #include &quot;WeakPtr.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class RealPortInterface;
+-class MatrixPortInterface;
+-
+-class PortInterface : public Referenced {
+-public:
+-  virtual ~PortInterface(void) {}
+-  virtual RealPortInterface* toRealPortInterface(void) { return 0; }
+-  virtual MatrixPortInterface* toMatrixPortInterface(void) { return 0; }
+-
+-  virtual void evaluate(void) = 0;
+-};
+-
+-class RealPortInterface : public PortInterface {
+-public:
+-  RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
+-  virtual RealPortInterface* toRealPortInterface(void)
+-  {
+-    evaluate();
+-    if (Size(1, 1) == size(mValue))
+-      return this;
+-    else
+-      return 0;
+-  }
+-  // FIXME, move evaluate into seperate method
+-  real_type getRealValue(void)
+-  { evaluate(); return mValue(1, 1); }
+-protected:
+-  Matrix mValue;
+-};
+-
+-class MatrixPortInterface : public RealPortInterface {
+-public:
+-  virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
+-  // FIXME, move evaluate into seperate method
+-  const Matrix&amp; getMatrixValue(void)
+-  { evaluate(); return mValue; }
+-};
+-
+-
+-/// Just a getter used for now
+-template&lt;typename M&gt;
+-class RealGetterPortInterface : public MatrixPortInterface {
+-public:
+-  typedef const real_type&amp; (M::*Getter) () const;
+-  RealGetterPortInterface(M* sourceModel, Getter getter) :
+-    mSourceModel(sourceModel), mGetter(getter)
+-  { }
+-  virtual void evaluate(void)
+-  { mValue(1, 1) = (mSourceModel-&gt;*mGetter)(); }
+-private:
+-  WeakPtr&lt;M&gt; mSourceModel;
+-  Getter mGetter;
+-};
+-template&lt;typename M&gt;
+-class MatrixGetterPortInterface : public MatrixPortInterface {
+-public:
+-  typedef const Matrix&amp; (M::*Getter) () const;
+-  MatrixGetterPortInterface(M* sourceModel, Getter getter) :
+-    mSourceModel(sourceModel), mGetter(getter)
+-  { }
+-  virtual void evaluate(void)
+-  { mValue = (mSourceModel-&gt;*mGetter)(); }
+-private:
+-  WeakPtr&lt;M&gt; mSourceModel;
+-  Getter mGetter;
+-};
+-
+-class RealPortHandle {
+-public:
+-  RealPortHandle(void)
+-  { }
+-  RealPortHandle(RealPortInterface* realPortInterface) :
+-    mRealPortInterface(realPortInterface)
+-  { }
+-  real_type getRealValue(void)
+-  { return mRealPortInterface-&gt;getRealValue(); }
+-  bool isConnected(void) const
+-  { return mRealPortInterface; }
+-private:
+-  SharedPtr&lt;RealPortInterface&gt; mRealPortInterface;
+-};
+-
+-class MatrixPortHandle {
+-public:
+-  MatrixPortHandle(void)
+-  { }
+-  MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
+-    mMatrixPortInterface(matrixPortInterface)
+-  { }
+-  const Matrix&amp; getMatrixValue(void)
+-  { return mMatrixPortInterface-&gt;getMatrixValue(); }
+-  bool isConnected(void) const
+-  { return mMatrixPortInterface; }
+-private:
+-  SharedPtr&lt;MatrixPortInterface&gt; mMatrixPortInterface;
+-};
+-
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-
+ class Model;
+ class Connection;
+ 
+@@ -121,7 +18,6 @@
+ public:
+   enum ConnectResult {
+     Success = 0,
+-    NoPort, // The given port is a zero pointer
+     NoConnection, // The given Connection is a zero pointer
+     Running, // The System is running, stop the System before manipulating it
+     IsolatedModel, // Model does not belong to a parent Group
+@@ -145,7 +41,7 @@
+   virtual bool removeConnection(Connection* connection) = 0;
+   virtual void removeAllConnections() = 0;
+ 
+-  /// Sets the model it belongs to to zero and cuts all connections
++  /// Sets the model it belongs to zero and cuts all connections
+   void invalidate();
+ 
+   /// Return the model this port belongs to
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -26,4 +26,12 @@
+   return connection-&gt;setPortAcceptor(this);
+ }
+ 
++bool
++PortAcceptor::removeConnection(Connection* connection)
++{
++  if (!connection)
++    return false;
++  return connection-&gt;setPortAcceptor(0);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortAcceptor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortAcceptor.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortAcceptor.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -18,6 +18,7 @@
+   virtual ~PortAcceptor();
+ 
+   virtual ConnectResult addConnection(Connection* connection);
++  virtual bool removeConnection(Connection* connection);
+ 
+   virtual ConnectResult connect(PortProvider* port) = 0;
+   virtual bool disconnect(PortProvider* port) = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -26,4 +26,12 @@
+   return connection-&gt;setPortProvider(this);
+ }
+ 
++bool
++PortProvider::removeConnection(Connection* connection)
++{
++  if (!connection)
++    return false;
++  return connection-&gt;setPortProvider(0);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortProvider.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortProvider.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortProvider.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -19,6 +19,7 @@
+   virtual ~PortProvider();
+ 
+   virtual Port::ConnectResult addConnection(Connection* connection);
++  virtual bool removeConnection(Connection* connection);
+ 
+   virtual Port::ConnectResult provide(NumericPortAcceptor* port)
+   { return Port::IncompatiblePort; }
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-05-30 19:42:49 UTC (rev 284)
+@@ -8,8 +8,16 @@
+ othrlib=$(HOME)/sw/lib
+ osglib=$(HOME)/sw/lib
+ 
++MOC=$(QTDIR)/bin/moc
++
++SUFFIXES = _moc.cpp
++.h_moc.cpp:
++	$(MOC) $(CPPFLAGS) -o $@ $&lt;
++
+ INCLUDES = -I$(srcdir)/.. -I$(qtinclude) -I$(othrinclude) -I$(osginclude)
+ 
++BUILT_SOURCES = QOsgWidget_moc.cpp
++
+ bin_PROGRAMS = openfdm
+ 
+ openfdm_SOURCES = \
+@@ -25,7 +33,8 @@
+ 	ModelItem.h \
+ 	ModelItem.cpp \
+ 	QOsgWidget.h \
+-	QOsgWidget.cpp
++	QOsgWidget.cpp \
++	QOsgWidget_moc.cpp
+ 
+ openfdm_LDADD = ../JSBSim/libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+
+Modified: trunk/OpenFDM/src/builder/QOsgWidget.h
+===================================================================
+--- trunk/OpenFDM/src/builder/QOsgWidget.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/builder/QOsgWidget.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -19,8 +19,9 @@
+ 
+ class QtEventAdapter;
+ 
+-class QOsgWidget
+-  : public QGLWidget, protected osgGA::GUIActionAdapter {
++class QOsgWidget :
++  public QGLWidget, protected osgGA::GUIActionAdapter {
++  Q_OBJECT
+ public:
+   QOsgWidget(QWidget *parent = 0, const QGLWidget* shareWidget = 0,
+              Qt::WFlags f = 0);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000261.html">[OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#262">[ date ]</a>
+              <a href="thread.html#262">[ thread ]</a>
+              <a href="subject.html#262">[ subject ]</a>
+              <a href="author.html#262">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

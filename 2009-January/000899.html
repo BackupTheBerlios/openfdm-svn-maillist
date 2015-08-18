@@ -1,0 +1,573 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r933 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r933%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901091959.n09Jx1Cb022698%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000898.html">
+   <LINK REL="Next"  HREF="000900.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r933 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r933%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901091959.n09Jx1Cb022698%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r933 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Jan  9 20:59:01 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000898.html">[OpenFDM-svn] r932 - branches/OpenFDM-StateSeparation
+</A></li>
+        <LI>Next message: <A HREF="000900.html">[OpenFDM-svn] r934 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#899">[ date ]</a>
+              <a href="thread.html#899">[ thread ]</a>
+              <a href="subject.html#899">[ subject ]</a>
+              <a href="author.html#899">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-09 20:59:00 +0100 (Fri, 09 Jan 2009)
+New Revision: 933
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+Log:
+Implement initial positions and velocities for
+RotationalJoint, PrismaticJoint, RevoluteActuator and
+RevoluteJoint.
+
+M    src/test/foucault.cpp
+M    src/OpenFDM/RotationalJoint.cpp
+M    src/OpenFDM/PrismaticJoint.cpp
+M    src/OpenFDM/RevoluteActuator.cpp
+M    src/OpenFDM/RevoluteJoint.cpp
+M    src/OpenFDM/RotationalJoint.h
+M    src/OpenFDM/PrismaticJoint.h
+M    src/OpenFDM/RevoluteActuator.h
+M    src/OpenFDM/RevoluteJoint.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2009-01-09 19:59:00 UTC (rev 933)
+@@ -19,6 +19,8 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(PrismaticJoint, Joint)
+   DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialPosition, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialVelocity, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ PrismaticJoint::PrismaticJoint(const std::string&amp; name) :
+@@ -27,7 +29,9 @@
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+-  mAxis(Vector3(1, 0, 0))
++  mAxis(Vector3(1, 0, 0)),
++  mInitialPosition(0),
++  mInitialVelocity(0)
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -57,7 +61,31 @@
+   mAxis = (1/nrm)*axis;
+ }
+ 
++const real_type&amp;
++PrismaticJoint::getInitialPosition() const
++{
++  return mInitialPosition;
++}
++
+ void
++PrismaticJoint::setInitialPosition(const real_type&amp; initialPosition)
++{
++  mInitialPosition = initialPosition;
++}
++
++const real_type&amp;
++PrismaticJoint::getInitialVelocity() const
++{
++  return mInitialVelocity;
++}
++
++void
++PrismaticJoint::setInitialVelocity(const real_type&amp; initialVelocity)
++{
++  mInitialVelocity = initialVelocity;
++}
++
++void
+ PrismaticJoint::setEnableExternalForce(bool enable)
+ {
+   if (enable == getEnableExternalForce())
+@@ -79,8 +107,8 @@
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+ {
+-  continousState[*mPositionStateInfo] = 0;
+-  continousState[*mVelocityStateInfo] = 0;
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
+ }
+ 
+ PrismaticJoint::Matrix6N
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2009-01-09 19:59:00 UTC (rev 933)
+@@ -33,6 +33,12 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
++  const real_type&amp; getInitialPosition() const;
++  void setInitialPosition(const real_type&amp; initialPosition);
++
++  const real_type&amp; getInitialVelocity() const;
++  void setInitialVelocity(const real_type&amp; initialVelocity);
++
+   void setEnableExternalForce(bool enable);
+   bool getEnableExternalForce() const;
+ 
+@@ -65,6 +71,8 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2009-01-09 19:59:00 UTC (rev 933)
+@@ -19,6 +19,8 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuator, Joint)
+   DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialPosition, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, VelocityControl, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, MaxVel, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, VelGain, Serialized)
+@@ -33,6 +35,8 @@
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+   mAxis(Vector3(1, 0, 0)),
++  mInitialPosition(0),
++  mInitialVelocity(0),
+   mVelocityControl(false),
+   mVelGain(1),
+   mVelDotGain(1),
+@@ -66,13 +70,85 @@
+   mAxis = (1/nrm)*axis;
+ }
+ 
++const real_type&amp;
++RevoluteActuator::getInitialPosition() const
++{
++  return mInitialPosition;
++}
++
+ void
++RevoluteActuator::setInitialPosition(const real_type&amp; initialPosition)
++{
++  mInitialPosition = initialPosition;
++}
++
++const real_type&amp;
++RevoluteActuator::getInitialVelocity() const
++{
++  return mInitialVelocity;
++}
++
++void
++RevoluteActuator::setInitialVelocity(const real_type&amp; initialVelocity)
++{
++  mInitialVelocity = initialVelocity;
++}
++
++const bool&amp;
++RevoluteActuator::getVelocityControl(void) const
++{
++  return mVelocityControl;
++}
++
++void
++RevoluteActuator::setVelocityControl(const bool&amp; velocityControl)
++{
++  mVelocityControl = velocityControl;
++}
++
++const real_type&amp;
++RevoluteActuator::getMaxVel(void) const
++{
++  return mMaxVel;
++}
++
++void
++RevoluteActuator::setMaxVel(const real_type&amp; maxVel)
++{
++  mMaxVel = maxVel;
++}
++
++const real_type&amp;
++RevoluteActuator::getVelGain(void) const
++{
++  return mVelGain;
++}
++
++void
++RevoluteActuator::setVelGain(const real_type&amp; velGain)
++{
++  mVelGain = velGain;
++}
++
++const real_type&amp;
++RevoluteActuator::getVelDotGain(void) const
++{
++  return mVelDotGain;
++}
++
++void
++RevoluteActuator::setVelDotGain(const real_type&amp; velDotGain)
++{
++  mVelDotGain = velDotGain;
++}
++
++void
+ RevoluteActuator::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                        ContinousStateValueVector&amp; continousState,
+                        const PortValueList&amp;) const
+ {
+-  continousState[*mPositionStateInfo] = 0;
+-  continousState[*mVelocityStateInfo] = 0;
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
+ }
+ 
+ RevoluteActuator::Matrix6N
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2009-01-09 19:59:00 UTC (rev 933)
+@@ -33,26 +33,24 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
+-  const bool&amp; getVelocityControl(void) const
+-  { return mVelocityControl; }
+-  void setVelocityControl(const bool&amp; velocityControl)
+-  { mVelocityControl = velocityControl; }
++  const real_type&amp; getInitialPosition() const;
++  void setInitialPosition(const real_type&amp; initialPosition);
+ 
+-  const real_type&amp; getMaxVel(void) const
+-  { return mMaxVel; }
+-  void setMaxVel(const real_type&amp; maxVel)
+-  { mMaxVel = maxVel; }
++  const real_type&amp; getInitialVelocity() const;
++  void setInitialVelocity(const real_type&amp; initialVelocity);
+ 
+-  const real_type&amp; getVelGain(void) const
+-  { return mVelGain; }
+-  void setVelGain(const real_type&amp; velGain)
+-  { mVelGain = velGain; }
++  const bool&amp; getVelocityControl(void) const;
++  void setVelocityControl(const bool&amp; velocityControl);
+ 
+-  const real_type&amp; getVelDotGain(void) const
+-  { return mVelDotGain; }
+-  void setVelDotGain(const real_type&amp; velDotGain)
+-  { mVelDotGain = velDotGain; }
++  const real_type&amp; getMaxVel(void) const;
++  void setMaxVel(const real_type&amp; maxVel);
+ 
++  const real_type&amp; getVelGain(void) const;
++  void setVelGain(const real_type&amp; velGain);
++
++  const real_type&amp; getVelDotGain(void) const;
++  void setVelDotGain(const real_type&amp; velDotGain);
++
+ protected:
+ 
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+@@ -83,6 +81,8 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
+   bool mVelocityControl;
+   real_type mVelGain;
+   real_type mVelDotGain;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2009-01-09 19:59:00 UTC (rev 933)
+@@ -19,6 +19,8 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(RevoluteJoint, Joint)
+   DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialPosition, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialVelocity, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ RevoluteJoint::RevoluteJoint(const std::string&amp; name) :
+@@ -27,7 +29,9 @@
+   mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
+   mPositionStateInfo(new Vector1StateInfo),
+   mVelocityStateInfo(new Vector1StateInfo),
+-  mAxis(Vector3(1, 0, 0))
++  mAxis(Vector3(1, 0, 0)),
++  mInitialPosition(0),
++  mInitialVelocity(0)
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -54,7 +58,31 @@
+   mAxis = (1/nrm)*axis;
+ }
+ 
++const real_type&amp;
++RevoluteJoint::getInitialPosition() const
++{
++  return mInitialPosition;
++}
++
+ void
++RevoluteJoint::setInitialPosition(const real_type&amp; initialPosition)
++{
++  mInitialPosition = initialPosition;
++}
++
++const real_type&amp;
++RevoluteJoint::getInitialVelocity() const
++{
++  return mInitialVelocity;
++}
++
++void
++RevoluteJoint::setInitialVelocity(const real_type&amp; initialVelocity)
++{
++  mInitialVelocity = initialVelocity;
++}
++
++void
+ RevoluteJoint::setEnableExternalForce(bool enable)
+ {
+   if (enable == getEnableExternalForce())
+@@ -76,8 +104,8 @@
+                     ContinousStateValueVector&amp; continousState,
+                     const PortValueList&amp;) const
+ {
+-  continousState[*mPositionStateInfo] = 0;
+-  continousState[*mVelocityStateInfo] = 0;
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
+ }
+ 
+ RevoluteJoint::Matrix6N
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2009-01-09 19:59:00 UTC (rev 933)
+@@ -33,6 +33,12 @@
+   const Vector3&amp; getAxis() const;
+   void setAxis(const Vector3&amp; axis);
+ 
++  const real_type&amp; getInitialPosition() const;
++  void setInitialPosition(const real_type&amp; initialPosition);
++
++  const real_type&amp; getInitialVelocity() const;
++  void setInitialVelocity(const real_type&amp; initialVelocity);
++
+   void setEnableExternalForce(bool enable);
+   bool getEnableExternalForce() const;
+ 
+@@ -66,6 +72,8 @@
+   SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+   Vector3 mAxis;
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2009-01-09 19:59:00 UTC (rev 933)
+@@ -18,6 +18,8 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(RotationalJoint, Joint)
++  DEF_OPENFDM_PROPERTY(Quaternion, InitialOrientation, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, InitialVelocity, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ RotationalJoint::RotationalJoint(const std::string&amp; name) :
+@@ -25,7 +27,9 @@
+   mOrientationPort(this, &quot;orientation&quot;, Size(4, 1)),
+   mVelocityPort(this, &quot;velocity&quot;, Size(3, 1)),
+   mPositionStateInfo(new Vector4StateInfo),
+-  mVelocityStateInfo(new Vector3StateInfo)
++  mVelocityStateInfo(new Vector3StateInfo),
++  mInitialOrientation(Quaternion::unit()),
++  mInitialVelocity(Vector3::zeros())
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mVelocityStateInfo);
+@@ -35,7 +39,31 @@
+ {
+ }
+ 
++const Quaternion&amp;
++RotationalJoint::getInitialOrientation() const
++{
++  return mInitialOrientation;
++}
++
+ void
++RotationalJoint::setInitialOrientation(const Quaternion&amp; initialOrientation)
++{
++  mInitialOrientation = initialOrientation;
++}
++
++const Vector3&amp;
++RotationalJoint::getInitialVelocity() const
++{
++  return mInitialVelocity;
++}
++
++void
++RotationalJoint::setInitialVelocity(const Vector3&amp; initialVelocity)
++{
++  mInitialVelocity = initialVelocity;
++}
++
++void
+ RotationalJoint::setEnableExternalForce(bool enable)
+ {
+   if (enable == getEnableExternalForce())
+@@ -57,8 +85,8 @@
+                       ContinousStateValueVector&amp; continousState,
+                       const PortValueList&amp;) const
+ {
+-  continousState[*mPositionStateInfo] = Quaternion::unit();
+-  continousState[*mVelocityStateInfo] = Vector3::zeros();
++  continousState[*mPositionStateInfo] = mInitialOrientation;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
+ }
+ 
+ RotationalJoint::Matrix6N
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2009-01-09 19:59:00 UTC (rev 933)
+@@ -28,6 +28,12 @@
+   RotationalJoint(const std::string&amp; name);
+   virtual ~RotationalJoint(void);
+ 
++  const Quaternion&amp; getInitialOrientation() const;
++  void setInitialOrientation(const Quaternion&amp; initialOrientation);
++
++  const Vector3&amp; getInitialVelocity() const;
++  void setInitialVelocity(const Vector3&amp; initialVelocity);
++
+   void setEnableExternalForce(bool enable);
+   bool getEnableExternalForce() const;
+ 
+@@ -59,6 +65,9 @@
+ 
+   SharedPtr&lt;Vector4StateInfo&gt; mPositionStateInfo;
+   SharedPtr&lt;Vector3StateInfo&gt; mVelocityStateInfo;
++
++  Quaternion mInitialOrientation;
++  Vector3 mInitialVelocity;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2009-01-09 18:31:26 UTC (rev 932)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2009-01-09 19:59:00 UTC (rev 933)
+@@ -25,20 +25,21 @@
+   Geodetic geodetic(rad2deg*(48 + 50.781/60), rad2deg*(2 + 20.709/60), 0);
+   // Test the direction of the velocity vector projected to the ground plane
+ 
+-  // FIXME, need usable environment stuff like gravity first ...
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Foucault&quot;);
+   FixedRootJoint* fixedRootJoint = new FixedRootJoint(&quot;Root&quot;);
+   fixedRootJoint-&gt;setRootPosition(planet-&gt;toCart(geodetic));
+   fixedRootJoint-&gt;setRootOrientation(planet-&gt;getGeodHLOrientation(geodetic));
+   group-&gt;addChild(fixedRootJoint);
+   RotationalJoint* rotationalJoint1 = new RotationalJoint(&quot;Rotational Joint 1&quot;);
++  Quaternion orientation = Quaternion::fromAngleAxisDeg(90, Vector3(0, 1, 0));
++  rotationalJoint1-&gt;setInitialOrientation(orientation);
+   group-&gt;addChild(rotationalJoint1);
+   RigidBody* rigidBody1 = new RigidBody(&quot;Rigid Body 1&quot;);
+   rigidBody1-&gt;addLink(&quot;externalInteractLink&quot;);
+   group-&gt;addChild(rigidBody1);
+ 
+-  Mass* mass = new Mass(&quot;Mass&quot;, 28, InertiaMatrix(1, 0, 0, 1, 0, 1));
+-  mass-&gt;setPosition(Vector3(3, 0, 67));
++  Mass* mass = new Mass(&quot;Mass&quot;, 28, InertiaMatrix(1e-2, 0, 0, 1e-2, 0, 1e-2));
++  mass-&gt;setPosition(Vector3(0, 0, 67));
+   group-&gt;addChild(mass);
+ 
+   ExternalInteract* externalInteract = new ExternalInteract(&quot;ExternalInteract&quot;);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000898.html">[OpenFDM-svn] r932 - branches/OpenFDM-StateSeparation
+</A></li>
+	<LI>Next message: <A HREF="000900.html">[OpenFDM-svn] r934 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#899">[ date ]</a>
+              <a href="thread.html#899">[ thread ]</a>
+              <a href="subject.html#899">[ subject ]</a>
+              <a href="author.html#899">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

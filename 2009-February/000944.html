@@ -1,0 +1,310 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r980 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r980%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200902011917.n11JHEXZ022153%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000943.html">
+   <LINK REL="Next"  HREF="000945.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r980 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r980%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200902011917.n11JHEXZ022153%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r980 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Feb  1 20:17:14 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000943.html">[OpenFDM-svn] r979 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000945.html">[OpenFDM-svn] r981 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#944">[ date ]</a>
+              <a href="thread.html#944">[ thread ]</a>
+              <a href="subject.html#944">[ subject ]</a>
+              <a href="author.html#944">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-02-01 20:17:13 +0100 (Sun, 01 Feb 2009)
+New Revision: 980
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+Log:
+Reduce direct access to MechanicLinkValue.
+
+M    OpenFDM/MobileRootJoint.cpp
+M    OpenFDM/CartesianJoint.h
+M    OpenFDM/MechanicLinkValue.h
+M    OpenFDM/FixedRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-02-01 19:17:13 UTC (rev 980)
+@@ -143,8 +143,7 @@
+       mChildLink.setCoordinateSystem(mParentLink.getCoordinateSystem().toReference(mRelativeCoordinateSystem));
+ 
+       Vector6 relVel = mJointMatrix*velocity;
+-      mChildLink.setPosAndVel(mParentLink.getMechanicLinkValue(),
+-                              relPosition, orientation, relVel);
++      mChildLink.setPosAndVel(mParentLink, relPosition, orientation, relVel);
+ 
+       /**
+          This is the cross product of the inertial spatial velocity
+@@ -221,8 +220,7 @@
+ 
+       Vector6 f = mChildLink.getInertia()*parentSpAccel + pAlpha;
+       mVelDot = hIh.solve(mJointForce - trans(mJointMatrix)*f);
+-      mChildLink.setAccel(mParentLink.getMechanicLinkValue(),
+-                          mJointMatrix*mVelDot);
++      mChildLink.setAccel(mParentLink, mJointMatrix*mVelDot);
+     }
+   
+     /** Compute the articulation step for a given velocity derivative.
+@@ -253,8 +251,7 @@
+      */
+     void accelerateDueToVelDot()
+     {
+-      mChildLink.setAccel(mParentLink.getMechanicLinkValue(),
+-                          mJointMatrix*mVelDot);
++      mChildLink.setAccel(mParentLink, mJointMatrix*mVelDot);
+     }
+ 
+     const VectorN&amp; getVelDot() const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-01 19:17:13 UTC (rev 980)
+@@ -38,17 +38,16 @@
+   virtual void velocities(const Task&amp; task)
+   {
+     Vector3 angularVel = getEnvironment().getAngularVelocity(task.getTime());
+-    mChildLink.getMechanicLinkValue().
+-      setCoordinateSystem(CoordinateSystem(mFixedRootJoint-&gt;mRootPosition,
+-                                           mFixedRootJoint-&gt;mRootOrientation));
+-    mChildLink.getMechanicLinkValue().
+-      setPosAndVel(angularVel, mFixedRootJoint-&gt;mRootPosition,
+-                   mFixedRootJoint-&gt;mRootOrientation, Vector6::zeros());
++    CoordinateSystem coordSys(mFixedRootJoint-&gt;mRootPosition,
++                              mFixedRootJoint-&gt;mRootOrientation);
++    mChildLink.setCoordinateSystem(coordSys);
++    mChildLink.setPosAndVel(angularVel, mFixedRootJoint-&gt;mRootPosition,
++                            mFixedRootJoint-&gt;mRootOrientation,
++                            Vector6::zeros());
+   }
+   virtual void accelerations(const Task&amp; task)
+   {
+-    mChildLink.getMechanicLinkValue().
+-      setSpAccel(getEnvironment().getAcceleration(task.getTime()));
++    mChildLink.setSpAccel(getEnvironment().getAcceleration(task.getTime()));
+   }
+   
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-01 19:17:13 UTC (rev 980)
+@@ -126,52 +126,6 @@
+   Vector3 mDesignPosition;
+ };
+ 
+-class ChildLink {
+-public:
+-  ChildLink(MechanicLinkValue* mechanicLinkValue) :
+-    mMechanicLinkValue(mechanicLinkValue)
+-  { OpenFDMAssert(mMechanicLinkValue); }
+-
+-  const MechanicLinkValue&amp; getMechanicLinkValue() const
+-  { return *mMechanicLinkValue; }
+-  MechanicLinkValue&amp; getMechanicLinkValue()
+-  { return *mMechanicLinkValue; }
+-
+-  void setDesignPosition(const Vector3&amp; position)
+-  { mMechanicLinkValue-&gt;setDesignPosition(position); }
+-
+-  void setPosAndVel(const MechanicLinkValue&amp; link, const Vector3&amp; position,
+-                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
+-  { mMechanicLinkValue-&gt;setPosAndVel(link, position, orientation, velocity); }
+-  void setAccel(const MechanicLinkValue&amp; link, const Vector6&amp; accel)
+-  { mMechanicLinkValue-&gt;setAccel(link, accel); }
+-
+-  void setCoordinateSystem(const CoordinateSystem&amp; coordinateSystem)
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue-&gt;setCoordinateSystem(coordinateSystem);
+-  }
+-  const CoordinateSystem&amp; getCoordinateSystem() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue-&gt;getCoordinateSystem();
+-  }
+-
+-  const Vector6&amp; getForce() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue-&gt;getForce();
+-  }
+-  const SpatialInertia&amp; getInertia() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue-&gt;getInertia();
+-  }
+- 
+-private:
+-  SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
+-};
+-
+ class ParentLink {
+ public:
+   ParentLink(MechanicLinkValue* mechanicLinkValue = 0) :
+@@ -193,11 +147,6 @@
+     OpenFDMAssert(isConnected());
+     return *mMechanicLinkValue;
+   }
+-  MechanicLinkValue&amp; getMechanicLinkValue()
+-  {
+-    OpenFDMAssert(isConnected());
+-    return *mMechanicLinkValue;
+-  }
+ 
+   CoordinateSystem getCoordinateSystem() const
+   {
+@@ -326,6 +275,71 @@
+   Vector3 mLinkRelPos;
+ };
+ 
++class ChildLink {
++public:
++  ChildLink(MechanicLinkValue* mechanicLinkValue) :
++    mMechanicLinkValue(mechanicLinkValue)
++  { OpenFDMAssert(mMechanicLinkValue); }
++
++  const MechanicLinkValue&amp; getMechanicLinkValue() const
++  { return *mMechanicLinkValue; }
++
++  void setDesignPosition(const Vector3&amp; position)
++  { mMechanicLinkValue-&gt;setDesignPosition(position); }
++
++  void setPosAndVel(const Vector3&amp; angularBaseVel, const Vector3&amp; position,
++                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
++  {
++    mMechanicLinkValue-&gt;setPosAndVel(angularBaseVel, position,
++                                     orientation, velocity);
++  }
++  void setSpAccel(const Vector6&amp; accel)
++  {
++    mMechanicLinkValue-&gt;setSpAccel(accel);
++  }
++  Vector6 getSpAccel() const
++  {
++    mMechanicLinkValue-&gt;getSpAccel();
++  }
++
++  void setPosAndVel(const ParentLink&amp; parentLink, const Vector3&amp; position,
++                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
++  {
++    const MechanicLinkValue&amp; link = parentLink.getMechanicLinkValue();
++    mMechanicLinkValue-&gt;setPosAndVel(link, position, orientation, velocity);
++  }
++  void setAccel(const ParentLink&amp; parentLink, const Vector6&amp; accel)
++  {
++    const MechanicLinkValue&amp; link = parentLink.getMechanicLinkValue();
++    mMechanicLinkValue-&gt;setAccel(link, accel);
++  }
++
++  void setCoordinateSystem(const CoordinateSystem&amp; coordinateSystem)
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue-&gt;setCoordinateSystem(coordinateSystem);
++  }
++  const CoordinateSystem&amp; getCoordinateSystem() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue-&gt;getCoordinateSystem();
++  }
++
++  const Vector6&amp; getForce() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue-&gt;getForce();
++  }
++  const SpatialInertia&amp; getInertia() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue-&gt;getInertia();
++  }
++ 
++private:
++  SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-01 19:17:13 UTC (rev 980)
+@@ -173,8 +173,7 @@
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+   childLink.setCoordinateSystem(CoordinateSystem(position, orientation));
+-  childLink.getMechanicLinkValue().setPosAndVel(angularBaseVelocity, position,
+-                                                orientation, velocity);
++  childLink.setPosAndVel(angularBaseVelocity, position, orientation, velocity);
+ }
+ 
+ void
+@@ -188,7 +187,7 @@
+   Vector6 force = childLink.getForce();
+ 
+   spatialAcceleration -= solve(inertia, force);
+-  childLink.getMechanicLinkValue().setSpAccel(spatialAcceleration);
++  childLink.setSpAccel(spatialAcceleration);
+ }
+ 
+ void
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000943.html">[OpenFDM-svn] r979 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000945.html">[OpenFDM-svn] r981 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#944">[ date ]</a>
+              <a href="thread.html#944">[ thread ]</a>
+              <a href="subject.html#944">[ subject ]</a>
+              <a href="author.html#944">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,296 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r946 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r946%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901172133.n0HLXSSx026442%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000910.html">
+   <LINK REL="Next"  HREF="000912.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r946 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r946%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901172133.n0HLXSSx026442%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r946 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan 17 22:33:28 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000910.html">[OpenFDM-svn] r945 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000912.html">[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#911">[ date ]</a>
+              <a href="thread.html#911">[ thread ]</a>
+              <a href="subject.html#911">[ subject ]</a>
+              <a href="author.html#911">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-17 22:33:28 +0100 (Sat, 17 Jan 2009)
+New Revision: 946
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+Updates to the testrig.
+
+M    tiretestrig.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-17 19:28:32 UTC (rev 945)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-17 21:33:28 UTC (rev 946)
+@@ -3,13 +3,15 @@
+  */
+ 
+ #include &lt;OpenFDM/ConstModel.h&gt;
+-#include &lt;OpenFDM/DoPri5.h&gt;
+ #include &lt;OpenFDM/FixedRootJoint.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/LinearSpringDamper.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+ #include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/GroupInput.h&gt;
++#include &lt;OpenFDM/GroupMechanicLink.h&gt;
++#include &lt;OpenFDM/GroupOutput.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
+ #include &lt;OpenFDM/PrismaticJoint.h&gt;
+ #include &lt;OpenFDM/RevoluteActuator.h&gt;
+@@ -40,20 +42,49 @@
+   Vector3 mVelocity;
+ };
+ 
+-int
+-main(int argc, char *argv[])
++// Build up a wheel to put on the testrig.
++// When we have proper serialization, load that from a file.
++Node*
++createWheel()
+ {
+-  // Simulate a simple side sweep with
+-  //   sweep speed alphaSpeed
+-  //   sweep range alphaRange
+-  //   at camber Angle
+-  //   and velocity
+-  real_type camberAngle = deg2rad*0;
+-  real_type alphaRange = deg2rad*20;
+-  real_type alphaSpeed = deg2rad*10;
+-  real_type velocity = 10;
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Wheel&quot;);
+ 
++  GroupMechanicLink* hubLink = new GroupMechanicLink(&quot;Hub Link&quot;);
++  group-&gt;addChild(hubLink);
+ 
++  RigidBody* rimAndTire = new RigidBody(&quot;Rim And Tire&quot;);
++  group-&gt;addChild(rimAndTire);
++  group-&gt;connect(hubLink-&gt;getPort(&quot;link&quot;), rimAndTire-&gt;getPort(&quot;link0&quot;));
++
++  Mass* tireAndRimMass = new Mass(&quot;Rim And Tire Mass&quot;);
++  tireAndRimMass-&gt;setMass(9);
++  // Realistic ...
++//   tireAndRimMass-&gt;setInertia(InertiaMatrix(0.4, 0, 0, 1, 0, 0.4));
++  // For pac 2002
++//   tireAndRimMass-&gt;setInertia(InertiaMatrix(0.5, 0, 0, 2, 0, 0.5));
++  // For pac 89
++  tireAndRimMass-&gt;setInertia(InertiaMatrix(0.4, 0, 0, 1, 0, 0.4));
++  group-&gt;addChild(tireAndRimMass);
++  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link1&quot;), tireAndRimMass-&gt;getPort(&quot;link&quot;));
++  
++//   Pacejka89* pacejkaTire = new Pacejka89(&quot;PacejkaTire&quot;);
++  Pacejka94* pacejkaTire = new Pacejka94(&quot;PacejkaTire&quot;);
++//   Pacejka2002* pacejkaTire = new Pacejka2002(&quot;PacejkaTire&quot;);
++  pacejkaTire-&gt;setWheelRadius(0.313);
++  pacejkaTire-&gt;setSpringConstant(2e5);
++  pacejkaTire-&gt;setDampingConstant(sqrt(pacejkaTire-&gt;getSpringConstant()));
++  group-&gt;addChild(pacejkaTire);
++  rimAndTire-&gt;addLink(&quot;link2&quot;);
++  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link2&quot;), pacejkaTire-&gt;getPort(&quot;link&quot;));
++
++  return group.release();
++}
++
++// Build up the tiretestrig system.
++// When we have proper serialization, load that from a file.
++Node*
++createTireTestrig(Node* wheel)
++{
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Tire Testrig&quot;);
+ 
+   // First build up the mechanical system
+@@ -78,15 +109,14 @@
+   group-&gt;connect(prismaticJoint-&gt;getPort(&quot;force&quot;),
+                  normalForceSum-&gt;getPort(&quot;output&quot;));
+ 
+-  ConstModel* normalForce = new ConstModel(&quot;Normal force&quot;);
+-  normalForce-&gt;setScalarValue(4000);
++  ConstModel* normalForce = new ConstModel(&quot;Normal Force&quot;);
+   group-&gt;addChild(normalForce);
+   group-&gt;connect(normalForceSum-&gt;getPort(&quot;input0&quot;),
+                  normalForce-&gt;getPort(&quot;output&quot;));
+  
+   LinearSpringDamper* strutDamper = new LinearSpringDamper(&quot;Strut Damper&quot;);
+   strutDamper-&gt;setSpringConstant(0);
+-  strutDamper-&gt;setDamperConstant(30);
++  strutDamper-&gt;setDamperConstant(1000);
+   group-&gt;addChild(strutDamper);
+   group-&gt;connect(normalForceSum-&gt;getPort(&quot;input1&quot;),
+                  strutDamper-&gt;getPort(&quot;force&quot;));
+@@ -102,11 +132,9 @@
+ 
+   RevoluteActuator* camberActuator = new RevoluteActuator(&quot;Camber Actuator&quot;);
+   camberActuator-&gt;setAxis(Vector3(1, 0, 0));
+-  camberActuator-&gt;setInitialPosition(camberAngle);
+   group-&gt;addChild(camberActuator);
+ 
+   ConstModel* camberAngleModel = new ConstModel(&quot;Camber Angle&quot;);
+-  camberAngleModel-&gt;setScalarValue(camberAngle);
+   group-&gt;addChild(camberAngleModel);
+   group-&gt;connect(camberActuator-&gt;getPort(&quot;input&quot;),
+                  camberAngleModel-&gt;getPort(&quot;output&quot;));
+@@ -121,14 +149,11 @@
+  
+   RevoluteActuator* sideActuator = new RevoluteActuator(&quot;Sideslip Actuator&quot;);
+   sideActuator-&gt;setAxis(Vector3(0, 0, 1));
+-  sideActuator-&gt;setInitialPosition(0);
+-  sideActuator-&gt;setMaxVel(alphaSpeed);
+   sideActuator-&gt;setVelGain(100);
+   sideActuator-&gt;setVelDotGain(100);
+   group-&gt;addChild(sideActuator);
+ 
+   ConstModel* sideslipAngle = new ConstModel(&quot;Sideslip Angle&quot;);
+-  sideslipAngle-&gt;setScalarValue(0);
+   group-&gt;addChild(sideslipAngle);
+   group-&gt;connect(sideActuator-&gt;getPort(&quot;input&quot;),
+                  sideslipAngle-&gt;getPort(&quot;output&quot;));
+@@ -149,49 +174,64 @@
+   group-&gt;connect(hubStrut-&gt;getPort(&quot;link0&quot;), sideActuator-&gt;getPort(&quot;link1&quot;));
+   group-&gt;connect(hubStrut-&gt;getPort(&quot;link1&quot;), hubJoint-&gt;getPort(&quot;link0&quot;));
+ 
+-  RigidBody* rimAndTire = new RigidBody(&quot;Rim And Tire&quot;);
+-  group-&gt;addChild(rimAndTire);
+-  group-&gt;connect(hubJoint-&gt;getPort(&quot;link1&quot;), rimAndTire-&gt;getPort(&quot;link0&quot;));
++  group-&gt;addChild(wheel);
++  group-&gt;connect(hubJoint-&gt;getPort(&quot;link1&quot;), wheel-&gt;getPort(&quot;link&quot;));
+ 
+-  Mass* tireAndRimMass = new Mass(&quot;Rim And Tire Mass&quot;);
+-  tireAndRimMass-&gt;setMass(9);
+-  // Realistic ...
+-//   tireAndRimMass-&gt;setInertia(InertiaMatrix(0.4, 0, 0, 1, 0, 0.4));
+-  // For pac 2002
+-//   tireAndRimMass-&gt;setInertia(InertiaMatrix(0.5, 0, 0, 2, 0, 0.5));
+-  // For pac 89
+-  tireAndRimMass-&gt;setInertia(InertiaMatrix(0.5, 0, 0, 8, 0, 0.5));
+-  group-&gt;addChild(tireAndRimMass);
+-  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link1&quot;), tireAndRimMass-&gt;getPort(&quot;link&quot;));
+-  
+-//   Pacejka89* pacejkaTire = new Pacejka89(&quot;PacejkaTire&quot;);
+-  Pacejka94* pacejkaTire = new Pacejka94(&quot;PacejkaTire&quot;);
+-//   Pacejka2002* pacejkaTire = new Pacejka2002(&quot;PacejkaTire&quot;);
+-  pacejkaTire-&gt;setWheelRadius(0.313);
+-  pacejkaTire-&gt;setSpringConstant(2e5);
+-  pacejkaTire-&gt;setDampingConstant(sqrt(pacejkaTire-&gt;getSpringConstant()));
+-  group-&gt;addChild(pacejkaTire);
+-  rimAndTire-&gt;addLink(&quot;link2&quot;);
+-  group-&gt;connect(rimAndTire-&gt;getPort(&quot;link2&quot;), pacejkaTire-&gt;getPort(&quot;link&quot;));
++  return group.release();
++}
+ 
+-  prismaticJoint-&gt;setInitialPosition(1 - pacejkaTire-&gt;getWheelRadius());
++int
++main(int argc, char *argv[])
++{
++  // Simulate a simple side sweep with
++  //   sweep speed alphaSpeed
++  //   sweep range alphaRange
++  //   at camber Angle
++  //   and velocity
++  real_type camberAngle = deg2rad*0;
++  real_type alphaRange = deg2rad*20;
++  real_type alphaSpeed = deg2rad*10;
++  real_type velocity = 10;
++  real_type normalForce = 4000;
+ 
+-  SharedPtr&lt;System&gt; system = new System(&quot;Tire Testrig&quot;, group);
++  SharedPtr&lt;Node&gt; wheel = createWheel();
++  SharedPtr&lt;Node&gt; testrig = createTireTestrig(wheel);
++  SharedPtr&lt;System&gt; system = new System(&quot;Tire Testrig&quot;, testrig);
+ 
+   // set the moving ground
+-  system-&gt;getEnvironment()-&gt;setGround(new MovingGround(Vector3(velocity, 0, 0)));
++  MovingGround* movingGround = new MovingGround(Vector3(velocity, 0, 0));
++  system-&gt;getEnvironment()-&gt;setGround(movingGround);
+ 
++  // Get the model nodes that are important to drive the testrig
++  SharedPtr&lt;Node&gt; sideslipNode;
++  sideslipNode = system-&gt;getNode(&quot;Tire Testrig/Sideslip Angle&quot;);
++  SharedPtr&lt;Node&gt; sideslipActuator;
++  sideslipActuator = system-&gt;getNode(&quot;Tire Testrig/Sideslip Actuator&quot;);
++  SharedPtr&lt;Node&gt; camberNode;
++  camberNode = system-&gt;getNode(&quot;Tire Testrig/Camber Angle&quot;);
++  SharedPtr&lt;Node&gt; normalForceNode;
++  normalForceNode = system-&gt;getNode(&quot;Tire Testrig/Normal Force&quot;);
++
++  // Set parametrs for the measurment
++  sideslipActuator-&gt;setPropertyValue(&quot;MaxVel&quot;, Variant(real_type(alphaSpeed)));
++  camberNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(camberAngle)));
++  normalForceNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(normalForce)));
++  sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(0)));
++
+   if (!system-&gt;init())
+     return EXIT_FAILURE;
+ 
+   system-&gt;simulate(2);
+   system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;tiretestrig&quot;));
+-  sideslipAngle-&gt;setScalarValue(alphaRange);
++  
++  sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(alphaRange)));
+   system-&gt;simulate(system-&gt;getTime() + alphaRange/alphaSpeed);
+-  sideslipAngle-&gt;setScalarValue(-alphaRange);
++  
++  sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(-alphaRange)));
+   system-&gt;simulate(system-&gt;getTime() + 2*alphaRange/alphaSpeed);
+-  sideslipAngle-&gt;setScalarValue(0);
++  
++  sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(0)));
+   system-&gt;simulate(system-&gt;getTime() + alphaRange/alphaSpeed);
+-  
++
+   return EXIT_SUCCESS;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000910.html">[OpenFDM-svn] r945 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000912.html">[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#911">[ date ]</a>
+              <a href="thread.html#911">[ thread ]</a>
+              <a href="subject.html#911">[ subject ]</a>
+              <a href="author.html#911">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

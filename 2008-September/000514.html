@@ -1,0 +1,393 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r542 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r542%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809302027.m8UKRKG9032019%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000513.html">
+   <LINK REL="Next"  HREF="000515.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r542 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r542%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809302027.m8UKRKG9032019%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r542 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep 30 22:27:20 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000513.html">[OpenFDM-svn] r541 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000515.html">[OpenFDM-svn] r543 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#514">[ date ]</a>
+              <a href="thread.html#514">[ thread ]</a>
+              <a href="subject.html#514">[ subject ]</a>
+              <a href="author.html#514">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-30 22:27:19 +0200 (Tue, 30 Sep 2008)
+New Revision: 542
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move MechanicContext stuff into own implementation.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-30 20:19:18 UTC (rev 541)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-30 20:27:19 UTC (rev 542)
+@@ -57,6 +57,7 @@
+   MatrixStateValue.h \
+   MatrixStateInfo.h \
+   MidpointRule.h \
++  MechanicContext.h \
+   MechanicBodyPort.h \
+   MechanicInteractPort.h \
+   MechanicNode.h \
+@@ -143,6 +144,7 @@
+   LibraryNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
++  MechanicContext.cpp \
+   MechanicNode.cpp \
+   MechanicPortValue.cpp \
+   MidpointRule.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-09-30 20:19:18 UTC (rev 541)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-09-30 20:27:19 UTC (rev 542)
+@@ -0,0 +1,51 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;MechanicContext.h&quot;
++
++namespace OpenFDM {
++
++MechanicContext::MechanicContext(const MechanicNode* mechanicNode) :
++  mMechanicNode(mechanicNode)
++{
++  OpenFDMAssert(mMechanicNode);
++}
++
++MechanicContext::~MechanicContext()
++{
++}
++
++const MechanicNode&amp;
++MechanicContext::getNode() const
++{
++  return *mMechanicNode;
++}
++
++bool
++MechanicContext::isConnectedTo(const MechanicContext&amp; mechanicContext) const
++{
++  unsigned numPorts = mMechanicNode-&gt;getNumPorts();
++  for (unsigned i = 0; i &lt; numPorts; ++i) {
++    SharedPtr&lt;const PortInfo&gt; portInfo = mMechanicNode-&gt;getPort(i);
++    OpenFDMAssert(portInfo);
++    const PortValue* portValue = getPortValueList().getPortValue(i);
++    if (!portValue)
++      continue;
++    unsigned otherNumPorts = mechanicContext.mMechanicNode-&gt;getNumPorts();
++    for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++      if (!mechanicContext.mMechanicNode-&gt;getPort(j)-&gt;toProviderPortInfo())
++        continue;
++      
++      const PortValue* otherPortValue;
++      otherPortValue = mechanicContext.getPortValueList().getPortValue(j);
++      if (portValue != otherPortValue)
++        continue;
++      
++      return true;
++    }
++  }
++  return false;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-09-30 20:19:18 UTC (rev 541)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-09-30 20:27:19 UTC (rev 542)
+@@ -0,0 +1,105 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MechanicContext_H
++#define OpenFDM_MechanicContext_H
++
++#include &lt;list&gt;
++#include &quot;SharedPtr.h&quot;
++#include &quot;LeafContext.h&quot;
++#include &quot;MechanicNode.h&quot;
++
++namespace OpenFDM {
++
++class Task;
++class DiscreteTask;
++class ContinousTask;
++
++class MechanicContext : public LeafContext {
++public:
++  MechanicContext(const MechanicNode* mechanicNode);
++  virtual ~MechanicContext();
++
++  virtual const MechanicNode&amp; getNode() const;
++
++  bool alloc()
++  { return mMechanicNode-&gt;alloc(*this); }
++  void init(const Task&amp;)
++  { mMechanicNode-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
++
++  void velocities(const ContinousTask&amp;)
++  { mMechanicNode-&gt;velocity(mContinousState, mPortValueList); }
++  void articulation(const ContinousTask&amp;)
++  { mMechanicNode-&gt;articulation(mContinousState, mPortValueList); }
++  void accelerations(const ContinousTask&amp;)
++  { }
++
++//   virtual void derivative(const ContinousStateValueVector&amp;,
++//                           const PortValueList&amp;,
++//                           ContinousStateValueVector&amp;) const
++ 
++//   void outputVelocities()
++//   { }
++//   void outputAcceperation()
++//   { }
++
++  void update(const DiscreteTask&amp; discreteTask)
++  {
++    mMechanicNode-&gt;update(discreteTask, mDiscreteState,
++                          mContinousState, mPortValueList);
++  }
++
++  bool isConnectedTo(const MechanicContext&amp; mechanicContext) const;
++
++private:
++  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
++
++private:
++  MechanicContext();
++  MechanicContext(const MechanicContext&amp;);
++  MechanicContext&amp; operator=(const MechanicContext&amp;);
++};
++
++class MechanicContextList : public std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; {
++public:
++  typedef std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; list_type;
++
++  bool alloc() const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      if (!(*i)-&gt;alloc())
++        return false;
++    return true;
++  }
++  void init(const Task&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;init(task);
++  }
++  void velocities(const ContinousTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;velocities(task);
++  }
++  void articulation(const ContinousTask&amp; task) const
++  {
++    // Note that this list is traversed from the mechanic leafs to the root
++    for (list_type::const_reverse_iterator i = rbegin(); i != rend(); ++i)
++      (*i)-&gt;articulation(task);
++  }
++  void accelerations(const ContinousTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;accelerations(task);
++  }
++  void update(const DiscreteTask&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;update(task);
++  }
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-30 20:19:18 UTC (rev 541)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-30 20:27:19 UTC (rev 542)
+@@ -48,6 +48,7 @@
+ #include &lt;OpenFDM/LeafContext.h&gt;
+ #include &lt;OpenFDM/NodeContext.h&gt;
+ #include &lt;OpenFDM/ModelContext.h&gt;
++#include &lt;OpenFDM/MechanicContext.h&gt;
+ #include &lt;OpenFDM/Task.h&gt;
+ 
+ #include &lt;OpenFDM/RigidBody.h&gt;
+@@ -120,115 +121,6 @@
+ /// there must be a PortData like structure that is only built during simulation
+ /// model initialization.
+ 
+-class MechanicContext : public LeafContext {
+-public:
+-  MechanicContext(const MechanicNode* mechanicNode) :
+-    mMechanicNode(mechanicNode)
+-  { OpenFDMAssert(mMechanicNode); }
+-
+-  virtual const MechanicNode&amp; getNode() const
+-  { return *mMechanicNode; }
+-
+-  bool alloc()
+-  { return mMechanicNode-&gt;alloc(*this); }
+-  void init(const Task&amp;)
+-  { mMechanicNode-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
+-
+-  void velocities(const ContinousTask&amp;)
+-  { mMechanicNode-&gt;velocity(mContinousState, mPortValueList); }
+-  void articulation(const ContinousTask&amp;)
+-  { mMechanicNode-&gt;articulation(mContinousState, mPortValueList); }
+-  void accelerations(const ContinousTask&amp;)
+-  { }
+-
+-//   virtual void derivative(const ContinousStateValueVector&amp;,
+-//                           const PortValueList&amp;,
+-//                           ContinousStateValueVector&amp;) const
+- 
+-//   void outputVelocities()
+-//   { }
+-//   void outputAcceperation()
+-//   { }
+-
+-  void update(const DiscreteTask&amp; discreteTask)
+-  {
+-    mMechanicNode-&gt;update(discreteTask, mDiscreteState,
+-                          mContinousState, mPortValueList);
+-  }
+-
+-  bool isConnectedTo(const MechanicContext&amp; mechanicContext) const
+-  {
+-    unsigned numPorts = mMechanicNode-&gt;getNumPorts();
+-    for (unsigned i = 0; i &lt; numPorts; ++i) {
+-      SharedPtr&lt;const PortInfo&gt; portInfo = mMechanicNode-&gt;getPort(i);
+-      OpenFDMAssert(portInfo);
+-      const PortValue* portValue = getPortValueList().getPortValue(i);
+-      if (!portValue)
+-        continue;
+-      unsigned otherNumPorts = mechanicContext.mMechanicNode-&gt;getNumPorts();
+-      for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
+-        if (!mechanicContext.mMechanicNode-&gt;getPort(j)-&gt;toProviderPortInfo())
+-          continue;
+-
+-        const PortValue* otherPortValue;
+-        otherPortValue = mechanicContext.getPortValueList().getPortValue(j);
+-        if (portValue != otherPortValue)
+-          continue;
+-
+-        return true;
+-      }
+-    }
+-    return false;
+-  }
+-
+-private:
+-  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
+-
+-private:
+-  MechanicContext();
+-  MechanicContext(const MechanicContext&amp;);
+-  MechanicContext&amp; operator=(const MechanicContext&amp;);
+-};
+-
+-class MechanicContextList : public std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; {
+-public:
+-  typedef std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; list_type;
+-
+-  bool alloc() const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      if (!(*i)-&gt;alloc())
+-        return false;
+-    return true;
+-  }
+-  void init(const Task&amp; task) const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      (*i)-&gt;init(task);
+-  }
+-  void velocities(const ContinousTask&amp; task) const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      (*i)-&gt;velocities(task);
+-  }
+-  void articulation(const ContinousTask&amp; task) const
+-  {
+-    // Note that this list is traversed from the mechanic leafs to the root
+-    for (list_type::const_reverse_iterator i = rbegin(); i != rend(); ++i)
+-      (*i)-&gt;articulation(task);
+-  }
+-  void accelerations(const ContinousTask&amp; task) const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      (*i)-&gt;accelerations(task);
+-  }
+-  void update(const DiscreteTask&amp; task) const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      (*i)-&gt;update(task);
+-  }
+-};
+-
+ class MechanicInstance : public AbstractNodeInstance {
+ public:
+   MechanicInstance(const NodePath&amp; nodePath,
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000513.html">[OpenFDM-svn] r541 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000515.html">[OpenFDM-svn] r543 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#514">[ date ]</a>
+              <a href="thread.html#514">[ thread ]</a>
+              <a href="subject.html#514">[ subject ]</a>
+              <a href="author.html#514">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

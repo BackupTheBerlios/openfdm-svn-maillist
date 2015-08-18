@@ -1,0 +1,564 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r934 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r934%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901100915.n0A9FE4a010561%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000899.html">
+   <LINK REL="Next"  HREF="000901.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r934 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r934%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901100915.n0A9FE4a010561%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r934 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan 10 10:15:14 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000899.html">[OpenFDM-svn] r933 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000901.html">[OpenFDM-svn] r935 - branches/OpenFDM-StateSeparation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#900">[ date ]</a>
+              <a href="thread.html#900">[ thread ]</a>
+              <a href="subject.html#900">[ subject ]</a>
+              <a href="author.html#900">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-10 10:15:13 +0100 (Sat, 10 Jan 2009)
+New Revision: 934
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h
+Log:
+Enable arbitrary port access in contact models.
+Sigh, need better solution for that port/state stuff ...
+
+M    src/OpenFDM/WheelContact.cpp
+M    src/OpenFDM/SimpleGear.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/WheelContact.h
+M    src/OpenFDM/Contact.h
+M    src/OpenFDM/Contact.cpp
+M    src/OpenFDM/SimpleContact.h
+M    src/OpenFDM/SimpleGear.cpp
+M    src/OpenFDM/SimpleContact.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp	2009-01-10 09:15:13 UTC (rev 934)
+@@ -60,14 +60,16 @@
+     
+     // Get the plane normal force.
+     real_type normForce = mContact-&gt;computeNormalForce(compressLength,
+-                                                       compressVel);
++                                                       compressVel,
++                                                       mPortValueList);
+     // The normal force cannot get negative here.
+     normForce = max(static_cast&lt;real_type&gt;(0), normForce);
+     
+     // Get the friction force.
+     Vector3 fricForce = mContact-&gt;computeFrictionForce(normForce, sVel,
+                                                        lp.getNormal(),
+-                                                       groundValues.friction);
++                                                       groundValues.friction,
++                                                       mPortValueList);
+     
+     // The resulting force is the sum of both.
+     // The minus sign is because of the direction of the surface normal.
+@@ -98,15 +100,14 @@
+ }
+ 
+ real_type
+-Contact::computeNormalForce(real_type compressLen, real_type compressVel) const
++Contact::computeNormalForce(real_type, real_type, PortValueList&amp;) const
+ {
+   return 0;
+ }
+ 
+ Vector3
+-Contact::computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+-                              const Vector3&amp; groundNormal,
+-                              real_type friction) const
++Contact::computeFrictionForce(real_type, const Vector3&amp;, const Vector3&amp;,
++                              real_type, PortValueList&amp;) const
+ {
+   return Vector3::zeros();
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h	2009-01-10 09:15:13 UTC (rev 934)
+@@ -21,12 +21,14 @@
+ 
+   // Compute the plane normal force.
+   virtual real_type
+-  computeNormalForce(real_type compressLen, real_type compressVel) const;
++  computeNormalForce(real_type compressLen, real_type compressVel,
++                     PortValueList&amp;) const;
+ 
+   // Compute the friction force.
+   virtual Vector3
+   computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+-                       const Vector3&amp; groundNormal, real_type friction) const;
++                       const Vector3&amp; groundNormal, real_type friction,
++                       PortValueList&amp;) const;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-10 09:15:13 UTC (rev 934)
+@@ -283,12 +283,12 @@
+   RevoluteJoint.cpp \
+   RotationalJoint.cpp \
+   SimpleContact.cpp \
++  SimpleGear.cpp \
+   SingleLinkInteract.cpp \
+   UniversalJoint.cpp \
+   WheelContact.cpp
+ 
+ #   AeroForce.cpp \
+-#   SimpleGear.cpp \
+ #   Tank.cpp
+ 
+ #   Launchbar.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp	2009-01-10 09:15:13 UTC (rev 934)
+@@ -65,7 +65,8 @@
+ // Compute the plane normal force.
+ real_type
+ SimpleContact::computeNormalForce(real_type compressLen,
+-                                  real_type compressVel) const
++                                  real_type compressVel,
++                                  PortValueList&amp;) const
+ {
+   return compressLen*mSpringConst - mDamperConstant*compressVel;
+ }
+@@ -73,7 +74,8 @@
+ // Compute the friction force.
+ Vector3
+ SimpleContact::computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+-                                    const Vector3&amp;, real_type friction) const
++                                    const Vector3&amp;, real_type friction,
++                                    PortValueList&amp;) const
+ {
+   real_type nVel = norm(vel);
+   if (1 &lt; nVel)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h	2009-01-10 09:15:13 UTC (rev 934)
+@@ -26,12 +26,14 @@
+ 
+   // Compute the plane normal force.
+   virtual real_type
+-  computeNormalForce(real_type compressLen, real_type compressVel) const;
++  computeNormalForce(real_type compressLen, real_type compressVel,
++                     PortValueList&amp;) const;
+ 
+   // Compute the friction force.
+   virtual Vector3
+   computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+-                       const Vector3&amp;, real_type friction) const;
++                       const Vector3&amp;, real_type friction,
++                       PortValueList&amp;) const;
+ 
+ private:
+   real_type mSpringConst;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.cpp	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.cpp	2009-01-10 09:15:13 UTC (rev 934)
+@@ -9,102 +9,64 @@
+ #include &quot;Unit.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+ #include &quot;Contact.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(SimpleGear, Contact)
++  DEF_OPENFDM_PROPERTY(Bool, EnableSteeringAngle, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableBrakeCommand, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
+-/// FIXME want to have similar names than with linearspringdamper
+-  DEF_OPENFDM_PROPERTY(Real, SpringDamping, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, DamperConstant, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, FrictionCoeficient, Serialized)
+-
+-  DEF_OPENFDM_PROPERTY(Real, SteeringAngle, NotSerialized)
+-/// FIXME think about that name 
+-  DEF_OPENFDM_PROPERTY(Real, Brake, NotSerialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-SimpleGear::SimpleGear(const std::string&amp; name)
+-  : Contact(name)
++SimpleGear::SimpleGear(const std::string&amp; name) :
++  Contact(name),
++  mSpringConst(0),
++  mDamperConst(0),
++  mFrictionCoef(0)
+ {
+-  mSteeringAngle = 0;
+-  mBrake = 0;
+-  mSpringConst = 0;
+-  mSpringDamp = 0;
+-  mFrictionCoef = 0;
+-
+-  /// FIXME
+-  unsigned inputPortBase = getNumInputPorts();
+-  setNumInputPorts(inputPortBase + 2);
+-  setInputPortName(inputPortBase + 0, &quot;brakeCommand&quot;);
+-  setInputPortName(inputPortBase + 1, &quot;steeringAngle&quot;);
+ }
+ 
+ SimpleGear::~SimpleGear(void)
+ {
+ }
+ 
+-bool
+-SimpleGear::init(void)
++void
++SimpleGear::setEnableSteeringAngle(bool enable)
+ {
+-  NumericPortAcceptor* port = getInputPort(&quot;brakeCommand&quot;);
+-  if (port)
+-    mBrakeCommandHandle = port-&gt;toRealPortHandle();
++  if (enable == getEnableSteeringAngle())
++    return;
++  if (enable)
++    mSteeringAnglePort = RealInputPort(this, &quot;steeringAngle&quot;, true);
+   else
+-    mBrakeCommandHandle = RealPortHandle(0);
+-
+-  port = getInputPort(&quot;steeringAngle&quot;);
+-  if (port)
+-    mSteeringAngleHandle = port-&gt;toRealPortHandle();
+-  else
+-    mSteeringAngleHandle = RealPortHandle(0);
+-
+-  mBrake = 0;
+-  mSteeringAngle = 0;
+-
+-  return Contact::init();
++    mSteeringAnglePort.clear();
+ }
+ 
+-void
+-SimpleGear::output(const TaskInfo&amp; taskInfo)
++bool
++SimpleGear::getEnableSteeringAngle() const
+ {
+-  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
+-                          SampleTime::PerTimestep)) {
+-    if (mBrakeCommandHandle.isConnected())
+-      mBrake = mBrakeCommandHandle.getRealValue();
+-    if (mSteeringAngleHandle.isConnected())
+-      mSteeringAngle = mSteeringAngleHandle.getRealValue();
+-  }
+-
+-  Contact::output(taskInfo);
++  return !mSteeringAnglePort.empty();
+ }
+ 
+-real_type
+-SimpleGear::getSteeringAngle(void) const
+-{
+-  return mSteeringAngle;
+-}
+-
+ void
+-SimpleGear::setSteeringAngle(real_type steeringAngle)
++SimpleGear::setEnableBrakeCommand(bool enable)
+ {
+-  mSteeringAngle = steeringAngle;
++  if (enable == getEnableBrakeCommand())
++    return;
++  if (enable)
++    mBrakeCommandPort = RealInputPort(this, &quot;brakeCommand&quot;, true);
++  else
++    mBrakeCommandPort.clear();
+ }
+ 
+-real_type
+-SimpleGear::getBrake(void) const
++bool
++SimpleGear::getEnableBrakeCommand() const
+ {
+-  return mBrake;
++  return !mBrakeCommandPort.empty();
+ }
+ 
+-void
+-SimpleGear::setBrake(real_type brake)
+-{
+-  mBrake = brake;
+-}
+-
+ real_type
+ SimpleGear::getSpringConstant(void) const
+ {
+@@ -118,15 +80,15 @@
+ }
+ 
+ real_type
+-SimpleGear::getSpringDamping(void) const
++SimpleGear::getDamperConstant(void) const
+ {
+-  return mSpringDamp;
++  return mDamperConst;
+ }
+ 
+ void
+-SimpleGear::setSpringDamping(real_type springDamp)
++SimpleGear::setDamperConstant(real_type damperConst)
+ {
+-  mSpringDamp = springDamp;
++  mDamperConst = damperConst;
+ }
+ 
+ real_type
+@@ -144,24 +106,33 @@
+ // Compute the plane normal force.
+ real_type
+ SimpleGear::computeNormalForce(real_type compressLen,
+-                               real_type compressVel) const
++                               real_type compressVel,
++                               PortValueList&amp; portValueList) const
+ {
+-  return compressLen*mSpringConst
+-    - mSpringDamp*min(compressVel, static_cast&lt;real_type&gt;(0));
++  return compressLen*mSpringConst - mDamperConst*compressVel;
+ }
+ 
+ // Compute the friction force.
+ Vector3
+ SimpleGear::computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+                                  const Vector3&amp; groundNormal,
+-                                 real_type friction) const
++                                 real_type friction,
++                                 PortValueList&amp; portValueList) const
+ {
++  // Get the relevant inputs or their defaults.
++  real_type steeringAngle = 0;
++  if (getEnableSteeringAngle())
++    steeringAngle = portValueList[mSteeringAnglePort];
++  real_type brakeCommand = 0;
++  if (getEnableBrakeCommand())
++    brakeCommand = portValueList[mBrakeCommandPort];
++
+   // Get a transform from the current frames coordinates into
+   // wheel coordinates.
+   // The wheel coordinates x asxis is defined by the forward orientation
+   // of the wheel, the z axis points perpandicular to the ground
+   // plane downwards.
+-  Vector3 forward(cos(mSteeringAngle), sin(mSteeringAngle), 0);
++  Vector3 forward(cos(steeringAngle), sin(steeringAngle), 0);
+   Vector3 side = cross(groundNormal, forward);
+   forward = normalize(cross(side, groundNormal));
+   side = normalize(side);
+@@ -176,7 +147,7 @@
+   // The wheel spin speed is not known in this simple model.
+   // We just set that to 0.99999 times the x-velocity in the 
+   // rolling case and to 1 in the brakeing case.
+-  real_type wheelSlip = interpolate(mBrake,
++  real_type wheelSlip = interpolate(brakeCommand,
+                                     (real_type)0, 1e-5*wheelVel(0),
+                                     (real_type)1, wheelVel(0));
+   
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.h	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleGear.h	2009-01-10 09:15:13 UTC (rev 934)
+@@ -9,8 +9,6 @@
+ #include &quot;Unit.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+ #include &quot;Contact.h&quot;
+ 
+ namespace OpenFDM {
+@@ -21,43 +19,43 @@
+   SimpleGear(const std::string&amp; name);
+   virtual ~SimpleGear(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  /// Set availabilty of the steering angle input port
++  void setEnableSteeringAngle(bool enable);
++  /// Get availabilty of the steering angle input port
++  bool getEnableSteeringAngle() const;
+ 
+-  real_type getSteeringAngle(void) const;
+-  void setSteeringAngle(real_type steeringAngle);
++  /// Set availabilty of the brake command input port
++  void setEnableBrakeCommand(bool enable);
++  /// Get availabilty of the brake command input port
++  bool getEnableBrakeCommand() const;
+ 
+-  real_type getBrake(void) const;
+-  void setBrake(real_type brake);
+-
+   real_type getSpringConstant(void) const;
+   void setSpringConstant(real_type springConst);
+ 
+-  real_type getSpringDamping(void) const;
+-  void setSpringDamping(real_type springDamp);
++  real_type getDamperConstant(void) const;
++  void setDamperConstant(real_type damperConstant);
+ 
+   real_type getFrictionCoeficient(void) const;
+   void setFrictionCoeficient(real_type frictionCoef);
+ 
+   // Compute the plane normal force.
+   virtual real_type
+-  computeNormalForce(real_type compressLen, real_type compressVel) const;
++  computeNormalForce(real_type compressLen, real_type compressVel,
++                     PortValueList&amp;) const;
+ 
+   // Compute the friction force.
+   virtual Vector3
+   computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+-                       const Vector3&amp; groundNormal, real_type friction) const;
++                       const Vector3&amp; groundNormal, real_type friction,
++                       PortValueList&amp;) const;
+ 
+ private:
+-  real_type mSteeringAngle;
+-  real_type mBrake;
++  RealInputPort mSteeringAnglePort;
++  RealInputPort mBrakeCommandPort;
+ 
+   real_type mSpringConst;
+-  real_type mSpringDamp;
++  real_type mDamperConst;
+   real_type mFrictionCoef;
+-
+-  RealPortHandle mBrakeCommandHandle;
+-  RealPortHandle mSteeringAngleHandle;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2009-01-10 09:15:13 UTC (rev 934)
+@@ -86,13 +86,14 @@
+     
+     // Get the plane normal force.
+     real_type normForce = mWheelContact-&gt;computeNormalForce(compressLength,
+-                                                            compressVel);
++                                                            compressVel,
++                                                            mPortValueList);
+     // The normal force cannot get negative here.
+     normForce = max(static_cast&lt;real_type&gt;(0), normForce);
+     
+     // Get the friction force.
+     Vector2 fricForce = mWheelContact-&gt;computeFrictionForce(normForce, wheelVel,
+-                                             omegaR, groundValues.friction);
++                                 omegaR, groundValues.friction, mPortValueList);
+     
+     // The resulting force is the sum of both.
+     // The minus sign is because of the direction of the surface normal.
+@@ -128,14 +129,17 @@
+ }
+ 
+ real_type
+-WheelContact::computeNormalForce(real_type compressLen, real_type compressVel) const
++WheelContact::computeNormalForce(real_type compressLen,
++                                 real_type compressVel,
++                                 PortValueList&amp;) const
+ {
+   return compressLen*mSpringConstant + mDampingConstant*compressVel;
+ }
+ 
+ Vector2
+ WheelContact::computeFrictionForce(real_type normForce, const Vector2&amp; vel,
+-                                   real_type omegaR, real_type friction) const
++                                   real_type omegaR, real_type friction,
++                                   PortValueList&amp;) const
+ {
+   // We just get the wheel slip directly here
+   real_type wheelSlip = vel(0)+omegaR;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h	2009-01-09 19:59:00 UTC (rev 933)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h	2009-01-10 09:15:13 UTC (rev 934)
+@@ -21,12 +21,14 @@
+ 
+   // Compute the plane normal force.
+   virtual real_type
+-  computeNormalForce(real_type compressLen, real_type compressVel) const;
++  computeNormalForce(real_type compressLen, real_type compressVel,
++                     PortValueList&amp;) const;
+ 
+   // Compute the friction force.
+   virtual Vector2
+   computeFrictionForce(real_type normForce, const Vector2&amp; vel,
+-                       real_type omegaR, real_type friction) const;
++                       real_type omegaR, real_type friction,
++                       PortValueList&amp;) const;
+ 
+   /** Set wheel axis direction.
+    */
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000899.html">[OpenFDM-svn] r933 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000901.html">[OpenFDM-svn] r935 - branches/OpenFDM-StateSeparation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#900">[ date ]</a>
+              <a href="thread.html#900">[ thread ]</a>
+              <a href="subject.html#900">[ subject ]</a>
+              <a href="author.html#900">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

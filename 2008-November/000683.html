@@ -1,0 +1,248 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r714 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r714%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811111800.mABI0pDJ024149%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000682.html">
+   <LINK REL="Next"  HREF="000684.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r714 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r714%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811111800.mABI0pDJ024149%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r714 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 11 19:00:51 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000682.html">[OpenFDM-svn] r713 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000684.html">[OpenFDM-svn] r715 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#683">[ date ]</a>
+              <a href="thread.html#683">[ thread ]</a>
+              <a href="subject.html#683">[ subject ]</a>
+              <a href="author.html#683">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-11 19:00:50 +0100 (Tue, 11 Nov 2008)
+New Revision: 714
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Comming closer to a propper bootstrap sequence.
+
+M    src/OpenFDM/PortValueList.h
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-11 17:32:23 UTC (rev 713)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-11 18:00:50 UTC (rev 714)
+@@ -101,6 +101,12 @@
+       return 0;
+     return mPortValueVector[idx];
+   }
++  PortValue* getPortValue(unsigned idx)
++  {
++    if (mPortValueVector.size() &lt;= idx)
++      return 0;
++    return mPortValueVector[idx];
++  }
+ 
+   /// Save but partially expensive Accessor for numeric ports
+   const NumericPortValue* getPortValue(const NumericPortInfo* portInfo) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-11 17:32:23 UTC (rev 713)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-11 18:00:50 UTC (rev 714)
+@@ -385,7 +385,7 @@
+     virtual ~Instance()
+     { }
+     virtual const Node* getNode() const = 0;
+-    virtual AbstractNodeInstance* getAbstractNodeInstance() = 0;
++    virtual AbstractNodeInstance* newNodeInstance() = 0;
+ 
+     PortData* getPortData(unsigned i)
+     {
+@@ -396,7 +396,6 @@
+ 
+     void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
+     {
+-      getAbstractNodeInstance()-&gt;setPortValue(portInfo, portValue);
+       mPortValueList.setPortValue(portInfo.getIndex(), portValue);
+     }
+     const PortValue* getPortValue(const PortInfo&amp; portInfo)
+@@ -474,10 +473,16 @@
+       mNode(&amp;node)
+     { }
+     virtual const Node* getNode() const { return mNode; }
+-    virtual AbstractNodeInstance* getAbstractNodeInstance()
+-    { return mAbstractNodeInstance; }
+-    /// FIXME, just in this intermediate step
+-    SharedPtr&lt;AbstractNodeInstance&gt; mAbstractNodeInstance;
++    virtual AbstractNodeInstance* newNodeInstance()
++    {
++      OpenFDM::NodeInstance* nodeInstance;
++      nodeInstance = new OpenFDM::NodeInstance(mSampleTime, getNode());
++      OpenFDMAssert(mNode-&gt;getNumPorts() == mPortDataVector.size());
++      for (unsigned i = 0; i &lt; mNode-&gt;getNumPorts(); ++i)
++        nodeInstance-&gt;setPortValue(*mNode-&gt;getPort(i),
++                                   mPortValueList.getPortValue(i));
++      return nodeInstance;
++    }
+   private:
+     SharedPtr&lt;const Node&gt; mNode;
+   };
+@@ -488,11 +493,21 @@
+       mModel(&amp;model)
+     { }
+     virtual const Model* getNode() const { return mModel; }
+-    virtual AbstractNodeInstance* getAbstractNodeInstance()
+-    { return mAbstractNodeInstance; }
+-    /// FIXME, just in this intermediate step
+-    SharedPtr&lt;AbstractNodeInstance&gt; mAbstractNodeInstance;
+ 
++    bool createModelContext()
++    {
++      OpenFDMAssert(!mModelContext);
++      mModelContext = mModel-&gt;newModelContext();
++      OpenFDMAssert(mModel-&gt;getNumPorts() == mPortDataVector.size());
++      for (unsigned i = 0; i &lt; mModel-&gt;getNumPorts(); ++i)
++        mModelContext-&gt;setPortValue(*mModel-&gt;getPort(i), mPortValueList.getPortValue(i));
++    }
++
++    virtual AbstractNodeInstance* newNodeInstance()
++    {
++      return new OpenFDM::LeafInstance(mSampleTime, mModelContext);
++    }
++
+     ModelContext* getModelContext()
+     { return mModelContext; }
+ 
+@@ -507,11 +522,21 @@
+       Instance(mechanicNode, nodePath, sampleTime)
+     { }
+     virtual const MechanicNode* getNode() const = 0;
+-    virtual AbstractNodeInstance* getAbstractNodeInstance()
+-    { return mAbstractNodeInstance; }
+-    /// FIXME, just in this intermediate step
+-    SharedPtr&lt;AbstractNodeInstance&gt; mAbstractNodeInstance;
+ 
++    bool createMechanicContext()
++    {
++      OpenFDMAssert(!mMechanicContext);
++      mMechanicContext = getNode()-&gt;newMechanicContext();
++      OpenFDMAssert(getNode()-&gt;getNumPorts() == mPortDataVector.size());
++      for (unsigned i = 0; i &lt; getNode()-&gt;getNumPorts(); ++i)
++        mMechanicContext-&gt;setPortValue(*getNode()-&gt;getPort(i), mPortValueList.getPortValue(i));
++    }
++
++    virtual AbstractNodeInstance* newNodeInstance()
++    {
++      return new OpenFDM::LeafInstance(mSampleTime, mMechanicContext);
++    }
++
+     MechanicContext* getMechanicContext()
+     { return mMechanicContext; }
+ 
+@@ -1011,41 +1036,25 @@
+   bool
+   allocPortValues()
+   {
++    // alloc port values
++    InstanceMap::const_iterator i;
++    for (i = mInstanceMap.begin(); i != mInstanceMap.end(); ++i) {
++      if (!i-&gt;second-&gt;allocPortValues())
++          return false;
++    }
++
+     {
+     ModelInstanceList::const_iterator i;
+     for (i = mModelInstanceList.begin(); i != mModelInstanceList.end(); ++i) {
+-      ModelContext* context = (*i)-&gt;getNode()-&gt;newModelContext();
+-      OpenFDM::LeafInstance* modelInstance;
+-      modelInstance = new OpenFDM::LeafInstance((*i)-&gt;mSampleTime, context);
+-      (*i)-&gt;mAbstractNodeInstance = modelInstance;
+-      (*i)-&gt;mModelContext = context;
++      (*i)-&gt;createModelContext();
+     }
+ 
+     MechanicInstanceList::const_iterator j;
+     for (j = mMechanicInstanceList.begin();
+          j != mMechanicInstanceList.end(); ++j) {
+-      MechanicContext* context = (*j)-&gt;getNode()-&gt;newMechanicContext();
+-      OpenFDM::LeafInstance* mechanicInstance;
+-      mechanicInstance = new OpenFDM::LeafInstance((*j)-&gt;mSampleTime, context);
+-      (*j)-&gt;mAbstractNodeInstance = mechanicInstance;
+-      (*j)-&gt;mMechanicContext = context;
++      (*j)-&gt;createMechanicContext();
+     }
+-
+-    NodeInstanceList::const_iterator k;
+-    for (k = mNodeInstanceList.begin(); k != mNodeInstanceList.end(); ++k) {
+-      OpenFDM::NodeInstance* nodeInstance;
+-      nodeInstance = new OpenFDM::NodeInstance((*k)-&gt;mSampleTime,
+-                                               (*k)-&gt;getNode());
+-      (*k)-&gt;mAbstractNodeInstance = nodeInstance;
+     }
+-    }
+-
+-    // alloc port values
+-    InstanceMap::const_iterator i;
+-    for (i = mInstanceMap.begin(); i != mInstanceMap.end(); ++i) {
+-      if (!i-&gt;second-&gt;allocPortValues())
+-          return false;
+-    }
+     
+     // check port values and report unconnected mandatory values.
+     for (i = mInstanceMap.begin(); i != mInstanceMap.end(); ++i) {
+@@ -1141,7 +1150,7 @@
+   NodeInstanceCollector::InstanceMap::const_iterator i;
+   for (i = nodeInstanceCollector.mInstanceMap.begin();
+        i != nodeInstanceCollector.mInstanceMap.end(); ++i) {
+-    mNodeInstanceMap[i-&gt;first] = i-&gt;second-&gt;getAbstractNodeInstance();
++    mNodeInstanceMap[i-&gt;first] = i-&gt;second-&gt;newNodeInstance();
+   }
+ 
+   SystemOutputList::const_iterator j;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000682.html">[OpenFDM-svn] r713 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000684.html">[OpenFDM-svn] r715 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#683">[ date ]</a>
+              <a href="thread.html#683">[ thread ]</a>
+              <a href="subject.html#683">[ subject ]</a>
+              <a href="author.html#683">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

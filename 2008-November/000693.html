@@ -1,0 +1,396 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r724 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r724%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811120555.mAC5tsH3001472%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000692.html">
+   <LINK REL="Next"  HREF="000694.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r724 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r724%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811120555.mAC5tsH3001472%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r724 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 12 06:55:54 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000692.html">[OpenFDM-svn] r723 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000694.html">[OpenFDM-svn] r725 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#693">[ date ]</a>
+              <a href="thread.html#693">[ thread ]</a>
+              <a href="subject.html#693">[ subject ]</a>
+              <a href="author.html#693">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-12 06:55:49 +0100 (Wed, 12 Nov 2008)
+New Revision: 724
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Joints get now their topological link information.
+
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/PortValueList.h
+M    src/OpenFDM/RootJoint.h
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/RootJoint.cpp
+M    src/OpenFDM/Joint.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-12 05:55:49 UTC (rev 724)
+@@ -26,23 +26,46 @@
+   typedef LinAlg::Matrix&lt;real_type,n,n&gt; MatrixNN;
+   typedef LinAlg::MatrixFactors&lt;real_type,n,n,LinAlg::LUTag&gt; MatrixFactorsNN;
+ 
+-  virtual MechanicContext* newMechanicContext(PortValueList&amp; portValueList) const
++  virtual MechanicContext*
++  newMechanicContext(const MechanicLinkInfo* parentLink,
++                     const MechanicLinkInfo* childLink,
++                     PortValueList&amp; portValueList) const
+   {
+-    SharedPtr&lt;Context&gt; context = new Context(this);
++    if (!parentLink) {
++      Log(Model, Error) &lt;&lt; &quot;Parent link is not set while creating context &quot;
++                        &lt;&lt; &quot;for model \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return 0;
++    }
++    MechanicLinkValue* parentLinkValue;
++    parentLinkValue = portValueList.getPortValue(*parentLink);
++    if (!parentLinkValue)
++      return 0;
++    if (!childLink) {
++      Log(Model, Error) &lt;&lt; &quot;Child link is not set while creating context &quot;
++                        &lt;&lt; &quot;for model \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return 0;
++    }
++    MechanicLinkValue* childLinkValue;
++    childLinkValue = portValueList.getPortValue(*childLink);
++    if (!childLinkValue)
++      return 0;
++
++    SharedPtr&lt;Context&gt; context;
++    context = new Context(this, parentLinkValue, childLinkValue);
+     for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+       PortValue* portValue = portValueList.getPortValue(i);
+       if (!portValue) {
+         Log(Model, Error) &lt;&lt; &quot;No port value given for model \&quot;&quot; &lt;&lt; getName()
+                           &lt;&lt; &quot;\&quot; and port \&quot;&quot; &lt;&lt; getPort(i)-&gt;getName()
+                           &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-        return false;
++        return 0;
+       }
+       context-&gt;setPortValue(*getPort(i), portValue);
+     }
+     if (!context-&gt;alloc()) {
+       Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
+                           &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return false;
++      return 0;
+     }
+     return context.release();
+   }
+@@ -176,8 +199,11 @@
+ private:
+   class Context : public MechanicContext {
+   public:
+-    Context(const CartesianJoint* cartesianJoint) :
+-      mCartesianJoint(cartesianJoint)
++    Context(const CartesianJoint* cartesianJoint, MechanicLinkValue* parentLink,
++            MechanicLinkValue* childLink) :
++      mCartesianJoint(cartesianJoint),
++      mParentLink(parentLink),
++      mChildLink(childLink)
+     { }
+     virtual ~Context() {}
+     
+@@ -188,8 +214,6 @@
+     {
+       if (!allocStates())
+         return false;
+-      mParentLink = &amp;mPortValueList[mCartesianJoint-&gt;mParentLink];
+-      mChildLink = &amp;mPortValueList[mCartesianJoint-&gt;mChildLink];
+       return mCartesianJoint-&gt;alloc(*this);
+     }
+     virtual void initVelocities(const /*Init*/Task&amp; task)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.h	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.h	2008-11-12 05:55:49 UTC (rev 724)
+@@ -27,7 +27,10 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  virtual MechanicContext* newMechanicContext(PortValueList&amp; portValues) const = 0;
++  virtual MechanicContext*
++  newMechanicContext(const MechanicLinkInfo* parentLink,
++                     const MechanicLinkInfo* childLink,
++                     PortValueList&amp; portValues) const = 0;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-12 05:55:49 UTC (rev 724)
+@@ -136,6 +136,13 @@
+       return 0;
+     return portValue-&gt;toMechanicLinkValue();
+   }
++  MechanicLinkValue* getPortValue(const MechanicLinkInfo&amp; portInfo)
++  {
++    PortValue* portValue = getPortValue(portInfo.getIndex());
++    if (!portValue)
++      return 0;
++    return portValue-&gt;toMechanicLinkValue();
++  }
+   /// Save but partially expensive Accessor for numeric ports
+   const PortValue* getPortValue(const PortInfo* portInfo) const
+   {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-12 05:55:49 UTC (rev 724)
+@@ -67,7 +67,9 @@
+ }
+ 
+ MechanicContext*
+-RootJoint::newMechanicContext(PortValueList&amp; portValueList) const
++RootJoint::newMechanicContext(const MechanicLinkInfo* parentLink,
++                              const MechanicLinkInfo* childLink,
++                              PortValueList&amp; portValueList) const
+ {
+   SharedPtr&lt;Context&gt; context = new Context(this);
+   for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-12 05:55:49 UTC (rev 724)
+@@ -16,7 +16,10 @@
+   RootJoint(const std::string&amp; name);
+   virtual ~RootJoint();
+ 
+-  virtual MechanicContext* newMechanicContext(PortValueList&amp; portValueList) const;
++  virtual MechanicContext*
++  newMechanicContext(const MechanicLinkInfo* parentLink,
++                     const MechanicLinkInfo* childLink,
++                     PortValueList&amp; portValueList) const;
+ 
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-11 21:46:27 UTC (rev 723)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-12 05:55:49 UTC (rev 724)
+@@ -599,7 +599,8 @@
+     virtual bool createMechanicContext()
+     {
+       OpenFDMAssert(!mMechanicContext);
+-      mMechanicContext = getNode()-&gt;newMechanicContext(mPortValueList);
++      mMechanicContext = getNode()-&gt;newMechanicContext(mParentLink, mChildLink,
++                                                       mPortValueList);
+       if (!mMechanicContext) {
+         Log(Schedule, Warning) &lt;&lt; &quot;Could not create context for mechanic &quot;
+                                &lt;&lt; &quot;node \&quot;&quot; &lt;&lt; getNodeNamePath()
+@@ -608,6 +609,56 @@
+       }
+       return true;
+     }
++
++    bool isLinkedToAndSetChild(JointInstanceData&amp; instance)
++    {
++      unsigned numPorts = getNode()-&gt;getNumPorts();
++      for (unsigned i = 0; i &lt; numPorts; ++i) {
++        const MechanicLinkInfo* linkInfo;
++        linkInfo = getNode()-&gt;getPort(i)-&gt;toMechanicLinkInfo();
++        if (!linkInfo)
++          continue;
++        OpenFDMAssert(i &lt; mPortDataVector.size());
++
++        const Node* otherNode = instance.getNode();
++        unsigned otherNumPorts = otherNode-&gt;getNumPorts();
++        for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++          const MechanicLinkInfo* otherLinkInfo;
++          otherLinkInfo = otherNode-&gt;getPort(j)-&gt;toMechanicLinkInfo();
++          if (!otherLinkInfo)
++            continue;
++
++          OpenFDMAssert(j &lt; instance.mPortDataVector.size());
++          OpenFDMAssert(instance.mPortDataVector[j]);
++          if (!mPortDataVector[i]-&gt;isConnected(*instance.mPortDataVector[j]))
++            continue;
++
++          mChildLink = linkInfo;
++          instance.mParentLink = otherLinkInfo;
++          return true;
++        }
++      }
++      return false;
++    }
++
++    // FIXME: do real checks in this case, connected and so forth ...
++    bool makeRemainigLinksChildLinks()
++    {
++      unsigned numPorts = getNode()-&gt;getNumPorts();
++      for (unsigned i = 0; i &lt; numPorts; ++i) {
++        const MechanicLinkInfo* linkInfo;
++        linkInfo = getNode()-&gt;getPort(i)-&gt;toMechanicLinkInfo();
++        if (!linkInfo)
++          continue;
++        if (linkInfo == mParentLink)
++          continue;
++        mChildLink = linkInfo;
++      }
++      return true;
++    }
++
++    SharedPtr&lt;const MechanicLinkInfo&gt; mParentLink;
++    SharedPtr&lt;const MechanicLinkInfo&gt; mChildLink;
+   private:
+     SharedPtr&lt;const Joint&gt; mJoint;
+   };
+@@ -842,6 +893,7 @@
+   typedef std::list&lt;SharedPtr&lt;NodeInstanceData&gt; &gt; NodeInstanceDataList;
+   typedef std::list&lt;SharedPtr&lt;ModelInstanceData&gt; &gt; ModelInstanceDataList;
+   typedef std::list&lt;SharedPtr&lt;MechanicInstanceData&gt; &gt; MechanicInstanceDataList;
++  typedef std::list&lt;SharedPtr&lt;JointInstanceData&gt; &gt; JointInstanceDataList;
+ 
+   // The list of Nodes that do not need a context for itself.
+   NodeInstanceDataList mNodeInstanceDataList;
+@@ -852,8 +904,8 @@
+ 
+   // The list of root nodes in the mechanical system. Will be a starting point
+   // for sorting the tree of mechanical models downwards
+-  MechanicInstanceDataList mRootJointInstanceDataList;
+-  MechanicInstanceDataList mJointInstanceDataList;
++  JointInstanceDataList mRootJointInstanceDataList;
++  JointInstanceDataList mJointInstanceDataList;
+   MechanicInstanceDataList mInteractInstanceDataList;
+ 
+   ////////////////////////////////////////////////////////////////////////////
+@@ -929,30 +981,34 @@
+     }
+ 
+     // Start with all the roots in front of the list ...
+-    // FIXME: ensure that there is no loop here?
+-    mMechanicInstanceDataList.swap(mRootJointInstanceDataList);
++    // FIXME: ensure that we have no root joints with two mechanic links.
++    // They must then appear in the joint list. When we know that, we are sure
++    // that there is no mechanic link loop in the root joints - they
++    // have only one link ...
++    JointInstanceDataList sortedJoints;
++    sortedJoints.swap(mRootJointInstanceDataList);
+ 
+     // Not the best algorithm, but for a first cut ...
+     while (!mJointInstanceDataList.empty()) {
+-      MechanicInstanceDataList nextLevelList;
++      JointInstanceDataList nextLevelList;
+ 
+-      MechanicInstanceDataList::iterator j;
+-      for (j = mMechanicInstanceDataList.begin();
+-           j != mMechanicInstanceDataList.end(); ++j) {
+-        MechanicInstanceDataList::iterator i;
++      JointInstanceDataList::iterator j;
++      for (j = sortedJoints.begin();
++           j != sortedJoints.end(); ++j) {
++        JointInstanceDataList::iterator i;
+         for (i = mJointInstanceDataList.begin();
+              i != mJointInstanceDataList.end();) {
+         
+-          if ((*j)-&gt;isLinkedTo(*(*i))) {
+-            SharedPtr&lt;MechanicInstanceData&gt; mechanicInstanceData = *i;
++          if ((*j)-&gt;isLinkedToAndSetChild(*(*i))) {
++            SharedPtr&lt;JointInstanceData&gt; mechanicInstanceData = *i;
+             nextLevelList.push_back(mechanicInstanceData);
+             i = mJointInstanceDataList.erase(i);
+ 
+             // Check if this current mechanic node does not reference
+             // back into the already sorted models
+-            MechanicInstanceDataList::const_iterator k;
+-            for (k = mMechanicInstanceDataList.begin();
+-                 k != mMechanicInstanceDataList.end(); ++k) {
++            JointInstanceDataList::const_iterator k;
++            for (k = sortedJoints.begin();
++                 k != sortedJoints.end(); ++k) {
+               if (*k == *j)
+                 continue;
+               if (mechanicInstanceData-&gt;isLinkedTo(*(*k))) {
+@@ -975,7 +1031,7 @@
+       // if we have a connection in between them, there must be a
+       // closed kinematic loop.
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+-        MechanicInstanceDataList::iterator i = j;
++        JointInstanceDataList::iterator i = j;
+         for (++i; i != nextLevelList.end(); ++i) {
+           if ((*j)-&gt;isLinkedTo(*(*i))) {
+             Log(Schedule,Warning)
+@@ -990,11 +1046,15 @@
+       
+ 
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+-        mMechanicInstanceDataList.push_back(*j);
++        // FIXME
++        (*j)-&gt;makeRemainigLinksChildLinks();
++        sortedJoints.push_back(*j);
+       }
+     }
+ 
+-    // Interacts are always computed at the end of the list
++    // First the sorted joints ...
++    mMechanicInstanceDataList.assign(sortedJoints.begin(), sortedJoints.end());
++    // ... then Interacts at the end of the list
+     mMechanicInstanceDataList.splice(mMechanicInstanceDataList.end(),
+                                      mInteractInstanceDataList,
+                                      mInteractInstanceDataList.begin(),
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000692.html">[OpenFDM-svn] r723 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000694.html">[OpenFDM-svn] r725 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#693">[ date ]</a>
+              <a href="thread.html#693">[ thread ]</a>
+              <a href="subject.html#693">[ subject ]</a>
+              <a href="author.html#693">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

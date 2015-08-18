@@ -1,0 +1,124 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r260 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r260%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200603080714.k287ERQL001647%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000238.html">
+   <LINK REL="Next"  HREF="000240.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r260 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r260%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200603080714.k287ERQL001647%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r260 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Mar  8 08:14:27 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000238.html">[OpenFDM-svn] r259 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000240.html">[OpenFDM-svn] r261 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#239">[ date ]</a>
+              <a href="thread.html#239">[ thread ]</a>
+              <a href="subject.html#239">[ subject ]</a>
+              <a href="author.html#239">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-03-08 08:14:24 +0100 (Wed, 08 Mar 2006)
+New Revision: 260
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.h
+Log:
+Use preevalueted ports in Integrator
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-03-08 07:13:48 UTC (rev 259)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-03-08 07:14:24 UTC (rev 260)
+@@ -30,11 +30,13 @@
+ bool
+ Integrator::init(void)
+ {
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++  mDerivativeHandle = getInputPort(0)-&gt;toMatrixPortHandle();
++  if (!mDerivativeHandle.isConnected())
++    return false;
+ 
+   // The initial value defaults to zero
+   if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+-    mInitialValue.resize(getInputPort(0)-&gt;getValue().toMatrix());
++    mInitialValue.resize(mDerivativeHandle.getMatrixValue());
+     mInitialValue.clear();
+   }
+ 
+@@ -66,13 +68,10 @@
+ void
+ Integrator::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-
+-  // Just compute the integral.
+-  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
+-  const Matrix&amp; input = mh.getMatrixValue();
++  // Just return the derivative
++  OpenFDMAssert(mDerivativeHandle.isConnected());
++  const Matrix&amp; input = mDerivativeHandle.getMatrixValue();
+   OpenFDMAssert(size(input) == size(mIntegralState));
+-
+   stateDeriv.writeSubState(input);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.h	2006-03-08 07:13:48 UTC (rev 259)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.h	2006-03-08 07:14:24 UTC (rev 260)
+@@ -29,6 +29,8 @@
+   const Matrix&amp; getIntegralOutput(void) const;
+ 
+ private:
++  /// The handle to the input port
++  MatrixPortHandle mDerivativeHandle;
+   /// Holds the current output.
+   Matrix mIntegralOutput;
+   /// Holds the current integral state.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000238.html">[OpenFDM-svn] r259 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000240.html">[OpenFDM-svn] r261 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#239">[ date ]</a>
+              <a href="thread.html#239">[ thread ]</a>
+              <a href="subject.html#239">[ subject ]</a>
+              <a href="author.html#239">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

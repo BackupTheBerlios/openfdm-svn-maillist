@@ -1,0 +1,179 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r517 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r517%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271818.m8RIIHaK006290%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000488.html">
+   <LINK REL="Next"  HREF="000490.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r517 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r517%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809271818.m8RIIHaK006290%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r517 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 20:18:17 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000488.html">[OpenFDM-svn] r516 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000490.html">[OpenFDM-svn] r518 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#489">[ date ]</a>
+              <a href="thread.html#489">[ thread ]</a>
+              <a href="subject.html#489">[ subject ]</a>
+              <a href="author.html#489">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 20:18:17 +0200 (Sat, 27 Sep 2008)
+New Revision: 517
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ODESolver.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Again provide ode solvers ...
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-27 17:52:27 UTC (rev 516)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-27 18:18:17 UTC (rev 517)
+@@ -122,6 +122,9 @@
+   Atomic.cpp \
+   ConstNodeVisitor.cpp \
+   ContinousStateValue.cpp \
++  DoPri5.cpp \
++  ExplicitAdams.cpp \
++  ExplicitEuler.cpp \
+   Frame.cpp \
+   Function.cpp \
+   Group.cpp \
+@@ -133,11 +136,13 @@
+   MatrixStateValue.cpp \
+   MechanicNode.cpp \
+   MechanicPortValue.cpp \
++  MidpointRule.cpp \
+   Model.cpp \
+   Node.cpp \
+   NodeVisitor.cpp \
+   NumericPortValue.cpp \
+   Object.cpp \
++  ODESolver.cpp \
+   Planet.cpp \
+   PortInfo.cpp \
+   PortValue.cpp \
+@@ -149,16 +154,11 @@
+   Unit.cpp \
+   Variant.cpp
+ 
+-#   DoPri5.cpp \
+ #   Environment.cpp \
+ #   EnvironmentObject.cpp \
+-#   ExplicitAdams.cpp \
+-#   ExplicitEuler.cpp \
+ #   ImplicitEuler.cpp \
+ #   Newton.cpp \
+-#   MidpointRule.cpp \
+ #   ReaderWriter.cpp \
+-#   ODESolver.cpp \
+ #   System.cpp \
+ #   TaskInfo.cpp \
+ #
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ODESolver.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ODESolver.h	2008-09-27 17:52:27 UTC (rev 516)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ODESolver.h	2008-09-27 18:18:17 UTC (rev 517)
+@@ -9,7 +9,7 @@
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+-#include &quot;System.h&quot;
++#include &quot;Function.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -53,26 +53,19 @@
+   { return mStats; }
+ 
+   void evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+-  {
+-    SharedPtr&lt;System&gt; system = mSystem.lock();
+-    system-&gt;evalFunction(t, v, out);
+-  }
++  { mFunction-&gt;eval(t, v, out); }
+   void evalJacobian(real_type t, const Vector&amp; v, Matrix&amp; jac)
+-  {
+-    SharedPtr&lt;System&gt; system = mSystem.lock();
+-    system-&gt;evalJacobian(t, v, jac);
+-  }
++  { mFunction-&gt;jac(t, v, jac); }
+ 
+-  void setSystem(System* model)
+-  { mSystem = model; }
++  void setFunction(Function* function)
++  { mFunction = function; }
+ 
+ protected:
+   real_type mStepsize;
+   real_type mTime;
+   Vector mState;
+ 
+-  /// WeakPtr ???
+-  WeakPtr&lt;System&gt; mSystem;
++  SharedPtr&lt;Function&gt; mFunction;
+ 
+   Stats mStats;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 17:52:27 UTC (rev 516)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 18:18:17 UTC (rev 517)
+@@ -28,6 +28,8 @@
+ #include &lt;OpenFDM/ContinousStateValueVector.h&gt;
+ #include &lt;OpenFDM/DiscreteStateValueVector.h&gt;
+ 
++#include &lt;OpenFDM/ODESolver.h&gt;
++#include &lt;OpenFDM/Function.h&gt;
+ #include &lt;OpenFDM/SampleTime.h&gt;
+ 
+ #include &lt;OpenFDM/BoolStateInfo.h&gt;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000488.html">[OpenFDM-svn] r516 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000490.html">[OpenFDM-svn] r518 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#489">[ date ]</a>
+              <a href="thread.html#489">[ thread ]</a>
+              <a href="subject.html#489">[ subject ]</a>
+              <a href="author.html#489">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

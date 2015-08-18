@@ -1,0 +1,348 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r510 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r510%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809271054.m8RAs4xt008682%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000481.html">
+   <LINK REL="Next"  HREF="000483.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r510 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r510%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809271054.m8RAs4xt008682%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r510 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 12:54:04 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000481.html">[OpenFDM-svn] r509 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000483.html">[OpenFDM-svn] r511 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#482">[ date ]</a>
+              <a href="thread.html#482">[ thread ]</a>
+              <a href="subject.html#482">[ subject ]</a>
+              <a href="author.html#482">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 12:54:02 +0200 (Sat, 27 Sep 2008)
+New Revision: 510
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+Log:
+Use pointers instead of references for the node path handling.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-09-27 10:54:02 UTC (rev 510)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_ConstNodeVisitor_H
+ #define OpenFDM_ConstNodeVisitor_H
+ 
++#include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
+ 
+ namespace OpenFDM {
+@@ -48,10 +49,11 @@
+   const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+   template&lt;typename T&gt;
+-  void handleNodePathAndApply(T&amp; node)
++  void handleNodePathAndApply(const T* node)
+   {
+-    mNodePath.push_back(&amp;node);
+-    apply(node);
++    OpenFDMAssert(node);
++    mNodePath.push_back(node);
++    apply(*node);
+     mNodePath.pop_back();
+   }
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -35,13 +35,13 @@
+ void
+ Group::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ Group::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ Group::NodeId
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ Interact::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ Interact::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ LeafNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ LeafNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryNode.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -25,13 +25,13 @@
+ void
+ LibraryNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ LibraryNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ SharedPtr&lt;LibraryModel&gt;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ MechanicNode::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ MechanicNode::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -25,13 +25,13 @@
+ void
+ Model::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ Model::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ Node::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ Node::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-27 10:54:02 UTC (rev 510)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_NodeVisitor_H
+ #define OpenFDM_NodeVisitor_H
+ 
++#include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
+ 
+ namespace OpenFDM {
+@@ -48,10 +49,11 @@
+   const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+   template&lt;typename T&gt;
+-  void handleNodePathAndApply(T&amp; node)
++  void handleNodePathAndApply(T* node)
+   {
+-    mNodePath.push_back(&amp;node);
+-    apply(node);
++    OpenFDMAssert(node);
++    mNodePath.push_back(node);
++    apply(*node);
+     mNodePath.pop_back();
+   }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Output.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -33,13 +33,13 @@
+ void
+ Output::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ Output::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ RigidBody::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ RigidBody::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-09-27 10:22:45 UTC (rev 509)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-09-27 10:54:02 UTC (rev 510)
+@@ -24,13 +24,13 @@
+ void
+ RootJoint::accept(NodeVisitor&amp; visitor)
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ void
+ RootJoint::accept(ConstNodeVisitor&amp; visitor) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  visitor.handleNodePathAndApply(this);
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000481.html">[OpenFDM-svn] r509 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000483.html">[OpenFDM-svn] r511 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#482">[ date ]</a>
+              <a href="thread.html#482">[ thread ]</a>
+              <a href="subject.html#482">[ subject ]</a>
+              <a href="author.html#482">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

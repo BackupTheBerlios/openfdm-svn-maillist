@@ -1,0 +1,322 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1106 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1106%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200908201625.n7KGPXpi015258%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001063.html">
+   <LINK REL="Next"  HREF="001065.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1106 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1106%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200908201625.n7KGPXpi015258%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1106 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 20 18:25:33 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001063.html">[OpenFDM-svn] r1105 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001065.html">[OpenFDM-svn] r1107 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1064">[ date ]</a>
+              <a href="thread.html#1064">[ thread ]</a>
+              <a href="subject.html#1064">[ subject ]</a>
+              <a href="author.html#1064">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-20 18:25:32 +0200 (Thu, 20 Aug 2009)
+New Revision: 1106
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Time.h
+   branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+   branches/OpenFDM-StateSeparation/src/test/drop.cpp
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+   branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+   branches/OpenFDM-StateSeparation/src/test/linalg.cpp
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+Add timers to get some timing statistics.
+
+M    src/test/harmonic.cpp
+M    src/test/drop.cpp
+M    src/test/tiretestrig.cpp
+M    src/test/linalg.cpp
+M    src/test/ballistic.cpp
+M    src/test/foucault.cpp
+M    src/OpenFDM/Time.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Time.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Time.h	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Time.h	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -6,6 +6,7 @@
+ #define OpenFDM_Time_H
+ 
+ #include &lt;ctime&gt;
++#include &lt;sstream&gt;
+ #include &lt;istream&gt;
+ #include &lt;ostream&gt;
+ #include &lt;iomanip&gt;
+@@ -149,7 +150,7 @@
+ public:
+   TimeCounter(Time::Type type = Time::CPUTime) :
+     mType(type),
+-    mTime(real_type(0)),
++    mTime(0, 0),
+     mRunCounter(0)
+   { }
+   
+
+Modified: branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -1,3 +1,4 @@
++#include &lt;iostream&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/DynamicPressure.h&gt;
+ #include &lt;OpenFDM/ExternalInteract.h&gt;
+@@ -13,6 +14,7 @@
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ #include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/WindAxis.h&gt;
+ #include &lt;OpenFDM/WindAxisForce.h&gt;
+@@ -152,10 +154,18 @@
+ 
+   system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;ballistic&quot;));
+ 
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
++
+   if (!system-&gt;init())
+     return 1;
+ 
+   system-&gt;simulate(10);
+ 
++  timeCounter.stop();
++  std::cout &lt;&lt; &quot;Execution time: &quot; &lt;&lt; timeCounter.getTime()
++            &lt;&lt; &quot;s (&quot; &lt;&lt; double(timeCounter.getTime())/system-&gt;getTime() &lt;&lt; &quot;)&quot;
++            &lt;&lt; std::endl;
++
+   return 0;
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/drop.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/drop.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/drop.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -1,3 +1,4 @@
++#include &lt;iostream&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+@@ -6,6 +7,7 @@
+ #include &lt;OpenFDM/ExternalInteract.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ 
+ using namespace OpenFDM;
+ 
+@@ -47,11 +49,19 @@
+ 
+   system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;drop&quot;));
+ 
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
++
+   if (!system-&gt;init())
+     return 1;
+ 
+   system-&gt;simulate(45);
+ 
++  timeCounter.stop();
++  std::cout &lt;&lt; &quot;Execution time: &quot; &lt;&lt; timeCounter.getTime()
++            &lt;&lt; &quot;s (&quot; &lt;&lt; double(timeCounter.getTime())/system-&gt;getTime() &lt;&lt; &quot;)&quot;
++            &lt;&lt; std::endl;
++
+   return 0;
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -1,3 +1,4 @@
++#include &lt;iostream&gt;
+ #include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+ #include &lt;OpenFDM/FixedRootJoint.h&gt;
+@@ -6,6 +7,7 @@
+ #include &lt;OpenFDM/ExternalInteract.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ #include &lt;OpenFDM/WGS84Planet.h&gt;
+ 
+ using namespace OpenFDM;
+@@ -58,6 +60,9 @@
+   system-&gt;getEnvironment()-&gt;setPlanet(planet);
+   system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;foucault&quot;));
+ 
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
++
+   if (!system-&gt;init())
+     return 1;
+ 
+@@ -65,5 +70,10 @@
+ //   system-&gt;simulate(60*60);
+   system-&gt;simulate(60);
+ 
++  timeCounter.stop();
++  std::cout &lt;&lt; &quot;Execution time: &quot; &lt;&lt; timeCounter.getTime()
++            &lt;&lt; &quot;s (&quot; &lt;&lt; double(timeCounter.getTime())/system-&gt;getTime() &lt;&lt; &quot;)&quot;
++            &lt;&lt; std::endl;
++
+   return 0;
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -12,6 +12,7 @@
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ #include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &quot;ErrorCollectorCallback.h&quot;
+ 
+@@ -97,6 +98,9 @@
+   SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
+   system-&gt;setNode(group);
+ 
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
++
+   if (!system-&gt;init()) {
+     std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+@@ -104,6 +108,11 @@
+ 
+   system-&gt;simulate(10);
+ 
++  timeCounter.stop();
++  std::cout &lt;&lt; &quot;Execution time: &quot; &lt;&lt; timeCounter.getTime()
++            &lt;&lt; &quot;s (&quot; &lt;&lt; double(timeCounter.getTime())/system-&gt;getTime() &lt;&lt; &quot;)&quot;
++            &lt;&lt; std::endl;
++
+   real_type posError = posErrorCallback-&gt;error();
+   std::cout &lt;&lt; &quot;Position error check with error = &quot; &lt;&lt; posError &lt;&lt; std::endl;
+   real_type velError = velErrorCallback-&gt;error();
+
+Modified: branches/OpenFDM-StateSeparation/src/test/linalg.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/linalg.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/linalg.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -7,6 +7,7 @@
+ #include &lt;OpenFDM/Quaternion.h&gt;
+ #include &lt;OpenFDM/Matrix.h&gt;
+ #include &lt;OpenFDM/Vector.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ 
+ namespace OpenFDM {
+ 
+@@ -117,7 +118,10 @@
+ int
+ main(int argc, char *argv[])
+ {
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
+   if (!OpenFDM::solvetest())
+     return EXIT_FAILURE;
++  std::cout &lt;&lt; &quot;SUCCESS execution time: &quot; &lt;&lt; timeCounter.getTime() &lt;&lt; std::endl;
+   return EXIT_SUCCESS;
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-08-19 19:52:03 UTC (rev 1105)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-08-20 16:25:32 UTC (rev 1106)
+@@ -2,6 +2,7 @@
+  *
+  */
+ 
++#include &lt;iostream&gt;
+ #include &lt;OpenFDM/Bias.h&gt;
+ #include &lt;OpenFDM/BinaryFunction.h&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+@@ -25,6 +26,7 @@
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
++#include &lt;OpenFDM/Time.h&gt;
+ #include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/Pacejka89.h&gt;
+ #include &lt;OpenFDM/Pacejka94.h&gt;
+@@ -288,6 +290,9 @@
+   normalForceNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(normalForce)));
+   sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(0)));
+ 
++  OpenFDM::TimeCounter timeCounter;
++  timeCounter.start();
++
+   if (!system-&gt;init())
+     return EXIT_FAILURE;
+ 
+@@ -303,5 +308,10 @@
+   sideslipNode-&gt;setPropertyValue(&quot;Value&quot;, Variant(Matrix(0)));
+   system-&gt;simulate(system-&gt;getTime() + alphaRange/alphaSpeed);
+ 
++  timeCounter.stop();
++  std::cout &lt;&lt; &quot;Execution time: &quot; &lt;&lt; timeCounter.getTime()
++            &lt;&lt; &quot;s (&quot; &lt;&lt; double(timeCounter.getTime())/system-&gt;getTime() &lt;&lt; &quot;)&quot;
++            &lt;&lt; std::endl;
++
+   return EXIT_SUCCESS;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001063.html">[OpenFDM-svn] r1105 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001065.html">[OpenFDM-svn] r1107 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1064">[ date ]</a>
+              <a href="thread.html#1064">[ thread ]</a>
+              <a href="subject.html#1064">[ subject ]</a>
+              <a href="author.html#1064">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

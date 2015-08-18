@@ -1,0 +1,1211 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r218 - in trunk/OpenFDM: . src src/JSBSim src/OpenFDM src/OpenFDM/XML
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r218%20-%20in%20trunk/OpenFDM%3A%20.%20src%20src/JSBSim%20src/OpenFDM%20src/OpenFDM/XML&In-Reply-To=%3C200601221850.k0MIo5rs003226%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000198.html">
+   <LINK REL="Next"  HREF="000200.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r218 - in trunk/OpenFDM: . src src/JSBSim src/OpenFDM src/OpenFDM/XML</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r218%20-%20in%20trunk/OpenFDM%3A%20.%20src%20src/JSBSim%20src/OpenFDM%20src/OpenFDM/XML&In-Reply-To=%3C200601221850.k0MIo5rs003226%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r218 - in trunk/OpenFDM: . src src/JSBSim src/OpenFDM src/OpenFDM/XML">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Jan 22 19:50:05 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000198.html">[OpenFDM-svn] r217 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/XML
+</A></li>
+        <LI>Next message: <A HREF="000200.html">[OpenFDM-svn] r219 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#199">[ date ]</a>
+              <a href="thread.html#199">[ thread ]</a>
+              <a href="subject.html#199">[ subject ]</a>
+              <a href="author.html#199">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-22 19:49:31 +0100 (Sun, 22 Jan 2006)
+New Revision: 218
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/XML/Attributes.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/Attributes.h
+   trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.h
+   trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h
+   trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.h
+   trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h
+   trunk/OpenFDM/src/OpenFDM/XML/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/XMLReader.h
+Removed:
+   trunk/OpenFDM/src/OpenFDM/config.h.in
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/JSBSim/Makefile.am
+   trunk/OpenFDM/src/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+A subset of a SAX2 infrastructure
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/configure.ac	2006-01-22 18:49:31 UTC (rev 218)
+@@ -42,18 +42,54 @@
+ ]
+ AC_SUBST(enable_range_checking)
+ 
++dnl Since OpenFDM is c++ ...
++AC_LANG_PUSH(C++)
++
+ dnl Check for headers and symbols required for better speaking backtraces ...
+ AC_CHECK_HEADERS([execinfo.h cxxabi.h])
+ AC_CHECK_FUNCS([backtrace backtrace_symbols])
+ 
+-AM_CONFIG_HEADER([src/OpenFDM/config.h])
++dnl Choice of used xml parsers
++dnl Check for expat
++AC_CHECK_HEADERS([expat.h],
++  [AC_CHECK_LIB([expat],[XML_ExpatVersion],
++     [openfdm_expat_enabled=&quot;1&quot;])
++  ])
++AC_CHECK_FUNC([XML_SetSkippedEntityHandler])
++AM_CONDITIONAL([ENABLE_EXPAT], [test &quot;x$openfdm_expat_enabled&quot; = &quot;x1&quot;])
++AC_SUBST(openfdm_expat_enabled)
+ 
++dnl Check for SimGear and easyxml
++AC_CHECK_HEADERS([simgear/xml/easyxml.hxx],[openfdm_easyxml_enabled=&quot;1&quot;])
++AM_CONDITIONAL([ENABLE_EASYXML], [test &quot;x$openfdm_easyxml_enabled&quot; = &quot;x1&quot;])
++AC_SUBST(openfdm_easyxml_enabled)
++
++dnl Check for libxml2 - this is the prefered one, since it does validation
++dnl not yet implemented
++AM_CONDITIONAL([ENABLE_LIBXML2], [test &quot;x$openfdm_libxml2_enabled&quot; = &quot;x1&quot;])
++AC_SUBST(openfdm_libxml2_enabled)
++
++dnl simple check for qt4
++AC_CHECK_HEADERS([Qt/QtGlobal],[openfdm_have_qt4=&quot;yes&quot;])
++dnl simple check for osg
++AC_CHECK_HEADERS([osg/Object],[openfdm_have_osg=&quot;yes&quot;])
++dnl avoid trying to build the editor if qt4 or osg is missing
++if test &quot;x$openfdm_have_qt4&quot; = &quot;xyes&quot; &amp;&amp; test &quot;x$openfdm_have_osg&quot; = &quot;xyes&quot;
++then
++  openfdm_builder_enabled=&quot;yes&quot;
++else
++  openfdm_builder_enabled=&quot;no&quot;
++fi
++AM_CONDITIONAL([ENABLE_BUILDER], [test &quot;x$openfdm_builder_enabled&quot; = &quot;xyes&quot;])
++
+ dnl write makefiles and config.h
++AM_CONFIG_HEADER([src/OpenFDM/config.h])
+ AC_OUTPUT([
+   src/OpenFDM/OpenFDMConfig.h
+   Makefile
+   src/Makefile
+   src/OpenFDM/Makefile
++  src/OpenFDM/XML/Makefile
+   src/JSBSim/Makefile
+   src/builder/Makefile
+   share/Makefile
+
+Modified: trunk/OpenFDM/src/JSBSim/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/Makefile.am	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/JSBSim/Makefile.am	2006-01-22 18:49:31 UTC (rev 218)
+@@ -26,3 +26,4 @@
+   LegacyJSBSimReader.cpp \
+   Tablereader.cpp \
+   XMLReader.cpp
++libJSBReader_la_LIBADD = -lsgxml -lsgstructure
+
+Modified: trunk/OpenFDM/src/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/Makefile.am	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/Makefile.am	2006-01-22 18:49:31 UTC (rev 218)
+@@ -1 +1,4 @@
+-SUBDIRS = OpenFDM JSBSim builder
++SUBDIRS = OpenFDM JSBSim
++if ENABLE_BUILDER
++SUBDIRS += builder
++endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-22 18:49:31 UTC (rev 218)
+@@ -1,3 +1,4 @@
++SUBDIRS = XML
+ 
+ INCLUDES = -I$(srcdir)/..
+ 
+@@ -19,7 +20,6 @@
+ lib_LTLIBRARIES = libOpenFDM.la
+ 
+ # Will need these at the moment ...
+-libOpenFDM_la_LIBADD = -lsgxml -lsgstructure
+ nobase_OpenFDMinclude_HEADERS = \
+   AeroForce.h \
+   AirSpring.h \
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-01-22 18:49:31 UTC (rev 218)
+@@ -1,4 +1,10 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
+ 
++#ifndef OpenFDM_Config_H
++#define OpenFDM_Config_H
++
+ #ifdef OpenFDM_ENABLE_DEBUG
+ #undef OpenFDM_ENABLE_DEBUG
+ #endif
+@@ -8,3 +14,20 @@
+ #undef OpenFDM_ENABLE_RANGE_CHECKING
+ #endif
+ #define OpenFDM_ENABLE_RANGE_CHECKING @enable_range_checking@
++
++#ifdef OpenFDM_HAVE_EXPAT_XMLREADER
++#undef OpenFDM_HAVE_EXPAT_XMLREADER
++#endif
++#define OpenFDM_HAVE_EXPAT_XMLREADER @openfdm_expat_enabled@
++
++#ifdef OpenFDM_HAVE_EASYXML_XMLREADER
++#undef OpenFDM_HAVE_EASYXML_XMLREADER
++#endif
++#define OpenFDM_HAVE_EASYXML_XMLREADER @openfdm_easyxml_enabled@
++
++#ifdef OpenFDM_HAVE_LIBXML2_XMLREADER
++#undef OpenFDM_HAVE_LIBXML2_XMLREADER
++#endif
++#define OpenFDM_HAVE_LIBXML2_XMLREADER @openfdm_libxml2_enabled@
++
++#endif
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/Attributes.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/Attributes.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/Attributes.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,15 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Attributes.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++Attributes::~Attributes(void)
++{
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/Attributes.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/Attributes.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/Attributes.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/Attributes.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,44 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_XML_Attributes_H
++#define OpenFDM_XML_Attributes_H
++
++namespace OpenFDM {
++namespace XML {
++
++enum Type {
++  CDATA,
++  ID,
++  IDREF,
++  IDREFS,
++  NMTOKEN,
++  NMTOKENS,
++  ENTITY,
++  ENTITIES,
++  NOTATION
++};
++
++class Attributes {
++public:
++  virtual ~Attributes(void);
++
++  virtual int getIndex(const char* qName) const = 0;
++//   virtual int getIndex(const char* uri, const char* localName) = 0;
++  virtual int getLength(void) const = 0;
++  virtual const char* getLocalName(int index) const = 0;
++//   virtual const char* getQName(int index) const = 0;
++  virtual Type getType(int index) const = 0;
++  virtual Type getType(const char* qName) const = 0;
++//   virtual Type getType(const char* uri, const char* localName) const = 0;
++//   virtual const char* getURI(int index) const = 0;
++  virtual const char* getValue(int index) const = 0;
++  virtual const char* getValue(const char* qName) const = 0;
++//   virtual const char* getValue(const char* uri, const char* localName) const = 0;
++};
++
++} // namespace XML
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/Attributes.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,56 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;ContentHandler.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++ContentHandler::~ContentHandler(void)
++{
++}
++
++void
++ContentHandler::characters(const char* data, unsigned length)
++{
++}
++
++void
++ContentHandler::comment(const char* commentData, unsigned length)
++{
++}
++
++void
++ContentHandler::startDocument(void)
++{
++}
++
++void
++ContentHandler::endDocument(void)
++{
++}
++
++void
++ContentHandler::startElement(const char*, const char*, const char*,
++                             const Attributes*)
++{
++}
++
++void
++ContentHandler::endElement(const char*, const char*, const char*)
++{
++}
++
++void
++ContentHandler::skippedEntity(const char* name)
++{
++}
++
++void
++ContentHandler::processingInstruction(const char*, const char*)
++{
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,44 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_XML_ContentHandler_H
++#define OpenFDM_XML_ContentHandler_H
++
++#include &lt;OpenFDM/Referenced.h&gt;
++
++namespace OpenFDM {
++namespace XML {
++
++class Attributes;
++
++class ContentHandler : public Referenced {
++public:
++  virtual ~ContentHandler(void);
++
++  virtual void characters(const char* data, unsigned length);
++/*   virtual void ignorableWhitespace(const char* data, unsigned length); */
++
++  virtual void comment(const char* commentData, unsigned length);
++
++  virtual void startDocument(void);
++  virtual void endDocument(void);
++
++  virtual void startElement(const char* uri, const char* localName,
++                            const char* qName, const Attributes* atts);
++  virtual void endElement(const char* uri, const char* localName,
++                          const char* qName);
++
++  virtual void skippedEntity(const char* name);
++  virtual void processingInstruction(const char* target, const char* data);
++
++//   virtual void startPrefixMapping(const char* prefix, const char* uri);
++//   virtual void endPrefixMapping(const char* prefix);
++
++//   virtual void setDocumentLocator(Locator locator);
++};
++
++} // namespace XML
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ContentHandler.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,158 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &lt;simgear/xml/easyxml.hxx&gt;
++#include &quot;EasyXMLReader.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++class EasyXMLAttributes : public Attributes {
++public:
++  EasyXMLAttributes(const XMLAttributes* atts);
++  virtual int getIndex(const char* qName) const;
++  virtual int getLength(void) const;
++  virtual const char* getLocalName(int index) const;
++  virtual Type getType(int) const;
++  virtual Type getType(const char*) const;
++  virtual const char* getValue(int index) const;
++  virtual const char* getValue(const char* qName) const;
++private:
++  const XMLAttributes* mAtts;
++};
++
++EasyXMLAttributes::EasyXMLAttributes(const XMLAttributes* atts) : mAtts(atts)
++{
++}
++
++int
++EasyXMLAttributes::getIndex(const char* qName) const
++{
++  return mAtts-&gt;findAttribute(qName);
++}
++
++int
++EasyXMLAttributes::getLength(void) const
++{
++  return mAtts-&gt;size();
++}
++
++const char*
++EasyXMLAttributes::getLocalName(int index) const
++{
++  return mAtts-&gt;getName(index);
++}
++
++Type
++EasyXMLAttributes::getType(int) const
++{
++  return CDATA;
++}
++
++Type
++EasyXMLAttributes::getType(const char*) const
++{
++  return CDATA;
++}
++
++const char*
++EasyXMLAttributes::getValue(int index) const
++{
++  return mAtts-&gt;getValue(index);
++}
++
++const char*
++EasyXMLAttributes::getValue(const char* qName) const
++{
++  return mAtts-&gt;getValue(qName);
++}
++
++class EasyXMLVisitor : public XMLVisitor {
++public:
++  EasyXMLVisitor(SharedPtr&lt;ContentHandler&gt; contentHandler,
++                 SharedPtr&lt;ErrorHandler&gt; errorHandler) :
++    mContentHandler(contentHandler),
++    mErrorHandler(errorHandler)
++  {}
++  virtual ~EasyXMLVisitor(void) {}
++
++  virtual void startXML()
++  {
++    if (!mContentHandler)
++      return;
++    mContentHandler-&gt;startDocument();
++  }
++  virtual void endXML()
++  {
++    if (!mContentHandler)
++      return;
++    mContentHandler-&gt;endDocument();
++  }
++
++  virtual void startElement(const char *name, const XMLAttributes&amp; atts)
++  {
++    if (!mContentHandler)
++      return;
++    EasyXMLAttributes eAtts(&amp;atts);
++    mContentHandler-&gt;startElement(&quot;&quot;, name, name, &amp;eAtts);
++  }
++  virtual void endElement(const char *name)
++  {
++    if (!mContentHandler)
++      return;
++    mContentHandler-&gt;endElement(&quot;&quot;, name, name);
++  }
++  virtual void data(const char *s, int length)
++  {
++    if (!mContentHandler)
++      return;
++    mContentHandler-&gt;characters(s, length);
++  }
++  virtual void pi(const char * target, const char * data)
++  {
++    if (!mContentHandler)
++      return;
++    mContentHandler-&gt;processingInstruction(target, data);
++  }
++  virtual void warning (const char * message, int line, int column)
++  {
++    if (!mErrorHandler)
++      return;
++    mErrorHandler-&gt;warning(message, line, column);
++  }
++
++private:
++  SharedPtr&lt;ContentHandler&gt; mContentHandler;
++  SharedPtr&lt;ErrorHandler&gt; mErrorHandler;
++};
++
++
++EasyXMLReader::EasyXMLReader(void)
++{
++}
++
++EasyXMLReader::~EasyXMLReader(void)
++{
++}
++
++void
++EasyXMLReader::parse(std::istream&amp; stream)
++{
++  try {
++    const ErrorHandler* eh = mErrorHandler;
++    const ContentHandler* ch = mContentHandler;
++    EasyXMLVisitor easyXMLVisitor(const_cast&lt;ContentHandler*&gt;(ch),
++                                  const_cast&lt;ErrorHandler*&gt;(eh));
++    readXML(stream, easyXMLVisitor);
++  } catch (const sg_exception&amp; e) {
++    if (mErrorHandler) {
++      std::string error = e.getOrigin() + &quot;: &quot; + e.getFormattedMessage();
++      const ErrorHandler* eh = mErrorHandler;
++      const_cast&lt;ErrorHandler*&gt;(eh)-&gt;error(error.c_str(), 0, 0);
++    }
++  }
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,19 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;XMLReader.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++class EasyXMLReader : public XMLReader {
++public:
++  EasyXMLReader(void);
++  virtual ~EasyXMLReader(void);
++  // returns bool instead of void to signal errors
++  virtual void parse(std::istream&amp; stream);
++};
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/EasyXMLReader.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,30 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;ErrorHandler.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++ErrorHandler::~ErrorHandler(void)
++{
++}
++
++void
++ErrorHandler::error(const char* msg, unsigned line, unsigned col)
++{
++}
++
++void
++ErrorHandler::fatalError(const char* msg, unsigned line, unsigned col)
++{
++}
++
++void
++ErrorHandler::warning(const char* msg, unsigned line, unsigned col)
++{
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,24 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_XML_ErrorHandler_H
++#define OpenFDM_XML_ErrorHandler_H
++
++#include &lt;OpenFDM/Referenced.h&gt;
++
++namespace OpenFDM {
++namespace XML {
++
++class ErrorHandler : public Referenced {
++public:
++  virtual ~ErrorHandler(void);
++  virtual void error(const char* msg, unsigned line, unsigned col);
++  virtual void fatalError(const char* msg, unsigned line, unsigned col);
++  virtual void warning(const char* msg, unsigned line, unsigned col);
++};
++
++} // namespace XML
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ErrorHandler.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,214 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iostream&gt;
++#include &lt;expat.h&gt;
++#include &quot;ExpatXMLReader.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++class ExpatXMLAttributes : public Attributes {
++public:
++  ExpatXMLAttributes(const char**atts);
++  virtual int getIndex(const char* qName) const;
++  virtual int getLength(void) const;
++  virtual const char* getLocalName(int index) const;
++  virtual Type getType(int) const;
++  virtual Type getType(const char*) const;
++  virtual const char* getValue(int index) const;
++  virtual const char* getValue(const char* qName) const;
++private:
++  unsigned mLength;
++  const char** mAtts;
++};
++
++ExpatXMLAttributes::ExpatXMLAttributes(const char ** atts) :
++  mLength(0), mAtts(atts)
++{
++  for (unsigned i = 0; mAtts[i] != 0; i += 2)
++    ++mLength;
++}
++
++int
++ExpatXMLAttributes::getIndex(const char* qName) const
++{
++  for (unsigned i = 0; mAtts[i] != 0; i += 2) {
++    if (strcmp(mAtts[i*2], qName) == 0)
++      return i;
++  }
++  return -1;
++}
++
++int
++ExpatXMLAttributes::getLength(void) const
++{
++  return mLength;
++}
++
++const char*
++ExpatXMLAttributes::getLocalName(int index) const
++{
++  return (index &lt; mLength) ? mAtts[index*2] : 0;
++}
++
++Type
++ExpatXMLAttributes::getType(int) const
++{
++  return CDATA; /*FIXME*/
++}
++
++Type
++ExpatXMLAttributes::getType(const char*) const
++{
++  return CDATA; /*FIXME*/
++}
++
++const char*
++ExpatXMLAttributes::getValue(int index) const
++{
++  return (index &lt; mLength) ? mAtts[index*2+1] : 0;
++}
++
++const char*
++ExpatXMLAttributes::getValue(const char* qName) const
++{
++  for (unsigned i = 0; mAtts[i] != 0; i += 2) {
++    if (strcmp(mAtts[i*2], qName) == 0)
++      return mAtts[i*2+1];
++  }
++  return 0;
++}
++
++static inline ContentHandler*
++userDataToContentHandler(void* userData)
++{
++  ExpatXMLReader* reader = static_cast&lt;ExpatXMLReader*&gt;(userData);
++  if (!reader)
++    return 0;
++  ContentHandler* contentHandler = reader-&gt;getContentHandler();
++  return contentHandler;
++}
++
++static void
++ExpatStartElement(void* userData, const char* name, const char** atts)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  ExpatXMLAttributes eAtts(atts);
++  if (contentHandler)
++    contentHandler-&gt;startElement(&quot;&quot;, name, name, &amp;eAtts);
++}
++
++static void
++ExpatEndElement(void* userData, const char* name)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  if (contentHandler)
++    contentHandler-&gt;endElement(&quot;&quot;, name, name);
++}
++
++static void
++ExpatCharacterData(void* userData, const char* data, int length)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  if (contentHandler)
++    contentHandler-&gt;characters(data, length);
++}
++
++static void
++ExpatComment(void* userData, const char* data)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  if (contentHandler)
++    contentHandler-&gt;comment(data, strlen(data));
++}
++
++#ifdef HAVE_XML_SETSKIPPEDENTITYHANDLER
++static void
++ExpatSkippedEntity(void *userData, const char *entityName, int)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  if (contentHandler)
++    contentHandler-&gt;skippedEntity(entityName);
++}
++#endif
++
++static void
++ExpatProcessingInstructions(void* userData, const char* target, const char* data)
++{
++  ContentHandler* contentHandler = userDataToContentHandler(userData);
++  if (contentHandler)
++    contentHandler-&gt;processingInstruction(target, data);
++}
++
++ExpatXMLReader::ExpatXMLReader(void)
++{
++}
++
++ExpatXMLReader::~ExpatXMLReader(void)
++{
++}
++
++void
++ExpatXMLReader::parse(std::istream&amp; stream)
++{
++  XML_Parser parser = XML_ParserCreate(0);
++//   XML_Parser parser = XML_ParserCreateNS(0, ':');
++  XML_SetUserData(parser, this);
++  XML_SetElementHandler(parser, ExpatStartElement, ExpatEndElement);
++  XML_SetCharacterDataHandler(parser, ExpatCharacterData);
++  XML_SetProcessingInstructionHandler(parser, ExpatProcessingInstructions);
++  XML_SetCommentHandler(parser, ExpatComment);
++#ifdef HAVE_XML_SETSKIPPEDENTITYHANDLER
++  XML_SetSkippedEntityHandler(parser, ExpatSkippedEntity);
++#endif
++
++  if (mContentHandler)
++    mContentHandler-&gt;startDocument();
++
++  unsigned bufSize = 32*1024;
++  char* buf = new char[bufSize];
++  while (!stream.eof()) {
++    if (!stream.good()) {
++      if (mErrorHandler)
++        mErrorHandler-&gt;fatalError(&quot;ExpatXMLReader: &quot;
++                                  &quot;Can not read from input stream&quot;,
++                                  XML_GetCurrentLineNumber(parser),
++                                  XML_GetCurrentColumnNumber(parser));
++      XML_ParserFree(parser);
++      delete [] buf;
++      return;
++    }
++
++    stream.read(buf, bufSize);
++    if (!XML_Parse(parser, buf, stream.gcount(), false)) {
++      if (mErrorHandler)
++        mErrorHandler-&gt;fatalError(&quot;ExpatXMLReader: Error from Parser&quot;,
++                                  XML_GetCurrentLineNumber(parser),
++                                  XML_GetCurrentColumnNumber(parser));
++      XML_ParserFree(parser);
++      delete [] buf;
++      return;
++    }
++  }
++
++  if (!XML_Parse(parser, buf, 0, true)) {
++    if (mErrorHandler)
++      mErrorHandler-&gt;fatalError(&quot;ExpatXMLReader: Error from Parser&quot;,
++                                XML_GetCurrentLineNumber(parser),
++                                XML_GetCurrentColumnNumber(parser));
++    XML_ParserFree(parser);
++    delete [] buf;
++    return;
++  }
++
++  XML_ParserFree(parser);
++  delete [] buf;
++
++  if (mContentHandler)
++    mContentHandler-&gt;endDocument();
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,19 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;XMLReader.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++class ExpatXMLReader : public XMLReader {
++public:
++  ExpatXMLReader(void);
++  virtual ~ExpatXMLReader(void);
++  // returns bool instead of void to signal errors
++  virtual void parse(std::istream&amp; stream);
++};
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/Makefile.am	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/Makefile.am	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,47 @@
++INCLUDES = -I$(srcdir)/../..
++
++OpenFDMXMLincludedir = $(includedir)/OpenFDM/XML
++
++lib_LTLIBRARIES = libOpenFDMXML.la
++
++nobase_OpenFDMXMLinclude_HEADERS = \
++  Attributes.h \
++  ContentHandler.h \
++  ErrorHandler.h \
++  XMLReader.h
++
++libOpenFDMXML_la_SOURCES = \
++  Attributes.cpp \
++  ContentHandler.cpp \
++  ErrorHandler.cpp \
++  XMLReader.cpp
++
++if ENABLE_EXPAT
++
++lib_LTLIBRARIES += libOpenFDMexpatXML.la
++
++nobase_OpenFDMXMLinclude_HEADERS += ExpatXMLReader.h
++libOpenFDMexpatXML_la_SOURCES = ExpatXMLReader.cpp
++libOpenFDMexpatXML_la_LIBADD = -lexpat libOpenFDMXML.la
++
++endif
++
++if ENABLE_EASYXML
++
++lib_LTLIBRARIES += libOpenFDMeasyxmlXML.la
++
++nobase_OpenFDMXMLinclude_HEADERS += EasyXMLReader.h
++libOpenFDMeasyxmlXML_la_SOURCES = EasyXMLReader.cpp
++libOpenFDMeasyxmlXML_la_LIBADD = -lsgxml -lsgstructure libOpenFDMXML.la
++
++endif
++
++if ENABLE_LIBXML2
++
++lib_LTLIBRARIES += libOpenFDMlibxml2XML.la
++
++nobase_OpenFDMXMLinclude_HEADERS += Libxml2XMLReader.h
++libOpenFDMlibxml2XML_la_SOURCES = Libxml2XMLReader.cpp
++libOpenFDMlibxml2XML_la_LIBADD = -lxml2 libOpenFDMXML.la
++
++endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/Makefile.am
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,45 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;XMLReader.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++Attributes::~Attributes(void)
++{
++}
++
++XMLReader::~XMLReader(void)
++{
++}
++
++ContentHandler*
++XMLReader::getContentHandler(void) const
++{
++  const ContentHandler* ch = mContentHandler;
++  return const_cast&lt;ContentHandler*&gt;(ch);
++}
++
++void
++XMLReader::setContentHandler(ContentHandler* contentHandler)
++{
++  mContentHandler = contentHandler;
++}
++
++ErrorHandler*
++XMLReader::getErrorHandler(void) const
++{
++  const ErrorHandler* eh = mErrorHandler;
++  return const_cast&lt;ErrorHandler*&gt;(eh);
++}
++
++void
++XMLReader::setErrorHandler(ErrorHandler* errorHandler)
++{
++  mErrorHandler = errorHandler;
++}
++
++} // namespace XML
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/XML/XMLReader.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/XMLReader.h	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/XML/XMLReader.h	2006-01-22 18:49:31 UTC (rev 218)
+@@ -0,0 +1,39 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_XML_XMLReader_H
++#define OpenFDM_XML_XMLReader_H
++
++#include &lt;iosfwd&gt;
++
++#include &lt;OpenFDM/Referenced.h&gt;
++#include &lt;OpenFDM/SharedPtr.h&gt;
++
++#include &quot;Attributes.h&quot;
++#include &quot;ContentHandler.h&quot;
++#include &quot;ErrorHandler.h&quot;
++
++namespace OpenFDM {
++namespace XML {
++
++class XMLReader : public Referenced {
++public:
++  virtual ~XMLReader(void);
++  virtual void parse(std::istream&amp; stream) = 0;
++
++  ContentHandler* getContentHandler(void) const;
++  void setContentHandler(ContentHandler* contentHandler);
++
++  ErrorHandler* getErrorHandler(void) const;
++  void setErrorHandler(ErrorHandler* errorHandler);
++
++protected:
++  SharedPtr&lt;ContentHandler&gt; mContentHandler;
++  SharedPtr&lt;ErrorHandler&gt; mErrorHandler;
++};
++
++} // namespace XML
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/XML/XMLReader.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Deleted: trunk/OpenFDM/src/OpenFDM/config.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/config.h.in	2006-01-22 15:17:59 UTC (rev 217)
++++ trunk/OpenFDM/src/OpenFDM/config.h.in	2006-01-22 18:49:31 UTC (rev 218)
+@@ -1,67 +0,0 @@
+-/* src/OpenFDM/config.h.in.  Generated from configure.ac by autoheader.  */
+-
+-/* Define to 1 if you have the `backtrace' function. */
+-#undef HAVE_BACKTRACE
+-
+-/* Define to 1 if you have the `backtrace_symbols' function. */
+-#undef HAVE_BACKTRACE_SYMBOLS
+-
+-/* Define to 1 if you have the &lt;cxxabi.h&gt; header file. */
+-#undef HAVE_CXXABI_H
+-
+-/* Define to 1 if you have the &lt;dlfcn.h&gt; header file. */
+-#undef HAVE_DLFCN_H
+-
+-/* Define to 1 if you have the &lt;execinfo.h&gt; header file. */
+-#undef HAVE_EXECINFO_H
+-
+-/* Define to 1 if you have the &lt;inttypes.h&gt; header file. */
+-#undef HAVE_INTTYPES_H
+-
+-/* Define to 1 if you have the &lt;memory.h&gt; header file. */
+-#undef HAVE_MEMORY_H
+-
+-/* Define to 1 if you have the &lt;stdint.h&gt; header file. */
+-#undef HAVE_STDINT_H
+-
+-/* Define to 1 if you have the &lt;stdlib.h&gt; header file. */
+-#undef HAVE_STDLIB_H
+-
+-/* Define to 1 if you have the &lt;strings.h&gt; header file. */
+-#undef HAVE_STRINGS_H
+-
+-/* Define to 1 if you have the &lt;string.h&gt; header file. */
+-#undef HAVE_STRING_H
+-
+-/* Define to 1 if you have the &lt;sys/stat.h&gt; header file. */
+-#undef HAVE_SYS_STAT_H
+-
+-/* Define to 1 if you have the &lt;sys/types.h&gt; header file. */
+-#undef HAVE_SYS_TYPES_H
+-
+-/* Define to 1 if you have the &lt;unistd.h&gt; header file. */
+-#undef HAVE_UNISTD_H
+-
+-/* Name of package */
+-#undef PACKAGE
+-
+-/* Define to the address where bug reports for this package should be sent. */
+-#undef PACKAGE_BUGREPORT
+-
+-/* Define to the full name of this package. */
+-#undef PACKAGE_NAME
+-
+-/* Define to the full name and version of this package. */
+-#undef PACKAGE_STRING
+-
+-/* Define to the one symbol short name of this package. */
+-#undef PACKAGE_TARNAME
+-
+-/* Define to the version of this package. */
+-#undef PACKAGE_VERSION
+-
+-/* Define to 1 if you have the ANSI C header files. */
+-#undef STDC_HEADERS
+-
+-/* Version number of package */
+-#undef VERSION
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000198.html">[OpenFDM-svn] r217 - in trunk/OpenFDM/src: JSBSim OpenFDM OpenFDM/XML
+</A></li>
+	<LI>Next message: <A HREF="000200.html">[OpenFDM-svn] r219 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#199">[ date ]</a>
+              <a href="thread.html#199">[ thread ]</a>
+              <a href="subject.html#199">[ subject ]</a>
+              <a href="author.html#199">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

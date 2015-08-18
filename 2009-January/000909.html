@@ -1,0 +1,303 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r944 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r944%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901171408.n0HE8BtR001811%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000908.html">
+   <LINK REL="Next"  HREF="000910.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r944 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r944%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901171408.n0HE8BtR001811%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r944 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan 17 15:08:11 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000908.html">[OpenFDM-svn] r943 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000910.html">[OpenFDM-svn] r945 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#909">[ date ]</a>
+              <a href="thread.html#909">[ thread ]</a>
+              <a href="subject.html#909">[ subject ]</a>
+              <a href="author.html#909">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-17 15:08:11 +0100 (Sat, 17 Jan 2009)
+New Revision: 944
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.h
+Log:
+Add turnslip and clean up magic formula implementations.
+
+M    OpenFDM/Pacejka89.h
+M    OpenFDM/PacejkaTire.cpp
+M    OpenFDM/PacejkaTire.h
+M    OpenFDM/Pacejka89.cpp
+M    OpenFDM/Pacejka94.h
+M    OpenFDM/Pacejka94.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp	2009-01-17 14:08:11 UTC (rev 944)
+@@ -68,7 +68,7 @@
+ 
+   mB0(2),
+   mB1(0), mB2(1000),
+-  mB3(0), mB4(100), mB5(0),
++  mB3(0), mB4(50), mB5(0),
+   mB6(0), mB7(0), mB8(0.5),
+   mB9(0), mB10(0),
+ 
+@@ -112,7 +112,7 @@
+ Vector6
+ Pacejka89::getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                     const real_type&amp; alpha, const real_type&amp; kappa,
+-                    const real_type&amp; gamma) const
++                    const real_type&amp; gamma, const real_type&amp; phi) const
+ {
+   // Pacejka suggests this correction to avoid singularities at zero speed
+   const real_type e_v = 1e-2;
+@@ -128,9 +128,9 @@
+   // Shape factor
+   real_type Cx = mB0;
+   // Peak factor
+-  real_type Dx = mB1*sqr(Fz) + mB2*Fz;
++  real_type Dx = (mB1*Fz + mB2)*Fz;
+   // BCD
+-  real_type BCDx = (mB3*sqr(Fz) + mB4*Fz)*exp(-mB5*Fz);
++  real_type BCDx = (mB3*Fz + mB4)*Fz*exp(-mB5*Fz);
+   // Stiffness factor
+   real_type Bx = BCDx/(Cx*Dx + e_v);
+   // Horizonal shift
+@@ -142,7 +142,7 @@
+ //   real_type kappax = kappa + SHx;
+   real_type kappax = 100*kappa + SHx;
+   // Curvature factor
+-  real_type Ex = (mB6*sqr(Fz) + mB7*Fz + mB8);
++  real_type Ex = (mB6*Fz + mB7)*Fz + mB8;
+   // See P175 Note on Fig 4.10: Clamp E &lt;= 1 to avoid unrealistic behaviour
+   Ex = min(Ex, real_type(1));
+   // The resulting longitudinal force
+@@ -180,19 +180,19 @@
+   // Shape factor
+   real_type Cz = mC0;
+   // Peak factor
+-  real_type Dz = mC1*sqr(Fz) + mC2*Fz;
++  real_type Dz = (mC1*Fz + mC2)*Fz;
+   // BCD
+-  real_type BCDz = (mC3*sqr(Fz) + mC4*Fz)*(1 - mC6*fabs(gamma))*exp(-mC5*Fz);
++  real_type BCDz = (mC3*Fz + mC4)*Fz*(1 - mC6*fabs(gamma))*exp(-mC5*Fz);
+   // Stiffness factor
+   real_type Bz = BCDz/(Cz*Dz + e_v);
+   // Horizonal shift
+   real_type SHz = mC11*gamma + mC12*Fz + mC13;
+   // Vertical shift
+-  real_type SVz = (mC14*sqr(Fz) + mC15*Fz)*gamma + mC16*Fz + mC17;
++  real_type SVz = (mC14*Fz + mC15)*Fz*gamma + mC16*Fz + mC17;
+   // Shifted lateral slip
+   real_type alphaz = rad2deg*alpha + SHz;
+   // Curvature factor
+-  real_type Ez = (mC7*sqr(Fz) + mC8*Fz + mC9)*(1 - mC10*fabs(gamma));
++  real_type Ez = ((mC7*Fz + mC8)*Fz + mC9)*(1 - mC10*fabs(gamma));
+   // See P175 Note on Fig 4.10: Clamp E &lt;= 1 to avoid unrealistic behaviour
+   Ez = min(Ez, real_type(1));
+   // The resulting lateral force
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h	2009-01-17 14:08:11 UTC (rev 944)
+@@ -26,7 +26,7 @@
+   // Helper function to compute the resulting force
+   virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                            const real_type&amp; alpha, const real_type&amp; kappa,
+-                           const real_type&amp; gamma) const;
++                           const real_type&amp; gamma, const real_type&amp; phi) const;
+ 
+   const real_type&amp; getA0() const { return mA0; }
+   void setA0(const real_type&amp; value) { mA0 = value; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp	2009-01-17 14:08:11 UTC (rev 944)
+@@ -83,7 +83,7 @@
+ 
+   mB0(2),
+   mB1(0), mB2(1000),
+-  mB3(0), mB4(100), mB5(0),
++  mB3(0), mB4(50), mB5(0),
+   mB6(0), mB7(0), mB8(0.5), mB13(0),
+   mB9(0), mB10(0),
+   mB11(0), mB12(0),
+@@ -129,7 +129,7 @@
+ Vector6
+ Pacejka94::getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                     const real_type&amp; alpha, const real_type&amp; kappa,
+-                    const real_type&amp; gamma) const
++                    const real_type&amp; gamma, const real_type&amp; phi) const
+ {
+   // Pacejka suggests this correction to avoid singularities at zero speed
+   const real_type e_v = 1e-2;
+@@ -145,9 +145,9 @@
+   // Shape factor
+   real_type Cx = mB0;
+   // Peak factor
+-  real_type Dx = (mB1*sqr(Fz) + mB2*Fz)*mDLON;
++  real_type Dx = (mB1*Fz + mB2)*Fz*mDLON;
+   // BCD
+-  real_type BCDx = (mB3*sqr(Fz) + mB4*Fz)*exp(-mB5*Fz)*mBCDLON;
++  real_type BCDx = (mB3*Fz + mB4)*Fz*exp(-mB5*Fz)*mBCDLON;
+   // Stiffness factor
+   real_type Bx = BCDx/(Cx*Dx + e_v);
+   // Horizonal shift
+@@ -156,7 +156,7 @@
+   real_type SVx = (mB11*Fz + mB12);
+   // Shifted longitudinal slip
+   // FIXME is this really in % ??? Also the other old model!!!
+-  real_type kappax = kappa + SHx;
++  real_type kappax = 100*kappa + SHx;
+   // Curvature factor
+   real_type Ex = ((mB6*Fz + mB7)*Fz + mB8)*(1 - mB13*copysign(1, kappax));
+   // See P175 Note on Fig 4.10: Clamp E &lt;= 1 to avoid unrealistic behaviour
+@@ -196,9 +196,9 @@
+   // Shape factor
+   real_type Cz = mC0;
+   // Peak factor
+-  real_type Dz = (mC1*sqr(Fz) + mC2*Fz)*(1 - mC18*sqr(gamma));
++  real_type Dz = (mC1*Fz + mC2)*Fz*(1 - mC18*sqr(gamma));
+   // BCD
+-  real_type BCDz = (mC3*sqr(Fz) + mC4*Fz)*(1 - mC6*fabs(gamma))*exp(-mC5*Fz);
++  real_type BCDz = (mC3*Fz + mC4)*Fz*(1 - mC6*fabs(gamma))*exp(-mC5*Fz);
+   // Stiffness factor
+   real_type Bz = BCDz/(Cz*Dz + e_v);
+   // Horizonal shift
+@@ -208,7 +208,7 @@
+   // Shifted lateral slip
+   real_type alphaz = rad2deg*alpha + SHz;
+   // Curvature factor
+-  real_type Ez = (mC7*sqr(Fz) + mC8*Fz + mC9)
++  real_type Ez = ((mC7*Fz + mC8)*Fz + mC9)
+     *(1 - (mC19*gamma + mC20)*copysign(1, alphaz))/(1 - mC10*fabs(gamma));
+   // See P175 Note on Fig 4.10: Clamp E &lt;= 1 to avoid unrealistic behaviour
+   Ez = min(Ez, real_type(1));
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h	2009-01-17 14:08:11 UTC (rev 944)
+@@ -26,7 +26,7 @@
+   // Helper function to compute the resulting force
+   virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                            const real_type&amp; alpha, const real_type&amp; kappa,
+-                           const real_type&amp; gamma) const;
++                           const real_type&amp; gamma, const real_type&amp; phi) const;
+ 
+   const real_type&amp; getA0() const { return mA0; }
+   void setA0(const real_type&amp; value) { mA0 = value; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp	2009-01-17 14:08:11 UTC (rev 944)
+@@ -116,15 +116,21 @@
+ //     Vector3 V_cS = relVel.getLinear(); // + r_dot; ???
+     Vector3 V_s = relVel2.getLinear();
+ 
++    // The wheels velocity wrt ground
++    Vector3 rotVel = relVel.getAngular();
++
++    // The wheel revolution speed
++    real_type omega = dot(rotVel, s);
++
++    // The rotational velocity of the hub system wrt ground
++    Vector3 rotVelHub = relVel.getAngular() - omega*s;
++ 
+     // FIXME ????
+     real_type V_cx = dot(V_c, l);
+     real_type V_cx_eps = fabs(V_cx) + e_v;
+     real_type V_cy = dot(V_c, t);
+     real_type V_sx = dot(V_s, l);
+ 
+-    // Note that internally computations are done using derived parameters,
+-    // thus compute different values for the output ports
+-
+     // The sideslip angle (4.E3)
+     real_type alpha = atan2(-V_cy, V_cx_eps);
+     if (mSideSlipPort.isConnected())
+@@ -140,8 +146,13 @@
+     if (mLongitudinalSlipPort.isConnected())
+       mLongitudinalSlipPort = kappa;
+ 
+-    Vector6 f = mPacejkaTire-&gt;getForce(rho, rhoDot, alpha, kappa, gamma);
++    // The turnslip
++    // FIXME: make sure this really is: That is create a testcase where
++    // we check the  = -1/R claim in (2.18) Pacejka
++    real_type phi = dot(n, rotVelHub)/V_cx_eps;
+ 
++    Vector6 f = mPacejkaTire-&gt;getForce(rho, rhoDot, alpha, kappa, gamma, phi);
++
+     if (mLongitudinalForcePort.isConnected())
+       mLongitudinalForcePort = f.getLinear()(0);
+     if (mLateralForcePort.isConnected())
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.h	2009-01-17 14:06:19 UTC (rev 943)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.h	2009-01-17 14:08:11 UTC (rev 944)
+@@ -32,7 +32,7 @@
+   // Model function to compute the resulting force
+   virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                            const real_type&amp; alpha, const real_type&amp; kappa,
+-                           const real_type&amp; gamma) const = 0;
++                           const real_type&amp; gamma, const real_type&amp; phi) const = 0;
+ 
+ private:
+   RealOutputPort mSideSlipPort;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000908.html">[OpenFDM-svn] r943 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000910.html">[OpenFDM-svn] r945 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#909">[ date ]</a>
+              <a href="thread.html#909">[ thread ]</a>
+              <a href="subject.html#909">[ subject ]</a>
+              <a href="author.html#909">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

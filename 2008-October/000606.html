@@ -1,0 +1,909 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r637 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r637%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810200557.m9K5vaik015149%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000605.html">
+   <LINK REL="Next"  HREF="000607.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r637 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r637%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810200557.m9K5vaik015149%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r637 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Oct 20 07:57:36 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000605.html">[OpenFDM-svn] r636 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000607.html">[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#606">[ date ]</a>
+              <a href="thread.html#606">[ thread ]</a>
+              <a href="subject.html#606">[ subject ]</a>
+              <a href="author.html#606">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-20 07:57:35 +0200 (Mon, 20 Oct 2008)
+New Revision: 637
+
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstFrameVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FrameVisitor.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+The frame is now more a swiss army knife than a tree structure.
+Preparation for more explicit usage.
+
+D    src/OpenFDM/ConstFrameVisitor.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Frame.cpp
+M    src/OpenFDM/Frame.h
+D    src/OpenFDM/FrameVisitor.h
+
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstFrameVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstFrameVisitor.h	2008-10-20 04:30:08 UTC (rev 636)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstFrameVisitor.h	2008-10-20 05:57:35 UTC (rev 637)
+@@ -1,24 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ConstFrameVisitor_H
+-#define OpenFDM_ConstFrameVisitor_H
+-
+-#include &quot;Frame.h&quot;
+-
+-namespace OpenFDM {
+-
+-class ConstFrameVisitor {
+-public:
+-  virtual ~ConstFrameVisitor(void)
+-  {}
+-  virtual void apply(const Frame&amp; frame)
+-  { traverse(frame); }
+-  inline void traverse(const Frame&amp; frame)
+-  { frame.traverse(*this); }
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp	2008-10-20 04:30:08 UTC (rev 636)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.cpp	2008-10-20 05:57:35 UTC (rev 637)
+@@ -11,272 +11,26 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;FrameVisitor.h&quot;
+-#include &quot;ConstFrameVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Frame, Object)
+-  DEF_OPENFDM_ROPROP(Vector3, Position)
+-  DEF_OPENFDM_ROPROP(Vector3, RefPosition)
+-  DEF_OPENFDM_ROPROP(Quaternion, Orientation)
+-  DEF_OPENFDM_ROPROP(Quaternion, RefOrientation)
+-  DEF_OPENFDM_ROPROP(Vector6, RelVel)
+-  DEF_OPENFDM_ROPROP(Vector6, SpVel)
+-  DEF_OPENFDM_ROPROP(Vector6, RefVel)
+-  DEF_OPENFDM_ROPROP(Vector6, RelVelDot)
+-  DEF_OPENFDM_ROPROP(Vector6, SpAccel)
+-  END_OPENFDM_OBJECT_DEF
+-
+-/// FIXME
+-BEGIN_OPENFDM_OBJECT_DEF(FreeFrame, Frame)
+-  END_OPENFDM_OBJECT_DEF
+-
+-Frame::Frame(const std::string&amp; name) :
+-  Object(name),
+-  mDirtyPos(true),
+-  mDirtySpVel(true),
+-  mDirtySpAccel(true),
+-  mReferenceFrameId(0)
++Frame::Frame() :
++  mPosition(Vector3::zeros()),
++  mOrientation(Quaternion::unit()),
++  mRelVel(Vector6::zeros()),
++  mRelVelDot(Vector6::zeros()),
++  mParentSpVel(Vector6::zeros()),
++  mParentSpAccel(Vector6::zeros()),
++  mRefOrient(Quaternion::unit()),
++  mRefPos(Vector3::zeros()),
++  mRefVel(Vector6::zeros())
+ {
+-  setPosition(Vector3::zeros());
+-  setOrientation(Quaternion::unit());
+-  setRelVel(Vector6::zeros());
+ }
+ 
+ Frame::~Frame(void)
+ {
+ }
+ 
+-void
+-Frame::accept(FrameVisitor&amp; visitor)
+-{
+-  visitor.apply(*this);
+-}
+-
+-void
+-Frame::traverse(FrameVisitor&amp; visitor)
+-{
+-  ChildFrameList::iterator it = mChildFrames.begin();
+-  ChildFrameList::iterator iEnd = mChildFrames.end();
+-  while (it != iEnd) {
+-    (*it)-&gt;accept(visitor);
+-    ++it;
+-  }
+-}
+-
+-void
+-Frame::accept(ConstFrameVisitor&amp; visitor) const
+-{
+-  visitor.apply(*this);
+-}
+-
+-void
+-Frame::traverse(ConstFrameVisitor&amp; visitor) const
+-{
+-  ChildFrameList::const_iterator it = mChildFrames.begin();
+-  ChildFrameList::const_iterator iEnd = mChildFrames.end();
+-  while (it != iEnd) {
+-    (*it)-&gt;accept(visitor);
+-    ++it;
+-  }
+-}
+-
+-bool
+-Frame::isParentFrameOf(const Frame* const frame) const
+-{
+-  return isDirectParentFrameOf(frame) ||
+-    (frame &amp;&amp; isParentFrameOf(frame-&gt;mParentFrame.lock()));
+-}
+-
+-bool
+-Frame::isChildFrameOf(const Frame* const frame) const
+-{
+-  SharedPtr&lt;Frame&gt; parent = mParentFrame.lock();
+-  return isDirectChildFrameOf(frame) ||
+-    (parent &amp;&amp; parent-&gt;isChildFrameOf(frame));
+-}
+-
+-bool
+-Frame::addChildFrame(Frame* child)
+-{
+-  if (!child) {
+-    Log(Frame,Warning) &lt;&lt; &quot;Trying to attach zero pointer child Frame to &quot;
+-                       &lt;&lt; &quot;Frame \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  if (child-&gt;getParentFrame()) {
+-    Log(Frame,Error) &lt;&lt; &quot;Can not attach Frame \&quot;&quot; &lt;&lt; child-&gt;getName()
+-                     &lt;&lt; &quot;\&quot; to Frame \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;: &quot;
+-                     &lt;&lt; &quot; is already child of \&quot;&quot;
+-                     &lt;&lt; child-&gt;getParentFrame()-&gt;getName() &lt;&lt; endl;
+-    return false;
+-  }
+-  
+-  child-&gt;setParentFrame(this);
+-  mChildFrames.push_back(child);
+-  return true;
+-}
+-
+-bool
+-Frame::removeChildFrame(Frame* child)
+-{
+-  ChildFrameList::iterator it = mChildFrames.begin();
+-  while (it != mChildFrames.end()) {
+-    if ((*it) == child) {
+-      it = mChildFrames.erase(it);
+-      return true;
+-    }
+-    ++it;
+-  }
+-
+-  return false;
+-}
+-
+-Frame*
+-Frame::getChildFrame(unsigned i)
+-{
+-  if (mChildFrames.size() &lt;= i)
+-    return 0;
+-  return mChildFrames[i];
+-}
+-
+-const Frame*
+-Frame::getChildFrame(unsigned i) const
+-{
+-  if (mChildFrames.size() &lt;= i)
+-    return 0;
+-  return mChildFrames[i];
+-}
+-
+-unsigned
+-Frame::getChildFrameIndex(const Frame* child) const
+-{
+-  if (!child)
+-    return mChildFrames.size();
+-
+-  unsigned i = 0;
+-  for (; i &lt; mChildFrames.size(); ++i) {
+-    if (mChildFrames[i] == child)
+-      return i;
+-  }
+-  return i;
+-}
+-
+-void
+-Frame::reparentChildren(Frame* frame)
+-{
+-  if (!frame)
+-    return;
+-
+-  ChildFrameList::iterator it = frame-&gt;mChildFrames.begin();
+-  while (it != frame-&gt;mChildFrames.end()) {
+-    Log(Model,Error) &lt;&lt; &quot;Moving Frame &quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot; from &quot;
+-                     &lt;&lt; frame-&gt;getName() &lt;&lt; &quot; to &quot; &lt;&lt; getName() &lt;&lt; endl;
+-    (*it)-&gt;setParentFrame(this);
+-    mChildFrames.push_back(*it);
+-    it = frame-&gt;mChildFrames.erase(it);
+-  }
+-}
+-
+-void
+-Frame::computePositionDep(void) const
+-{
+-  if (hasParent()) {
+-    mRefOrient = getParentFrame()-&gt;getRefOrientation()*getOrientation();
+-    mRefPos = getParentFrame()-&gt;posToRef(getPosition());
+-    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-  } else {
+-    mRefOrient = getOrientation();
+-    mRefPos = getPosition();
+-    mReferenceFrameId = getFrameId();
+-  }
+-  mDirtyPos = false;
+-}
+-
+-void
+-Frame::computeVelocityDep(void) const
+-{
+-  if (hasParent()) {
+-    mParentSpVel = motionFromParent(getParentFrame()-&gt;getSpVel());
+-    mRefVel = getRelVel() + motionFromParent(getParentFrame()-&gt;getRefVel());
+-    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-  } else {
+-    mParentSpVel = Vector6::zeros();
+-    mRefVel = Vector6::zeros();
+-    mReferenceFrameId = getFrameId();
+-  }
+-  mDirtySpVel = false;
+-}
+-
+-void
+-Frame::computeAccelerationDep(void) const
+-{
+-  if (hasParent()) {
+-    mParentSpAccel = motionFromParent(getParentFrame()-&gt;getSpAccel());
+-    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-  } else {
+-    mParentSpAccel = Vector6::zeros();
+-    mReferenceFrameId = getFrameId();
+-  }
+-  mDirtySpAccel = false;
+-}
+-
+-void
+-Frame::setPosDirtyUnconditional(void)
+-{
+-  // Mark ourself dirty.
+-  mDirtyPos = true;
+-  mDirtySpVel = true;
+-  mDirtySpAccel = true;
+-  
+-  // Mark all child dirty.
+-  ChildFrameList::iterator it = mChildFrames.begin();
+-  ChildFrameList::iterator iEnd = mChildFrames.end();
+-  while (it != iEnd) {
+-    (*it)-&gt;setPosDirty();
+-    ++it;
+-  }
+-}
+-
+-void
+-Frame::setVelDirtyUnconditional(void)
+-{
+-  // Mark ourself dirty.
+-  mDirtySpVel = true;
+-  mDirtySpAccel = true;
+-  
+-  // Mark all child dirty.
+-  ChildFrameList::iterator it = mChildFrames.begin();
+-  ChildFrameList::iterator iEnd = mChildFrames.end();
+-  while (it != iEnd) {
+-    (*it)-&gt;setVelDirty();
+-    ++it;
+-  }
+-}
+-
+-void
+-Frame::setAccelDirtyUnconditional(void) const
+-{
+-  // Mark ourself dirty.
+-  mDirtySpAccel = true;
+-  
+-  // Mark all child dirty.
+-  ChildFrameList::const_iterator it = mChildFrames.begin();
+-  ChildFrameList::const_iterator iEnd = mChildFrames.end();
+-  while (it != iEnd) {
+-    (*it)-&gt;setAccelDirty();
+-    ++it;
+-  }
+-}
+-
+-void
+-Frame::setParentFrame(Frame* parent)
+-{
+-  mParentFrame = parent;
+-  setPosDirty();
+-}
+-
+ SpatialInertia
+ Frame::inertiaToParent(const SpatialInertia&amp; I) const
+ {
+@@ -295,6 +49,4 @@
+   }
+ }
+ 
+-const Vector6 Frame::mZeroVector = Vector6::zeros();
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 04:30:08 UTC (rev 636)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 05:57:35 UTC (rev 637)
+@@ -5,13 +5,7 @@
+ #ifndef OpenFDM_Frame_H
+ #define OpenFDM_Frame_H
+ 
+-#include &lt;list&gt;
+-#include &lt;vector&gt;
+-#include &lt;string&gt;
+-
+ #include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;WeakPtr.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Plane.h&quot;
+ #include &quot;Transform.h&quot;
+@@ -22,114 +16,73 @@
+ 
+ namespace OpenFDM {
+ 
+-class RigidBody;
+-class Joint;
+-class Interact;
+-
+-class FrameVisitor;
+-class ConstFrameVisitor;
+-
+ /** 
+ The \ref Frame class is the basic tool to model a tree of moving and
+ accelerating coordinate frames.
+-
+-Each frame can have one parent frame and several child frames. Each
+-frame can have a position and orientation offset with respect to its
+-parent frame. So, if a parent frame is relocated with respect to a
+-global coordinate system, all the child frames will be relocated with
+-respect to that global coordinate system too.
+-
+-Each frame can have a linear and angular velocity with respect to its
+-parent frame.
+ */
+ 
+-class Frame : public Object {
+-  OPENFDM_OBJECT(Frame, Object);
++class Frame {
+ public:
+-  /// FIXME: store a 'path' to the current frame, check that by comparing the
+-  /// first path element
+-  typedef const void* frameid_type;
++  Frame();
++  ~Frame(void);
+ 
+-  /// Container for the child frames.
+-  typedef std::vector&lt;SharedPtr&lt;Frame&gt; &gt; ChildFrameList;
++  void setPosAndVel(const Frame&amp; parent, const Vector3&amp; position,
++                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
++  {
++    mPosition = position;
++    mOrientation = orientation;
++    mRelVel = velocity;
+ 
+-  Frame(const std::string&amp; name);
+-  virtual ~Frame(void);
++    mRefOrient = parent.getRefOrientation()*getOrientation();
++    mRefPos = parent.posToRef(getPosition());
+ 
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(FrameVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(FrameVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ConstFrameVisitor&amp; visitor) const;
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void traverse(ConstFrameVisitor&amp; visitor) const;
++    mParentSpVel = motionFromParent(parent.getSpVel());
++    mRefVel = velocity + motionFromParent(parent.getRefVel());
++  }
+ 
+-  /// Return the parent frame.
+-  Frame* getParentFrame(void)
+-  { return mParentFrame.lock(); }
+-  /// Return the parent frame.
+-  const Frame* getParentFrame(void) const
+-  { return mParentFrame.lock(); }
+-  /// True if the current frame has a parent frame.
+-  bool hasParent(void) const
+-  { return getParentFrame(); }
++  void setAccel(const Frame&amp; parent, const Vector6&amp; acceleration)
++  {
++    mRelVelDot = acceleration;
+ 
+-  /// Return true if this Frame is the direct parent Frame of the Frame given
+-  /// in the argument frame.
+-  /// That means it reads:
+-  ///  this-&gt;isDirectParentFrameOf(frame)
+-  bool isDirectParentFrameOf(const Frame* const frame) const
+-  { return frame &amp;&amp; this == frame-&gt;mParentFrame.lock(); }
+-  /// Return true if this Frame is a parent Frame of the Frame given
+-  /// in the argument frame. It does not need to be the direct parent.
+-  /// That means it reads:
+-  ///  this-&gt;isParentFrameOf(frame)
+-  bool isParentFrameOf(const Frame* const frame) const;
++    mParentSpAccel = motionFromParent(parent.getSpAccel());
++  }
+ 
+-  /// Return true if this Frame is a direct child Frame of the Frame given
+-  /// in the argument frame.
+-  /// That means it reads:
+-  ///  this-&gt;isDirectChildFrameOf(frame)
+-  bool isDirectChildFrameOf(const Frame* const frame) const
+-  { return frame &amp;&amp; frame == mParentFrame.lock(); }
+-  /// Return true if this Frame is a child Frame of the Frame given
+-  /// in the argument frame. It does not need to be a direct child.
+-  /// That means it reads:
+-  ///  this-&gt;isChildFrameOf(frame)
+-  bool isChildFrameOf(const Frame* const frame) const;
++  void setPosAndVel(const Vector3&amp; parentAngularVel, const Vector3&amp; position,
++                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
++  {
++    mPosition = position;
++    mOrientation = orientation;
++    mRelVel = velocity;
+ 
+-  /// Adds the given frame to the list of child frames.
+-  /// returns true if that completed sucessfully.
+-  bool addChildFrame(Frame* child);
+-  /// Removes the given frame to the list of child frames.
+-  /// returns true if that completed sucessfully.
+-  bool removeChildFrame(Frame* child);
+-  /// Get the i-th child frame. Returns a 0 pointer if i is out of range.
+-  Frame* getChildFrame(unsigned i);
+-  /// Get the i-th child frame. Returns a 0 pointer if i is out of range.
+-  const Frame* getChildFrame(unsigned i) const;
+-  /// Returns the child frame index of the given frame
+-  unsigned getChildFrameIndex(const Frame* child) const;
+-  /// Returns the number of child frames
+-  unsigned getNumChildFrames(void) const
+-  { return mChildFrames.size(); }
++    mRefOrient = orientation;
++    mRefPos = position;
+ 
+-  /// Take over all children from the given frame to this frame
+-  void reparentChildren(Frame* frame);
++    mParentSpVel = angularMotionTo(mPosition, mOrientation, parentAngularVel);
++    mRefVel = velocity + mParentSpVel;
++  }
+ 
+-  // Return the current frames frame id.
+-  frameid_type getFrameId(void) const
+-  { return this; }
+-  // Return the reference frames frame id.
+-  frameid_type getRefFrameId(void) const
++  void setAccel(const Vector6&amp; acceleration)
+   {
+-    if (mDirtyPos)
+-      computePositionDep();
+-    return mReferenceFrameId;
++    mRelVelDot = acceleration;
++
++    mParentSpAccel = Vector6::zeros();
+   }
+ 
++  // FIXME: they do not yet update the dependent values inside ...
++//   void setRefOrientation(const Frame&amp; parent, const Quaternion&amp; o)
++//   { setOrientation(inverse(parent.getRefOrientation())*o); }
++//   void setRefPosition(const Frame&amp; parent, const Vector3&amp; p)
++//   { setPosition(parent.posFromRef(p)); }
++//   void setRefVel(const Frame&amp; parent, const Vector6&amp; vel)
++//   { setRelVel(vel - motionFromParent(parent.getRefVel())); }
+ 
++//   void setPosition(const Vector3&amp; p)
++//   { mPosition = p; }
++//   void setOrientation(const Quaternion&amp; o)
++//   { mOrientation = o; }
++//   void setRelVel(const Vector6&amp; vel)
++//   { mRelVel = vel; }
++
+   /** Position of the current frame.
+       @return The position vector of the current frame with repsect to the
+       parent frame. It is the only vector which is in the parent frames
+@@ -177,8 +130,8 @@
+               to the parent frame. The velocity is in the current frames
+               coordinates.
+    */
+-  virtual const Vector6&amp; getRelVelDot(void) const 
+-  { return mZeroVector; }
++  const Vector6&amp; getRelVelDot(void) const 
++  { return mRelVelDot; }
+ 
+ 
+   /** Linear velocity with respect to parent.
+@@ -201,11 +154,7 @@
+       does not have a parent it is assumed to be an inertial frame.
+    */
+   const Vector6&amp; getParentSpVel(void) const
+-  {
+-    if (mDirtySpVel)
+-      computeVelocityDep();
+-    return mParentSpVel;
+-  }
++  { return mParentSpVel; }
+ 
+   /** Spatial velocity of the current frame.
+       @return The spatial velocity of the current frame with respect to an
+@@ -216,11 +165,7 @@
+   { return getRelVel() + getParentSpVel(); }
+ 
+   const Vector6&amp; getRefVel(void) const
+-  {
+-    if (mDirtySpVel)
+-      computeVelocityDep();
+-    return mRefVel;
+-  }
++  { return mRefVel; }
+ 
+   /** Linear acceleration with respect to parent.
+       @return The linear acceleration of this frame with respect to the parent
+@@ -244,11 +189,7 @@
+       of the moving and accelerating body (@see getClassicAccel).
+    */
+   const Vector6&amp; getParentSpAccel(void) const
+-  {
+-    if (mDirtySpAccel)
+-      computeAccelerationDep();
+-    return mParentSpAccel;
+-  }
++  { return mParentSpAccel; }
+ 
+   /** Spatial acceleration of the current frame.
+       @return The spatial acceleration of the current frame with respect to an
+@@ -427,11 +368,7 @@
+    * It is measured in the topmost frames coordinates.
+    */
+   const Rotation&amp; getRefOrientation(void) const
+-  {
+-    if (mDirtyPos)
+-      computePositionDep();
+-    return mRefOrient;
+-  }
++  { return mRefOrient; }
+ 
+   /** Reference position.
+    * Returns the reference position of this frame wrt the topmost frame 
+@@ -439,110 +376,16 @@
+    * It is measured in the topmost frames coordinates.
+    */
+   const Vector3&amp; getRefPosition(void) const
+-  {
+-    if (mDirtyPos)
+-      computePositionDep();
+-    return mRefPos;
+-  }
++  { return mRefPos; }
+ 
+-protected:
+-  void setRefOrientation(const Quaternion&amp; o)
+-  {
+-    if (hasParent())
+-      setOrientation(inverse(getParentFrame()-&gt;getRefOrientation())*o);
+-    else
+-      setOrientation(o);
+-  }
++  Quaternion getRelOrientation(const Frame&amp; frame) const
++  { return inverse(getRefOrientation())*frame.getRefOrientation(); }
++  Vector3 getRelPosition(const Frame&amp; frame) const
++  { return posFromRef(frame.getRefPosition()); }
++  Vector6 getRelVel(const Frame&amp; frame) const
++  { return motionFromRef(frame.motionToRef(frame.getRefVel())) - getRefVel(); }
+ 
+-  void setRefPosition(const Vector3&amp; p)
+-  {
+-    if (hasParent())
+-      setPosition(getParentFrame()-&gt;posFromRef(p));
+-    else
+-      setPosition(p);
+-  }
+-  void setRefVel(const Vector6&amp; vel)
+-  {
+-    if (hasParent()) {
+-      setRelVel(vel - motionFromParent(getParentFrame()-&gt;getRefVel()));
+-    } else {
+-      setRelVel(vel);
+-    }
+-  }
+-
+-public:
+-  Quaternion getRelOrientation(const Frame* frame) const
+-  {
+-    OpenFDMAssert(frame-&gt;getRefFrameId() == getRefFrameId());
+-    return inverse(getRefOrientation())*frame-&gt;getRefOrientation();
+-  }
+-  Vector3 getRelPosition(const Frame* frame) const
+-  {
+-    OpenFDMAssert(frame-&gt;getRefFrameId() == getRefFrameId());
+-    return posFromRef(frame-&gt;getRefPosition());
+-  }
+-  Vector6 getRelVel(const Frame* frame) const
+-  {
+-    OpenFDMAssert(frame-&gt;getRefFrameId() == getRefFrameId());
+-    return motionFromRef(frame-&gt;motionToRef(frame-&gt;getRefVel())) - getRefVel();
+-  }
+-
+-protected:
+-  void setPosition(const Vector3&amp; p)
+-  { setPosDirty(); mPosition = p; }
+-  void setOrientation(const Quaternion&amp; o)
+-  { setPosDirty(); mOrientation = o; }
+-  void setRelVel(const Vector6&amp; vel)
+-  { setVelDirty(); mRelVel = vel; }
+-  void setLinearRelVel(const Vector3&amp; v)
+-  { setVelDirty(); mRelVel.setLinear(v); }
+-  void setAngularRelVel(const Vector3&amp; rotVel)
+-  { setVelDirty(); mRelVel.setAngular(rotVel); }
+-
+-  void computePositionDep(void) const;
+-  void computeVelocityDep(void) const;
+-  void computeAccelerationDep(void) const;
+-
+-protected:
+-  void setPosDirty(void)
+-  {
+-    // Don't bother iterating over all children if we are already dirty.
+-    if (mDirtyPos == true &amp;&amp; mDirtySpVel == true &amp;&amp; mDirtySpAccel == true)
+-      return;
+-    // Really set ourself and all children dirty.
+-    // Is done in this way to help the compiler inline the fast path and
+-    // only really call a function if real work needs to be done.
+-    setPosDirtyUnconditional();
+-  }
+-  void setVelDirty(void)
+-  {
+-    // Don't bother iterating over all children if we are already dirty.
+-    if (mDirtySpVel == true &amp;&amp; mDirtySpAccel == true)
+-      return;
+-    // Really set ourself and all children dirty.
+-    // Is done in this way to help the compiler inline the fast path and
+-    // only really call a function if real work needs to be done.
+-    setVelDirtyUnconditional();
+-  }
+-  void setAccelDirty(void) const
+-  {
+-    // Don't bother iterating over all children if we are already dirty.
+-    if (mDirtySpAccel == true)
+-      return;
+-    // Really set ourself and all children dirty.
+-    // Is done in this way to help the compiler inline the fast path and
+-    // only really call a function if real work needs to be done.
+-    setAccelDirtyUnconditional();
+-  }
+ private:
+-  void setPosDirtyUnconditional(void);
+-  void setVelDirtyUnconditional(void);
+-  void setAccelDirtyUnconditional(void) const;
+-
+-private:
+-  /// Set the parent frame to the given one.
+-  void setParentFrame(Frame* parent);
+-
+   // The offset of this frames origin wrt the parent frame measured in
+   // the parent frames coordinates.
+   Vector3 mPosition;
+@@ -554,80 +397,16 @@
+   // True? more the relative velocity ...
+   Vector6 mRelVel;
+ 
+-  mutable Vector6 mParentSpVel;
+-  mutable Vector6 mParentSpAccel;
++  Vector6 mRelVelDot;
+ 
+-  mutable Rotation mRefOrient;
+-  mutable Vector3 mRefPos;
+-  mutable Vector6 mRefVel;
++  Vector6 mParentSpVel;
++  Vector6 mParentSpAccel;
+ 
+-  // Here the topmost frame's id is stored.
+-  // Is used to check for compatibility of reference values when frame relative
+-  // values are computed.
+-  mutable frameid_type mReferenceFrameId;
+-
+-  // Flag which tells the frame if dependent values must
+-  // be recomputed or not.
+-  mutable bool mDirtyPos:1;
+-  mutable bool mDirtySpVel:1;
+-  mutable bool mDirtySpAccel:1;
+-
+-  // The parent frame.
+-  // FIXME: May be we should store a list of all parents ???
+-  WeakPtr&lt;Frame&gt; mParentFrame;
+-  // The list of child frames.
+-  ChildFrameList mChildFrames;
+-
+-  /// Used to return a zero acceleration, might move to the LinAlg namespace
+-  static const Vector6 mZeroVector;
++  Rotation mRefOrient;
++  Vector3 mRefPos;
++  Vector6 mRefVel;
+ };
+ 
+-class FreeFrame : public Frame {
+-  OPENFDM_OBJECT(FreeFrame, Frame);
+-public:
+-  FreeFrame(const std::string&amp; name = std::string())
+-    : Frame(name)
+-  {
+-    setRelVelDot(Vector6::zeros());
+-  }
+-  virtual ~FreeFrame(void)
+-  {}
+-
+-//   using Frame::setPosition;
+-  void setPosition(const Vector3&amp; p)
+-  { Frame::setPosition(p); }
+-  void setOrientation(const Quaternion&amp; o)
+-  { Frame::setOrientation(o); }
+-  void setRelVel(const Vector6&amp; vel)
+-  { Frame::setRelVel(vel); }
+-  void setLinearRelVel(const Vector3&amp; vel)
+-  { Frame::setLinearRelVel(vel); }
+-  void setAngularRelVel(const Vector3&amp; vel)
+-  { Frame::setAngularRelVel(vel); }
+-
+-  virtual const Vector6&amp; getRelVelDot(void) const 
+-  { return mRelVelDot; }
+-  void setRelVelDot(const Vector6&amp; accel)
+-  { setAccelDirty(); mRelVelDot = accel; }
+-//   void setLinearRelVelDot(const Vector3&amp; accel)
+-//   { setAccelDirty(); mRelVelDot.setLinear(accel); }
+-//   void setAngularRelVelDot(const Vector3&amp; accel)
+-//   { setAccelDirty(); mRelVelDot.setAngular(accel); }
+-
+-  void setRefPosition(const Vector3&amp; p)
+-  { Frame::setRefPosition(p); }
+-  void setRefOrientation(const Quaternion&amp; o)
+-  { Frame::setRefOrientation(o); }
+-
+-  void setRefVel(const Vector6&amp; vel)
+-  { Frame::setRefVel(vel); }
+-
+-private:
+-  // The spatial acceleration of this frame wrt the parent frame.
+-  // True? more the relative acceleration ...
+-  Vector6 mRelVelDot;
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/FrameVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FrameVisitor.h	2008-10-20 04:30:08 UTC (rev 636)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FrameVisitor.h	2008-10-20 05:57:35 UTC (rev 637)
+@@ -1,24 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_FrameVisitor_H
+-#define OpenFDM_FrameVisitor_H
+-
+-#include &quot;Frame.h&quot;
+-
+-namespace OpenFDM {
+-
+-class FrameVisitor {
+-public:
+-  virtual ~FrameVisitor(void)
+-  {}
+-  virtual void apply(Frame&amp; frame)
+-  { traverse(frame); }
+-  inline void traverse(Frame&amp; frame)
+-  { frame.traverse(*this); }
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-20 04:30:08 UTC (rev 636)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-20 05:57:35 UTC (rev 637)
+@@ -18,7 +18,6 @@
+   Assert.h \
+   Atomic.h \
+   BoolStateInfo.h \
+-  ConstFrameVisitor.h \
+   ConstNodeVisitor.h \
+   ContinousStateInfo.h \
+   ContinousStateInfoVector.h \
+@@ -33,7 +32,6 @@
+   ExplicitEuler.h \
+   Fraction.h \
+   Frame.h \
+-  FrameVisitor.h \
+   Function.h \
+   Group.h \
+   HDF5SystemOutput.h \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000605.html">[OpenFDM-svn] r636 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000607.html">[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#606">[ date ]</a>
+              <a href="thread.html#606">[ thread ]</a>
+              <a href="subject.html#606">[ subject ]</a>
+              <a href="author.html#606">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,705 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1020 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1020%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907202049.n6KKnnoI005189%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000981.html">
+   <LINK REL="Next"  HREF="000984.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1020 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1020%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907202049.n6KKnnoI005189%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1020 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jul 20 22:49:49 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000981.html">[OpenFDM-svn] r1019 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000984.html">[OpenFDM-svn] r1021 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#982">[ date ]</a>
+              <a href="thread.html#982">[ thread ]</a>
+              <a href="subject.html#982">[ subject ]</a>
+              <a href="author.html#982">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-20 22:49:48 +0200 (Mon, 20 Jul 2009)
+New Revision: 1020
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+Log:
+Consolidate MechanicLinkValue handling a bit.
+
+M    src/OpenFDM/MobileRootJoint.cpp
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/Mass.cpp
+M    src/OpenFDM/MechanicLinkValue.cpp
+M    src/OpenFDM/MechanicLinkValue.h
+M    src/OpenFDM/FixedRootJoint.cpp
+M    src/OpenFDM/HDF5SystemOutput.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -171,8 +171,8 @@
+                       cross(parentInVel.getLinear(), relVel.getAngular()));
+ 
+ 
+-      mChildLink.setSpatialForce(Vector6::zeros());
+-      mChildLink.setSpatialInertia(SpatialInertia::zeros());
++      mChildLink.setForce(Vector6::zeros());
++      mChildLink.setInertia(SpatialInertia::zeros());
+     }
+ 
+     /** This is the derivative of the joint matrix times the joint velocity
+@@ -193,7 +193,7 @@
+ 
+       // Compute the projection of the inertia matrix to the
+       // joint coordinate space
+-      SpatialInertia I = mChildLink.getSpatialInertia();
++      SpatialInertia I = mChildLink.getInertia();
+       Matrix6N Ih = I*mJointMatrix;
+       hIh = trans(mJointMatrix)*Ih;
+ 
+@@ -206,15 +206,15 @@
+ 
+       // Note that the momentum of the local mass is already included in the
+       // child links force due the the mass model ...
+-      Vector6 force = mChildLink.getSpatialForce() + I*getHdot();
++      Vector6 force = mChildLink.getForce() + I*getHdot();
+ 
+       // Project away those axis handled with this current joint
+       force -= Ih*hIh.solve(trans(mJointMatrix)*force - jointForce);
+       I -= SpatialInertia(Ih*hIh.solve(trans(Ih)));
+ 
+       // Contribute the remaining force and inertiy to the parent link
+-      mParentLink.addSpatialForce(cs.getPosition(), force);
+-      mParentLink.addSpatialInertia(cs.getPosition(), I);
++      mParentLink.addForce(cs.getPosition(), force);
++      mParentLink.addInertia(cs.getPosition(), I);
+     }
+ 
+     /** Compute the acceleration step for a given joint force.
+@@ -230,16 +230,16 @@
+ 
+       Vector3 positionDifference = cs.getPosition() - ps.getPosition();
+ 
+-      Vector6 parentSpAccel = mParentLink.getAcceleration();
++      Vector6 parentSpAccel = mParentLink.getInertialAcceleration();
+       parentSpAccel = motionTo(positionDifference, parentSpAccel);
+ 
+-      Vector6 f = mChildLink.getSpatialForce();
+-      f += mChildLink.getSpatialInertia()*(parentSpAccel + getHdot());
++      Vector6 f = mChildLink.getForce();
++      f += mChildLink.getInertia()*(parentSpAccel + getHdot());
+ 
+       mVelDot = hIh.solve(mJointForce - trans(mJointMatrix)*f);
+ 
+       Vector6 spAccel = parentSpAccel + getHdot() + mJointMatrix*mVelDot;
+-      mChildLink.setAcceleration(spAccel);
++      mChildLink.setInertialAcceleration(spAccel);
+     }
+   
+     /** Compute the articulation step for a given velocity derivative.
+@@ -257,12 +257,12 @@
+ 
+       const CoordinateSystem&amp; cs = mChildLink.getCoordinateSystem();
+ 
+-      const SpatialInertia&amp; I = mChildLink.getSpatialInertia();
+-      Vector6 force = mChildLink.getSpatialForce();
++      const SpatialInertia&amp; I = mChildLink.getInertia();
++      Vector6 force = mChildLink.getForce();
+       force += I*(getHdot() + mJointMatrix*mVelDot);
+       
+-      mParentLink.addSpatialForce(cs.getPosition(), force);
+-      mParentLink.addSpatialInertia(cs.getPosition(), I);
++      mParentLink.addForce(cs.getPosition(), force);
++      mParentLink.addInertia(cs.getPosition(), I);
+     }
+     
+     /** Compute the acceleration step for a given velocity derivative.
+@@ -274,11 +274,11 @@
+       const CoordinateSystem&amp; ps = mParentLink.getCoordinateSystem();
+       Vector3 positionDifference = cs.getPosition() - ps.getPosition();
+ 
+-      Vector6 parentSpAccel = mParentLink.getAcceleration();
++      Vector6 parentSpAccel = mParentLink.getInertialAcceleration();
+       parentSpAccel = motionTo(positionDifference, parentSpAccel);
+ 
+       Vector6 spAccel = parentSpAccel + getHdot() + mJointMatrix*mVelDot;
+-      mChildLink.setAcceleration(spAccel);
++      mChildLink.setInertialAcceleration(spAccel);
+     }
+ 
+     const VectorN&amp; getVelDot() const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -47,14 +47,14 @@
+     mChildLink.setVelocity(Vector6::zeros());
+     mChildLink.setInertialVelocity(vel);
+ 
+-    mChildLink.setSpatialForce(Vector6::zeros());
+-    mChildLink.setSpatialInertia(SpatialInertia::zeros());
++    mChildLink.setForce(Vector6::zeros());
++    mChildLink.setInertia(SpatialInertia::zeros());
+   }
+   virtual void accelerations(const Task&amp; task)
+   {
+     Vector6 spAccel = getEnvironment().getAcceleration(task.getTime());
+     spAccel = motionTo(mFixedRootJoint-&gt;mRootPosition, spAccel);
+-    mChildLink.setAcceleration(spAccel);
++    mChildLink.setInertialAcceleration(spAccel);
+   }
+   
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -349,7 +349,8 @@
+       _orientation(_group, &quot;orientation&quot;, Size(4, 1)),
+       _eulerAngle(_group, &quot;eulerAngles&quot;, Size(3, 1)),
+       _velocity(_group, &quot;velocity&quot;, Size(6, 1)),
+-      _acceleration(_group, &quot;acceleration&quot;, Size(6, 1)),
++      _inertialVelocity(_group, &quot;inertialVelocity&quot;, Size(6, 1)),
++      _inertialAcceleration(_group, &quot;inertialAcceleration&quot;, Size(6, 1)),
+       _force(_group, &quot;force&quot;, Size(6, 1)),
+       _inertia(_group, &quot;inertia&quot;, Size(6, 6))
+     { }
+@@ -360,9 +361,10 @@
+       _orientation.append(cs.getOrientation());
+       _eulerAngle.append(cs.getOrientation().getEuler());
+       _velocity.append(mMechanicLinkValue-&gt;getVelocity());
+-      _acceleration.append(mMechanicLinkValue-&gt;getAcceleration());
+-      _force.append(mMechanicLinkValue-&gt;getSpatialForce());
+-      _inertia.append(mMechanicLinkValue-&gt;getSpatialInertia());
++      _inertialVelocity.append(mMechanicLinkValue-&gt;getInertialVelocity());
++      _inertialAcceleration.append(mMechanicLinkValue-&gt;getInertialAcceleration());
++      _force.append(mMechanicLinkValue-&gt;getForce());
++      _inertia.append(mMechanicLinkValue-&gt;getInertia());
+     }
+     virtual HDF5Object getObject()
+     { return _group; }
+@@ -373,7 +375,8 @@
+     HDFMatrixStream _orientation;
+     HDFMatrixStream _eulerAngle;
+     HDFMatrixStream _velocity;
+-    HDFMatrixStream _acceleration;
++    HDFMatrixStream _inertialVelocity;
++    HDFMatrixStream _inertialAcceleration;
+     HDFMatrixStream _force;
+     HDFMatrixStream _inertia;
+   };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -51,7 +51,7 @@
+                              v.getLinear(), so the cross product is zero
+                           + cross(v.getLinear(), Iv.getLinear())*/,
+                           cross(v.getAngular(), Iv.getLinear()));
+-    getLink().addSpatialForce(cs.getPosition(), vIv);
++    getLink().addForce(cs.getPosition(), vIv);
+ 
+     // Now the gravity part
+     Vector3 gravity = getEnvironment().getGravityAcceleration(cs.getPosition());
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.cpp	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -9,7 +9,7 @@
+ MechanicLinkValue::MechanicLinkValue() :
+   mVelocity(Vector6::zeros()),
+   mInertialVelocity(Vector6::zeros()),
+-  mAcceleration(Vector6::zeros()),
++  mInertialAcceleration(Vector6::zeros()),
+   mForce(Vector6::zeros()),
+   mInertia(SpatialInertia::zeros())
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -33,7 +33,7 @@
+   void setCoordinateSystem(const CoordinateSystem&amp; coordinateSystem)
+   { mCoordinateSystem = coordinateSystem; }
+ 
+-  /// The spatial velocity of this mechanic link
++  /// The velocity of this mechanic link
+   ///
+   /// The velocity is given in global coordinates and at this mechanic links
+   /// coordinate systems origin.
+@@ -42,36 +42,40 @@
+   const Vector6&amp; getVelocity() const
+   { return mVelocity; }
+ 
++  /// The inertial velocity of this mechanic link
++  ///
++  /// The velocity is given in global coordinates and at this mechanic links
++  /// coordinate systems origin.
+   void setInertialVelocity(const Vector6&amp; inertialVelocity)
+   { mInertialVelocity = inertialVelocity; }
+   const Vector6&amp; getInertialVelocity() const
+   { return mInertialVelocity; }
+ 
+-  /// The spatial acceleration of this mechanic link
++  /// The inertial acceleration of this mechanic link
+   ///
+   /// The acceleration is given in global coordinates and at this mechanic links
+   /// coordinate systems origin.
+-  void setAcceleration(const Vector6&amp; acceleration)
+-  { mAcceleration = acceleration; }
+-  const Vector6&amp; getAcceleration() const
+-  { return mAcceleration; }
++  void setInertialAcceleration(const Vector6&amp; inertialAcceleration)
++  { mInertialAcceleration = inertialAcceleration; }
++  const Vector6&amp; getInertialAcceleration() const
++  { return mInertialAcceleration; }
+ 
+-  /// The spatial force of this mechanic link
++  /// The force of this mechanic link
+   ///
+   /// The force is given in global coordinates and at this mechanic links
+   /// coordinate systems origin.
+-  const Vector6&amp; getSpatialForce() const
++  const Vector6&amp; getForce() const
+   { return mForce; }
+-  void setSpatialForce(const Vector6&amp; force)
++  void setForce(const Vector6&amp; force)
+   { mForce = force; }
+ 
+-  /// The spatial inertia of this mechanic link
++  /// The inertia of this mechanic link
+   ///
+   /// The inertia is given in global coordinates and at this mechanic links
+   /// coordinate systems origin.
+-  const SpatialInertia&amp; getSpatialInertia() const
++  const SpatialInertia&amp; getInertia() const
+   { return mInertia; }
+-  void setSpatialInertia(const SpatialInertia&amp; inertia)
++  void setInertia(const SpatialInertia&amp; inertia)
+   { mInertia = inertia; }
+ 
+ 
+@@ -82,35 +86,43 @@
+ 
+ 
+   /// Conveninent getters at different positions/coordinatesystems
+-  Vector6 getSpatialVelocity(const Vector3&amp; pos) const
++  Vector6 getVelocity(const Vector3&amp; pos) const
+   { return motionTo(pos - mCoordinateSystem.getPosition(), getVelocity()); }
+-  Vector6 getSpatialVelocity(const CoordinateSystem&amp; cs) const
+-  { return cs.rotToLocal(getSpatialVelocity(cs.getPosition())); }
++  Vector6 getVelocity(const CoordinateSystem&amp; cs) const
++  { return cs.rotToLocal(getVelocity(cs.getPosition())); }
+ 
+   Vector6 getInertialVelocity(const Vector3&amp; pos) const
+   { return motionTo(pos - mCoordinateSystem.getPosition(), getInertialVelocity()); }
+   Vector6 getInertialVelocity(const CoordinateSystem&amp; cs) const
+   { return cs.rotToLocal(getInertialVelocity(cs.getPosition())); }
+ 
+-  Vector6 getSpatialAcceleration(const Vector3&amp; pos) const
+-  { return motionTo(pos - mCoordinateSystem.getPosition(), getAcceleration()); }
+-  Vector6 getSpatialAcceleration(const CoordinateSystem&amp; cs) const
+-  { return cs.rotToLocal(getSpatialAcceleration(cs.getPosition())); }
++  Vector6 getInertialAcceleration(const Vector3&amp; pos) const
++  { return motionTo(pos - mCoordinateSystem.getPosition(), getInertialAcceleration()); }
++  Vector6 getInertialAcceleration(const CoordinateSystem&amp; cs) const
++  { return cs.rotToLocal(getInertialAcceleration(cs.getPosition())); }
+ 
+-  Vector6 getSpatialForce(const Vector3&amp; pos) const
+-  { return forceTo(pos - mCoordinateSystem.getPosition(), getSpatialForce()); }
+-  Vector6 getSpatialForce(const CoordinateSystem&amp; cs) const
+-  { return cs.rotToLocal(getSpatialForce(cs.getPosition())); }
++  Vector6 getForce(const Vector3&amp; pos) const
++  { return forceTo(pos - mCoordinateSystem.getPosition(), getForce()); }
++  Vector6 getForce(const CoordinateSystem&amp; cs) const
++  { return cs.rotToLocal(getForce(cs.getPosition())); }
+ 
+-  SpatialInertia getSpatialInertia(const Vector3&amp; pos) const
++
++  /// Conveninent setters for the forces
++  void applyGlobalTorque(const Vector3&amp; torque)
+   {
+-    // is inertiaTo(pos - cs.getPosition(), ...)
+-    return inertiaFrom(mCoordinateSystem.getPosition() - pos,
+-                       getSpatialInertia());
++    mForce -= Vector6(torque, Vector3::zeros());
+   }
+-  SpatialInertia getSpatialInertia(const CoordinateSystem&amp; cs) const
+-  { return cs.rotToLocal(getSpatialInertia(cs.getPosition())); }
+ 
++  void applyLocalForce(const Vector6&amp; force)
++  { mForce -= mCoordinateSystem.rotToReference(force); }
++  void applyLocalForce(const Vector3&amp; position, const Vector6&amp; force)
++  { applyLocalForce(forceFrom(position, force)); }
++  void applyLocalForce(const Vector3&amp; force)
++  { applyLocalForce(Vector6(Vector3::zeros(), force)); }
++  void applyLocalForce(const Vector3&amp; position, const Vector3&amp; force)
++  { applyLocalForce(forceFrom(position, force)); }
++  void applyLocalTorque(const Vector3&amp; torque)
++  { applyLocalForce(Vector6(torque, Vector3::zeros())); }
+ 
+   void applyForce(const Vector3&amp; position, const Vector3&amp; force)
+   {
+@@ -124,25 +136,32 @@
+   }
+   void applyForce(const CoordinateSystem&amp; cs, const Vector3&amp; force)
+   {
+-    Vector3 forceInGlobal = cs.rotToReference(force);
+     Vector3 positionDiff = cs.getPosition() - mCoordinateSystem.getPosition();
+-    mForce -= forceFrom(positionDiff, forceInGlobal);
++    mForce -= forceFrom(positionDiff, cs.rotToReference(force));
+   }
+   void applyForce(const CoordinateSystem&amp; cs, const Vector6&amp; force)
+   {
+-    Vector6 forceInGlobal = cs.rotToReference(force);
+     Vector3 positionDiff = cs.getPosition() - mCoordinateSystem.getPosition();
+-    mForce -= forceFrom(positionDiff, forceInGlobal);
++    mForce -= forceFrom(positionDiff, cs.rotToReference(force));
+   }
+ 
+ 
+-  void addSpatialForce(const Vector3&amp; position, const Vector6&amp; force)
++  void addForce(const Vector3&amp; position, const Vector6&amp; force)
+   {
+     Vector3 offset = position - mCoordinateSystem.getPosition();
+     mForce += forceFrom(offset, force);
+   }
+-  void addSpatialInertia(const Vector3&amp; position, const SpatialInertia&amp; inertia)
++
++  SpatialInertia getInertia(const Vector3&amp; pos) const
+   {
++    // is inertiaTo(pos - cs.getPosition(), ...)
++    return inertiaFrom(mCoordinateSystem.getPosition() - pos, getInertia());
++  }
++  SpatialInertia getInertia(const CoordinateSystem&amp; cs) const
++  { return cs.rotToLocal(getInertia(cs.getPosition())); }
++
++  void addInertia(const Vector3&amp; position, const SpatialInertia&amp; inertia)
++  {
+     if (position == mCoordinateSystem.getPosition()) {
+       mInertia += inertia;
+     } else {
+@@ -150,65 +169,38 @@
+       mInertia += inertiaFrom(offset, inertia);
+     }
+   }
+-
+-
+-  SpatialInertia getLocalInertia() const
+-  { return getSpatialInertia(mCoordinateSystem); }
+-  Vector6 getLocalForce() const
+-  { return getSpatialForce(mCoordinateSystem); }
+-
+-  void applyGlobalTorque(const Vector3&amp; torque)
++  void addInertia(const Vector3&amp; position,
++                  const InertiaMatrix&amp; inertia, const real_type&amp; mass)
+   {
+-    mForce -= Vector6(torque, Vector3::zeros());
++    Vector3 offset = position - mCoordinateSystem.getPosition();
++    mInertia += SpatialInertia(offset, inertia, mass);
+   }
+-  void applyGlobalForce(const Vector3&amp; globalPosition, const Vector3&amp; force)
+-  {
+-    Vector3 positionDiff = globalPosition - mCoordinateSystem.getPosition();
+-    mForce -= forceFrom(positionDiff, force);
+-  }
+ 
+-  void applyLocalForce(const Vector6&amp; force)
+-  { mForce -= mCoordinateSystem.rotToReference(force); }
+-  void applyLocalForce(const Vector3&amp; position, const Vector6&amp; force)
+-  { applyLocalForce(forceFrom(position, force)); }
+-  void applyLocalForce(const Vector3&amp; force)
+-  { applyLocalForce(Vector6(Vector3::zeros(), force)); }
+-  void applyLocalForce(const Vector3&amp; position, const Vector3&amp; force)
+-  { applyLocalForce(forceFrom(position, force)); }
+-  void applyLocalTorque(const Vector3&amp; torque)
+-  { applyLocalForce(Vector6(torque, Vector3::zeros())); }
+-
+-  void setLocalVelocity(const Vector6&amp; velocity)
+-  { mVelocity = mCoordinateSystem.rotToReference(velocity); }
+   Vector6 getLocalVelocity() const
+   { return mCoordinateSystem.rotToLocal(mVelocity); }
+ 
+   Vector6 getLocalAcceleration() const
+-  { return mCoordinateSystem.rotToLocal(mAcceleration); }
++  { return mCoordinateSystem.rotToLocal(mInertialAcceleration); }
+ 
+-  void addInertia(const Vector3&amp; position,
+-                  const InertiaMatrix&amp; inertia, const real_type&amp; mass)
+-  {
+-    Vector3 offset = position - mCoordinateSystem.getPosition();
+-    mInertia += SpatialInertia(offset, inertia, mass);
+-  }
+-
+ protected:
+   /// The local coordinate system of the mechanic link.
+   CoordinateSystem mCoordinateSystem;
+ 
+-  /// The spatial velocity at the origin of the coordinate system
++  /// The velocity at the origin of the coordinate system
+   /// measured in global coordinate systems coordinates.
+   /// The spacial velocities pivot point is at the coordinate systems origin.
+   Vector6 mVelocity;
+-  /// Inertial velocity
+-  Vector6 mInertialVelocity;
+ 
+-  /// The spatial acceleration at the origin of the coordinate system
++  /// The inertial velocity at the origin of the coordinate system
+   /// measured in global coordinate systems coordinates.
+   /// The spacial velocities pivot point is at the coordinate systems origin.
+-  Vector6 mAcceleration;
++  Vector6 mInertialVelocity;
+ 
++  /// The inertial acceleration at the origin of the coordinate system
++  /// measured in global coordinate systems coordinates.
++  /// The spacial accelerations pivot point is at the coordinate systems origin.
++  Vector6 mInertialAcceleration;
++
+   /// The articulated force at the origin of the coordinate system
+   /// measured in global coordinate systems coordinates.
+   /// The articulated force pivot point is at the coordinate systems origin.
+@@ -233,10 +225,7 @@
+   { return mMechanicLinkValue; }
+ 
+   const Vector3&amp; getLinkRelPos() const
+-  {
+-    OpenFDMAssert(isConnected());
+-    return mLinkRelPos;
+-  }
++  { return mLinkRelPos; }
+ 
+   const MechanicLinkValue&amp; getMechanicLinkValue() const
+   {
+@@ -251,9 +240,7 @@
+   }
+ 
+   CoordinateSystem getRelativeCoordinateSystem(const ParentLink&amp; link) const
+-  {
+-    return getCoordinateSystem().toLocal(link.getCoordinateSystem());
+-  }
++  { return getCoordinateSystem().toLocal(link.getCoordinateSystem()); }
+ 
+   Vector3 getRefPos() const
+   {
+@@ -269,12 +256,12 @@
+   Vector6 getVelocity(const Vector3&amp; position) const
+   {
+     OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getSpatialVelocity(position);
++    return mMechanicLinkValue-&gt;getVelocity(position);
+   }
+   Vector6 getVelocity(const CoordinateSystem&amp; cs) const
+   {
+     OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getSpatialVelocity(cs);
++    return mMechanicLinkValue-&gt;getVelocity(cs);
+   }
+ 
+   Vector6 getInertialVelocity(const Vector3&amp; position) const
+@@ -288,15 +275,15 @@
+     return mMechanicLinkValue-&gt;getInertialVelocity(cs);
+   }
+ 
+-  Vector6 getAcceleration(const Vector3&amp; position) const
++  Vector6 getInertialAcceleration(const Vector3&amp; position) const
+   {
+     OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getSpatialAcceleration(position);
++    return mMechanicLinkValue-&gt;getInertialAcceleration(position);
+   }
+-  Vector6 getAcceleration(const CoordinateSystem&amp; cs) const
++  Vector6 getInertialAcceleration(const CoordinateSystem&amp; cs) const
+   {
+     OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getSpatialAcceleration(cs);
++    return mMechanicLinkValue-&gt;getInertialAcceleration(cs);
+   }
+ 
+   Vector6 getLocalVelocity() const
+@@ -309,8 +296,8 @@
+     OpenFDMAssert(isConnected());
+     return motionTo(mLinkRelPos, mMechanicLinkValue-&gt;getLocalAcceleration());
+   }
+-  const Vector6&amp; getAcceleration() const
+-  { return mMechanicLinkValue-&gt;getAcceleration(); }
++  const Vector6&amp; getInertialAcceleration() const
++  { return mMechanicLinkValue-&gt;getInertialAcceleration(); }
+   const Vector6&amp; getVelocity() const
+   { return mMechanicLinkValue-&gt;getVelocity(); }
+   const Vector6&amp; getInertialVelocity() const
+@@ -356,7 +343,7 @@
+   {
+     OpenFDMAssert(isConnected());
+     const CoordinateSystem&amp; cs = mMechanicLinkValue-&gt;getCoordinateSystem();
+-    mMechanicLinkValue-&gt;applyGlobalForce(cs.toReference(mLinkRelPos), force);
++    mMechanicLinkValue-&gt;applyForce(cs.toReference(mLinkRelPos), force);
+   }
+ 
+   void applyGlobalTorque(const Vector3&amp; torque)
+@@ -365,12 +352,6 @@
+     mMechanicLinkValue-&gt;applyGlobalTorque(torque);
+   }
+ 
+-  void applyLocalForceAtLink(const Vector6&amp; force)
+-  {
+-    OpenFDMAssert(isConnected());
+-    mMechanicLinkValue-&gt;applyLocalForce(force);
+-  }
+-
+   void applyForce(const Vector3&amp; position, const Vector3&amp; force)
+   {
+     OpenFDMAssert(isConnected());
+@@ -392,15 +373,15 @@
+     mMechanicLinkValue-&gt;applyForce(cs, force);
+   }
+ 
+-  void addSpatialForce(const Vector3&amp; position, const Vector6&amp; force)
++  void addForce(const Vector3&amp; position, const Vector6&amp; force)
+   {
+     OpenFDMAssert(isConnected());
+-    mMechanicLinkValue-&gt;addSpatialForce(position, force);
++    mMechanicLinkValue-&gt;addForce(position, force);
+   }
+-  void addSpatialInertia(const Vector3&amp; position, const SpatialInertia&amp; inertia)
++  void addInertia(const Vector3&amp; position, const SpatialInertia&amp; inertia)
+   {
+     OpenFDMAssert(isConnected());
+-    mMechanicLinkValue-&gt;addSpatialInertia(position, inertia);
++    mMechanicLinkValue-&gt;addInertia(position, inertia);
+   }
+   void addInertia(const Vector3&amp; position,
+                   const InertiaMatrix&amp; inertia, const real_type&amp; mass)
+@@ -426,10 +407,10 @@
+   void setDesignPosition(const Vector3&amp; position)
+   { mMechanicLinkValue-&gt;setCoordinateSystem(CoordinateSystem(position)); }
+ 
+-  void setAcceleration(const Vector6&amp; accel)
+-  { mMechanicLinkValue-&gt;setAcceleration(accel); }
+-  const Vector6&amp; getAcceleration() const
+-  { return mMechanicLinkValue-&gt;getAcceleration(); }
++  void setInertialAcceleration(const Vector6&amp; accel)
++  { mMechanicLinkValue-&gt;setInertialAcceleration(accel); }
++  const Vector6&amp; getInertialAcceleration() const
++  { return mMechanicLinkValue-&gt;getInertialAcceleration(); }
+ 
+   void setVelocity(const Vector6&amp; velocity)
+   { mMechanicLinkValue-&gt;setVelocity(velocity); }
+@@ -446,15 +427,15 @@
+   const CoordinateSystem&amp; getCoordinateSystem() const
+   { return mMechanicLinkValue-&gt;getCoordinateSystem(); }
+ 
+-  void setSpatialForce(const Vector6&amp; force)
+-  { return mMechanicLinkValue-&gt;setSpatialForce(force); }
+-  const Vector6&amp; getSpatialForce() const
+-  { return mMechanicLinkValue-&gt;getSpatialForce(); }
++  void setForce(const Vector6&amp; force)
++  { return mMechanicLinkValue-&gt;setForce(force); }
++  const Vector6&amp; getForce() const
++  { return mMechanicLinkValue-&gt;getForce(); }
+ 
+-  void setSpatialInertia(const SpatialInertia&amp; inertia) const
+-  { return mMechanicLinkValue-&gt;setSpatialInertia(inertia); }
+-  const SpatialInertia&amp; getSpatialInertia() const
+-  { return mMechanicLinkValue-&gt;getSpatialInertia(); }
++  void setInertia(const SpatialInertia&amp; inertia) const
++  { return mMechanicLinkValue-&gt;setInertia(inertia); }
++  const SpatialInertia&amp; getInertia() const
++  { return mMechanicLinkValue-&gt;getInertia(); }
+  
+ private:
+   SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-07-20 19:36:59 UTC (rev 1019)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-07-20 20:49:48 UTC (rev 1020)
+@@ -49,10 +49,9 @@
+   }
+   virtual void accelerations(const Task&amp; task)
+   {
+-    const SpatialInertia&amp; inertia = mChildLink.getSpatialInertia();
+-    Vector6 force = -mChildLink.getSpatialForce();
+-    Vector6 spatialAcceleration = solve(inertia, force);
+-    mChildLink.setAcceleration(spatialAcceleration);
++    Vector6 force = -mChildLink.getForce();
++    Vector6 acceleration = solve(mChildLink.getInertia(), force);
++    mChildLink.setInertialAcceleration(acceleration);
+   }
+   
+   virtual void derivative(const Task&amp; task)
+@@ -184,8 +183,8 @@
+   childLink.setVelocity(velocity);
+   childLink.setInertialVelocity(baseVelocity + velocity);
+ 
+-  childLink.setSpatialForce(Vector6::zeros());
+-  childLink.setSpatialInertia(SpatialInertia::zeros());
++  childLink.setForce(Vector6::zeros());
++  childLink.setInertia(SpatialInertia::zeros());
+ }
+ 
+ void
+@@ -223,7 +222,7 @@
+                          cross(pivel.getAngular(), velocity.getLinear()) + 
+                          cross(pivel.getLinear(), velocity.getAngular()));
+ 
+-  Vector6 velDeriv = childLink.getAcceleration()
++  Vector6 velDeriv = childLink.getInertialAcceleration()
+     - spatialAcceleration - Hdot;
+ 
+   derivatives[*mPositionStateInfo] = pDot;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000981.html">[OpenFDM-svn] r1019 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000984.html">[OpenFDM-svn] r1021 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#982">[ date ]</a>
+              <a href="thread.html#982">[ thread ]</a>
+              <a href="subject.html#982">[ subject ]</a>
+              <a href="author.html#982">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

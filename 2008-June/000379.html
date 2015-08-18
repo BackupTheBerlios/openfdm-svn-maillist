@@ -1,0 +1,164 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r406 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-June/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r406%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200806161950.m5GJoEJG015369%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000378.html">
+   <LINK REL="Next"  HREF="000380.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r406 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r406%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200806161950.m5GJoEJG015369%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r406 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jun 16 21:50:14 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000378.html">[OpenFDM-svn] r405 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000380.html">[OpenFDM-svn] r407 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#379">[ date ]</a>
+              <a href="thread.html#379">[ thread ]</a>
+              <a href="subject.html#379">[ subject ]</a>
+              <a href="author.html#379">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-06-16 21:50:12 +0200 (Mon, 16 Jun 2008)
+New Revision: 406
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+Log:
+Implement relation operators for weak pointers
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-06-16 19:48:36 UTC (rev 405)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-06-16 19:50:12 UTC (rev 406)
+@@ -77,11 +77,21 @@
+   friend class WeakPtr;
+ };
+ 
+-template&lt;typename T&gt;
+-inline bool
+-operator&lt;(const SharedPtr&lt;T&gt;&amp; sharedPtr0, const SharedPtr&lt;T&gt;&amp; sharedPtr1)
+-{ return sharedPtr0.get() &lt; sharedPtr1.get(); }
++// Hmmm, what if we get an automatic cast to a shared pointer of a fresh
++// allocated object pointer?
++// This will be gone after destruction of the temporary object ...
++// The same applies to the &lt; operator below ...
+ 
++// template&lt;typename T&gt;
++// inline bool
++// operator==(const SharedPtr&lt;T&gt;&amp; sharedPtr0, const SharedPtr&lt;T&gt;&amp; sharedPtr1)
++// { return sharedPtr0.get() == sharedPtr1.get(); }
++
++// template&lt;typename T&gt;
++// inline bool
++// operator&lt;(const SharedPtr&lt;T&gt;&amp; sharedPtr0, const SharedPtr&lt;T&gt;&amp; sharedPtr1)
++// { return sharedPtr0.get() &lt; sharedPtr1.get(); }
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-16 19:48:36 UTC (rev 405)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-16 19:50:12 UTC (rev 406)
+@@ -11,6 +11,11 @@
+ namespace OpenFDM {
+ 
+ template&lt;typename T&gt;
++inline bool operator==(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2);
++template&lt;typename T&gt;
++inline bool operator&lt;(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2);
++
++template&lt;typename T&gt;
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+@@ -62,8 +67,43 @@
+   
+   // The indirect reference itself.
+   SharedPtr&lt;WeakReferenced::WeakData&gt; mWeakData;
++
++  template&lt;typename S&gt;
++  friend bool operator==(const WeakPtr&lt;S&gt;&amp; p1, const WeakPtr&lt;S&gt;&amp; p2);
++  template&lt;typename S&gt;
++  friend bool operator&lt;(const WeakPtr&lt;S&gt;&amp; p1, const WeakPtr&lt;S&gt;&amp; p2);
+ };
+ 
++template&lt;typename T&gt;
++inline bool
++operator==(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return p1.mWeakData == p2.mWeakData; }
++
++template&lt;typename T&gt;
++inline bool
++operator!=(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return !(p1 == p2); }
++
++template&lt;typename T&gt;
++inline bool
++operator&lt;(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return p1.mWeakData &lt; p2.mWeakData; }
++
++template&lt;typename T&gt;
++inline bool
++operator&gt;(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return p2 &lt; p1; }
++
++template&lt;typename T&gt;
++inline bool
++operator&lt;=(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return !(p1 &gt; p2); }
++
++template&lt;typename T&gt;
++inline bool
++operator&gt;=(const WeakPtr&lt;T&gt;&amp; p1, const WeakPtr&lt;T&gt;&amp; p2)
++{ return !(p1 &lt; p2); }
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000378.html">[OpenFDM-svn] r405 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000380.html">[OpenFDM-svn] r407 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#379">[ date ]</a>
+              <a href="thread.html#379">[ thread ]</a>
+              <a href="subject.html#379">[ subject ]</a>
+              <a href="author.html#379">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,264 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r577 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r577%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810081546.m98Fk5PR029058%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000547.html">
+   <LINK REL="Next"  HREF="000549.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r577 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r577%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810081546.m98Fk5PR029058%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r577 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct  8 17:46:05 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000547.html">[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000549.html">[OpenFDM-svn] r579 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#548">[ date ]</a>
+              <a href="thread.html#548">[ thread ]</a>
+              <a href="subject.html#548">[ subject ]</a>
+              <a href="author.html#548">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-08 17:46:04 +0200 (Wed, 08 Oct 2008)
+New Revision: 577
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Streamline connect information.
+Prepare for symmetric port connects.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-08 05:40:02 UTC (rev 576)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-08 15:46:04 UTC (rev 577)
+@@ -169,59 +169,48 @@
+     if (!port0-&gt;canConnect(*port1))
+       return false;
+ 
+-    if (port0-&gt;toProviderPortInfo() &amp;&amp; port1-&gt;toAcceptorPortInfo()) {
+-      SharedPtr&lt;Connect&gt; connect = new Connect;
+-      if (!connect-&gt;setProvider(nodeId0, portId0))
+-        return false;
+-      if (!connect-&gt;addAcceptor(nodeId1, portId1))
+-        return false;
+-      _connectList.push_back(connect);
+-      return true;
+-    } else if (port1-&gt;toProviderPortInfo() &amp;&amp; port0-&gt;toAcceptorPortInfo()) {
+-      SharedPtr&lt;Connect&gt; connect = new Connect;
+-      if (!connect-&gt;setProvider(nodeId1, portId1))
+-        return false;
+-      if (!connect-&gt;addAcceptor(nodeId0, portId0))
+-        return false;
+-      _connectList.push_back(connect);
+-      return true;
+-    } else {
+-      return false;
+-    }
++    SharedPtr&lt;Connect&gt; connect = new Connect;
++    connect-&gt;_portId0 = portId0;
++    connect-&gt;_nodeId0 = nodeId0;
++    connect-&gt;_portId1 = portId1;
++    connect-&gt;_nodeId1 = nodeId1;
++    _connectList.push_back(connect);
++
++    return true;
+   }
+ 
+ 
+   unsigned getNumConnects() const
+   { return _connectList.size(); }
+ 
+-  unsigned getConnectAcceptorNodeIndex(unsigned i) const
++  unsigned getConnectNodeIndex0(unsigned i) const
+   {
+     if (getNumConnects() &lt;= i)
+       return ~0u;
+-    NodeId nodeId = _connectList[i]-&gt;_acceptorNodeId;
+-    return getChildNumber(nodeId);
++    return getChildNumber(_connectList[i]-&gt;_nodeId0);
+   }
+-  unsigned getConnectProviderNodeIndex(unsigned i) const
++  unsigned getConnectNodeIndex1(unsigned i) const
+   {
+     if (getNumConnects() &lt;= i)
+       return ~0u;
+-    NodeId nodeId = _connectList[i]-&gt;_providerNodeId;
+-    return getChildNumber(nodeId);
++    return getChildNumber(_connectList[i]-&gt;_nodeId1);
+   }
+ 
+-  SharedPtr&lt;const AcceptorPortInfo&gt;
+-  getConnectAcceptorPortInfo(unsigned i) const
++  SharedPtr&lt;const PortInfo&gt;
++  getConnectPortInfo0(unsigned i) const
+   {
+     if (getNumConnects() &lt;= i)
+       return 0;
+-    return _connectList[i]-&gt;_acceptorPort.lock();
++    SharedPtr&lt;const Node&gt; node = getChild(_connectList[i]-&gt;_nodeId0);
++    return node-&gt;getPort(_connectList[i]-&gt;_portId0);
+   }
+-  SharedPtr&lt;const ProviderPortInfo&gt;
+-  getConnectProviderPortInfo(unsigned i) const
++  SharedPtr&lt;const PortInfo&gt;
++  getConnectPortInfo1(unsigned i) const
+   {
+     if (getNumConnects() &lt;= i)
+       return 0;
+-    return _connectList[i]-&gt;_providerPort.lock();
++    SharedPtr&lt;const Node&gt; node = getChild(_connectList[i]-&gt;_nodeId1);
++    return node-&gt;getPort(_connectList[i]-&gt;_portId1);
+   }
+ 
+ private:
+@@ -290,37 +279,12 @@
+   };
+ 
+   struct Connect : public WeakReferenced {
+-    bool setProvider(const NodeId&amp; node, const PortId&amp; portId)
+-    {
+-      SharedPtr&lt;const PortInfo&gt; port = node.getPortPtr(portId);
+-      if (!port)
+-        return false;
+-      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
+-      if (!providerPort)
+-        return false;
+-      _providerNodeId = node;
+-      _providerPort = providerPort;
+-      return true;
+-    }
+-    bool addAcceptor(const NodeId&amp; node, const PortId&amp; portId)
+-    {
+-      SharedPtr&lt;const PortInfo&gt; port = node.getPortPtr(portId);
+-      if (!port)
+-        return false;
+-      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
+-      if (!acceptorPort)
+-        return false;
+-      _acceptorNodeId = node;
+-      _acceptorPort = acceptorPort;
+-      return true;
+-    }
++    NodeId _nodeId0;
++    PortId _portId0;
+ 
+-    NodeId _providerNodeId;
+-    WeakPtr&lt;const ProviderPortInfo&gt; _providerPort;
++    NodeId _nodeId1;
++    PortId _portId1;
+ 
+-    NodeId _acceptorNodeId;
+-    WeakPtr&lt;const AcceptorPortInfo&gt; _acceptorPort;
+-
+     // Where the line in the gui will be ...??
+     // std::list&lt;Vector2&gt; _positions;
+   };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-08 05:40:02 UTC (rev 576)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-08 15:46:04 UTC (rev 577)
+@@ -432,40 +432,36 @@
+     // Apply the group internal connections to the instances
+     unsigned numConnects = group.getNumConnects();
+     for (unsigned i = 0; i &lt; numConnects; ++i) {
+-      unsigned acceptorNodeIndex = group.getConnectAcceptorNodeIndex(i);
+-      unsigned providerNodeIndex = group.getConnectProviderNodeIndex(i);
+-
+-      if (acceptorNodeIndex == ~0u) {
++      unsigned nodeIndex0 = group.getConnectNodeIndex0(i);
++      if (nodeIndex0 == ~0u) {
+         Log(Schedule, Error)
+-          &lt;&lt; &quot;Cannot find acceptor node from nodeId&quot; &lt;&lt; std::endl;
++          &lt;&lt; &quot;Cannot find node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+-      if (providerNodeIndex == ~0u) {
++      unsigned nodeIndex1 = group.getConnectNodeIndex1(i);
++      if (nodeIndex1 == ~0u) {
+         Log(Schedule, Error)
+-          &lt;&lt; &quot;Cannot find provider node from nodeId&quot; &lt;&lt; std::endl;
++          &lt;&lt; &quot;Cannot find node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+ 
+-      SharedPtr&lt;const AcceptorPortInfo&gt; acceptorPort;
+-      acceptorPort = group.getConnectAcceptorPortInfo(i);
+-      SharedPtr&lt;const ProviderPortInfo&gt; providerPort;
+-      providerPort = group.getConnectProviderPortInfo(i);
+-
+-      if (!acceptorPort) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find acceptor Port data node &quot;
+-                  &lt;&lt; group.getChild(acceptorNodeIndex)-&gt;getName() &lt;&lt; std::endl;
++      SharedPtr&lt;const PortInfo&gt; portInfo0 = group.getConnectPortInfo0(i);
++      if (!portInfo0) {
++        Log(Schedule, Error) &lt;&lt; &quot;Cannot find provider Port data node &quot;
++                  &lt;&lt; group.getChild(nodeIndex0)-&gt;getName() &lt;&lt; std::endl;
+         continue;
+       }
+-      if (!providerPort) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find provider Port data node &quot;
+-                  &lt;&lt; group.getChild(providerNodeIndex)-&gt;getName() &lt;&lt; std::endl;
++      SharedPtr&lt;const PortInfo&gt; portInfo1 = group.getConnectPortInfo1(i);
++      if (!portInfo1) {
++        Log(Schedule, Error) &lt;&lt; &quot;Cannot find acceptor Port data node &quot;
++                  &lt;&lt; group.getChild(nodeIndex1)-&gt;getName() &lt;&lt; std::endl;
+         continue;
+       }
+ 
+-      unsigned acceptorPortNumber = acceptorPort-&gt;getIndex();
+-      unsigned providerPortNumber = providerPort-&gt;getIndex();
+-      if (!_portDataMap[acceptorNodeIndex]-&gt;mPortDataVector[acceptorPortNumber]-&gt;
+-          connect(_portDataMap[providerNodeIndex]-&gt;mPortDataVector[providerPortNumber]))
++      unsigned portInfoIndex0 = portInfo0-&gt;getIndex();
++      unsigned portInfoIndex1 = portInfo1-&gt;getIndex();
++      if (!_portDataMap[nodeIndex1]-&gt;mPortDataVector[portInfoIndex1]-&gt;
++          connect(_portDataMap[nodeIndex0]-&gt;mPortDataVector[portInfoIndex0]))
+         Log(Schedule, Error) &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
+     }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000547.html">[OpenFDM-svn] r576 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000549.html">[OpenFDM-svn] r579 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#548">[ date ]</a>
+              <a href="thread.html#548">[ thread ]</a>
+              <a href="subject.html#548">[ subject ]</a>
+              <a href="author.html#548">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

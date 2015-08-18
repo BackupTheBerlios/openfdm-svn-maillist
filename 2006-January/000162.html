@@ -1,0 +1,120 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r178 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r178%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031715.k03HFnn7007422%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000161.html">
+   <LINK REL="Next"  HREF="000163.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r178 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r178%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031715.k03HFnn7007422%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r178 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Jan  3 18:15:49 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000161.html">[OpenFDM-svn] r177 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000163.html">[OpenFDM-svn] r179 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#162">[ date ]</a>
+              <a href="thread.html#162">[ thread ]</a>
+              <a href="subject.html#162">[ subject ]</a>
+              <a href="author.html#162">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-03 18:15:46 +0100 (Tue, 03 Jan 2006)
+New Revision: 178
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+Log:
+Use real stability frame instead of negating
+lift and drag
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-03 16:03:39 UTC (rev 177)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-03 17:15:46 UTC (rev 178)
+@@ -679,32 +679,26 @@
+   real_type sa = sin(getAlpha());
+   real_type cb = cos(getBeta());
+   real_type sb = sin(getBeta());
+-  Matrix33 Ts2b(ca*cb, -ca*sb, -sa,
+-                   sb,     cb,   0,
+-                sa*cb, -sa*sb,  ca);
++  Matrix33 Ts2b(-ca*cb, -ca*sb,  sa,
++                   -sb,     cb,   0,
++                -sa*cb, -sa*sb, -ca);
+ 
+   // This is simple here. Just collect all summands ...
+-  Vector6 force = Vector6::zeros();
++  Vector3 stabilityForce = Vector3::zeros();
+   /// Lift points upward
+   /// Drag points backward
+-  /// FIXME: may be we can put that already into the rotation matrix?
+-  if (mStabilityAxisForce[0].isConnected())
+-    force(4) -= mStabilityAxisForce[0].getRealValue();
+-  if (mStabilityAxisForce[1].isConnected())
+-    force(5) += mStabilityAxisForce[1].getRealValue();
+-  if (mStabilityAxisForce[2].isConnected())
+-    force(6) -= mStabilityAxisForce[2].getRealValue();
++  for (int i = 0; i &lt; 3; ++i)
++    if (mStabilityAxisForce[i].isConnected())
++      stabilityForce(i+1) = mStabilityAxisForce[i].getRealValue();
+ 
+-  force.setAngular(Ts2b*force.getAngular());
+-  force.setLinear(Ts2b*force.getLinear());
+-
++  Vector3 bodyTorque = Vector3::zeros();
+   for (int i = 0; i &lt; 3; ++i)
+     if (mBodyAxisTorque[i].isConnected())
+-      force(i+1) += mBodyAxisTorque[i].getRealValue();
++      bodyTorque(i+1) = mBodyAxisTorque[i].getRealValue();
+ 
++  Vector6 force(bodyTorque, Ts2b*stabilityForce);
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::computeForce() &quot;
+                        &lt;&lt; trans(force) &lt;&lt; endl;
+-
+   applyForce(forceFrom(mPosition, mOrientation, force));
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000161.html">[OpenFDM-svn] r177 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000163.html">[OpenFDM-svn] r179 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#162">[ date ]</a>
+              <a href="thread.html#162">[ thread ]</a>
+              <a href="subject.html#162">[ subject ]</a>
+              <a href="author.html#162">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

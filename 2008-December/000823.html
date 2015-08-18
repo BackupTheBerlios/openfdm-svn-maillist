@@ -1,0 +1,244 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r855 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r855%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812050618.mB56IkAM019978%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000822.html">
+   <LINK REL="Next"  HREF="000824.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r855 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r855%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812050618.mB56IkAM019978%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r855 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Dec  5 07:18:46 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000822.html">[OpenFDM-svn] r854 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000824.html">[OpenFDM-svn] r856 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#823">[ date ]</a>
+              <a href="thread.html#823">[ thread ]</a>
+              <a href="subject.html#823">[ subject ]</a>
+              <a href="author.html#823">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-05 07:18:43 +0100 (Fri, 05 Dec 2008)
+New Revision: 855
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Use the Connect api in the system. Remove the legacy one.
+
+M    src/OpenFDM/Group.h
+M    src/OpenFDM/Group.cpp
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-12-04 21:54:25 UTC (rev 854)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-12-05 06:18:43 UTC (rev 855)
+@@ -84,7 +84,7 @@
+ }
+ 
+ unsigned
+-Group::getChildNumber(const Node* node) const
++Group::getChildIndex(const Node* node) const
+ {
+   ChildList::const_iterator i;
+   i = std::find(mChildList.begin(), mChildList.end(), node);
+@@ -152,7 +152,7 @@
+ }
+ 
+ unsigned
+-Group::getConnectNumber(const Connect* connect) const
++Group::getConnectIndex(const Connect* connect) const
+ {
+   ConnectList::const_iterator i;
+   i = std::find(mConnectList.begin(), mConnectList.end(), connect);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-12-04 21:54:25 UTC (rev 854)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-12-05 06:18:43 UTC (rev 855)
+@@ -43,7 +43,7 @@
+   const Node* getChild(unsigned i) const;
+   /// Get child number of the given node. If the node is not contained in
+   /// the group ~0u is returned.
+-  unsigned getChildNumber(const Node* node) const;
++  unsigned getChildIndex(const Node* node) const;
+ 
+ 
+   /// Connect api
+@@ -52,7 +52,7 @@
+   const Connect* getConnect(unsigned i) const;
+   void removeConnect(unsigned i);
+   void removeConnect(const Connect* connect);
+-  unsigned getConnectNumber(const Connect* connect) const;
++  unsigned getConnectIndex(const Connect* connect) const;
+ 
+   Connect* connect(const PortInfo* port0, const PortInfo* port1)
+   {
+@@ -66,35 +66,6 @@
+     return connect.get();
+   }
+ 
+-
+-  unsigned getConnectNodeIndex0(unsigned i) const
+-  {
+-    if (getNumConnects() &lt;= i)
+-      return ~0u;
+-    return getChildNumber(mConnectList[i]-&gt;getPortInfo0()-&gt;getNode());
+-  }
+-  unsigned getConnectNodeIndex1(unsigned i) const
+-  {
+-    if (getNumConnects() &lt;= i)
+-      return ~0u;
+-    return getChildNumber(mConnectList[i]-&gt;getPortInfo1()-&gt;getNode());
+-  }
+-
+-  SharedPtr&lt;const PortInfo&gt;
+-  getConnectPortInfo0(unsigned i) const
+-  {
+-    if (getNumConnects() &lt;= i)
+-      return 0;
+-    return mConnectList[i]-&gt;getPortInfo0();
+-  }
+-  SharedPtr&lt;const PortInfo&gt;
+-  getConnectPortInfo1(unsigned i) const
+-  {
+-    if (getNumConnects() &lt;= i)
+-      return 0;
+-    return mConnectList[i]-&gt;getPortInfo1();
+-  }
+-
+ private:
+   typedef std::vector&lt;SharedPtr&lt;Connect&gt; &gt; ConnectList;
+   ConnectList mConnectList;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-12-04 21:54:25 UTC (rev 854)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-12-05 06:18:43 UTC (rev 855)
+@@ -816,34 +816,61 @@
+     // Apply the group internal connections to the instances
+     unsigned numConnects = group.getNumConnects();
+     for (unsigned i = 0; i &lt; numConnects; ++i) {
+-      unsigned nodeIndex0 = group.getConnectNodeIndex0(i);
+-      if (nodeIndex0 == ~0u) {
+-        Log(Schedule, Error)
+-          &lt;&lt; &quot;Cannot find node from nodeId&quot; &lt;&lt; std::endl;
++      SharedPtr&lt;const Connect&gt; connect = group.getConnect(i);
++      if (!connect) {
++        Log(Schedule, Warning) &lt;&lt; &quot;Zero Connect pointer #&quot; &lt;&lt; i
++                               &lt;&lt; &quot; for Group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+         continue;
+       }
+-      unsigned nodeIndex1 = group.getConnectNodeIndex1(i);
+-      if (nodeIndex1 == ~0u) {
+-        Log(Schedule, Error)
+-          &lt;&lt; &quot;Cannot find node from nodeId&quot; &lt;&lt; std::endl;
+-        continue;
+-      }
+ 
+-      SharedPtr&lt;const PortInfo&gt; portInfo0 = group.getConnectPortInfo0(i);
++      SharedPtr&lt;const PortInfo&gt; portInfo0 = connect-&gt;getPortInfo0();
+       if (!portInfo0) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find provider Port data node &quot;
+-                             &lt;&lt; group.getChild(nodeIndex0)-&gt;getName()
+-                             &lt;&lt; std::endl;
++        Log(Schedule, Warning) &lt;&lt; &quot;Incomplete connect #&quot; &lt;&lt; i &lt;&lt; &quot; for Group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+         continue;
+       }
+-      SharedPtr&lt;const PortInfo&gt; portInfo1 = group.getConnectPortInfo1(i);
++      SharedPtr&lt;const PortInfo&gt; portInfo1 = connect-&gt;getPortInfo1();
+       if (!portInfo1) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot find acceptor Port data node &quot;
+-                             &lt;&lt; group.getChild(nodeIndex1)-&gt;getName()
+-                             &lt;&lt; std::endl;
++        Log(Schedule, Warning) &lt;&lt; &quot;Incomplete connect #&quot; &lt;&lt; i &lt;&lt; &quot; for Group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+         continue;
+       }
+ 
++      SharedPtr&lt;const Node&gt; node0 = portInfo0-&gt;getNode();
++      if (!node0) {
++        Log(Schedule, Warning) &lt;&lt; &quot;Dangling port #0 connected in connect #&quot; &lt;&lt; i
++                               &lt;&lt; &quot; for Group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++        continue;
++      }
++      SharedPtr&lt;const Node&gt; node1 = portInfo1-&gt;getNode();
++      if (!node1) {
++        Log(Schedule, Warning) &lt;&lt; &quot;Dangling port #1 connected in connect #&quot; &lt;&lt; i
++                               &lt;&lt; &quot; for Group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++        continue;
++      }
++      unsigned nodeIndex0 = group.getChildIndex(node0);
++      if (nodeIndex0 == ~0u) {
++        Log(Schedule, Warning) &lt;&lt; &quot;Node #0 does no longer belong to group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot; in connect #&quot; &lt;&lt; i &lt;&lt; std::endl;
++        continue;
++      }
++      unsigned nodeIndex1 = group.getChildIndex(node1);
++      if (nodeIndex1 == ~0u) {
++        Log(Schedule, Warning) &lt;&lt; &quot;Node #1 does no longer belong to group \&quot;&quot;
++                               &lt;&lt; Node::toNodePathName(getNodePath())
++                               &lt;&lt; &quot;\&quot; in connect #&quot; &lt;&lt; i &lt;&lt; std::endl;
++        continue;
++      }
++
+       unsigned portInfoIndex0 = portInfo0-&gt;getIndex();
+       unsigned portInfoIndex1 = portInfo1-&gt;getIndex();
+       if (!mInstanceDataVector[nodeIndex1]-&gt;getPortData(portInfoIndex1)-&gt;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000822.html">[OpenFDM-svn] r854 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000824.html">[OpenFDM-svn] r856 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#823">[ date ]</a>
+              <a href="thread.html#823">[ thread ]</a>
+              <a href="subject.html#823">[ subject ]</a>
+              <a href="author.html#823">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

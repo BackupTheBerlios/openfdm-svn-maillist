@@ -1,0 +1,163 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1044 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1044%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908011243.n71ChRZb026918%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001003.html">
+   <LINK REL="Next"  HREF="001005.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1044 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1044%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908011243.n71ChRZb026918%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1044 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug  1 14:43:27 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001003.html">[OpenFDM-svn] r1043 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001005.html">[OpenFDM-svn] r1045 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1004">[ date ]</a>
+              <a href="thread.html#1004">[ thread ]</a>
+              <a href="subject.html#1004">[ subject ]</a>
+              <a href="author.html#1004">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-01 14:43:26 +0200 (Sat, 01 Aug 2009)
+New Revision: 1044
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+   branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp
+Log:
+Now it compiles ..
+
+M    JSBSim/JSBSimReaderBase.cpp
+M    JSBSim/jsb2openfdm.cpp
+M    JSBSim/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-01 12:43:00 UTC (rev 1043)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-01 12:43:26 UTC (rev 1044)
+@@ -50,7 +50,7 @@
+ #include &lt;OpenFDM/XML/ErrorHandler.h&gt;
+ #include &lt;OpenFDM/XML/Attributes.h&gt;
+ 
+-#include &lt;OpenFDM/XML/EasyXMLReader.h&gt; // FIXME
++#include &lt;OpenFDM/XML/ExpatXMLReader.h&gt; // FIXME
+ 
+ #include &quot;JSBSimAerodynamic.h&quot;
+ #include &quot;JSBSimAerosurfaceScale.h&quot;
+@@ -110,7 +110,7 @@
+ JSBSimReaderBase::parseXMLStream(std::istream&amp; stream)
+ {
+   // Get a parser FIXME
+-  SharedPtr&lt;XML::XMLReader&gt; reader = new XML::EasyXMLReader;
++  SharedPtr&lt;XML::XMLReader&gt; reader = new XML::ExpatXMLReader;
+   
+   // Set the handlers
+   SharedPtr&lt;SimpleContentHandler&gt; ch = new SimpleContentHandler;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-01 12:43:00 UTC (rev 1043)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-01 12:43:26 UTC (rev 1044)
+@@ -1,5 +1,12 @@
+ INCLUDES = -I$(srcdir)/..
+ 
++if ENABLE_EXPAT
++xml_library = ../OpenFDM/XML/libOpenFDMexpatXML.la
++endif
++if ENABLE_EASYXML
++xml_library = ../OpenFDM/XML/libOpenFDMeasyxmlXML.la
++endif
++
+ bin_PROGRAMS = jsb2openfdm
+ jsb2openfdm_SOURCES = jsb2openfdm.cpp
+ jsb2openfdm_LDFLAGS = 
+@@ -30,6 +37,6 @@
+   JSBSimScheduledGain.cpp \
+   Tablereader.cpp \
+   XMLReader.cpp
+-libOpenFDMJSBReader_la_LIBADD = ../OpenFDM/XML/libOpenFDMeasyxmlXML.la \
++libOpenFDMJSBReader_la_LIBADD = $(xml_library) \
+                                 ../OpenFDM/XML/libOpenFDMXML.la \
+                                 ../OpenFDM/libOpenFDM.la
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp	2009-08-01 12:43:00 UTC (rev 1043)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp	2009-08-01 12:43:26 UTC (rev 1044)
+@@ -1,13 +1,14 @@
+ #include &lt;iostream&gt;
+ 
+ #include &lt;OpenFDM/ReaderWriter.h&gt;
++#include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/XMLDumpModelVisitor.h&gt;
+ #include &quot;JSBSimReader.h&quot;
+ 
+ using OpenFDM::ReaderWriter;
+ using OpenFDM::JSBSimReader;
+-using OpenFDM::Vehicle;
+ using OpenFDM::SharedPtr;
++using OpenFDM::System;
+ 
+ int
+ main(int argc, char *argv[])
+@@ -34,13 +35,13 @@
+     
+     return EXIT_FAILURE;
+   }
+-  SharedPtr&lt;Vehicle&gt; vehicle = reader.getVehicle();
++  SharedPtr&lt;System&gt; system = reader.getSystem();
+ 
+   // Ok, now the Vehicle here contains the imported data
+   // When the reflection stuff is ready, we can dump that data to a
+   // native format ...
+   OpenFDM::XMLDumpModelVisitor debugDumpVisitor(std::cout);
+-  vehicle-&gt;getSystem()-&gt;accept(debugDumpVisitor);
++  system-&gt;getNode()-&gt;accept(debugDumpVisitor);
+ 
+   return 0;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001003.html">[OpenFDM-svn] r1043 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001005.html">[OpenFDM-svn] r1045 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1004">[ date ]</a>
+              <a href="thread.html#1004">[ thread ]</a>
+              <a href="subject.html#1004">[ subject ]</a>
+              <a href="author.html#1004">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,1237 @@
+From frohlich at mail.berlios.de  Sun Feb  1 18:13:39 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 1 Feb 2009 18:13:39 +0100
+Subject: [OpenFDM-svn] r978 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902011713.n11HDdBJ027143@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-01 18:13:38 +0100 (Sun, 01 Feb 2009)
+New Revision: 978
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+Log:
+Cleanup the MobileRoot.
+
+M    OpenFDM/MobileRootJoint.cpp
+M    OpenFDM/MobileRootJoint.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-01-31 17:00:02 UTC (rev 977)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-01 17:13:38 UTC (rev 978)
+@@ -30,30 +30,28 @@
+   
+   virtual void initDesignPosition()
+   {
+-    mMobileRootJoint->initDesignPosition(mPortValueList);
++    mChildLink.setDesignPosition(mMobileRootJoint->getPosition());
+   }
+ 
+   virtual void init(const /*Init*/Task& task)
+   {
+-    mMobileRootJoint->init(task, mDiscreteState, mContinousState, mPortValueList);
++    mMobileRootJoint->init(task, mContinousState);
+   }
+   
+   virtual void velocities(const Task& task)
+   {
+-    mMobileRootJoint->velocity(task, getEnvironment(), mContinousState, mPortValueList);
++    mMobileRootJoint->velocity(task, getEnvironment(), mContinousState, mChildLink);
+   }
+   virtual void articulation(const Task& task)
+-  {
+-    mMobileRootJoint->articulation(task, getEnvironment(), mContinousState, mPortValueList);
+-  }
++  { }
+   virtual void accelerations(const Task& task)
+   {
+-    mMobileRootJoint->acceleration(task, getEnvironment(), mContinousState, mPortValueList);
++    mMobileRootJoint->acceleration(task, getEnvironment(), mContinousState, mChildLink);
+   }
+   
+   virtual void derivative(const Task&)
+   {
+-    mMobileRootJoint->derivative(getEnvironment(), mDiscreteState, mContinousState, mPortValueList,
++    mMobileRootJoint->derivative(getEnvironment(), mDiscreteState, mContinousState, mChildLink,
+                            mContinousStateDerivative);
+   }
+   
+@@ -154,9 +152,8 @@
+ 
+ 
+ void
+-MobileRootJoint::init(const Task&, DiscreteStateValueVector&,
+-                      ContinousStateValueVector& continousState,
+-                      const PortValueList& portValues) const
++MobileRootJoint::init(const Task&,
++                      ContinousStateValueVector& continousState) const
+ {
+   continousState[*mPositionStateInfo] = mInitialPosition;
+   continousState[*mOrientationStateInfo] = mInitialOrientation;
+@@ -165,15 +162,9 @@
+ }
+ 
+ void
+-MobileRootJoint::initDesignPosition(PortValueList& portValues) const
+-{
+-  portValues[*mMechanicLink].setDesignPosition(getPosition());
+-}
+-
+-void
+ MobileRootJoint::velocity(const Task& task, const Environment& environment,
+                           const ContinousStateValueVector& continousState,
+-                          PortValueList& portValues) const
++                          ChildLink& childLink) const
+ {
+   Vector3 angularBaseVelocity = environment.getAngularVelocity(task.getTime());
+ 
+@@ -181,39 +172,30 @@
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+-  portValues[*mMechanicLink].setCoordinateSystem(CoordinateSystem(position,
+-                                                                  orientation));
+-  portValues[*mMechanicLink].setPosAndVel(angularBaseVelocity,
+-                                          position, orientation, velocity);
++  childLink.setCoordinateSystem(CoordinateSystem(position, orientation));
++  childLink.getMechanicLinkValue().setPosAndVel(angularBaseVelocity, position,
++                                                orientation, velocity);
+ }
+ 
+ void
+-MobileRootJoint::articulation(const Task&, const Environment& environment,
+-                              const ContinousStateValueVector&,
+-                              PortValueList&) const
+-{
+-  /// In this case a noop.
+-}
+-
+-void
+ MobileRootJoint::acceleration(const Task& task, const Environment& environment,
+                               const ContinousStateValueVector&,
+-                              PortValueList& portValues) const
++                              ChildLink& childLink) const
+ {
+   Vector6 spatialAcceleration = environment.getAcceleration(task.getTime());
+ 
+-  SpatialInertia inertia = portValues[*mMechanicLink].getInertia();
+-  Vector6 force = portValues[*mMechanicLink].getForce();
++  SpatialInertia inertia = childLink.getInertia();
++  Vector6 force = childLink.getForce();
+ 
+   spatialAcceleration -= solve(inertia, force);
+-  portValues[*mMechanicLink].setSpAccel(spatialAcceleration);
++  childLink.getMechanicLinkValue().setSpAccel(spatialAcceleration);
+ }
+ 
+ void
+ MobileRootJoint::derivative(const Environment& environment,
+                             const DiscreteStateValueVector&,
+                             const ContinousStateValueVector& continousState,
+-                            const PortValueList& portValues,
++                            const ChildLink& childLink,
+                             ContinousStateValueVector& derivatives) const
+ {
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+@@ -229,7 +211,7 @@
+   Vector3 angVel = velocity.getAngular();
+   Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
+ 
+-  Vector6 velDeriv = portValues[*mMechanicLink].getRelVelDot();
++  Vector6 velDeriv = childLink.getMechanicLinkValue().getRelVelDot();
+ 
+   derivatives[*mPositionStateInfo] = pDot;
+   derivatives[*mOrientationStateInfo] = qderiv;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-01-31 17:00:02 UTC (rev 977)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-02-01 17:13:38 UTC (rev 978)
+@@ -40,23 +40,15 @@
+   const Vector3& getInitialAngularVelocity() const;
+   void setInitialAngularVelocity(const Vector3& initialAngularVelocity);
+ 
+-  void init(const Task&, DiscreteStateValueVector&,
+-            ContinousStateValueVector&,
+-            const PortValueList&) const;
+-  void initDesignPosition(PortValueList&) const;
++  void init(const Task&, ContinousStateValueVector&) const;
+   void velocity(const Task&, const Environment& environment,
+-                const ContinousStateValueVector& states,
+-                PortValueList& portValues) const;
+-  void articulation(const Task&, const Environment& environment,
+-                    const ContinousStateValueVector&,
+-                    PortValueList& portValues) const;
++                const ContinousStateValueVector& states, ChildLink&) const;
+   void acceleration(const Task&, const Environment& environment,
+-                    const ContinousStateValueVector&,
+-                    PortValueList& portValues) const;
++                    const ContinousStateValueVector&, ChildLink&) const;
+   void derivative(const Environment& environment,
+                   const DiscreteStateValueVector&,
+                   const ContinousStateValueVector&,
+-                  const PortValueList& portValues,
++                  const ChildLink& childLink,
+                   ContinousStateValueVector&) const;
+ private:
+   class Context;
+
+
+
+From frohlich at mail.berlios.de  Sun Feb  1 18:22:47 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 1 Feb 2009 18:22:47 +0100
+Subject: [OpenFDM-svn] r979 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902011722.n11HMlLQ027746@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-01 18:22:47 +0100 (Sun, 01 Feb 2009)
+New Revision: 979
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+Log:
+Remove direct accessors for the mechanic link stuff.
+
+M    PortValueList.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-02-01 17:13:38 UTC (rev 978)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-02-01 17:22:47 UTC (rev 979)
+@@ -40,13 +40,6 @@
+   Matrix& operator[](const MatrixOutputPort& port)
+   { return port.getPortValue(mPortValueVector)->getValue(); }
+ 
+-  // Accessors for matrix valued ports
+-  // FIXME Implement access control for the port value
+-  const MechanicLinkValue& operator[](const MechanicLink& port) const
+-  { return *getPortValue(port); }
+-  MechanicLinkValue& operator[](const MechanicLink& port)
+-  { return *getPortValue(port); }
+-
+   const NumericPortValue* getPortValue(const RealInputPort& port)
+   {
+     if (port.empty())
+@@ -173,6 +166,12 @@
+       return 0;
+     return portValue->toMechanicLinkValue();
+   }
++  MechanicLinkValue* getPortValue(const MechanicLink* portInfo)
++  {
++    if (!portInfo)
++      return 0;
++    return getPortValue(*portInfo);
++  }
+   MechanicLinkValue* getPortValue(const MechanicLink& portInfo)
+   {
+     PortValue* portValue = getPortValue(portInfo.getIndex());
+
+
+
+From frohlich at mail.berlios.de  Sun Feb  1 20:17:14 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 1 Feb 2009 20:17:14 +0100
+Subject: [OpenFDM-svn] r980 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902011917.n11JHEXZ022153@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-01 20:17:13 +0100 (Sun, 01 Feb 2009)
+New Revision: 980
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+Log:
+Reduce direct access to MechanicLinkValue.
+
+M    OpenFDM/MobileRootJoint.cpp
+M    OpenFDM/CartesianJoint.h
+M    OpenFDM/MechanicLinkValue.h
+M    OpenFDM/FixedRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2009-02-01 19:17:13 UTC (rev 980)
+@@ -143,8 +143,7 @@
+       mChildLink.setCoordinateSystem(mParentLink.getCoordinateSystem().toReference(mRelativeCoordinateSystem));
+ 
+       Vector6 relVel = mJointMatrix*velocity;
+-      mChildLink.setPosAndVel(mParentLink.getMechanicLinkValue(),
+-                              relPosition, orientation, relVel);
++      mChildLink.setPosAndVel(mParentLink, relPosition, orientation, relVel);
+ 
+       /**
+          This is the cross product of the inertial spatial velocity
+@@ -221,8 +220,7 @@
+ 
+       Vector6 f = mChildLink.getInertia()*parentSpAccel + pAlpha;
+       mVelDot = hIh.solve(mJointForce - trans(mJointMatrix)*f);
+-      mChildLink.setAccel(mParentLink.getMechanicLinkValue(),
+-                          mJointMatrix*mVelDot);
++      mChildLink.setAccel(mParentLink, mJointMatrix*mVelDot);
+     }
+   
+     /** Compute the articulation step for a given velocity derivative.
+@@ -253,8 +251,7 @@
+      */
+     void accelerateDueToVelDot()
+     {
+-      mChildLink.setAccel(mParentLink.getMechanicLinkValue(),
+-                          mJointMatrix*mVelDot);
++      mChildLink.setAccel(mParentLink, mJointMatrix*mVelDot);
+     }
+ 
+     const VectorN& getVelDot() const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-01 19:17:13 UTC (rev 980)
+@@ -38,17 +38,16 @@
+   virtual void velocities(const Task& task)
+   {
+     Vector3 angularVel = getEnvironment().getAngularVelocity(task.getTime());
+-    mChildLink.getMechanicLinkValue().
+-      setCoordinateSystem(CoordinateSystem(mFixedRootJoint->mRootPosition,
+-                                           mFixedRootJoint->mRootOrientation));
+-    mChildLink.getMechanicLinkValue().
+-      setPosAndVel(angularVel, mFixedRootJoint->mRootPosition,
+-                   mFixedRootJoint->mRootOrientation, Vector6::zeros());
++    CoordinateSystem coordSys(mFixedRootJoint->mRootPosition,
++                              mFixedRootJoint->mRootOrientation);
++    mChildLink.setCoordinateSystem(coordSys);
++    mChildLink.setPosAndVel(angularVel, mFixedRootJoint->mRootPosition,
++                            mFixedRootJoint->mRootOrientation,
++                            Vector6::zeros());
+   }
+   virtual void accelerations(const Task& task)
+   {
+-    mChildLink.getMechanicLinkValue().
+-      setSpAccel(getEnvironment().getAcceleration(task.getTime()));
++    mChildLink.setSpAccel(getEnvironment().getAcceleration(task.getTime()));
+   }
+   
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-01 19:17:13 UTC (rev 980)
+@@ -126,52 +126,6 @@
+   Vector3 mDesignPosition;
+ };
+ 
+-class ChildLink {
+-public:
+-  ChildLink(MechanicLinkValue* mechanicLinkValue) :
+-    mMechanicLinkValue(mechanicLinkValue)
+-  { OpenFDMAssert(mMechanicLinkValue); }
+-
+-  const MechanicLinkValue& getMechanicLinkValue() const
+-  { return *mMechanicLinkValue; }
+-  MechanicLinkValue& getMechanicLinkValue()
+-  { return *mMechanicLinkValue; }
+-
+-  void setDesignPosition(const Vector3& position)
+-  { mMechanicLinkValue->setDesignPosition(position); }
+-
+-  void setPosAndVel(const MechanicLinkValue& link, const Vector3& position,
+-                    const Quaternion& orientation, const Vector6& velocity)
+-  { mMechanicLinkValue->setPosAndVel(link, position, orientation, velocity); }
+-  void setAccel(const MechanicLinkValue& link, const Vector6& accel)
+-  { mMechanicLinkValue->setAccel(link, accel); }
+-
+-  void setCoordinateSystem(const CoordinateSystem& coordinateSystem)
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue->setCoordinateSystem(coordinateSystem);
+-  }
+-  const CoordinateSystem& getCoordinateSystem() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue->getCoordinateSystem();
+-  }
+-
+-  const Vector6& getForce() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue->getForce();
+-  }
+-  const SpatialInertia& getInertia() const
+-  {
+-    OpenFDMAssert(mMechanicLinkValue);
+-    return mMechanicLinkValue->getInertia();
+-  }
+- 
+-private:
+-  SharedPtr<MechanicLinkValue> mMechanicLinkValue;
+-};
+-
+ class ParentLink {
+ public:
+   ParentLink(MechanicLinkValue* mechanicLinkValue = 0) :
+@@ -193,11 +147,6 @@
+     OpenFDMAssert(isConnected());
+     return *mMechanicLinkValue;
+   }
+-  MechanicLinkValue& getMechanicLinkValue()
+-  {
+-    OpenFDMAssert(isConnected());
+-    return *mMechanicLinkValue;
+-  }
+ 
+   CoordinateSystem getCoordinateSystem() const
+   {
+@@ -326,6 +275,71 @@
+   Vector3 mLinkRelPos;
+ };
+ 
++class ChildLink {
++public:
++  ChildLink(MechanicLinkValue* mechanicLinkValue) :
++    mMechanicLinkValue(mechanicLinkValue)
++  { OpenFDMAssert(mMechanicLinkValue); }
++
++  const MechanicLinkValue& getMechanicLinkValue() const
++  { return *mMechanicLinkValue; }
++
++  void setDesignPosition(const Vector3& position)
++  { mMechanicLinkValue->setDesignPosition(position); }
++
++  void setPosAndVel(const Vector3& angularBaseVel, const Vector3& position,
++                    const Quaternion& orientation, const Vector6& velocity)
++  {
++    mMechanicLinkValue->setPosAndVel(angularBaseVel, position,
++                                     orientation, velocity);
++  }
++  void setSpAccel(const Vector6& accel)
++  {
++    mMechanicLinkValue->setSpAccel(accel);
++  }
++  Vector6 getSpAccel() const
++  {
++    mMechanicLinkValue->getSpAccel();
++  }
++
++  void setPosAndVel(const ParentLink& parentLink, const Vector3& position,
++                    const Quaternion& orientation, const Vector6& velocity)
++  {
++    const MechanicLinkValue& link = parentLink.getMechanicLinkValue();
++    mMechanicLinkValue->setPosAndVel(link, position, orientation, velocity);
++  }
++  void setAccel(const ParentLink& parentLink, const Vector6& accel)
++  {
++    const MechanicLinkValue& link = parentLink.getMechanicLinkValue();
++    mMechanicLinkValue->setAccel(link, accel);
++  }
++
++  void setCoordinateSystem(const CoordinateSystem& coordinateSystem)
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue->setCoordinateSystem(coordinateSystem);
++  }
++  const CoordinateSystem& getCoordinateSystem() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue->getCoordinateSystem();
++  }
++
++  const Vector6& getForce() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue->getForce();
++  }
++  const SpatialInertia& getInertia() const
++  {
++    OpenFDMAssert(mMechanicLinkValue);
++    return mMechanicLinkValue->getInertia();
++  }
++ 
++private:
++  SharedPtr<MechanicLinkValue> mMechanicLinkValue;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-01 17:22:47 UTC (rev 979)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-01 19:17:13 UTC (rev 980)
+@@ -173,8 +173,7 @@
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+   childLink.setCoordinateSystem(CoordinateSystem(position, orientation));
+-  childLink.getMechanicLinkValue().setPosAndVel(angularBaseVelocity, position,
+-                                                orientation, velocity);
++  childLink.setPosAndVel(angularBaseVelocity, position, orientation, velocity);
+ }
+ 
+ void
+@@ -188,7 +187,7 @@
+   Vector6 force = childLink.getForce();
+ 
+   spatialAcceleration -= solve(inertia, force);
+-  childLink.getMechanicLinkValue().setSpAccel(spatialAcceleration);
++  childLink.setSpAccel(spatialAcceleration);
+ }
+ 
+ void
+
+
+
+From frohlich at mail.berlios.de  Mon Feb  2 19:03:13 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Feb 2009 19:03:13 +0100
+Subject: [OpenFDM-svn] r981 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902021803.n12I3DGd013161@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-02 19:03:12 +0100 (Mon, 02 Feb 2009)
+New Revision: 981
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+Log:
+Fix missing return statement.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-01 19:17:13 UTC (rev 980)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-02-02 18:03:12 UTC (rev 981)
+@@ -299,7 +299,7 @@
+   }
+   Vector6 getSpAccel() const
+   {
+-    mMechanicLinkValue->getSpAccel();
++    return mMechanicLinkValue->getSpAccel();
+   }
+ 
+   void setPosAndVel(const ParentLink& parentLink, const Vector3& position,
+
+
+
+From frohlich at mail.berlios.de  Mon Feb  2 19:52:57 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Feb 2009 19:52:57 +0100
+Subject: [OpenFDM-svn] r982 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902021852.n12Iqv3Y002084@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-02 19:52:57 +0100 (Mon, 02 Feb 2009)
+New Revision: 982
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+Log:
+Handle external acceleration more correct.
+
+M    OpenFDM/MobileRootJoint.cpp
+M    OpenFDM/MobileRootJoint.h
+M    OpenFDM/FixedRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-02 18:03:12 UTC (rev 981)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-02-02 18:52:57 UTC (rev 982)
+@@ -47,7 +47,10 @@
+   }
+   virtual void accelerations(const Task& task)
+   {
+-    mChildLink.setSpAccel(getEnvironment().getAcceleration(task.getTime()));
++    Vector6 spAccel = getEnvironment().getAcceleration(task.getTime());
++    spAccel = motionTo(mFixedRootJoint->mRootPosition,
++                       mFixedRootJoint->mRootOrientation, spAccel);
++    mChildLink.setSpAccel(spAccel);
+   }
+   
+ private:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-02 18:03:12 UTC (rev 981)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-02-02 18:52:57 UTC (rev 982)
+@@ -43,15 +43,19 @@
+     mMobileRootJoint->velocity(task, getEnvironment(), mContinousState, mChildLink);
+   }
+   virtual void articulation(const Task& task)
+-  { }
++  {
++  }
+   virtual void accelerations(const Task& task)
+   {
+-    mMobileRootJoint->acceleration(task, getEnvironment(), mContinousState, mChildLink);
++    SpatialInertia inertia = mChildLink.getInertia();
++    Vector6 force = -mChildLink.getForce();
++    Vector6 spatialAcceleration = solve(inertia, force);
++    mChildLink.setSpAccel(spatialAcceleration);
+   }
+   
+-  virtual void derivative(const Task&)
++  virtual void derivative(const Task& task)
+   {
+-    mMobileRootJoint->derivative(getEnvironment(), mDiscreteState, mContinousState, mChildLink,
++    mMobileRootJoint->derivative(task, getEnvironment(), mDiscreteState, mContinousState, mChildLink,
+                            mContinousStateDerivative);
+   }
+   
+@@ -177,26 +181,13 @@
+ }
+ 
+ void
+-MobileRootJoint::acceleration(const Task& task, const Environment& environment,
+-                              const ContinousStateValueVector&,
+-                              ChildLink& childLink) const
+-{
+-  Vector6 spatialAcceleration = environment.getAcceleration(task.getTime());
+-
+-  SpatialInertia inertia = childLink.getInertia();
+-  Vector6 force = childLink.getForce();
+-
+-  spatialAcceleration -= solve(inertia, force);
+-  childLink.setSpAccel(spatialAcceleration);
+-}
+-
+-void
+-MobileRootJoint::derivative(const Environment& environment,
++MobileRootJoint::derivative(const Task& task, const Environment& environment,
+                             const DiscreteStateValueVector&,
+                             const ContinousStateValueVector& continousState,
+                             const ChildLink& childLink,
+                             ContinousStateValueVector& derivatives) const
+ {
++  Vector3 position = continousState[*mPositionStateInfo];
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+@@ -210,8 +201,24 @@
+   Vector3 angVel = velocity.getAngular();
+   Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
+ 
+-  Vector6 velDeriv = childLink.getMechanicLinkValue().getRelVelDot();
++  // Now the derivative of the relative velocity, that is take the
++  // spatial acceleration and subtract the inertial base velocity and the
++  // derivative of the 'joint matrix'.
++  Vector6 spatialAcceleration = environment.getAcceleration(task.getTime());
++//       pivel = mRelativeCoordinateSystem.motionToLocal(pivel);
++  spatialAcceleration = motionTo(position, orientation, spatialAcceleration);
+ 
++  Vector3 angularBaseVelocity = environment.getAngularVelocity(task.getTime());
++//       Vector6 pivel = mParentLink.getSpVelAtLink();
++  Vector6 pivel(angularBaseVelocity, Vector3::zeros());
++//       pivel = mRelativeCoordinateSystem.motionToLocal(pivel);
++  Vector6 relVel = velocity;
++  Vector6 Hdot = Vector6(cross(pivel.getAngular(), relVel.getAngular()),
++                         cross(pivel.getAngular(), relVel.getLinear()) + 
++                         cross(pivel.getLinear(), relVel.getAngular()));
++
++  Vector6 velDeriv = childLink.getSpAccel() - spatialAcceleration - Hdot;
++
+   derivatives[*mPositionStateInfo] = pDot;
+   derivatives[*mOrientationStateInfo] = qderiv;
+   derivatives[*mVelocityStateInfo] = velDeriv;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-02-02 18:03:12 UTC (rev 981)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-02-02 18:52:57 UTC (rev 982)
+@@ -43,9 +43,7 @@
+   void init(const Task&, ContinousStateValueVector&) const;
+   void velocity(const Task&, const Environment& environment,
+                 const ContinousStateValueVector& states, ChildLink&) const;
+-  void acceleration(const Task&, const Environment& environment,
+-                    const ContinousStateValueVector&, ChildLink&) const;
+-  void derivative(const Environment& environment,
++  void derivative(const Task&, const Environment& environment,
+                   const DiscreteStateValueVector&,
+                   const ContinousStateValueVector&,
+                   const ChildLink& childLink,
+
+
+
+From frohlich at mail.berlios.de  Mon Feb  2 21:02:21 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Feb 2009 21:02:21 +0100
+Subject: [OpenFDM-svn] r983 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902022002.n12K2LGG007761@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-02 21:02:20 +0100 (Mon, 02 Feb 2009)
+New Revision: 983
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TableData.h
+Log:
+Zap some FIXME's.
+
+M    TableData.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TableData.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TableData.h	2009-02-02 18:52:57 UTC (rev 982)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TableData.h	2009-02-02 20:02:20 UTC (rev 983)
+@@ -41,10 +41,8 @@
+ 
+   value_type lookup(const value_type& input) const
+   {
+-    // Empty table??
+-    // FIXME
+     if (mVector.empty())
+-      return value_type(0);
++      return Limits<value_type>::quiet_NaN();
+ 
+     vector_type::const_iterator vectorBegin = mVector.begin();
+     vector_type::const_iterator vectorEnd = mVector.end();
+@@ -125,8 +123,7 @@
+   const SizeVector& size(void) const
+   { return mSize; }
+   unsigned size(unsigned i) const
+-  { if (mSize.size() <= i) return 0; return mSize(i); }
+-  //   { if (mSize.size() <= i) return 1; /*??may be*/ return mSize(i); }
++  { if (mSize.size() <= i) return 1; return mSize(i); }
+ 
+   const real_type& operator()(const Index& multiIndex) const
+   { return mData[offset(multiIndex)]; }
+@@ -138,9 +135,17 @@
+   real_type& at(const Index& multiIndex)
+   { return mData[offset(multiIndex)]; }
+ 
++  bool validIndex(const Index& multiIndex) const
++  {
++    for (unsigned i = 0; i < numDims; ++i) {
++      if (mSize(i) <= multiIndex(i))
++        return false;
++    }
++    return true;
++  }
++
+   unsigned offset(const Index& multiIndex) const
+   {
+-    /// FIXME do size bounds checking ...
+     unsigned idx = multiIndex(numDims-1);
+     for (unsigned i = numDims-1; 0 < i; --i) {
+       idx *= mSize(i-1);
+
+
+
+From frohlich at mail.berlios.de  Mon Feb  2 21:05:42 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Feb 2009 21:05:42 +0100
+Subject: [OpenFDM-svn] r984 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902022005.n12K5gTj008191@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-02 21:05:41 +0100 (Mon, 02 Feb 2009)
+New Revision: 984
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add a missing header.
+
+M    Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-02-02 20:02:20 UTC (rev 983)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-02-02 20:05:41 UTC (rev 984)
+@@ -297,6 +297,8 @@
+   UniversalJoint.cpp \
+   WheelContact.cpp
+ 
++#   Actuator.h
++
+ #   AeroForce.cpp \
+ #   Tank.cpp
+ 
+
+
+
+From frohlich at mail.berlios.de  Mon Feb  2 21:32:24 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Feb 2009 21:32:24 +0100
+Subject: [OpenFDM-svn] r985 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902022032.n12KWOkk010977@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-02 21:32:24 +0100 (Mon, 02 Feb 2009)
+New Revision: 985
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+Log:
+A Node should have a single sample time.
+
+M    Node.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2009-02-02 20:05:41 UTC (rev 984)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2009-02-02 20:32:24 UTC (rev 985)
+@@ -97,7 +97,6 @@
+   class NodePathListCollectVisitor;
+ 
+   /// Sample time handling.
+-  /// FIXME Should that be something like the old sample time set??
+   SampleTime mSampleTime;
+ };
+ 
+
+
+
+From frohlich at mail.berlios.de  Tue Feb  3 19:33:05 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 3 Feb 2009 19:33:05 +0100
+Subject: [OpenFDM-svn] r987 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902031833.n13IX5MV006613@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-03 19:32:59 +0100 (Tue, 03 Feb 2009)
+New Revision: 987
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DoubleLinkInteract.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/JointContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+Log:
+Leaner includes.
+
+M    OpenFDM/AbstractSystem.h
+M    OpenFDM/AbstractNodeInstance.cpp
+M    OpenFDM/SingleLinkInteract.h
+M    OpenFDM/ModelContext.h
+M    OpenFDM/NodeInstance.h
+M    OpenFDM/DoubleLinkInteract.h
+M    OpenFDM/AbstractNodeContext.h
+M    OpenFDM/JointContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -5,11 +5,14 @@
+ #ifndef OpenFDM_AbstractNodeContext_H
+ #define OpenFDM_AbstractNodeContext_H
+ 
+-#include "Node.h"
+-#include "PortValueList.h"
++#include "Referenced.h"
+ 
+ namespace OpenFDM {
+ 
++class Node;
++class Port;
++class PortValue;
++
+ class AbstractNodeContext : public Referenced {
+ public:
+   AbstractNodeContext();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2009-02-03 18:32:59 UTC (rev 987)
+@@ -5,6 +5,7 @@
+ #include "AbstractNodeInstance.h"
+ 
+ #include "Assert.h"
++#include "MechanicLink.h"
+ #include "Node.h"
+ #include "SharedPtr.h"
+ #include "WeakReferenced.h"
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractSystem.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -6,6 +6,7 @@
+ #define OpenFDM_AbstractSystem_H
+ 
+ #include "Interval.h"
++#include "LogStream.h"
+ #include "Referenced.h"
+ #include "Types.h"
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DoubleLinkInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DoubleLinkInteract.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DoubleLinkInteract.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -8,6 +8,7 @@
+ #include <string>
+ #include "Interact.h"
+ #include "Environment.h"
++#include "PortValueList.h"
+ #include "MechanicContext.h"
+ 
+ namespace OpenFDM {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/JointContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/JointContext.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/JointContext.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -7,6 +7,7 @@
+ 
+ #include "Joint.h"
+ #include "MechanicContext.h"
++#include "PortValueList.h"
+ 
+ namespace OpenFDM {
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -6,9 +6,10 @@
+ #define OpenFDM_ModelContext_H
+ 
+ #include <list>
++#include "AbstractModel.h"
++#include "LeafContext.h"
++#include "PortValueList.h"
+ #include "SharedPtr.h"
+-#include "LeafContext.h"
+-#include "AbstractModel.h"
+ 
+ namespace OpenFDM {
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -6,6 +6,7 @@
+ #define OpenFDM_NodeInstance_H
+ 
+ #include "AbstractNodeInstance.h"
++#include "PortValueList.h"
+ 
+ namespace OpenFDM {
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-02-02 21:07:40 UTC (rev 986)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-02-03 18:32:59 UTC (rev 987)
+@@ -8,6 +8,7 @@
+ #include <string>
+ #include "Interact.h"
+ #include "Environment.h"
++#include "PortValueList.h"
+ #include "MechanicContext.h"
+ 
+ namespace OpenFDM {
+
+
+
+From frohlich at mail.berlios.de  Tue Feb  3 19:38:33 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 3 Feb 2009 19:38:33 +0100
+Subject: [OpenFDM-svn] r988 - branches/OpenFDM-StateSeparation
+Message-ID: <200902031838.n13IcXDO024782@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-03 19:38:32 +0100 (Tue, 03 Feb 2009)
+New Revision: 988
+
+Modified:
+   branches/OpenFDM-StateSeparation/TODO
+Log:
+new Idea.
+
+M    TODO
+
+
+Modified: branches/OpenFDM-StateSeparation/TODO
+===================================================================
+--- branches/OpenFDM-StateSeparation/TODO	2009-02-03 18:32:59 UTC (rev 987)
++++ branches/OpenFDM-StateSeparation/TODO	2009-02-03 18:38:32 UTC (rev 988)
+@@ -25,9 +25,11 @@
+ 
+ * Direct HLA Access??? Is there a possible way to do that??
+ 
++* Sensor: May be we can introduce SensorAttributes?
++  An attribute would be something like 'X-Velocity', 'Angular Velocity'
++
+ * More init time checking for SimpleDirectModels
+ * Template Contexts for SimpleDirectModels
+-* Sensor
+ * Move Mechanics into a normal ModelContext??
+ * Remove LeafNode??
+ * Environmental cache ...
+
+
+
+From frohlich at mail.berlios.de  Sat Feb 21 21:09:19 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 21 Feb 2009 21:09:19 +0100
+Subject: [OpenFDM-svn] r989 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902212009.n1LK9JLh012090@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-21 21:09:19 +0100 (Sat, 21 Feb 2009)
+New Revision: 989
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+Log:
+Avoid using deprecated functions.
+
+M    HDF5SystemOutput.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-02-03 18:38:32 UTC (rev 988)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-02-21 20:09:19 UTC (rev 989)
+@@ -263,7 +263,7 @@
+ 
+     // increment size
+     _dims[0] += 1;
+-    herr_t status = H5Dextend(getId(), _dims);
++    herr_t status = H5Dset_extent(getId(), _dims);
+ 
+     HDF5Object filespace(H5Dget_space(getId()), true);
+     hsize_t offset[3] = { _dims[0] - 1, 0, 0 };
+
+
+
+From frohlich at mail.berlios.de  Sat Feb 21 21:09:42 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 21 Feb 2009 21:09:42 +0100
+Subject: [OpenFDM-svn] r990 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200902212009.n1LK9gjr012140@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-21 21:09:42 +0100 (Sat, 21 Feb 2009)
+New Revision: 990
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+Log:
+No flush at each timestep.
+
+M    HDF5SystemOutput.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-02-21 20:09:19 UTC (rev 989)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2009-02-21 20:09:42 UTC (rev 990)
+@@ -300,7 +300,7 @@
+     DumperList::iterator i;
+     for (i = mDumperList.begin(); i != mDumperList.end(); ++i)
+       (*i)->append();
+-    mHDF5File.flush();
++    // mHDF5File.flush();
+   }
+ 
+   virtual void attachTo(const System* system)
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 25 07:15:18 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 25 Feb 2009 07:15:18 +0100
+Subject: [OpenFDM-svn] r991 - trunk/flightgear
+Message-ID: <200902250615.n1P6FIgw024297@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-02-25 07:15:06 +0100 (Wed, 25 Feb 2009)
+New Revision: 991
+
+Modified:
+   trunk/flightgear/flightgear.diff
+Log:
+Update current diff.
+
+M    flightgear.diff
+
+
+Modified: trunk/flightgear/flightgear.diff
+===================================================================
+--- trunk/flightgear/flightgear.diff	2009-02-21 20:09:42 UTC (rev 990)
++++ trunk/flightgear/flightgear.diff	2009-02-25 06:15:06 UTC (rev 991)
+@@ -1,11 +1,11 @@
+ Index: configure.ac
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/configure.ac,v
+-retrieving revision 1.110
+-diff -u -r1.110 configure.ac
+---- configure.ac	21 Jan 2006 10:06:09 -0000	1.110
+-+++ configure.ac	5 Feb 2006 12:39:39 -0000
+-@@ -459,6 +468,14 @@
++retrieving revision 1.146
++diff -u -r1.146 configure.ac
++--- configure.ac	2 Feb 2009 05:35:52 -0000	1.146
+++++ configure.ac	25 Feb 2009 06:03:31 -0000
++@@ -458,6 +458,14 @@
+  fi
+  AM_CONDITIONAL(ENABLE_JPEG_SERVER, test "x$ac_cv_header_simgear_screen_jpgfactory_hxx" = "xyes")
+  
+@@ -17,10 +17,10 @@
+ +    AC_DEFINE([FG_ENABLE_OPENFDM_FDM], 1, [Define for no logging output])
+ +fi
+ +
+- AC_LANG_POP
+- 
+- dnl Check for system installed zlib
+-@@ -539,6 +556,7 @@
++ # Check for "plib" without which we cannot go on
++ AC_CHECK_HEADER(plib/ul.h)
++ if test "x$ac_cv_header_plib_ul_h" != "xyes"; then
++@@ -688,6 +696,7 @@
+  	src/FDM/JSBSim/models/atmosphere/Makefile \
+  	src/FDM/JSBSim/models/propulsion/Makefile \
+  	src/FDM/LaRCsim/Makefile \
+@@ -31,10 +31,10 @@
+ Index: src/FDM/Makefile.am
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/FDM/Makefile.am,v
+-retrieving revision 1.7
+-diff -u -r1.7 Makefile.am
+---- src/FDM/Makefile.am	22 Nov 2004 10:10:33 -0000	1.7
+-+++ src/FDM/Makefile.am	5 Feb 2006 12:39:41 -0000
++retrieving revision 1.8
++diff -u -r1.8 Makefile.am
++--- src/FDM/Makefile.am	25 Jul 2008 18:38:30 -0000	1.8
+++++ src/FDM/Makefile.am	25 Feb 2009 06:03:32 -0000
+ @@ -4,8 +4,14 @@
+  SP_DIR =
+  endif
+@@ -45,7 +45,7 @@
+ +OpenFDM_DIR =
+ +endif
+ +
+- SUBDIRS	= Balloon JSBSim LaRCsim UIUCModel YASim \
++ SUBDIRS	= JSBSim LaRCsim UIUCModel YASim \
+ -          $(SP_DIR) ExternalNet ExternalPipe
+ +          $(SP_DIR) $(OpenFDM_DIR) ExternalNet ExternalPipe
+  
+@@ -54,18 +54,18 @@
+ Index: src/FDM/flight.hxx
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/FDM/flight.hxx,v
+-retrieving revision 1.11
+-diff -u -r1.11 flight.hxx
+---- src/FDM/flight.hxx	20 Jan 2006 17:19:02 -0000	1.11
+-+++ src/FDM/flight.hxx	5 Feb 2006 12:39:42 -0000
+-@@ -433,7 +433,10 @@
++retrieving revision 1.18
++diff -u -r1.18 flight.hxx
++--- src/FDM/flight.hxx	27 Jul 2008 16:25:14 -0000	1.18
+++++ src/FDM/flight.hxx	25 Feb 2009 06:03:32 -0000
++@@ -347,7 +347,10 @@
+  	FG_PARACHUTE = 9,
+  
+  	// Driven externally via a serial port, net, file, etc.
+ -	FG_EXTERNAL = 10
+ +	FG_EXTERNAL = 10,
+ +
+-+	// OpenFDM. Reads JSBSim legacy and new files.
+++	// OpenFDM. Reads OpenFDM and JSBSim files.
+ +	FG_OPENFDM = 11
+      };
+  
+@@ -73,18 +73,17 @@
+ Index: src/Main/Makefile.am
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/Main/Makefile.am,v
+-retrieving revision 1.63
+-diff -u -r1.63 Makefile.am
+---- src/Main/Makefile.am	20 Jan 2006 17:19:02 -0000	1.63
+-+++ src/Main/Makefile.am	5 Feb 2006 12:39:43 -0000
+-@@ -13,6 +13,14 @@
++retrieving revision 1.88
++diff -u -r1.88 Makefile.am
++--- src/Main/Makefile.am	13 Feb 2009 11:52:49 -0000	1.88
+++++ src/Main/Makefile.am	25 Feb 2009 06:03:33 -0000
++@@ -9,6 +9,13 @@
+  SP_FDM_LIBS = 
+  endif
+  
+ +if ENABLE_OpenFDM_FDM
+ +OpenFDM_LIBS = $(top_builddir)/src/FDM/OpenFDM/libFGOpenFDM.a \
+-+               -lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM \
+-+               -lrt
+++               -lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM -lrt
+ +else
+ +OpenFDM_LIBS = 
+ +endif
+@@ -92,7 +91,7 @@
+  if WITH_THREADS
+  THREAD_LIBS = -lsgthreads $(thread_LIBS)
+  else
+-@@ -84,6 +91,7 @@
++@@ -74,6 +81,7 @@
+  	$(top_builddir)/src/FDM/LaRCsim/libLaRCsim.a \
+  	$(top_builddir)/src/FDM/UIUCModel/libUIUCModel.a \
+  	$(SP_FDM_LIBS) \
+@@ -103,11 +102,11 @@
+ Index: src/Main/fg_init.cxx
+ ===================================================================
+ RCS file: /var/cvs/FlightGear-0.9/source/src/Main/fg_init.cxx,v
+-retrieving revision 1.150
+-diff -u -r1.150 fg_init.cxx
+---- src/Main/fg_init.cxx	30 Jan 2006 13:29:50 -0000	1.150
+-+++ src/Main/fg_init.cxx	5 Feb 2006 12:39:44 -0000
+-@@ -90,6 +90,9 @@
++retrieving revision 1.227
++diff -u -r1.227 fg_init.cxx
++--- src/Main/fg_init.cxx	10 Jan 2009 16:48:22 -0000	1.227
+++++ src/Main/fg_init.cxx	25 Feb 2009 06:03:34 -0000
++@@ -91,6 +91,9 @@
+  #include <FDM/UFO.hxx>
+  #include <FDM/NullFDM.hxx>
+  #include <FDM/YASim/YASim.hxx>
+@@ -117,14 +116,14 @@
+  #include <GUI/new_gui.hxx>
+  #include <Include/general.hxx>
+  #include <Input/input.hxx>
+-@@ -1361,6 +1364,10 @@
+-             cur_fdm_state = new FGNullFDM( dt );
+-         } else if ( model == "yasim" ) {
+-             cur_fdm_state = new YASim( dt );
++@@ -1279,6 +1282,10 @@
++         cur_fdm_state = new FGNullFDM( dt );
++     } else if ( model == "yasim" ) {
++         cur_fdm_state = new YASim( dt );
+ +#ifdef FG_ENABLE_OPENFDM_FDM
+-+        } else if ( model == "openfdm" ) {
+-+            cur_fdm_state = new OpenFDM::FGOpenFDM();
+++   } else if ( model == "openfdm" ) {
+++        cur_fdm_state = new OpenFDM::FGOpenFDM();
+ +#endif
+-         } else {
+-             SG_LOG(SG_GENERAL, SG_ALERT,
+-                    "Unrecognized flight model '" << model
++     } else {
++         throw sg_throwable(string("Unrecognized flight model '") + model
++                + "', cannot init flight dynamics model.");
+
+
+

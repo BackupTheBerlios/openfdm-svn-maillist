@@ -1,0 +1,184 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r833 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r833%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812011838.mB1Ic3e0013698%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000800.html">
+   <LINK REL="Next"  HREF="000802.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r833 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r833%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812011838.mB1Ic3e0013698%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r833 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Dec  1 19:38:03 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000800.html">[OpenFDM-svn] r832 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000802.html">[OpenFDM-svn] r834 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#801">[ date ]</a>
+              <a href="thread.html#801">[ thread ]</a>
+              <a href="subject.html#801">[ subject ]</a>
+              <a href="author.html#801">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-01 19:38:03 +0100 (Mon, 01 Dec 2008)
+New Revision: 833
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+Log:
+Remove remaining leftovers of NodeId
+
+M    src/OpenFDM/Group.h
+M    src/OpenFDM/Group.cpp
+M    src/OpenFDM/Node.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-12-01 18:37:19 UTC (rev 832)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-12-01 18:38:03 UTC (rev 833)
+@@ -46,17 +46,28 @@
+     (*i)-&gt;accept(visitor);
+ }
+ 
+-Group::NodeId
++unsigned
+ Group::addChild(const SharedPtr&lt;Node&gt;&amp; node)
+ {
+   if (!node)
+-    return NodeId();
++    return ~0u;
+   if (!node-&gt;addParent(this))
+-    return NodeId();
++    return ~0u;
+   _childList.push_back(node);
+-  return node.get();
++  return _childList.size() - 1;
+ }
+ 
++bool
++Group::removeChild(const Node* node)
++{
++  ChildList::iterator i;
++  i = std::find(_childList.begin(), _childList.end(), node);
++  if (i == _childList.end())
++    return false;
++  _childList.erase(i);
++  return true;
++}
++
+ unsigned
+ Group::getNumChildren() const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-12-01 18:37:19 UTC (rev 832)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-12-01 18:38:03 UTC (rev 833)
+@@ -18,8 +18,6 @@
+ class Group : public Node {
+   OPENFDM_OBJECT(Group, Node);
+ public:
+-  typedef const Node* NodeId;
+-
+   Group(const std::string&amp; name);
+   virtual ~Group();
+ 
+@@ -29,25 +27,13 @@
+   void traverse(NodeVisitor&amp; visitor);
+   void traverse(ConstNodeVisitor&amp; visitor) const;
+ 
+-  NodeId addChild(const SharedPtr&lt;Node&gt;&amp; node);
++  unsigned addChild(const SharedPtr&lt;Node&gt;&amp; node);
++  bool removeChild(const Node* node);
+   unsigned getNumChildren() const;
+   SharedPtr&lt;Node&gt; getChild(unsigned i);
+   SharedPtr&lt;const Node&gt; getChild(unsigned i) const;
+   unsigned getChildNumber(const Node* node) const;
+ 
+-  bool connect(const NodeId&amp; nodeId0, const std::string&amp; portName0,
+-               const NodeId&amp; nodeId1, const std::string&amp; portName1)
+-    OpenFDM_DEPRECATED
+-  {
+-    return connect(nodeId0-&gt;getPort(portName0), nodeId1-&gt;getPort(portName1));
+-  }
+-  bool connect(const NodeId&amp; nodeId0, unsigned portNum0,
+-               const NodeId&amp; nodeId1, unsigned portNum1)
+-    OpenFDM_DEPRECATED
+-  {
+-    return connect(nodeId0-&gt;getPort(portNum0), nodeId1-&gt;getPort(portNum1));
+-  }
+-
+   bool connect(const PortInfo* port0, const PortInfo* port1)
+   {
+     // Make sure the models belong to this group
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-12-01 18:37:19 UTC (rev 832)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-12-01 18:38:03 UTC (rev 833)
+@@ -174,6 +174,12 @@
+ {
+   if (!parent)
+     return false;
++  ParentList::const_iterator i;
++  for (i = mParentList.begin(); i != mParentList.end(); ++i) {
++    SharedPtr&lt;const Node&gt; lockedParent = i-&gt;lock();
++    if (parent == lockedParent)
++      return false;
++  }
+   mParentList.push_back(parent);
+   return true;
+ }
+@@ -183,7 +189,7 @@
+ {
+   ParentList::iterator i;
+   for (i = mParentList.begin(); i != mParentList.end();) {
+-    SharedPtr&lt;Node&gt; lockedParent = i-&gt;lock();
++    SharedPtr&lt;const Node&gt; lockedParent = i-&gt;lock();
+     if (parent == lockedParent)
+       i = mParentList.erase(i);
+     else
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000800.html">[OpenFDM-svn] r832 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000802.html">[OpenFDM-svn] r834 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#801">[ date ]</a>
+              <a href="thread.html#801">[ thread ]</a>
+              <a href="subject.html#801">[ subject ]</a>
+              <a href="author.html#801">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

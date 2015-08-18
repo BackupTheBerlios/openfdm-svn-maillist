@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r599 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r599%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810110934.m9B9YN9R012508%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000568.html">
+   <LINK REL="Next"  HREF="000570.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r599 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r599%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810110934.m9B9YN9R012508%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r599 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Oct 11 11:34:23 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000568.html">[OpenFDM-svn] r598 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000570.html">[OpenFDM-svn] r600 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#569">[ date ]</a>
+              <a href="thread.html#569">[ thread ]</a>
+              <a href="subject.html#569">[ subject ]</a>
+              <a href="author.html#569">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-11 11:34:22 +0200 (Sat, 11 Oct 2008)
+New Revision: 599
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+Log:
+Add possibility to ask for node paths.
+
+M    src/OpenFDM/Node.h
+M    src/OpenFDM/Node.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-11 09:07:19 UTC (rev 598)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-11 09:34:22 UTC (rev 599)
+@@ -162,6 +162,27 @@
+   }
+ }
+ 
++class Node::NodePathListCollectVisitor : public ConstNodeVisitor {
++public:
++  virtual void apply(const Node&amp; node)
++  {
++    if (node.getNumParents()) {
++      node.ascend(*this);
++    } else {
++      mNodePathList.push_back(getNodePath());
++    }
++  }
++
++  NodePathList mNodePathList;
++};
++
++NodePathList
++Node::getNodePathList() const
++{
++  NodePathListCollectVisitor visitor;
++  return visitor.mNodePathList;
++}
++
+ void
+ Node::addPort(PortInfo* port)
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-11 09:07:19 UTC (rev 598)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-11 09:34:22 UTC (rev 599)
+@@ -21,6 +21,7 @@
+ class ConstNodeVisitor;
+ 
+ typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
++typedef std::vector&lt;NodePath&gt; NodePathList;
+ 
+ class Node : public Object {
+   OPENFDM_OBJECT(Node, Object);
+@@ -54,6 +55,9 @@
+   void setSampleTime(const SampleTime&amp; sampleTime)
+   { mSampleTime = sampleTime; }
+ 
++  /// Return all node paths this Node is currently attached to.
++  NodePathList getNodePathList() const;
++
+ protected:
+ 
+   friend class Group;
+@@ -77,6 +81,8 @@
+   typedef std::vector&lt;WeakPtr&lt;Node&gt; &gt; ParentList;
+   ParentList mParentList;
+ 
++  class NodePathListCollectVisitor;
++
+   /// Sample time handling.
+   /// FIXME Should that be something like the old sample time set??
+   SampleTime mSampleTime;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000568.html">[OpenFDM-svn] r598 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000570.html">[OpenFDM-svn] r600 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#569">[ date ]</a>
+              <a href="thread.html#569">[ thread ]</a>
+              <a href="subject.html#569">[ subject ]</a>
+              <a href="author.html#569">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

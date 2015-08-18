@@ -1,0 +1,185 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1021 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1021%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907211805.n6LI5VSv031243%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000982.html">
+   <LINK REL="Next"  HREF="000985.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1021 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1021%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907211805.n6LI5VSv031243%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1021 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jul 21 20:05:31 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000982.html">[OpenFDM-svn] r1020 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000985.html">[OpenFDM-svn] r1022 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#984">[ date ]</a>
+              <a href="thread.html#984">[ thread ]</a>
+              <a href="subject.html#984">[ subject ]</a>
+              <a href="author.html#984">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-21 20:05:30 +0200 (Tue, 21 Jul 2009)
+New Revision: 1021
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+Log:
+More link value cleanup.
+
+M    MechanicLinkValue.h
+M    ExternalInteract.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-07-20 20:49:48 UTC (rev 1020)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-07-21 18:05:30 UTC (rev 1021)
+@@ -70,15 +70,15 @@
+     const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
+ 
+     // The global coordinates position
+-    Vector3 refPosition = getLink().getRefPos();
++    Vector3 refPosition = cs.getPosition();
+     if (mPosition.isConnected())
+       mPosition = refPosition;
+     
+     if (mOrientation.isConnected())
+-      mOrientation = getLink().getRefOr();
++      mOrientation = cs.getOrientation();
+     
+     if (mEulerAngles.isConnected())
+-      mEulerAngles = getLink().getRefOr().getEuler();
++      mEulerAngles = cs.getOrientation().getEuler();
+     
+     // Velocity related sensing
+     bool enableBodyAngularVelocity = mBodyAngularVelocity.isConnected();
+@@ -90,28 +90,26 @@
+     if (enableBodyAngularVelocity || enableBodyLinearVelocity
+         || enableGlobalAngularVelocity || enableGlobalLinearVelocity
+         || enableBodyWindVelocity || enableGlobalWindVelocity) {
+-      Vector6 refVelocity = getLink().getLocalVelocity();
++      Vector6 refVelocity = getLink().getVelocity();
+       if (enableBodyAngularVelocity)
+-        mBodyAngularVelocity = refVelocity.getAngular();
++        mBodyAngularVelocity = cs.rotToLocal(refVelocity.getAngular());
+       if (enableGlobalAngularVelocity)
+-        mGlobalAngularVelocity = cs.rotToReference(refVelocity.getAngular());
++        mGlobalAngularVelocity = refVelocity.getAngular();
+       
+       if (enableBodyLinearVelocity)
+-        mBodyLinearVelocity = refVelocity.getLinear();
++        mBodyLinearVelocity = cs.rotToLocal(refVelocity.getLinear());
+       if (enableGlobalLinearVelocity)
+-        mGlobalLinearVelocity = cs.rotToReference(refVelocity.getLinear());
++        mGlobalLinearVelocity = refVelocity.getLinear();
+       
+       // Wind sensing
+       if (enableBodyWindVelocity || enableGlobalWindVelocity) {
+         Vector6 wind = getEnvironment().getWindVelocity(task.getTime(),
+                                                         refPosition);
+-        wind = Vector6(cs.rotToLocal(wind.getAngular()),
+-                       cs.rotToLocal(wind.getLinear()));
+         wind -= refVelocity;
+         if (enableBodyWindVelocity)
+-          mBodyWindVelocity = wind.getLinear();
++          mBodyWindVelocity = cs.rotToLocal(wind.getLinear());
+         if (enableGlobalWindVelocity)
+-          mGlobalWindVelocity = cs.rotToReference(wind.getLinear());
++          mGlobalWindVelocity = wind.getLinear();
+       }
+     }
+     
+@@ -170,19 +168,20 @@
+       = mBodyCentrifugalAcceleration.isConnected();
+     bool enableBodyLoad = mBodyLoad.isConnected();
+     if (enableBodyCentrifugalAcceleration || enableBodyLoad) {
+-      Vector6 spatialVel = getLink().getLocalVelocity();
+-      Vector6 spatialAccel = getLink().getLocalAcceleration();
++      const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
++
++      Vector6 spatialVel = getLink().getInertialVelocity();
++      Vector6 spatialAccel = getLink().getInertialAcceleration();
+       Vector3 centrifugalAccel = spatialAccel.getLinear();
+       centrifugalAccel += cross(spatialVel.getAngular(),spatialVel.getLinear());
+ 
+       if (enableBodyCentrifugalAcceleration)
+-        mBodyCentrifugalAcceleration = centrifugalAccel;
++        mBodyCentrifugalAcceleration = cs.rotToLocal(centrifugalAccel);
+       if (enableBodyLoad) {
+         // May be cache that from the velocity step??
+-        Vector3 refPosition = getLink().getRefPos();
++        Vector3 refPosition = cs.getPosition();
+         Vector3 gravity = getEnvironment().getGravityAcceleration(refPosition);
+-        gravity = getLink().getCoordinateSystem().rotToLocal(gravity);
+-        mBodyLoad = centrifugalAccel - gravity;
++        mBodyLoad = cs.rotToLocal(Vector3(centrifugalAccel - gravity));
+       }
+     }
+   }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-20 20:49:48 UTC (rev 1020)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-21 18:05:30 UTC (rev 1021)
+@@ -242,17 +242,6 @@
+   CoordinateSystem getRelativeCoordinateSystem(const ParentLink&amp; link) const
+   { return getCoordinateSystem().toLocal(link.getCoordinateSystem()); }
+ 
+-  Vector3 getRefPos() const
+-  {
+-    OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getCoordinateSystem().toReference(mLinkRelPos);
+-  }
+-  const Rotation&amp; getRefOr() const
+-  {
+-    OpenFDMAssert(isConnected());
+-    return mMechanicLinkValue-&gt;getCoordinateSystem().getOrientation();
+-  }
+-
+   Vector6 getVelocity(const Vector3&amp; position) const
+   {
+     OpenFDMAssert(isConnected());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000982.html">[OpenFDM-svn] r1020 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000985.html">[OpenFDM-svn] r1022 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#984">[ date ]</a>
+              <a href="thread.html#984">[ thread ]</a>
+              <a href="subject.html#984">[ subject ]</a>
+              <a href="author.html#984">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

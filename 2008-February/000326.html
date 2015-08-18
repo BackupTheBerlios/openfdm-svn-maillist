@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r352 - trunk/OpenFDM/src/OpenFDM/LinAlg
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r352%20-%20trunk/OpenFDM/src/OpenFDM/LinAlg&In-Reply-To=%3C200802030904.m1394iP2012348%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000325.html">
+   <LINK REL="Next"  HREF="000327.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r352 - trunk/OpenFDM/src/OpenFDM/LinAlg</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r352%20-%20trunk/OpenFDM/src/OpenFDM/LinAlg&In-Reply-To=%3C200802030904.m1394iP2012348%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r352 - trunk/OpenFDM/src/OpenFDM/LinAlg">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Feb  3 10:04:44 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000325.html">[OpenFDM-svn] r351 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000327.html">[OpenFDM-svn] r353 - in trunk/OpenFDM/src/OpenFDM: . LinAlg XML
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#326">[ date ]</a>
+              <a href="thread.html#326">[ thread ]</a>
+              <a href="subject.html#326">[ subject ]</a>
+              <a href="author.html#326">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-02-03 10:04:43 +0100 (Sun, 03 Feb 2008)
+New Revision: 352
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+Log:
+Cleanup and make use of safe_min().
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2008-02-03 08:54:14 UTC (rev 351)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2008-02-03 09:04:43 UTC (rev 352)
+@@ -133,7 +133,7 @@
+ {
+   typedef typename Impl::value_type value_type;
+   value_type nrm = norm(v);
+-  if (fabs(nrm) &lt;= Limits&lt;real_type&gt;::min())
++  if (fabs(nrm) &lt;= Limits&lt;real_type&gt;::safe_min())
+     return Vector&lt;value_type,n&gt;(v);
+   else
+     return Vector&lt;value_type,n&gt;((1/nrm)*v);
+@@ -474,10 +474,13 @@
+ Vector&lt;typename Impl1::value_type,3&gt;
+ cross(const MatrixRValue&lt;Impl1,3,1&gt;&amp; u, const MatrixRValue&lt;Impl2,3,1&gt;&amp; v)
+ {
++  const Impl1&amp; ui = u.asImpl();
++  const Impl2&amp; vi = v.asImpl();
++
+   Vector&lt;typename Impl1::value_type,3&gt; ret;
+-  ret(0,0) = u.asImpl()(1,0)*v.asImpl()(2,0) - u.asImpl()(2,0)*v.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0)*v.asImpl()(0,0) - u.asImpl()(0,0)*v.asImpl()(2,0);
+-  ret(2,0) = u.asImpl()(0,0)*v.asImpl()(1,0) - u.asImpl()(1,0)*v.asImpl()(0,0);
++  ret(0,0) = ui(1,0)*vi(2,0) - ui(2,0)*vi(1,0);
++  ret(1,0) = ui(2,0)*vi(0,0) - ui(0,0)*vi(2,0);
++  ret(2,0) = ui(0,0)*vi(1,0) - ui(1,0)*vi(0,0);
+   return ret;
+ }
+ 
+@@ -498,19 +501,22 @@
+ Matrix&lt;typename Impl1::value_type,3,3&gt;
+ cross(const MatrixRValue&lt;Impl1,3,3&gt;&amp; u, const MatrixRValue&lt;Impl2,3,1&gt;&amp; v)
+ {
++  const Impl1&amp; ui = u.asImpl();
++  const Impl2&amp; vi = v.asImpl();
++
+   Matrix&lt;typename Impl1::value_type,3,3&gt; ret;
+ 
+-  ret(0,0) = v.asImpl()(2,0)*u.asImpl()(0,1) - v.asImpl()(1,0)*u.asImpl()(0,2);
+-  ret(1,0) = v.asImpl()(2,0)*u.asImpl()(1,1) - v.asImpl()(1,0)*u.asImpl()(1,2);
+-  ret(2,0) = v.asImpl()(2,0)*u.asImpl()(2,1) - v.asImpl()(1,0)*u.asImpl()(2,2);
++  ret(0,0) = vi(2,0)*ui(0,1) - vi(1,0)*ui(0,2);
++  ret(1,0) = vi(2,0)*ui(1,1) - vi(1,0)*ui(1,2);
++  ret(2,0) = vi(2,0)*ui(2,1) - vi(1,0)*ui(2,2);
+ 
+-  ret(0,1) = v.asImpl()(0,0)*u.asImpl()(0,2) - v.asImpl()(2,0)*u.asImpl()(0,0);
+-  ret(1,1) = v.asImpl()(0,0)*u.asImpl()(1,2) - v.asImpl()(2,0)*u.asImpl()(1,0);
+-  ret(2,1) = v.asImpl()(0,0)*u.asImpl()(2,2) - v.asImpl()(2,0)*u.asImpl()(2,0);
++  ret(0,1) = vi(0,0)*ui(0,2) - vi(2,0)*ui(0,0);
++  ret(1,1) = vi(0,0)*ui(1,2) - vi(2,0)*ui(1,0);
++  ret(2,1) = vi(0,0)*ui(2,2) - vi(2,0)*ui(2,0);
+ 
+-  ret(0,2) = v.asImpl()(1,0)*u.asImpl()(0,0) - v.asImpl()(0,0)*u.asImpl()(0,1);
+-  ret(1,2) = v.asImpl()(1,0)*u.asImpl()(1,0) - v.asImpl()(0,0)*u.asImpl()(1,1);
+-  ret(2,2) = v.asImpl()(1,0)*u.asImpl()(2,0) - v.asImpl()(0,0)*u.asImpl()(2,1);
++  ret(0,2) = vi(1,0)*ui(0,0) - vi(0,0)*ui(0,1);
++  ret(1,2) = vi(1,0)*ui(1,0) - vi(0,0)*ui(1,1);
++  ret(2,2) = vi(1,0)*ui(2,0) - vi(0,0)*ui(2,1);
+ 
+   return ret;
+ }
+@@ -533,19 +539,22 @@
+ Matrix&lt;typename Impl1::value_type,3,3&gt;
+ cross(const MatrixRValue&lt;Impl1,3,1&gt;&amp; u, const MatrixRValue&lt;Impl2,3,3&gt;&amp; v)
+ {
++  const Impl1&amp; ui = u.asImpl();
++  const Impl2&amp; vi = v.asImpl();
++
+   Matrix&lt;typename Impl1::value_type,3,3&gt; ret;
+ 
+-  ret(0,0) = u.asImpl()(1,0)*v.asImpl()(2,0) - u.asImpl()(2,0)*v.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0)*v.asImpl()(0,0) - u.asImpl()(0,0)*v.asImpl()(2,0);
+-  ret(2,0) = u.asImpl()(0,0)*v.asImpl()(1,0) - u.asImpl()(1,0)*v.asImpl()(0,0);
++  ret(0,0) = ui(1,0)*vi(2,0) - ui(2,0)*vi(1,0);
++  ret(1,0) = ui(2,0)*vi(0,0) - ui(0,0)*vi(2,0);
++  ret(2,0) = ui(0,0)*vi(1,0) - ui(1,0)*vi(0,0);
+ 
+-  ret(0,1) = u.asImpl()(1,0)*v.asImpl()(2,1) - u.asImpl()(2,0)*v.asImpl()(1,1);
+-  ret(1,1) = u.asImpl()(2,0)*v.asImpl()(0,1) - u.asImpl()(0,0)*v.asImpl()(2,1);
+-  ret(2,1) = u.asImpl()(0,0)*v.asImpl()(1,1) - u.asImpl()(1,0)*v.asImpl()(0,1);
++  ret(0,1) = ui(1,0)*vi(2,1) - ui(2,0)*vi(1,1);
++  ret(1,1) = ui(2,0)*vi(0,1) - ui(0,0)*vi(2,1);
++  ret(2,1) = ui(0,0)*vi(1,1) - ui(1,0)*vi(0,1);
+ 
+-  ret(0,2) = u.asImpl()(1,0)*v.asImpl()(2,2) - u.asImpl()(2,0)*v.asImpl()(1,2);
+-  ret(1,2) = u.asImpl()(2,0)*v.asImpl()(0,2) - u.asImpl()(0,0)*v.asImpl()(2,2);
+-  ret(2,2) = u.asImpl()(0,0)*v.asImpl()(1,2) - u.asImpl()(1,0)*v.asImpl()(0,2);
++  ret(0,2) = ui(1,0)*vi(2,2) - ui(2,0)*vi(1,2);
++  ret(1,2) = ui(2,0)*vi(0,2) - ui(0,0)*vi(2,2);
++  ret(2,2) = ui(0,0)*vi(1,2) - ui(1,0)*vi(0,2);
+ 
+   return ret;
+ }
+@@ -557,10 +566,11 @@
+ Matrix&lt;typename Impl1::value_type,3,3&gt;
+ cross(const MatrixRValue&lt;Impl1,3,1&gt;&amp; u)
+ {
++  const Impl1&amp; ui = u.asImpl();
+   Matrix&lt;typename Impl1::value_type,3,3&gt; ret;
+-  ret(0,0) = 0;  ret(0,1) = -u.asImpl()(2,0);  ret(0,2) = u.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0);  ret(1,1) = 0;  ret(1,2) = -u.asImpl()(0,0);
+-  ret(2,0) = -u.asImpl()(1,0);  ret(2,1) = u.asImpl()(0,0);  ret(2,2) = 0;
++  ret(0,0) =        0;  ret(0,1) = -ui(2,0);  ret(0,2) =  ui(1,0);
++  ret(1,0) =  ui(2,0);  ret(1,1) =        0;  ret(1,2) = -ui(0,0);
++  ret(2,0) = -ui(1,0);  ret(2,1) =  ui(0,0);  ret(2,2) =        0;
+   return ret;
+ }
+ 
+@@ -611,7 +621,7 @@
+       value_type Aii = A(i,i);
+       // If the matrix is exactly singular, compute the solution where the
+       // righthandside is projected into the image of the matrix.
+-      if (fabs(Aii) &lt;= Limits&lt;value_type&gt;::min()) {
++      if (fabs(Aii) &lt;= fabs(v(i))*Limits&lt;value_type&gt;::safe_min()) {
+         v(i) = static_cast&lt;value_type&gt;(0);
+       } else {
+         v(i) /= Aii;
+@@ -638,7 +648,7 @@
+         value_type Aii = A(i,i);
+         // If the matrix is exactly singular, compute the solution where the
+         // righthandside is projected into the image of the matrix.
+-        if (fabs(Aii) &lt;= Limits&lt;value_type&gt;::min()) {
++        if (fabs(Aii) &lt;= fabs(v(i,j))*Limits&lt;value_type&gt;::safe_min()) {
+           v(i,j) = static_cast&lt;value_type&gt;(0);
+         } else {
+           v(i,j) /= Aii;
+@@ -751,7 +761,9 @@
+   size_type n = A.cols();
+   for (size_type j = 0; j &lt; n; ++j) {
+     // The matrix is exactly singular.
+-    if (fabs(A(j,j)) &lt;= Limits&lt;value_type&gt;::min())
++    // Hmm, should read like that??
++    // if (fabs(A(j,j)) &lt;= normInf(A(Range(j+1, m-1), j))*Limits&lt;value_type&gt;::safe_min())
++    if (fabs(A(j,j)) &lt;= Limits&lt;value_type&gt;::safe_min())
+       nonsingular = false;
+     else {
+       if (j &lt; n-1) {
+@@ -785,7 +797,7 @@
+     perm(j) = jp;
+ 
+     // The matrix is exactly singular.
+-    if (fabs(A(jp,j)) &lt;= Limits&lt;value_type&gt;::min())
++    if (fabs(A(jp,j)) &lt;= Limits&lt;value_type&gt;::safe_min())
+       nonsingular = false;
+     else {
+       if (jp != j) {
+@@ -870,9 +882,7 @@
+     if (0 &lt;= alpha)
+       beta = -beta;
+ 
+-    value_type mn = Limits&lt;value_type&gt;::min();
+-    value_type eps = Limits&lt;value_type&gt;::epsilon();
+-    value_type safmin = mn/eps;
++    value_type safmin = Limits&lt;value_type&gt;::safe_min();
+ 
+     if (fabs(beta) &lt; safmin) {
+       value_type rsafmn = 1/safmin;
+@@ -928,7 +938,7 @@
+ 
+     // Check if that thing is singular.
+     value_type Ajj = A(j, j);
+-    if (fabs(Ajj) &lt;= Limits&lt;value_type&gt;::min())
++    if (fabs(Ajj) &lt;= Limits&lt;value_type&gt;::safe_min())
+       nonsingular = false;
+ 
+     A(j, j) = 1;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000325.html">[OpenFDM-svn] r351 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000327.html">[OpenFDM-svn] r353 - in trunk/OpenFDM/src/OpenFDM: . LinAlg XML
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#326">[ date ]</a>
+              <a href="thread.html#326">[ thread ]</a>
+              <a href="subject.html#326">[ subject ]</a>
+              <a href="author.html#326">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

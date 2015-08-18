@@ -1,0 +1,690 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1101 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1101%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908161955.n7GJtYPw024289%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001058.html">
+   <LINK REL="Next"  HREF="001060.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1101 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1101%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908161955.n7GJtYPw024289%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1101 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 16 21:55:34 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001058.html">[OpenFDM-svn] r1100 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001060.html">[OpenFDM-svn] r1102 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1059">[ date ]</a>
+              <a href="thread.html#1059">[ thread ]</a>
+              <a href="subject.html#1059">[ subject ]</a>
+              <a href="author.html#1059">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-16 21:55:33 +0200 (Sun, 16 Aug 2009)
+New Revision: 1101
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+Log:
+Improove function expressions.
+
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimReaderBase.h
+M    src/JSBSim/JSBSimReader.cpp
+M    src/JSBSim/JSBSimReader.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-16 17:50:24 UTC (rev 1100)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-16 19:55:33 UTC (rev 1101)
+@@ -1707,8 +1707,9 @@
+         if (!convertFunction(*fit, sum))
+           return error(&quot;Cannot convert function&quot;);
+       }
+-      
++
+       if (!sum-&gt;getNumSummands())
++        // FIXME connect that then with a zero port ...
+         continue;
+       const Port* port = sum-&gt;getPort(&quot;output&quot;);
+ 
+@@ -1746,197 +1747,339 @@
+   std::string::size_type slachPos = bindName.rfind('/');
+   if (slachPos != std::string::npos)
+     name = name.substr(slachPos+1);
+-  std::list&lt;const Port*&gt; inputs = readFunctionInputs(function, name);
+-  if (inputs.size() != 1)
+-    return error(&quot;function without output \&quot;&quot; + bindName + &quot;\&quot;!&quot;);
+ 
+-  registerJSBExpression(bindName, inputs.front());
++  // FIXME put that into a group and use a GroupOutput for that
++  SharedPtr&lt;Gain&gt; gain = new Gain(name);
++  mTopLevelGroup-&gt;addChild(gain);
++
++  std::list&lt;const XMLElement*&gt; elements = function-&gt;getElements();
++  std::list&lt;const XMLElement*&gt;::iterator i;
++  for (i = elements.begin(); i != elements.end(); ++i) {
++    if ((*i)-&gt;getName() == &quot;description&quot;)
++      continue;
++    if (!connectFunctionInput(*i, gain-&gt;getInputPort(0), mTopLevelGroup))
++      return error(&quot;Can not connect product input!&quot;);
++    // FIXME check that we get here only once
++  }
++
++  registerJSBExpression(bindName, gain-&gt;getOutputPort());
+   if (sum) {
+     unsigned num = sum-&gt;getNumSummands();
+     sum-&gt;setNumSummands(num+1);
+-    mTopLevelGroup-&gt;connect(inputs.front(), sum-&gt;getInputPort(num));
++    mTopLevelGroup-&gt;connect(gain-&gt;getOutputPort(), sum-&gt;getInputPort(num));
+   }
+ 
+   return true;
+ }
+ 
+-std::list&lt;const Port*&gt;
+-JSBSimReader::readFunctionInputs(const XMLElement* operationTag,
+-                                 const std::string&amp; name)
++bool
++JSBSimReader::connectUnaryFunctionInput(const std::string&amp; name,
++                                        UnaryFunction::Type type,
++                                        const XMLElement* element,
++                                        const Port* port, Group* parentGroup)
+ {
+-  NodePath path = mTopLevelGroup-&gt;getNodePathList().front();
+-  std::list&lt;const Port*&gt; inputs;
+-  std::list&lt;const XMLElement*&gt; args = operationTag-&gt;getElements();
+-  std::list&lt;const XMLElement*&gt;::const_iterator ait;
+-  for (ait = args.begin(); ait != args.end(); ++ait) {
+-    if ((*ait)-&gt;getName() == &quot;description&quot;) {
+-      // Just ignore
+-    } else if ((*ait)-&gt;getName() == &quot;value&quot;) {
+-      real_type value = asciiToReal((*ait)-&gt;getData());
+-      inputs.push_back(addMultiBodyConstModel(name + &quot; Constant&quot;, value));
+-    } else if ((*ait)-&gt;getName() == &quot;property&quot;) {
+-      inputs.push_back(lookupJSBExpression(stringData(*ait), path));
+-    } else if ((*ait)-&gt;getName() == &quot;difference&quot;) {
+-      std::list&lt;const Port*&gt; differenceInput = readFunctionInputs(*ait, &quot;difference-&quot; + name);
+-      if (differenceInput.size() != 2) {
+-          error(&quot;difference function inputtag must have 2 inputs!&quot;);
+-          return std::list&lt;const Port*&gt;();
+-      }
+-      SharedPtr&lt;Summer&gt; summer = new Summer(name + &quot; Difference&quot;);
+-      addMultiBodyModel(summer);
+-      mTopLevelGroup-&gt;connect(differenceInput.front(), summer-&gt;getInputPort(0));
++  SharedPtr&lt;UnaryFunction&gt; unaryFunction;
++  unaryFunction = new UnaryFunction(name, type);
++  parentGroup-&gt;addChild(unaryFunction);
++  
++  if (!parentGroup-&gt;connect(port, unaryFunction-&gt;getOutputPort()))
++    return error(&quot;Can not connect UnaryFunction output to port!&quot;);
++  
++  std::list&lt;const XMLElement*&gt; elements = element-&gt;getElements();
++  if (elements.size() != 1)
++    return error(&quot;Input ports to Unary models must have exactly one input!&quot;);
++  if (!connectFunctionInput(elements.front(), unaryFunction-&gt;getInputPort(0),
++                            parentGroup))
++    return error(&quot;Can not connect UnaryFunction input to port!&quot;);
++  
++  return true;
++}
+ 
+-      SharedPtr&lt;Gain&gt; gain = new Gain(name + &quot; Minus&quot;, -1);
+-      addMultiBodyModel(gain);
+-      mTopLevelGroup-&gt;connect(differenceInput.back(), gain-&gt;getInputPort(0));
+-      mTopLevelGroup-&gt;connect(gain-&gt;getOutputPort(), summer-&gt;getInputPort(1));
+-      inputs.push_back(summer-&gt;getOutputPort());
+-    } else if ((*ait)-&gt;getName() == &quot;quotient&quot;) {
+-      std::list&lt;const Port*&gt; divInput = readFunctionInputs(*ait, &quot;div-&quot; + name);
+-      if (divInput.size() != 2) {
+-          error(&quot;div function inputtag must have 2 inputs!&quot;);
+-          return std::list&lt;const Port*&gt;();
+-      }
+-      SharedPtr&lt;BinaryFunction&gt; div;
+-      div = new BinaryFunction(name + &quot; Difference&quot;, BinaryFunction::Div);
+-      addMultiBodyModel(div);
+-      mTopLevelGroup-&gt;connect(divInput.front(), div-&gt;getInputPort(0));
+-      mTopLevelGroup-&gt;connect(divInput.back(), div-&gt;getInputPort(1));
+-      inputs.push_back(div-&gt;getOutputPort());
+-    } else if ((*ait)-&gt;getName() == &quot;abs&quot;) {
+-      std::list&lt;const Port*&gt; absInput = readFunctionInputs(*ait, &quot;abs-&quot; + name);
+-      if (absInput.size() != 1) {
+-          error(&quot;abs function inputtag must have 1 input!&quot;);
+-          return std::list&lt;const Port*&gt;();
+-      }
+-      
+-      SharedPtr&lt;UnaryFunction&gt; absModel;
+-      absModel = new UnaryFunction(&quot;Abs &quot; + name, UnaryFunction::Abs);
+-      addMultiBodyModel(absModel);
+-      mTopLevelGroup-&gt;connect(absInput.front(), absModel-&gt;getInputPort(0));
+-      inputs.push_back(absModel-&gt;getOutputPort());
+-    } else if ((*ait)-&gt;getName() == &quot;product&quot;) {
+-      SharedPtr&lt;Product&gt; prod = new Product(name + &quot; product&quot;);
+-      addMultiBodyModel(prod);
+-      std::list&lt;const Port*&gt; pInputs = readFunctionInputs(*ait, name);
+-      if (pInputs.empty()) {
+-        error(&quot;Cannot read product inputs of function \&quot;&quot; + name + &quot;\&quot;!&quot;);
+-        return std::list&lt;const Port*&gt;();
+-      }
+-      unsigned i = 0;
+-      std::list&lt;const Port*&gt;::iterator iit = pInputs.begin();
+-      while (iit != pInputs.end()) {
+-        prod-&gt;setNumFactors(i+1);
+-        mTopLevelGroup-&gt;connect(*iit++, prod-&gt;getInputPort(i++));
+-      }
+-      inputs.push_back(prod-&gt;getPort(&quot;output&quot;));
+ 
+-    } else if ((*ait)-&gt;getName() == &quot;sum&quot;) {
+-      SharedPtr&lt;Summer&gt; summer = new Summer(name + &quot; sum&quot;);
+-      addMultiBodyModel(summer);
+-      std::list&lt;const Port*&gt; pInputs = readFunctionInputs(*ait, name);
+-      if (pInputs.empty()) {
+-        error(&quot;Cannot read sum inputs of function \&quot;&quot; + name + &quot;\&quot;!&quot;);
+-        return std::list&lt;const Port*&gt;();
+-      }
+-      unsigned i = 0;
+-      std::list&lt;const Port*&gt;::iterator iit = pInputs.begin();
+-      while (iit != pInputs.end()) {
+-        summer-&gt;setNumSummands(i+1);
+-        mTopLevelGroup-&gt;connect(*iit++, summer-&gt;getInputPort(i++));
+-      }
+-      inputs.push_back(summer-&gt;getPort(&quot;output&quot;));
++bool
++JSBSimReader::connectBinaryFunctionInput(const std::string&amp; name,
++                                         BinaryFunction::Type type,
++                                         const XMLElement* element,
++                                         const Port* port, Group* parentGroup)
++{
++  SharedPtr&lt;BinaryFunction&gt; binaryFunction;
++  binaryFunction = new BinaryFunction(name, type);
++  parentGroup-&gt;addChild(binaryFunction);
++  
++  if (!parentGroup-&gt;connect(port, binaryFunction-&gt;getOutputPort()))
++    return error(&quot;Can not connect BinaryFunction output to port!&quot;);
++  
++  std::list&lt;const XMLElement*&gt; elements = element-&gt;getElements();
++  if (elements.size() != 2)
++    return error(&quot;Input ports to Binary models must have exactly two inputs!&quot;);
++  if (!connectFunctionInput(elements.front(), binaryFunction-&gt;getInputPort(0),
++                            parentGroup))
++    return error(&quot;Can not connect BinaryFunction input to port0!&quot;);
++  if (!connectFunctionInput(elements.back(), binaryFunction-&gt;getInputPort(1),
++                            parentGroup))
++    return error(&quot;Can not connect BinaryFunction input to port1!&quot;);
++  
++  return true;
++}
+ 
+-    } else if ((*ait)-&gt;getName() == &quot;table&quot;) {
+-      unsigned dim = getNumTableDims(*ait);
+-      if (dim == 1) {
+-        TableData&lt;1&gt; data;
+-        BreakPointVector lookup;
+-        if (!readTable1D(*ait, data, lookup)) {
+-          error(&quot;Cannot read 1D table data.&quot;);
+-          return std::list&lt;const Port*&gt;();
+-        }
+-        std::string token = stringData((*ait)-&gt;getElement(&quot;independentVar&quot;));
+-        const Port* port = getTablePrelookup(name + &quot; lookup&quot;, token, lookup);
++bool
++JSBSimReader::connectFunctionInput(const XMLElement* element, const Port* port,
++                                   Group* parentGroup)
++{
++  if (element-&gt;getName() == &quot;abs&quot;) {
++    if (!connectUnaryFunctionInput(&quot;abs&quot;, UnaryFunction::Abs,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect abs output to port!&quot;);
++    return true;
+ 
+-        SharedPtr&lt;Table1D&gt; table = new Table1D(name + &quot; Table&quot;);
+-        addMultiBodyModel(table);
+-        mTopLevelGroup-&gt;connect(port, table-&gt;getInputPort(0));
+-        table-&gt;setTableData(data);
+-        inputs.push_back(table-&gt;getPort(&quot;output&quot;));
++  } else if (element-&gt;getName() == &quot;acos&quot;) {
++    if (!connectUnaryFunctionInput(&quot;acos&quot;, UnaryFunction::Acos,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect acos output to port!&quot;);
++    return true;
+ 
+-      } else if (dim == 2) {
+-        TableData&lt;2&gt; data;
+-        BreakPointVector lookup[2];
+-        if (!readTable2D(*ait, data, lookup)) {
+-          error(&quot;Cannot read 2D table data.&quot;);
+-          return std::list&lt;const Port*&gt;();
+-        }
++  } else if (element-&gt;getName() == &quot;asin&quot;) {
++    if (!connectUnaryFunctionInput(&quot;asin&quot;, UnaryFunction::Asin,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect asin output to port!&quot;);
++    return true;
+ 
+-        std::list&lt;const XMLElement*&gt; indeps
+-          = (*ait)-&gt;getElements(&quot;independentVar&quot;);
+-        if (indeps.size() != 2) {
+-          error(&quot;2DTable data does not have 2 inputs!&quot;);
+-          return std::list&lt;const Port*&gt;();
+-        }
+-        std::string rowInput = indepData(indeps, &quot;row&quot;);
+-        std::string colInput = indepData(indeps, &quot;column&quot;);
++  } else if (element-&gt;getName() == &quot;atan&quot;) {
++    if (!connectUnaryFunctionInput(&quot;atan&quot;, UnaryFunction::Atan,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect atan output to port!&quot;);
++    return true;
+ 
+-        const Port* rPort = getTablePrelookup(name + &quot; row lookup&quot;, rowInput,
+-                                              lookup[0]);
+-        const Port* cPort = getTablePrelookup(name + &quot; column lookup&quot;, colInput,
+-                                              lookup[1]);
++  } else if (element-&gt;getName() == &quot;atan2&quot;) {
++    if (!connectBinaryFunctionInput(&quot;Atan2&quot;, BinaryFunction::Atan2,
++                                    element, port, parentGroup))
++        return error(&quot;Can not connect atan2 output to port!&quot;);
++    return true;
+ 
+-        SharedPtr&lt;Table2D&gt; table = new Table2D(name  + &quot; Table&quot;);
+-        addMultiBodyModel(table);
+-        mTopLevelGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
+-        mTopLevelGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
+-        table-&gt;setTableData(data);
+-        inputs.push_back(table-&gt;getPort(&quot;output&quot;));
++  } else if (element-&gt;getName() == &quot;ceil&quot;) {
++    if (!connectUnaryFunctionInput(&quot;ceil&quot;, UnaryFunction::Ceil,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect ceil output to port!&quot;);
++    return true;
+ 
+-      } else if (dim == 3) {
+-        TableData&lt;3&gt; data;
+-        BreakPointVector lookup[3];
+-        if (!readTable3D(*ait, data, lookup)) {
+-          error(&quot;Cannot read 1D table data.&quot;);
+-          return std::list&lt;const Port*&gt;();
+-        }
++  } else if (element-&gt;getName() == &quot;cos&quot;) {
++    if (!connectUnaryFunctionInput(&quot;cos&quot;, UnaryFunction::Cos,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect cos output to port!&quot;);
++    return true;
+ 
+-        std::list&lt;const XMLElement*&gt; indeps
+-          = (*ait)-&gt;getElements(&quot;independentVar&quot;);
+-        if (indeps.size() != 3) {
+-          error(&quot;3DTable data does not have 3 inputs!&quot;);
+-          return std::list&lt;const Port*&gt;();
+-        }
+-        std::string rowInput = indepData(indeps, &quot;row&quot;);
+-        std::string colInput = indepData(indeps, &quot;column&quot;);
+-        std::string pageInput = indepData(indeps, &quot;table&quot;);
++  } else if (element-&gt;getName() == &quot;difference&quot;) {
++    SharedPtr&lt;Summer&gt; summer = new Summer(&quot;Difference&quot;);
++    parentGroup-&gt;addChild(summer);
+ 
+-        const Port* rPort = getTablePrelookup(name + &quot; row lookup&quot;, rowInput,
+-                                              lookup[0]);
+-        const Port* cPort = getTablePrelookup(name + &quot; column lookup&quot;, colInput,
+-                                              lookup[1]);
+-        const Port* pPort = getTablePrelookup(name + &quot; page lookup&quot;, pageInput,
+-                                              lookup[2]);
++    SharedPtr&lt;UnaryFunction&gt; unaryFunction;
++    unaryFunction = new UnaryFunction(&quot;Minus&quot;, UnaryFunction::Minus);
++    parentGroup-&gt;addChild(unaryFunction);
++    
++    if (!parentGroup-&gt;connect(unaryFunction-&gt;getOutputPort(),
++                              summer-&gt;getInputPort(1)))
++      return error(&quot;Can not connect negative Summer input to port!&quot;);
++    if (!parentGroup-&gt;connect(port, summer-&gt;getOutputPort()))
++      return error(&quot;Can not connect Summer output to port!&quot;);
++    
++    std::list&lt;const XMLElement*&gt; elements = element-&gt;getElements();
++    if (elements.size() != 2)
++      return error(&quot;Input ports to Difference model must have exactly two inputs!&quot;);
++    if (!connectFunctionInput(elements.front(), summer-&gt;getInputPort(0),
++                              parentGroup))
++      return error(&quot;Can not connect UnaryFunction input to port!&quot;);
+ 
+-        SharedPtr&lt;Table3D&gt; table = new Table3D(name  + &quot; Table&quot;);
+-        addMultiBodyModel(table);
+-        mTopLevelGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
+-        mTopLevelGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
+-        mTopLevelGroup-&gt;connect(pPort, table-&gt;getInputPort(2));
+-        table-&gt;setTableData(data);
+-        inputs.push_back(table-&gt;getPort(&quot;output&quot;));
++    if (!connectFunctionInput(elements.back(), unaryFunction-&gt;getInputPort(0),
++                              parentGroup))
++      return error(&quot;Can not connect UnaryFunction input to port!&quot;);
+ 
+-      } else {
+-        error(&quot;Unknown tabel dimension.&quot;);
+-        return std::list&lt;const Port*&gt;();
+-      }
+-    } else {
+-      error(&quot;Unknown function input&quot;);
+-      return std::list&lt;const Port*&gt;();
++    return true;
++
++  } else if (element-&gt;getName() == &quot;exp&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Exp&quot;, UnaryFunction::Exp,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect exp output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;floor&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Floor&quot;, UnaryFunction::Floor,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect floor output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;log&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Log&quot;, UnaryFunction::Log,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect log output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;log10&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Log10&quot;, UnaryFunction::Log10,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect log10 output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;log10&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Log10&quot;, UnaryFunction::Log10,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect log10 output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;product&quot;) {
++    SharedPtr&lt;Product&gt; product = new Product(&quot;product&quot;);
++    parentGroup-&gt;addChild(product);
++  
++    if (!parentGroup-&gt;connect(port, product-&gt;getOutputPort()))
++      return error(&quot;Can not connect product output to port!&quot;);
++  
++    product-&gt;setNumFactors(0);
++    std::list&lt;const XMLElement*&gt; elements = element-&gt;getElements();
++    std::list&lt;const XMLElement*&gt;::iterator i;
++    for (i = elements.begin(); i != elements.end(); ++i) {
++      unsigned idx = product-&gt;getNumFactors();
++      product-&gt;setNumFactors(idx + 1);
++      if (!connectFunctionInput(*i, product-&gt;getInputPort(idx),
++                                parentGroup))
++        return error(&quot;Can not connect product input!&quot;);
+     }
++  
++    return true;
++
++  } else if (element-&gt;getName() == &quot;property&quot;) {
++    if (!connectJSBExpression(stringData(element), port))
++        return error(&quot;Can not connect property to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;quotient&quot;) {
++    if (!connectBinaryFunctionInput(&quot;Div&quot;, BinaryFunction::Div,
++                                    element, port, parentGroup))
++        return error(&quot;Can not connect quotient output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;sin&quot;) {
++    if (!connectUnaryFunctionInput(&quot;Sin&quot;, UnaryFunction::Sin,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect sin output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;sum&quot;) {
++    SharedPtr&lt;Summer&gt; summer = new Summer(&quot;sum&quot;);
++    parentGroup-&gt;addChild(summer);
++  
++    if (!parentGroup-&gt;connect(port, summer-&gt;getOutputPort()))
++      return error(&quot;Can not connect sum output to port!&quot;);
++  
++    summer-&gt;setNumSummands(0);
++    std::list&lt;const XMLElement*&gt; elements = element-&gt;getElements();
++    std::list&lt;const XMLElement*&gt;::iterator i;
++    for (i = elements.begin(); i != elements.end(); ++i) {
++      unsigned idx = summer-&gt;getNumSummands();
++      summer-&gt;setNumSummands(idx + 1);
++      if (!connectFunctionInput(*i, summer-&gt;getInputPort(idx),
++                                parentGroup))
++        return error(&quot;Can not connect product input!&quot;);
++    }
++  
++    return true;
++
++  } else if (element-&gt;getName() == &quot;sqr&quot;) {
++    if (!connectUnaryFunctionInput(&quot;sqr&quot;, UnaryFunction::Sqr,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect sqr output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;sqrt&quot;) {
++    if (!connectUnaryFunctionInput(&quot;sqrt&quot;, UnaryFunction::Sqrt,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect sqrt output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;table&quot;) {
++    unsigned dim = getNumTableDims(element);
++    if (dim == 1) {
++      TableData&lt;1&gt; data;
++      BreakPointVector lookup;
++      if (!readTable1D(element, data, lookup))
++        return error(&quot;Cannot read 1D table data.&quot;);
++      std::string token = stringData(element-&gt;getElement(&quot;independentVar&quot;));
++      const Port* portP = getTablePrelookup(&quot;lookup&quot;, token, lookup);
++
++      SharedPtr&lt;Table1D&gt; table = new Table1D(&quot;Table&quot;);
++      parentGroup-&gt;addChild(table);
++      parentGroup-&gt;connect(portP, table-&gt;getInputPort(0));
++      table-&gt;setTableData(data);
++      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++      return true;
++
++    } else if (dim == 2) {
++      TableData&lt;2&gt; data;
++      BreakPointVector lookup[2];
++      if (!readTable2D(element, data, lookup))
++        return error(&quot;Cannot read 2D table data.&quot;);
++      
++      std::list&lt;const XMLElement*&gt; indeps
++        = element-&gt;getElements(&quot;independentVar&quot;);
++      if (indeps.size() != 2)
++        return error(&quot;2DTable data does not have 2 inputs!&quot;);
++      std::string rowInput = indepData(indeps, &quot;row&quot;);
++      std::string colInput = indepData(indeps, &quot;column&quot;);
++      
++      const Port* rPort = getTablePrelookup(&quot;Row lookup&quot;, rowInput, lookup[0]);
++      const Port* cPort = getTablePrelookup(&quot;Column lookup&quot;, colInput, lookup[1]);
++      
++      SharedPtr&lt;Table2D&gt; table = new Table2D(&quot;Table&quot;);
++      parentGroup-&gt;addChild(table);
++      parentGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
++      parentGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
++      table-&gt;setTableData(data);
++      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++      return true;
++
++    } else if (dim == 3) {
++      TableData&lt;3&gt; data;
++      BreakPointVector lookup[3];
++      if (!readTable3D(element, data, lookup))
++        return error(&quot;Cannot read 1D table data.&quot;);
++      
++      std::list&lt;const XMLElement*&gt; indeps
++        = element-&gt;getElements(&quot;independentVar&quot;);
++      if (indeps.size() != 3)
++        return error(&quot;3DTable data does not have 3 inputs!&quot;);
++      std::string rowInput = indepData(indeps, &quot;row&quot;);
++      std::string colInput = indepData(indeps, &quot;column&quot;);
++      std::string pageInput = indepData(indeps, &quot;table&quot;);
++      
++      const Port* rPort = getTablePrelookup(&quot;Row lookup&quot;, rowInput, lookup[0]);
++      const Port* cPort = getTablePrelookup(&quot;Column lookup&quot;, colInput, lookup[1]);
++      const Port* pPort = getTablePrelookup(&quot;Page lookup&quot;, pageInput, lookup[2]);
++      
++      SharedPtr&lt;Table3D&gt; table = new Table3D(&quot;Table&quot;);
++      parentGroup-&gt;addChild(table);
++      parentGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
++      parentGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
++      parentGroup-&gt;connect(pPort, table-&gt;getInputPort(2));
++      table-&gt;setTableData(data);
++      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++      return true;
++
++    }
++
++  } else if (element-&gt;getName() == &quot;tan&quot;) {
++    if (!connectUnaryFunctionInput(&quot;tan&quot;, UnaryFunction::Tan,
++                                   element, port, parentGroup))
++        return error(&quot;Can not connect tan output to port!&quot;);
++    return true;
++
++  } else if (element-&gt;getName() == &quot;value&quot;) {
++    real_type value = realData(element, 0);
++    SharedPtr&lt;ConstModel&gt; constModel = new ConstModel(&quot;Value&quot;, value);
++    parentGroup-&gt;addChild(constModel);
++    if (!parentGroup-&gt;connect(port, constModel-&gt;getPort(&quot;output&quot;)))
++      return error(&quot;Can not connect ConstModel output to port!&quot;);
++    return true;
++
+   }
+-  return inputs;
++  return false;
+ }
+ 
+ unsigned
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h	2009-08-16 17:50:24 UTC (rev 1100)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h	2009-08-16 19:55:33 UTC (rev 1101)
+@@ -12,6 +12,8 @@
+ 
+ #include &lt;OpenFDM/ReaderWriter.h&gt;
+ #include &lt;OpenFDM/Table.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
++#include &lt;OpenFDM/BinaryFunction.h&gt;
+ 
+ #include &quot;JSBSimReaderBase.h&quot;
+ 
+@@ -60,9 +62,19 @@
+                      const Port* thrusterDriver);
+   bool convertAerodynamics(const XMLElement* aero);
+   bool convertFunction(const XMLElement* function, Summer* sum);
+-  std::list&lt;const Port*&gt; readFunctionInputs(const XMLElement* operationTag,
+-                                            const std::string&amp; name);
+ 
++  bool connectUnaryFunctionInput(const std::string&amp; name,
++                                 UnaryFunction::Type type,
++                                 const XMLElement* element,
++                                 const Port* port, Group* parentGroup);
++  bool connectBinaryFunctionInput(const std::string&amp; name,
++                                  BinaryFunction::Type type,
++                                  const XMLElement* element,
++                                  const Port* port, Group* parentGroup);
++
++  bool connectFunctionInput(const XMLElement* element, const Port* port,
++                            Group* parentGroup);
++
+   unsigned getNumTableDims(const XMLElement* tableElem);
+   bool readTable1D(const XMLElement* tableElem,
+                    TableData&lt;1&gt;&amp; data, BreakPointVector&amp; lookup);
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-16 17:50:24 UTC (rev 1100)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-16 19:55:33 UTC (rev 1101)
+@@ -183,23 +183,6 @@
+   return ret;
+ }
+ 
+-const Port*
+-JSBSimReaderBase::lookupJSBExpression(const std::string&amp; name,
+-                                      const NodePath&amp; path,
+-                                      bool recheckAeroProp)
+-{
+-  Group* parent = 0;
+-  if (path.empty())
+-    parent = mTopLevelGroup;
+-  else
+-    parent = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(path.back().get()));
+-  OpenFDMAssert(parent);
+-  Gain* gain = new Gain(&quot;FIXME dummy&quot;);
+-  parent-&gt;addChild(gain);
+-  connectJSBExpression(name, gain-&gt;getInputPort(0), recheckAeroProp);
+-  return gain-&gt;getOutputPort();
+-}
+-
+ bool
+ JSBSimReaderBase::connectJSBExpression(const std::string&amp; name,
+                                        const Port* pa, bool recheckAeroProp)
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-16 17:50:24 UTC (rev 1100)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-16 19:55:33 UTC (rev 1101)
+@@ -70,18 +70,6 @@
+   /// Returns the name of the output property given the fcs component's name
+   static std::string normalizeComponentName(const std::string&amp; name);
+ 
+-
+-  /// &lt;FIXME&gt; document and rethink
+-  // Deprecated
+-  // const Port* lookupJSBExpression2(const std::string&amp; name,
+-  //                                 const NodePath&amp; path = NodePath(),
+-  //                                 bool recheckAeroProp = true);
+-
+-  // FIXME
+-  const Port* lookupJSBExpression(const std::string&amp; name,
+-                                  const NodePath&amp; path = NodePath(),
+-                                  bool recheckAeroProp = true);
+-
+   bool connectJSBExpression(const std::string&amp; name, const Port*,
+                             bool recheckAeroProp = true);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001058.html">[OpenFDM-svn] r1100 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001060.html">[OpenFDM-svn] r1102 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1059">[ date ]</a>
+              <a href="thread.html#1059">[ thread ]</a>
+              <a href="subject.html#1059">[ subject ]</a>
+              <a href="author.html#1059">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,141 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1099 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1099%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142215.n7EMFvds007046%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001056.html">
+   <LINK REL="Next"  HREF="001058.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1099 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1099%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142215.n7EMFvds007046%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1099 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 15 00:15:57 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001056.html">[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001058.html">[OpenFDM-svn] r1100 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1057">[ date ]</a>
+              <a href="thread.html#1057">[ thread ]</a>
+              <a href="subject.html#1057">[ subject ]</a>
+              <a href="author.html#1057">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-15 00:15:57 +0200 (Sat, 15 Aug 2009)
+New Revision: 1099
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Add some more model handling.
+
+M    src/JSBSim/JSBSimReader.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-14 21:58:04 UTC (rev 1098)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-14 22:15:57 UTC (rev 1099)
+@@ -16,6 +16,7 @@
+ 
+ #include &lt;OpenFDM/AirSpring.h&gt;
+ #include &lt;OpenFDM/Bias.h&gt;
++#include &lt;OpenFDM/BinaryFunction.h&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/DeadBand.h&gt;
+ #include &lt;OpenFDM/Delay.h&gt;
+@@ -1652,14 +1653,14 @@
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+ 
+-  // Register all output property names.
+-  std::string implicitOutname = std::string(&quot;fcs/&quot;)
+-    + normalizeComponentName(name);
+-  registerJSBExpression(implicitOutname, out);
++  // Register output property names.
+   if (fcsComponent-&gt;getElement(&quot;output&quot;)) {
+     std::string outname = stringData(fcsComponent-&gt;getElement(&quot;output&quot;));
+-    if (outname != implicitOutname)
+-      registerJSBExpression(outname, out);
++    registerJSBExpression(outname, out);
++  } else {
++    std::string implicitOutname = std::string(&quot;fcs/&quot;)
++      + normalizeComponentName(name);
++    registerJSBExpression(implicitOutname, out);
+   }
+ 
+   return true;
+@@ -1775,6 +1776,33 @@
+       inputs.push_back(addMultiBodyConstModel(name + &quot; Constant&quot;, value));
+     } else if ((*ait)-&gt;getName() == &quot;property&quot;) {
+       inputs.push_back(lookupJSBExpression(stringData(*ait), path));
++    } else if ((*ait)-&gt;getName() == &quot;difference&quot;) {
++      std::list&lt;const Port*&gt; differenceInput = readFunctionInputs(*ait, &quot;difference-&quot; + name);
++      if (differenceInput.size() != 2) {
++          error(&quot;difference function inputtag must have 2 inputs!&quot;);
++          return std::list&lt;const Port*&gt;();
++      }
++      SharedPtr&lt;Summer&gt; summer = new Summer(name + &quot; Difference&quot;);
++      addMultiBodyModel(summer);
++      mTopLevelGroup-&gt;connect(differenceInput.front(), summer-&gt;getInputPort(0));
++
++      SharedPtr&lt;Gain&gt; gain = new Gain(name + &quot; Minus&quot;, -1);
++      addMultiBodyModel(gain);
++      mTopLevelGroup-&gt;connect(differenceInput.back(), gain-&gt;getInputPort(0));
++      mTopLevelGroup-&gt;connect(gain-&gt;getOutputPort(), summer-&gt;getInputPort(1));
++      inputs.push_back(summer-&gt;getOutputPort());
++    } else if ((*ait)-&gt;getName() == &quot;quotient&quot;) {
++      std::list&lt;const Port*&gt; divInput = readFunctionInputs(*ait, &quot;div-&quot; + name);
++      if (divInput.size() != 2) {
++          error(&quot;div function inputtag must have 2 inputs!&quot;);
++          return std::list&lt;const Port*&gt;();
++      }
++      SharedPtr&lt;BinaryFunction&gt; div;
++      div = new BinaryFunction(name + &quot; Difference&quot;, BinaryFunction::Div);
++      addMultiBodyModel(div);
++      mTopLevelGroup-&gt;connect(divInput.front(), div-&gt;getInputPort(0));
++      mTopLevelGroup-&gt;connect(divInput.back(), div-&gt;getInputPort(1));
++      inputs.push_back(div-&gt;getOutputPort());
+     } else if ((*ait)-&gt;getName() == &quot;abs&quot;) {
+       std::list&lt;const Port*&gt; absInput = readFunctionInputs(*ait, &quot;abs-&quot; + name);
+       if (absInput.size() != 1) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001056.html">[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001058.html">[OpenFDM-svn] r1100 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1057">[ date ]</a>
+              <a href="thread.html#1057">[ thread ]</a>
+              <a href="subject.html#1057">[ subject ]</a>
+              <a href="author.html#1057">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

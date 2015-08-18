@@ -1,0 +1,230 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r96 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r96%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512101747.jBAHlLPK027435%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000079.html">
+   <LINK REL="Next"  HREF="000081.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r96 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r96%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512101747.jBAHlLPK027435%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r96 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Dec 10 18:47:21 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000079.html">[OpenFDM-svn] r95 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000081.html">[OpenFDM-svn] r97 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#80">[ date ]</a>
+              <a href="thread.html#80">[ thread ]</a>
+              <a href="subject.html#80">[ subject ]</a>
+              <a href="author.html#80">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-10 18:47:14 +0100 (Sat, 10 Dec 2005)
+New Revision: 96
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+Log:
+More on ports instead of properties.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-09 19:27:08 UTC (rev 95)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-10 17:47:14 UTC (rev 96)
+@@ -13,6 +13,7 @@
+ 
+ #include &lt;OpenFDM/AeroForce.h&gt;
+ #include &lt;OpenFDM/Bias.h&gt;
++#include &lt;OpenFDM/ConstSystem.h&gt;
+ #include &lt;OpenFDM/DeadBand.h&gt;
+ #include &lt;OpenFDM/DiscreteIntegrator.h&gt;
+ #include &lt;OpenFDM/Expression.h&gt;
+@@ -226,9 +227,8 @@
+     // Ok, still not available, create a constant zero thing and bail out ...
+     if (!port || !port-&gt;isConnected()) {
+       std::cerr &lt;&lt; &quot;Creating expression \&quot;&quot; &lt;&lt; propName &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-      port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(0)));
+-      return port;
++
++      return addConstModel(propName + &quot; constant&quot;, 0);
+     }
+     
+   } else {
+@@ -502,6 +502,16 @@
+   return unary-&gt;getOutputPort(0);
+ }
+ 
++Port*
++LegacyJSBSimReader::addConstModel(const std::string&amp; name, real_type value)
++{
++  Matrix m(1, 1);
++  m(1, 1) = 0;
++  ConstSystem* cModel = new ConstSystem(name, m);
++  addFCSModel(cModel);
++  return cModel-&gt;getOutputPort(0);
++}
++
+ void
+ LegacyJSBSimReader::addFCSModel(Model* model)
+ {
+@@ -608,8 +618,7 @@
+     } else if (name == &quot;AC_WINGINCIDENCE&quot;) {
+       real_type value;
+       datastr &gt;&gt; value;
+-      Port* port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++      Port* port = addConstModel(&quot;metrics/iw-deg constant&quot;, value);
+       registerJSBExpression(&quot;metrics/iw-deg&quot;, port);
+     } else if (name == &quot;AC_CHORD&quot;) {
+       real_type value;
+@@ -618,26 +627,22 @@
+     } else if (name == &quot;AC_HTAILAREA&quot;) {
+       real_type value;
+       datastr &gt;&gt; value;
+-      Port* port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++      Port* port = addConstModel(&quot;metrics/Sh-sqft constant&quot;, value);
+       registerJSBExpression(&quot;metrics/Sh-sqft&quot;, port);
+     } else if (name == &quot;AC_HTAILARM&quot;) {
+       real_type value;
+       datastr &gt;&gt; value;
+-      Port* port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++      Port* port = addConstModel(&quot;metrics/lh-ft constant&quot;, value);
+       registerJSBExpression(&quot;metrics/lh-ft&quot;, port);
+     } else if (name == &quot;AC_VTAILAREA&quot;) {
+       real_type value;
+       datastr &gt;&gt; value;
+-      Port* port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++      Port* port = addConstModel(&quot;metrics/Sv-sqft constant&quot;, value);
+       registerJSBExpression(&quot;metrics/Sv-sqft&quot;, port);
+     } else if (name == &quot;AC_VTAILARM&quot;) {
+       real_type value;
+       datastr &gt;&gt; value;
+-      Port* port = new Port;
+-      port-&gt;setProperty(Property(new ConstExpressionPropertyImpl&lt;real_type&gt;(value)));
++      Port* port = addConstModel(&quot;metrics/lv-ft constant&quot;, value);
+       registerJSBExpression(&quot;metrics/lv-ft&quot;, port);
+     } else if (name == &quot;AC_IXX&quot;) {
+       real_type value;
+@@ -766,13 +771,15 @@
+   wheel-&gt;addMultiBodyModel(wc);
+   
+   Port* port = wj-&gt;getOutputPort(0);
+-  addOutputModel(port, &quot;Wheel &quot; + numStr + &quot; Position&quot;,
++  std::string nameBase = &quot;Wheel &quot; + numStr + &quot; Position&quot;;
++  addOutputModel(port, nameBase,
+                  &quot;gear/gear[&quot; + numStr + &quot;]/wheel-position-rad&quot;);
+-  SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
+-  c-&gt;setInputProperty(port-&gt;getProperty());
+-  port = new Port;
+-  port-&gt;setProperty(Property(c));
+-  addOutputModel(port, &quot;Wheel &quot; + numStr + &quot; Position Deg&quot;,
++  UnitConversionModel* unitModel
++    = new UnitConversionModel(nameBase + &quot; converter&quot;,
++                              UnitConversionModel::SiToUnit, uDegree);
++  unitModel-&gt;getInputPort(0)-&gt;connect(port);
++  addFCSModel(unitModel);
++  addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
+                  &quot;gear/gear[&quot; + numStr + &quot;]/wheel-position-deg&quot;);
+ }
+ 
+@@ -1020,13 +1027,15 @@
+         
+         // Prepare outputs
+         port = sj-&gt;getOutputPort(0);
+-        addOutputModel(port, &quot;Steering &quot; + numStr + &quot; Position&quot;,
++        std::string nameBase = &quot;Steering &quot; + numStr + &quot; Position&quot;;
++        addOutputModel(port, nameBase,
+                        &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
+-        SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
+-        c-&gt;setInputProperty(port-&gt;getProperty());
+-        port = new Port(); // FIXME add unit convert model
+-        port-&gt;setProperty(Property(c));
+-        addOutputModel(port, &quot;Steering &quot; + numStr + &quot; Position Deg&quot;,
++        UnitConversionModel* unitModel
++          = new UnitConversionModel(nameBase + &quot; converter&quot;,
++                                    UnitConversionModel::SiToUnit, uDegree);
++        unitModel-&gt;getInputPort(0)-&gt;connect(port);
++        addFCSModel(unitModel);
++        addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
+                        &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
+       }
+ 
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2005-12-09 19:27:08 UTC (rev 95)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2005-12-10 17:47:14 UTC (rev 96)
+@@ -157,6 +157,7 @@
+ 
+   Port* addInverterModel(const std::string&amp; name, Port* in);
+   Port* addAbsModel(const std::string&amp; name, Port* in);
++  Port* addConstModel(const std::string&amp; name, real_type value);
+ 
+   void addFCSModel(Model* model);
+   /// &lt;/FIXME&gt; document and rethink
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-12-09 19:27:08 UTC (rev 95)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-12-10 17:47:14 UTC (rev 96)
+@@ -250,9 +250,9 @@
+ {
+   real_type value = getInputPort(0)-&gt;toRealPortHandle().getRealValue();
+   if (mType == UnitToSi) {
++    mValue = convertFrom(mUnit, value);
++  } else {
+     mValue = convertTo(mUnit, value);
+-  } else {
+-    mValue = convertFrom(mUnit, value);
+   }
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000079.html">[OpenFDM-svn] r95 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000081.html">[OpenFDM-svn] r97 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#80">[ date ]</a>
+              <a href="thread.html#80">[ thread ]</a>
+              <a href="subject.html#80">[ subject ]</a>
+              <a href="author.html#80">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

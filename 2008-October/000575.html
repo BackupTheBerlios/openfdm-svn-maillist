@@ -1,0 +1,458 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r605 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r605%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810130421.m9D4LDO4003445%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000574.html">
+   <LINK REL="Next"  HREF="000576.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r605 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r605%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810130421.m9D4LDO4003445%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r605 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Oct 13 06:21:13 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000574.html">[OpenFDM-svn] r604 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000576.html">[OpenFDM-svn] r606 - in	branches/OpenFDM-StateSeparation/src/OpenFDM: . LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#575">[ date ]</a>
+              <a href="thread.html#575">[ thread ]</a>
+              <a href="subject.html#575">[ subject ]</a>
+              <a href="author.html#575">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-13 06:21:12 +0200 (Mon, 13 Oct 2008)
+New Revision: 605
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+Log:
+Add the mobile root joint to the list of compiled objects.
+M    MobileRootJoint.h
+M    MobileRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-11 14:18:21 UTC (rev 604)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-13 04:21:12 UTC (rev 605)
+@@ -240,6 +240,10 @@
+   Output.cpp \
+   SimulationTime.cpp
+ 
++OpenFDMMechanicSOURCES = \
++  MobileRootJoint.cpp
++
++
+ #   AeroForce.cpp \
+ #   AirSpring.cpp \
+ #   Atmosphere.cpp \
+@@ -263,7 +267,6 @@
+ #   Mass.cpp \
+ #   MaxModel.cpp \
+ #   MinModel.cpp \
+-#   MobileRootJoint.cpp \
+ #   Output.cpp \
+ #   Product.cpp \
+ #   PrismaticJoint.cpp \
+@@ -285,4 +288,4 @@
+ #   WheelContact.cpp
+ 
+ nobase_OpenFDMinclude_HEADERS = $(OpenFDMCoreHEADERS) $(OpenFDMModelsHEADERS)
+-libOpenFDM_la_SOURCES = $(OpenFDMCoreSOURCES) $(OpenFDMModelsSOURCES)
++libOpenFDM_la_SOURCES = $(OpenFDMCoreSOURCES) $(OpenFDMModelsSOURCES) $(OpenFDMMecihanicSOURCES)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-11 14:18:21 UTC (rev 604)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-13 04:21:12 UTC (rev 605)
+@@ -12,220 +12,42 @@
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+ #include &quot;Gravity.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;ModelVisitor.h&quot;
+-#include &quot;RootFrame.h&quot;
+-#include &quot;MobileRootJointFrame.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-MobileRootJoint::MobileRootJoint(const std::string&amp; name)
+-  : Joint(name),
+-    mFrame(new MobileRootJointFrame(name))
++MobileRootJoint::MobileRootJoint(const std::string&amp; name) :
++  RootJoint(name)
+ {
+-  setNumContinousStates(13);
+-  addSampleTime(SampleTime::Continous);
+ }
+ 
+-MobileRootJoint::~MobileRootJoint(void)
++MobileRootJoint::~MobileRootJoint()
+ {
+ }
+ 
+ void
+-MobileRootJoint::accept(ModelVisitor&amp; visitor)
++MobileRootJoint::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
++                          PortValueList&amp;) const
+ {
+-  visitor.handleNodePathAndApply(*this);
+ }
+ 
+-bool
+-MobileRootJoint::init(void)
+-{
+-  mGravity = mEnvironment-&gt;getGravity();
+-  if (!mGravity) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get gravity model!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  const Frame* rootFrame = mEnvironment-&gt;getRootFrame();
+-  if (!rootFrame) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get rootFrame model!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  recheckTopology();
+-
+-  return Joint::init();
+-}
+-
+ void
+-MobileRootJoint::recheckTopology(void)
++MobileRootJoint::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
++                              PortValueList&amp;) const
+ {
+-  // Hmm, works for the first cut, but rethink what happens with strange
+-  // attach reattach sequences ...
+-  RigidBody* rigidBody = getOutboardBody();
+-  if (!rigidBody)
+-    return;
+-  // check if already done
+-  if (mFrame != rigidBody-&gt;getFrame())
+-    rigidBody-&gt;setFrame(mFrame);
+-
+-  // Check if we are attached to some rigid body ...
+-  rigidBody = getInboardBody();
+-  if (rigidBody) {
+-    Frame* frame = rigidBody-&gt;getFrame();
+-    if (frame &amp;&amp; !frame-&gt;isDirectParentFrameOf(mFrame))
+-      frame-&gt;addChildFrame(mFrame);
+-  } else {
+-    if (mEnvironment) {
+-      Frame* rootFrame = mEnvironment-&gt;getRootFrame();
+-      if (rootFrame &amp;&amp; !rootFrame-&gt;isDirectParentFrameOf(mFrame))
+-        rootFrame-&gt;addChildFrame(mFrame);
+-    }
+-  }
+ }
+ 
+-const Vector6&amp;
+-MobileRootJoint::getRelVel(void) const
+-{
+-  return mFrame-&gt;getRelVel();
+-}
+-
+ void
+-MobileRootJoint::setRelVel(const Vector6&amp; vel)
++MobileRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++                              PortValueList&amp;) const
+ {
+-  mFrame-&gt;setRelVel(vel);
+ }
+ 
+ void
+-MobileRootJoint::setLinearRelVel(const Vector3&amp; vel)
++MobileRootJoint::derivative(const DiscreteStateValueVector&amp;,
++                            const ContinousStateValueVector&amp;,
++                            const PortValueList&amp;,
++                            ContinousStateValueVector&amp;) const
+ {
+-  mFrame-&gt;setLinearRelVel(vel);
+ }
+ 
+-void
+-MobileRootJoint::setAngularRelVel(const Vector3&amp; vel)
+-{
+-  mFrame-&gt;setAngularRelVel(vel);
+-}
+-
+-const Vector6&amp;
+-MobileRootJoint::getRelVelDot(void) const
+-{
+-  return mFrame-&gt;getRelVelDot();
+-}
+-
+-const Vector3&amp;
+-MobileRootJoint::getRefPosition(void) const
+-{
+-  return mFrame-&gt;getRefPosition();
+-}
+-
+-void
+-MobileRootJoint::setRefPosition(const Vector3&amp; p)
+-{
+-  mFrame-&gt;setRefPosition(p);
+-}
+-
+-const Quaternion&amp;
+-MobileRootJoint::getRefOrientation(void) const
+-{
+-  return mFrame-&gt;getRefOrientation();
+-}
+-
+-void
+-MobileRootJoint::setRefOrientation(const Quaternion&amp; o)
+-{
+-  mFrame-&gt;setRefOrientation(o);
+-}
+-
+-Geodetic
+-MobileRootJoint::getGeodPosition(void) const
+-{
+-  if (!mEnvironment)
+-    return Geodetic();
+-  return mEnvironment-&gt;getPlanet()-&gt;toGeod(getRefPosition());
+-}
+-
+-void
+-MobileRootJoint::setGeodPosition(const Geodetic&amp; geod)
+-{
+-  if (!mEnvironment)
+-    return;
+-  setRefPosition(mEnvironment-&gt;getPlanet()-&gt;toCart(geod));
+-}
+-
+-Quaternion
+-MobileRootJoint::getGeodOrientation(void) const
+-{
+-  if (!mEnvironment)
+-    return Quaternion::unit();
+-  Quaternion hlOr = mEnvironment-&gt;getPlanet()-&gt;getGeodHLOrientation(getRefPosition());
+-  return inverse(hlOr)*getRefOrientation();
+-}
+-
+-Vector4
+-MobileRootJoint::getQDot(void) const
+-{
+-  // Compute the derivative term originating from the angular velocity.
+-  // Correction term to keep the quaternion normalized.
+-  // That is if |q| &lt; 1 add a little radial component outward,
+-  // if |q| &gt; 1 add a little radial component inward
+-  Quaternion q = mFrame-&gt;getOrientation();
+-  Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
+-  Vector4 qderiv = derivative(q, angVel) + 1e1*(normalize(q) - q);
+-  return qderiv;
+-}
+-
+-Vector3 MobileRootJoint::getPosDot(void) const
+-{
+-  return mFrame-&gt;rotToParent(mFrame-&gt;getRelVel().getLinear());
+-}
+-
+-void
+-MobileRootJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                             const SpatialInertia&amp; outI,
+-                             const Vector6&amp; outF)
+-{
+-  artI.clear();
+-  artF.clear();
+-
+-  Log(ArtBody, Debug) &lt;&lt; &quot;MobileRootJoint::computeRelVelDot():\n&quot; &lt;&lt; outI &lt;&lt; endl;
+-  mFrame-&gt;jointArticulation(outF, outI, mGravity);
+-}
+-
+-void
+-MobileRootJoint::setState(const StateStream&amp; state)
+-{
+-  Quaternion q;
+-  state.readSubState(q);
+-  mFrame-&gt;setOrientation(q);
+-  Vector3 p;
+-  state.readSubState(p);
+-  mFrame-&gt;setPosition(p);
+-  Vector6 v;
+-  state.readSubState(v);
+-  mFrame-&gt;setRelVel(v);
+-}
+-
+-void
+-MobileRootJoint::getState(StateStream&amp; state) const
+-{
+-  state.writeSubState(mFrame-&gt;getOrientation());
+-  state.writeSubState(mFrame-&gt;getPosition());
+-  state.writeSubState(mFrame-&gt;getRelVel());
+-}
+-
+-void
+-MobileRootJoint::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-  stateDeriv.writeSubState(getQDot());
+-  stateDeriv.writeSubState(getPosDot());
+-  stateDeriv.writeSubState(getRelVelDot());
+-}
+-
+-void
+-MobileRootJoint::setEnvironment(Environment* environment)
+-{
+-  mEnvironment = environment;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-11 14:18:21 UTC (rev 604)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-13 04:21:12 UTC (rev 605)
+@@ -11,94 +11,26 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Planet.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;Environment.h&quot;
++#include &quot;RootJoint.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class ModelVisitor;
+-class MobileRootJointFrame;
+-
+-class MobileRootJoint
+-  : public Joint {
++class MobileRootJoint : public RootJoint {
++  OPENFDM_OBJECT(MobileRootJoint, RootJoint);
+ public:
+   MobileRootJoint(const std::string&amp; name);
+-  virtual ~MobileRootJoint(void);
++  virtual ~MobileRootJoint();
+ 
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
+-
+-  virtual bool init(void);
+-
+-  virtual void recheckTopology(void);
+-
+-  /// Gets the relative velocity.
+-  const Vector6&amp; getRelVel(void) const;
+-  /// Set the relative velocity.
+-  void setRelVel(const Vector6&amp; vel);
+-  /// Set the relative velocity.
+-  void setLinearRelVel(const Vector3&amp; vel);
+-  /// Set the relative velocity.
+-  void setAngularRelVel(const Vector3&amp; vel);
+-
+-  /// Gets the relative velocity derivative.
+-  const Vector6&amp; getRelVelDot(void) const;
+-
+-  /// Get the reference position.
+-  const Vector3&amp; getRefPosition(void) const;
+-  /// Set the reference position.
+-  void setRefPosition(const Vector3&amp; p);
+-
+-  /// Get the reference orientation.
+-  const Quaternion&amp; getRefOrientation(void) const;
+-  /// Set the reference orientation.
+-  void setRefOrientation(const Quaternion&amp; o);
+-
+-  /// Get the geodetic position.
+-  Geodetic getGeodPosition(void) const;
+-  /// Set the geodetic position.
+-  void setGeodPosition(const Geodetic&amp; geod);
+-  /// Get orientation wrt the geodetic hl frame.
+-  Quaternion getGeodOrientation(void) const;
+-
+-  Vector4 getQDot(void) const;
+-  Vector3 getPosDot(void) const;
+-
+-  /** Plugin function for the articulated body algorithm.
+-   */
+-  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF);
+-
+-
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void setState(const StateStream&amp; state);
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void getState(StateStream&amp; state) const;
+-  /** Plugin function for the state propagation.
+-   */
+-  virtual void getStateDeriv(StateStream&amp; state);
+-
+-protected:
+-  virtual void setEnvironment(Environment* environment);
+-
+-private:
+-  /// The commonly used gravity model from the environment class
+-  /// It is initialized at the init() call
+-  SharedPtr&lt;const Gravity&gt; mGravity;
+-
+-  /// The frame of the mobile root
+-  SharedPtr&lt;MobileRootJointFrame&gt; mFrame;
+-
+-  /// The environment pointer
+-  SharedPtr&lt;Environment&gt; mEnvironment;
++  virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const;
++  virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp; portValues) const;
++  virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp; portValues) const;
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp; portValues,
++                          ContinousStateValueVector&amp;) const;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000574.html">[OpenFDM-svn] r604 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000576.html">[OpenFDM-svn] r606 - in	branches/OpenFDM-StateSeparation/src/OpenFDM: . LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#575">[ date ]</a>
+              <a href="thread.html#575">[ thread ]</a>
+              <a href="subject.html#575">[ subject ]</a>
+              <a href="author.html#575">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

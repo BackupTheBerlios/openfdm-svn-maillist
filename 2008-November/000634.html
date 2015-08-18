@@ -1,0 +1,438 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r665 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r665%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811050633.mA56XGSN029655%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000633.html">
+   <LINK REL="Next"  HREF="000635.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r665 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r665%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811050633.mA56XGSN029655%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r665 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov  5 07:33:16 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000633.html">[OpenFDM-svn] r664 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000635.html">[OpenFDM-svn] r666 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#634">[ date ]</a>
+              <a href="thread.html#634">[ thread ]</a>
+              <a href="subject.html#634">[ subject ]</a>
+              <a href="author.html#634">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-05 07:33:06 +0100 (Wed, 05 Nov 2008)
+New Revision: 665
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+Log:
+Move context implementation into mechanics classes
+
+M    src/OpenFDM/Interact.cpp
+M    src/OpenFDM/MechanicNode.cpp
+M    src/OpenFDM/Interact.h
+M    src/OpenFDM/RigidBody.h
+M    src/OpenFDM/MechanicContext.h
+M    src/OpenFDM/RigidBody.cpp
+M    src/OpenFDM/MechanicContext.cpp
+M    src/OpenFDM/MechanicNode.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-05 06:33:06 UTC (rev 665)
+@@ -5,10 +5,57 @@
+ #include &quot;Interact.h&quot;
+ 
+ #include &quot;ConstNodeVisitor.h&quot;
++#include &quot;MechanicContext.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
++class Interact::Context : public MechanicContext {
++public:
++  Context(const Interact* interact) : mInteract(interact) {}
++  virtual ~Context() {}
++
++  virtual const Interact&amp; getNode() const
++  { return *mInteract; }
++
++  virtual bool alloc()
++  { if (!allocStates()) return false; return mInteract-&gt;alloc(*this); }
++  virtual void initVelocities(const /*Init*/Task&amp; task)
++  {
++    mInteract-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
++    mInteract-&gt;velocity(task, mContinousState, mPortValueList);
++  }
++
++  virtual void velocities(const Task&amp; task)
++  {
++    mInteract-&gt;velocity(task, mContinousState, mPortValueList);
++  }
++  virtual void articulation(const Task&amp; task)
++  {
++    mInteract-&gt;articulation(task, mContinousState, mPortValueList, hIh);
++  }
++  virtual void accelerations(const Task&amp; task)
++  {
++    mInteract-&gt;acceleration(task, mContinousState, mPortValueList, hIh, velDot);
++  }
++
++  virtual void derivative(const Task&amp;)
++  {
++    mInteract-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
++                              velDot, mContinousStateDerivative);
++  }
++ 
++  virtual void update(const DiscreteTask&amp;)
++  { }
++
++private:
++  // Stores some values persistent accross velocity/articulation/acceleration
++  Matrix hIh;
++  Vector velDot;
++
++  SharedPtr&lt;const Interact&gt; mInteract;
++};
++
+ BEGIN_OPENFDM_OBJECT_DEF(Interact, MechanicNode)
+   END_OPENFDM_OBJECT_DEF
+ 
+@@ -33,4 +80,10 @@
+   visitor.handleNodePathAndApply(this);
+ }
+ 
++MechanicContext*
++Interact::newMechanicContext() const
++{
++  return new Context(this);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-05 06:33:06 UTC (rev 665)
+@@ -18,6 +18,27 @@
+ 
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
++  virtual MechanicContext* newMechanicContext() const;
++
++  virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
++                        PortValueList&amp;) const
++  { }
++  virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp;, Matrix&amp;) const
++  { }
++  // hmm, may be this should be output???
++  virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp;, const Matrix&amp;, Vector&amp;) const
++  { }
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp;, const Vector&amp;,
++                          ContinousStateValueVector&amp;) const
++  { }
++
++private:
++  class Context;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.cpp	2008-11-05 06:33:06 UTC (rev 665)
+@@ -6,22 +6,10 @@
+ 
+ namespace OpenFDM {
+ 
+-MechanicContext::MechanicContext(const MechanicNode* mechanicNode) :
+-  mMechanicNode(mechanicNode)
+-{
+-  OpenFDMAssert(mMechanicNode);
+-}
+-
+ MechanicContext::~MechanicContext()
+ {
+ }
+ 
+-const MechanicNode&amp;
+-MechanicContext::getNode() const
+-{
+-  return *mMechanicNode;
+-}
+-
+ bool
+ MechanicContext::isConnectedTo(const MechanicContext&amp; mechanicContext) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-05 06:33:06 UTC (rev 665)
+@@ -20,55 +20,22 @@
+ 
+ class MechanicContext : public LeafContext {
+ public:
+-  MechanicContext(const MechanicNode* mechanicNode);
++  MechanicContext() {}
+   virtual ~MechanicContext();
+ 
+-  virtual const MechanicNode&amp; getNode() const;
++  virtual const MechanicNode&amp; getNode() const = 0;
+ 
+-  virtual bool alloc()
+-  { if (!allocStates()) return false; return mMechanicNode-&gt;alloc(*this); }
+-  virtual void initVelocities(const /*Init*/Task&amp; task)
+-  {
+-    mMechanicNode-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+-    mMechanicNode-&gt;velocity(task, mContinousState, mPortValueList);
+-  }
++  virtual bool alloc() = 0;
++  virtual void initVelocities(const /*Init*/Task&amp; task) = 0;
++  virtual void velocities(const Task&amp; task) = 0;
++  virtual void articulation(const Task&amp; task) = 0;
++  virtual void accelerations(const Task&amp; task) = 0;
++  virtual void derivative(const Task&amp;) = 0;
++  virtual void update(const DiscreteTask&amp; discreteTask) = 0;
+ 
+-  virtual void velocities(const Task&amp; task)
+-  {
+-    mMechanicNode-&gt;velocity(task, mContinousState, mPortValueList);
+-  }
+-  virtual void articulation(const Task&amp; task)
+-  {
+-    mMechanicNode-&gt;articulation(task, mContinousState, mPortValueList, hIh);
+-  }
+-  virtual void accelerations(const Task&amp; task)
+-  {
+-    mMechanicNode-&gt;acceleration(task, mContinousState, mPortValueList, hIh, velDot);
+-  }
+-
+-  virtual void derivative(const Task&amp;)
+-  {
+-    mMechanicNode-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+-                              velDot, mContinousStateDerivative);
+-  }
+- 
+-  virtual void update(const DiscreteTask&amp; discreteTask)
+-  {
+-    mMechanicNode-&gt;update(discreteTask, mDiscreteState,
+-                          mContinousState, mPortValueList);
+-  }
+-
+   virtual bool isConnectedTo(const MechanicContext&amp; mechanicContext) const;
+ 
+ private:
+-  // Stores some values persistent accross velocity/articulation/acceleration
+-  Matrix hIh;
+-  Vector velDot;
+-
+-  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
+-
+-private:
+-  MechanicContext();
+   MechanicContext(const MechanicContext&amp;);
+   MechanicContext&amp; operator=(const MechanicContext&amp;);
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.cpp	2008-11-05 06:33:06 UTC (rev 665)
+@@ -40,10 +40,4 @@
+   return newMechanicContext();
+ }
+ 
+-MechanicContext*
+-MechanicNode::newMechanicContext() const
+-{
+-  return new MechanicContext(this);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-11-05 06:33:06 UTC (rev 665)
+@@ -66,27 +66,8 @@
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+   virtual AbstractNodeContext* newNodeContext() const;
+-  virtual MechanicContext* newMechanicContext() const;
++  virtual MechanicContext* newMechanicContext() const = 0;
+ 
+-  virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+-                        PortValueList&amp;) const
+-  { }
+-  virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, Matrix&amp;) const
+-  { }
+-  // hmm, may be this should be output???
+-  virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, const Matrix&amp;, Vector&amp;) const
+-  { }
+-  virtual void derivative(const DiscreteStateValueVector&amp;,
+-                          const ContinousStateValueVector&amp;,
+-                          const PortValueList&amp;, const Vector&amp;,
+-                          ContinousStateValueVector&amp;) const
+-  { }
+-  virtual void update(const DiscreteTask&amp;, DiscreteStateValueVector&amp;,
+-                      const ContinousStateValueVector&amp;,
+-                      const PortValueList&amp;) const
+-  { }
+ protected:
+   MechanicLink newMechanicLink(const std::string&amp; name)
+   { return MechanicLink(this, name); }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-11-05 06:33:06 UTC (rev 665)
+@@ -5,11 +5,54 @@
+ #include &quot;RigidBody.h&quot;
+ 
+ #include &quot;ConstNodeVisitor.h&quot;
++#include &quot;MechanicContext.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+ #include &quot;PortValueList.h&quot;
+ 
+ namespace OpenFDM {
+ 
++class RigidBody::Context : public MechanicContext {
++public:
++  Context(const RigidBody* rigidBody) : mRigidBody(rigidBody) {}
++  virtual ~Context() {}
++
++  virtual const RigidBody&amp; getNode() const
++  { return *mRigidBody; }
++
++  virtual bool alloc()
++  { if (!allocStates()) return false; return mRigidBody-&gt;alloc(*this); }
++  virtual void initVelocities(const /*Init*/Task&amp; task)
++  {
++    mRigidBody-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
++    mRigidBody-&gt;velocity(task, mContinousState, mPortValueList);
++  }
++
++  virtual void velocities(const Task&amp; task)
++  {
++    mRigidBody-&gt;velocity(task, mContinousState, mPortValueList);
++  }
++  virtual void articulation(const Task&amp; task)
++  {
++    mRigidBody-&gt;articulation(task, mContinousState, mPortValueList, hIh);
++  }
++  virtual void accelerations(const Task&amp; task)
++  {
++    mRigidBody-&gt;acceleration(task, mContinousState, mPortValueList, hIh, velDot);
++  }
++
++  virtual void derivative(const Task&amp;)
++  { }
++  virtual void update(const DiscreteTask&amp;)
++  { }
++
++private:
++  // Stores some values persistent accross velocity/articulation/acceleration
++  Matrix hIh;
++  Vector velDot;
++
++  SharedPtr&lt;const RigidBody&gt; mRigidBody;
++};
++
+ BEGIN_OPENFDM_OBJECT_DEF(RigidBody, MechanicNode)
+   END_OPENFDM_OBJECT_DEF
+ 
+@@ -36,6 +79,12 @@
+   visitor.handleNodePathAndApply(this);
+ }
+ 
++MechanicContext*
++RigidBody::newMechanicContext() const
++{
++  return new Context(this);
++}
++
+ PortId
+ RigidBody::addLink(const std::string&amp; name)
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-11-05 05:52:47 UTC (rev 664)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-11-05 06:33:06 UTC (rev 665)
+@@ -19,6 +19,8 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
++  virtual MechanicContext* newMechanicContext() const;
++
+   PortId addLink(const std::string&amp; name);
+   void removeLink(const PortId&amp; portId);
+ 
+@@ -38,6 +40,8 @@
+                             PortValueList&amp; portValues, const Matrix&amp;,
+                             Vector&amp;) const;
+ private:
++  class Context;
++
+   typedef std::vector&lt;MechanicLink&gt; MechanicLinkVector;
+   MechanicLinkVector mMechanicLinks;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000633.html">[OpenFDM-svn] r664 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000635.html">[OpenFDM-svn] r666 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#634">[ date ]</a>
+              <a href="thread.html#634">[ thread ]</a>
+              <a href="subject.html#634">[ subject ]</a>
+              <a href="author.html#634">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

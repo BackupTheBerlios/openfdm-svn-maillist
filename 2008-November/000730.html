@@ -1,0 +1,445 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r761 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r761%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811201806.mAKI61Br012693%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000729.html">
+   <LINK REL="Next"  HREF="000731.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r761 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r761%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811201806.mAKI61Br012693%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r761 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Nov 20 19:06:01 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000729.html">[OpenFDM-svn] r760 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000731.html">[OpenFDM-svn] r762 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#730">[ date ]</a>
+              <a href="thread.html#730">[ thread ]</a>
+              <a href="subject.html#730">[ subject ]</a>
+              <a href="author.html#730">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-20 19:05:58 +0100 (Thu, 20 Nov 2008)
+New Revision: 761
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+Log:
+Beginnings of the return of the environment.
+
+M    OpenFDM/MobileRootJoint.cpp
+M    OpenFDM/CartesianJoint.h
+M    OpenFDM/Mass.cpp
+M    OpenFDM/RootJoint.cpp
+M    OpenFDM/MechanicLinkValue.h
+M    OpenFDM/RootJoint.h
+M    OpenFDM/FixedRootJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-20 18:05:58 UTC (rev 761)
+@@ -50,6 +50,9 @@
+     if (!childLinkValue)
+       return 0;
+ 
++    // Now propagate the root dependent data ...
++    childLinkValue-&gt;setEnvironment(parentLinkValue-&gt;getEnvironment());
++
+     SharedPtr&lt;Context&gt; context;
+     context = new Context(this, parentLinkValue, childLinkValue);
+     for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2008-11-20 18:05:58 UTC (rev 761)
+@@ -11,7 +11,7 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Gravity.h&quot;
++#include &quot;Task.h&quot;
+ #include &quot;MechanicContext.h&quot;
+ 
+ namespace OpenFDM {
+@@ -71,11 +71,14 @@
+ }
+ 
+ void
+-FixedRootJoint::velocity(const Task&amp;,
+-                          const ContinousStateValueVector&amp; continousState,
+-                          PortValueList&amp; portValues) const
++FixedRootJoint::velocity(const Task&amp; task,
++                         const ContinousStateValueVector&amp; continousState,
++                         PortValueList&amp; portValues) const
+ {
+-  portValues[mMechanicLink].setPosAndVel(getAngularBaseVelocity(), mPosition,
++  const EnvironmentCache* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
++  Vector3 angularBaseVelocity = environment-&gt;getAngularVelocity(task.getTime());
++  portValues[mMechanicLink].setPosAndVel(angularBaseVelocity, mPosition,
+                                          mOrientation, Vector6::zeros());
+ }
+ 
+@@ -87,18 +90,12 @@
+ }
+ 
+ void
+-FixedRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++FixedRootJoint::acceleration(const Task&amp; task, const ContinousStateValueVector&amp;,
+                               PortValueList&amp; portValues) const
+ {
+-  // Assumption: body is small compared to the distance to the planets
+-  // center of mass. That means gravity could be considered equal for the
+-  // whole vehicle.
+-  // See Featherstone, Orin: Equations and Algorithms
+-
+-  // FIXME
+-  Vector6 grav = Vector6(Vector3::zeros(), portValues[mMechanicLink].getFrame().rotFromRef(Vector3(0, 0, 9.81)));
+-
+-  Vector6 spatialAcceleration = grav;
++  const EnvironmentCache* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
++  Vector6 spatialAcceleration = environment-&gt;getAcceleration(task.getTime());
+   portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-11-20 18:05:58 UTC (rev 761)
+@@ -38,12 +38,18 @@
+ Mass::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+                    PortValueList&amp; portValues, Matrix&amp;) const
+ {
++  const EnvironmentCache* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
++
+   Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+ 
+-  // FIXME: Hardcoding that gravity happens in the roots??
+-  Vector3 gravity = Vector3::zeros();
++  Vector3 refPosition = portValues[mMechanicLink].getFrame().posToRef(position);
++  Vector3 gravity = environment-&gt;getGravityAcceleration(refPosition);
++  gravity = portValues[mMechanicLink].getFrame().rotFromRef(gravity);
++  // FIXME: Why this -??
++  gravity = -mMass*gravity;
+ 
+-  Vector6 force = forceFrom(position, Vector6(Vector3::zeros(), gravity));
++  Vector6 force = forceFrom(position, gravity);
+   SpatialInertia I = inertiaFrom(position, SpatialInertia(mInertia, mMass));
+ 
+   // FIXME: do we really need that in the mass
+@@ -54,7 +60,6 @@
+                    cross(iv.getLinear(), Jiv.getLinear()),
+                    cross(iv.getAngular(), Jiv.getLinear()));
+ 
+-
+   portValues[mMechanicLink].applyInertia(I);
+   portValues[mMechanicLink].applyForce(force);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-11-20 18:05:58 UTC (rev 761)
+@@ -11,6 +11,95 @@
+ 
+ namespace OpenFDM {
+ 
++class EnvironmentCache;
++
++class AbstractInertial : public Referenced {
++public:
++  virtual ~AbstractInertial() {}
++  virtual Vector3 getAngularVelocity(const real_type&amp; t) const
++  { return Vector3::zeros(); }
++  virtual Vector6 getAcceleration(const real_type&amp; t) const
++  { return Vector6::zeros(); }
++};
++
++class AbstractGravity : public Referenced {
++public:
++  virtual ~AbstractGravity() {}
++  virtual Vector3
++  getGravityAcceleration(const EnvironmentCache&amp;, const Vector3&amp;) const
++  { return Vector3(0, 0, 9.81); }
++};
++
++class AbstractWind : public Referenced {
++public:
++  virtual ~AbstractWind() {}
++  virtual Vector6 getWindVelocity(const EnvironmentCache&amp;, const Vector3&amp;) const
++  { return Vector6::zeros(); }
++};
++
++class EnvironmentCache : public Referenced {
++public:
++  EnvironmentCache() :
++    mInertial(new AbstractInertial),
++    mGravity(new AbstractGravity),
++    mWind(new AbstractWind)
++  {
++  }
++  EnvironmentCache(const AbstractInertial* inertial,
++                   const AbstractGravity* gravity,
++                   const AbstractWind* wind) :
++    mInertial(inertial),
++    mGravity(gravity),
++    mWind(wind)
++  {
++  }
++  virtual ~EnvironmentCache() {}
++
++  // The the global coordinate frames angular velocity and acceleration.
++  // Note that the acceleration and velocity must fit together to simulate
++  // something useful.
++  Vector3 getAngularVelocity(const real_type&amp; t) const
++  { return mInertial-&gt;getAngularVelocity(t); }
++  Vector6 getAcceleration(const real_type&amp; t) const
++  { return mInertial-&gt;getAcceleration(t); }
++
++  // Sets a new RootJoint position, evaluate environmental stuff
++  void setRootJointPosition(const Vector3&amp; position)
++  {
++    mRootJointPosition = position;
++    mGravityAcceleration = getGravityAcceleration(position);
++    mWindVelocity = getWindVelocity(position);
++  }
++  const Vector3&amp; getRootJointPosition() const
++  { return mRootJointPosition; }
++
++  Vector3 getGravityAcceleration(const Vector3&amp; position) const
++  { return mGravity-&gt;getGravityAcceleration(*this, position); }
++  const Vector3&amp; getGravityAccelerationAtRoot() const
++  { return mGravityAcceleration; }
++
++  Vector6 getWindVelocity(const Vector3&amp; position) const
++  { return mWind-&gt;getWindVelocity(*this, position); }
++  const Vector6&amp; getWindVelocityAtRoot() const
++  { return mWindVelocity; }
++
++private:
++  Vector3 mRootJointPosition;
++
++  SharedPtr&lt;const AbstractInertial&gt; mInertial;
++
++  Vector3 mGravityAcceleration;
++  SharedPtr&lt;const AbstractGravity&gt; mGravity;
++
++  Vector6 mWindVelocity;
++  SharedPtr&lt;const AbstractWind&gt; mWind;
++
++//   SharedPtr&lt;const AbstractPlanet&gt; mPlanet;
++//   SharedPtr&lt;const AbstractAtmosphere&gt; mAtmosphere;
++//   SharedPtr&lt;const AbstractGround&gt; mGround;
++};
++
++
+ class MechanicLinkValue : public PortValue {
+ public:
+   MechanicLinkValue();
+@@ -81,6 +170,15 @@
+   void setDesignPosition(const Vector3&amp; designPosition)
+   { mDesignPosition = designPosition; }
+ 
++  // This is a per link value because of interacts that can be child of two
++  // different roots.
++  // FIXME, enforce setting that in the contructor
++  const EnvironmentCache* getEnvironment() const
++  { return mEnvironment; }
++
++  void setEnvironment(const EnvironmentCache* environment)
++  { OpenFDMAssert(environment); mEnvironment = environment; }
++
+ protected:
+   // May be build a class hierarchy that accounts for different inputs
+   // and outputs a rigid body can have.
+@@ -90,6 +188,8 @@
+   SpatialInertia mArticulatedInertia;
+ 
+   Vector3 mDesignPosition;
++
++  SharedPtr&lt;const EnvironmentCache&gt; mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-11-20 18:05:58 UTC (rev 761)
+@@ -6,12 +6,11 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Gravity.h&quot;
++#include &quot;Task.h&quot;
+ #include &quot;MechanicContext.h&quot;
+ 
+ namespace OpenFDM {
+@@ -52,15 +51,19 @@
+ }
+ 
+ void
+-MobileRootJoint::velocity(const Task&amp;,
++MobileRootJoint::velocity(const Task&amp; task,
+                           const ContinousStateValueVector&amp; continousState,
+                           PortValueList&amp; portValues) const
+ {
++  const EnvironmentCache* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
++  Vector3 angularBaseVelocity = environment-&gt;getAngularVelocity(task.getTime());
++
+   Vector3 position = continousState[*mPositionStateInfo];
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+-  portValues[mMechanicLink].setPosAndVel(getAngularBaseVelocity(),
++  portValues[mMechanicLink].setPosAndVel(angularBaseVelocity,
+                                          position, orientation, velocity);
+ }
+ 
+@@ -72,23 +75,18 @@
+ }
+ 
+ void
+-MobileRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
++MobileRootJoint::acceleration(const Task&amp; task,
++                              const ContinousStateValueVector&amp;,
+                               PortValueList&amp; portValues) const
+ {
+-  // Assumption: body is small compared to the distance to the planets
+-  // center of mass. That means gravity could be considered equal for the
+-  // whole vehicle.
+-  // See Featherstone, Orin: Equations and Algorithms
+-//   Vector3 ga = gravity-&gt;gravityAccel(getRefPosition());
+-//     Vector6 grav = Vector6(Vector3::zeros(), rotFromRef(ga));
++  const EnvironmentCache* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
++  Vector6 spatialAcceleration = environment-&gt;getAcceleration(task.getTime());
+ 
+-  // FIXME
+-  Vector6 grav = Vector6(Vector3::zeros(), portValues[mMechanicLink].getFrame().rotFromRef(Vector3(0, 0, 9.81)));
+-
+   SpatialInertia inertia = portValues[mMechanicLink].getInertia();
+   Vector6 force = portValues[mMechanicLink].getForce();
+ 
+-  Vector6 spatialAcceleration = grav - solve(inertia, force);
++  spatialAcceleration -= solve(inertia, force);
+   portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-20 18:05:58 UTC (rev 761)
+@@ -56,12 +56,10 @@
+ };
+   
+ BEGIN_OPENFDM_OBJECT_DEF(RootJoint, Joint)
+-  DEF_OPENFDM_PROPERTY(Matrix, AngularBaseVelocity, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ RootJoint::RootJoint(const std::string&amp; name) :
+-  Joint(name),
+-  mAngularBaseVelocity(Vector3::zeros())
++  Joint(name)
+ {
+ }
+ 
+@@ -83,6 +81,11 @@
+                         &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+       return false;
+     }
++
++    if (portValue-&gt;toMechanicLinkValue()) {
++      portValue-&gt;toMechanicLinkValue()-&gt;setEnvironment(new EnvironmentCache);
++    }
++
+     context-&gt;setPortValue(*getPort(i), portValue);
+   }
+   if (!context-&gt;allocStates()) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-20 17:10:59 UTC (rev 760)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-20 18:05:58 UTC (rev 761)
+@@ -24,11 +24,6 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  const Vector3&amp; getAngularBaseVelocity() const
+-  { return mAngularBaseVelocity; }
+-  void setAngularBaseVelocity(const Vector3&amp; angularBaseVelocity)
+-  { mAngularBaseVelocity = angularBaseVelocity; }
+-
+   virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp;, const PortValueList&amp;) const
+   { }
+@@ -47,8 +42,6 @@
+   {}
+ private:
+   class Context;
+-
+-  Vector3 mAngularBaseVelocity;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000729.html">[OpenFDM-svn] r760 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000731.html">[OpenFDM-svn] r762 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#730">[ date ]</a>
+              <a href="thread.html#730">[ thread ]</a>
+              <a href="subject.html#730">[ subject ]</a>
+              <a href="author.html#730">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,194 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r787 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r787%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240623.mAO6N0Gt016096%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000755.html">
+   <LINK REL="Next"  HREF="000757.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r787 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r787%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240623.mAO6N0Gt016096%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r787 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 24 07:23:00 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000755.html">[OpenFDM-svn] r786 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000757.html">[OpenFDM-svn] r788 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#756">[ date ]</a>
+              <a href="thread.html#756">[ thread ]</a>
+              <a href="subject.html#756">[ subject ]</a>
+              <a href="author.html#756">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-24 07:22:59 +0100 (Mon, 24 Nov 2008)
+New Revision: 787
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Add Atmospheric sensing.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-24 06:12:10 UTC (rev 786)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-24 06:22:59 UTC (rev 787)
+@@ -18,6 +18,8 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnableLinearVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableAngularVelocity, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableCentrifugalAcceleration, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableTemperature, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnablePressure, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Sensor::Sensor(const std::string&amp; name) :
+@@ -40,6 +42,8 @@
+ Sensor::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+                  PortValueList&amp; portValues) const
+ {
++  const Environment* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
+   const Frame&amp; frame = portValues[mMechanicLink].getFrame();
+ 
+   // FIXME, for now relative position
+@@ -61,6 +65,17 @@
+ 
+   if (getEnableLinearVelocity())
+     portValues[mLinearVelocityPort] = refVelocity.getLinear();
++
++  // Atmosphere related sensing
++  bool enableTemperature = getEnableTemperature();
++  bool enablePressure = getEnablePressure();
++  if (enableTemperature || enablePressure) {
++    AtmosphereData data = environment-&gt;getAtmosphereData(refPosition);
++    if (enableTemperature)
++      portValues[mTemperaturePort] = data.temperature;
++    if (enablePressure)
++      portValues[mPressurePort] = data.pressure;
++  }
+ }
+ 
+ void
+@@ -201,4 +216,38 @@
+   return !mCentrifugalAccelerationPort.empty();
+ }
+ 
++void
++Sensor::setEnableTemperature(bool enable)
++{
++  if (enable == getEnableTemperature())
++    return;
++  if (enable)
++    mTemperaturePort = RealOutputPort(this, &quot;temperature&quot;);
++  else
++    mTemperaturePort.clear();
++}
++
++bool
++Sensor::getEnableTemperature() const
++{
++  return !mTemperaturePort.empty();
++}
++
++void
++Sensor::setEnablePressure(bool enable)
++{
++  if (enable == getEnablePressure())
++    return;
++  if (enable)
++    mPressurePort = RealOutputPort(this, &quot;pressure&quot;);
++  else
++    mPressurePort.clear();
++}
++
++bool
++Sensor::getEnablePressure() const
++{
++  return !mPressurePort.empty();
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-24 06:12:10 UTC (rev 786)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-24 06:22:59 UTC (rev 787)
+@@ -8,6 +8,7 @@
+ #include &quot;Interact.h&quot;
+ #include &quot;MatrixOutputPort.h&quot;
+ #include &quot;MechanicLink.h&quot;
++#include &quot;RealOutputPort.h&quot;
+ #include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+@@ -59,6 +60,17 @@
+   /// Get availabilty of the linear acceleration output port
+   bool getEnableCentrifugalAcceleration() const;
+ 
++
++  /// Set availabilty of the temperature output port
++  void setEnableTemperature(bool enable);
++  /// Get availabilty of the temperature output port
++  bool getEnableTemperature() const;
++
++  /// Set availabilty of the pressure output port
++  void setEnablePressure(bool enable);
++  /// Get availabilty of the pressure output port
++  bool getEnablePressure() const;
++
+ private:
+   MechanicLink mMechanicLink;
+ 
+@@ -72,6 +84,10 @@
+   MatrixOutputPort mAngularVelocityPort;
+ 
+   MatrixOutputPort mCentrifugalAccelerationPort;
++
++  RealOutputPort mTemperaturePort;
++  RealOutputPort mPressurePort;
++//   RealOutputPort mDensityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000755.html">[OpenFDM-svn] r786 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000757.html">[OpenFDM-svn] r788 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#756">[ date ]</a>
+              <a href="thread.html#756">[ thread ]</a>
+              <a href="subject.html#756">[ subject ]</a>
+              <a href="author.html#756">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

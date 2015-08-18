@@ -1,0 +1,122 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r184 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r184%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051047.k05Al168024331%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000167.html">
+   <LINK REL="Next"  HREF="000168.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r184 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r184%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051047.k05Al168024331%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r184 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 11:47:01 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000167.html">[OpenFDM-svn] r183 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000168.html">[OpenFDM-svn] r185 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#169">[ date ]</a>
+              <a href="thread.html#169">[ thread ]</a>
+              <a href="subject.html#169">[ subject ]</a>
+              <a href="author.html#169">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 11:46:58 +0100 (Thu, 05 Jan 2006)
+New Revision: 184
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Force.h
+Log:
+Fix the direction of the resulting force
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-05 10:46:18 UTC (rev 183)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-05 10:46:58 UTC (rev 184)
+@@ -123,8 +123,6 @@
+   // Needs to call applyForce once ...
+   virtual void interactWith(RigidBody* rigidBody)
+   {
+-#if 1
+-    /// ORIG
+ //     Log(Model,Error) &lt;&lt; &quot;InternalForce \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot;
+ //                      &lt;&lt; &quot; interacting with RigidBody \&quot;&quot;
+ //                      &lt;&lt; rigidBody-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+@@ -143,18 +141,6 @@
+       //      Log(Model,Error) &lt;&lt; trans(parentForce) &lt;&lt; endl;
+       rigidBody-&gt;applyForce(-parentForce);
+     }
+-#else
+-    if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[1])) {
+-      Vector6 parentForce = mMountFrame[1]-&gt;forceToParent(mForce);
+-      rigidBody-&gt;applyForce(parentForce);
+-    } else if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[0])) {
+-      Rotation relOr = mMountFrame[1]-&gt;getRelOrientation(mMountFrame[0]);
+-      Vector6 force2(relOr.backTransform(mForce.getAngular()),
+-                     relOr.backTransform(mForce.getLinear()));
+-      Vector6 parentForce = mMountFrame[0]-&gt;forceToParent(mForce);
+-      rigidBody-&gt;applyForce(parentForce);
+-    }
+-#endif
+   }
+ 
+   const Vector3&amp; getPosition0(void) const
+@@ -224,13 +210,10 @@
+       dir = normalize(relVel6.getLinear());
+     } else
+       dir = (1/nrmRelPos)*relPos;
+-    mForce = Vector6(Vector3::zeros(), dir*mForcePort.getRealValue());
+-//     Log(Model,Error)
+-//       &lt;&lt; trans(relPos)
+-//       &lt;&lt; trans(mMountFrame[0]-&gt;getRelVel(mMountFrame[1])) &lt;&lt; &quot; &quot;
+-//       &lt;&lt; mRelPos &lt;&lt; &quot; &quot;
+-//       &lt;&lt; mRelVel
+-//       &lt;&lt; endl;
++    // Since we assume positive input forces to push the two attached
++    // RigidBodies, we need that minus sign to negate the current position
++    // offset
++    mForce = Vector6(Vector3::zeros(), (-mForcePort.getRealValue())*dir);
+   }
+ 
+   const real_type&amp; getRelPos(void) const
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000167.html">[OpenFDM-svn] r183 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000168.html">[OpenFDM-svn] r185 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#169">[ date ]</a>
+              <a href="thread.html#169">[ thread ]</a>
+              <a href="subject.html#169">[ subject ]</a>
+              <a href="author.html#169">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

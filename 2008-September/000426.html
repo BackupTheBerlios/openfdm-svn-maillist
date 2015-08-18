@@ -1,0 +1,748 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r454 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r454%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809091913.m89JD0wc006510%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000425.html">
+   <LINK REL="Next"  HREF="000427.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r454 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r454%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809091913.m89JD0wc006510%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r454 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  9 21:13:00 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000425.html">[OpenFDM-svn] r453 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000427.html">[OpenFDM-svn] r455 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#426">[ date ]</a>
+              <a href="thread.html#426">[ thread ]</a>
+              <a href="subject.html#426">[ subject ]</a>
+              <a href="author.html#426">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-09 21:12:57 +0200 (Tue, 09 Sep 2008)
+New Revision: 454
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Interact and RigidBody sketch.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-09-09 19:12:57 UTC (rev 454)
+@@ -1,132 +1,29 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
+  *
+  */
+ 
+ #include &quot;Interact.h&quot;
++#include &quot;NodeVisitor.h&quot;
+ 
+-#include &lt;iosfwd&gt;
+-#include &lt;list&gt;
+-#include &lt;string&gt;
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;ModelVisitor.h&quot;
+-
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Interact, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Interact, MechanicNode)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Interact::Interact(const std::string&amp; name, unsigned numParents) :
+-  Model(name),
+-  mParents(numParents)
++Interact::Interact(const std::string&amp; name) :
++  MechanicNode(name)
+ {
+ }
+ 
+-Interact::~Interact(void)
++Interact::~Interact()
+ {
+ }
+ 
+-const Interact*
+-Interact::toInteract(void) const
+-{
+-  return this;
+-}
+-
+-Interact*
+-Interact::toInteract(void)
+-{
+-  return this;
+-}
+-
+ void
+-Interact::accept(ModelVisitor&amp; visitor)
++Interact::accept(NodeVisitor&amp; visitor)
+ {
+   visitor.apply(*this);
+ }
+ 
+-bool
+-Interact::dependsDirectOn(Model* model)
+-{
+-  // HACK HACK HACK FIXME
+-  // non joint interacts need to have their inputs, but the outputs are
+-  // already present when the state is set ...
+-  // We need to split out sensors which could be scheduled earlier
+-  setDirectFeedThrough(true);
+-  if (Model::dependsDirectOn(model)) {
+-    setDirectFeedThrough(false);
+-    return true;
+-  }
+-  setDirectFeedThrough(false);
+-  
+-  return false;
+-}
+ 
+-bool
+-Interact::isChildOf(const RigidBody* const rigidBody) const
+-{
+-  if (!rigidBody)
+-    return false;
+-  ParentList::const_iterator it = mParents.begin();
+-  while (it != mParents.end()) {
+-    if ((*it).lock() == rigidBody)
+-      return true;
+-    ++it;
+-  }
+-  return false;
+-}
+-
+-bool
+-Interact::attachTo(RigidBody* rigidBody, bool upstream)
+-{
+-  if (!rigidBody) {
+-    Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  ParentList::iterator it;
+-  for (it = mParents.begin(); it != mParents.end(); ++it) {
+-    if ((*it).lock() == 0) {
+-      (*it) = rigidBody;
+-      if (upstream &amp;&amp; it != mParents.begin())
+-        swapParents();
+-      recheckTopology();
+-      return true;
+-    }
+-  }
+-  
+-  Log(MultiBody,Error) &lt;&lt; &quot;Cannot attach Interact \&quot;&quot; &lt;&lt; getName()
+-                       &lt;&lt; &quot;\&quot; to RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
+-                       &lt;&lt; &quot;\&quot;: Already attached to 2 Rigid bodies.&quot;
+-                       &lt;&lt; endl;
+-  return false;
+-}
+-
+-bool
+-Interact::detachFrom(RigidBody* rigidBody)
+-{
+-  if (!rigidBody) {
+-    Log(MultiBody,Error) &lt;&lt; &quot;Got 0 RigidBody pointer to attach to.&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  ParentList::iterator it;
+-  for (it = mParents.begin(); it != mParents.end(); ++it) {
+-    if ((*it).lock() == rigidBody) {
+-      (*it).clear();
+-      recheckTopology();
+-      return true;
+-    }
+-  }
+-  
+-  Log(MultiBody,Error) &lt;&lt; &quot;Cannot detatach Interact \&quot;&quot; &lt;&lt; getName()
+-                       &lt;&lt; &quot;\&quot; from RigidBody \&quot;&quot; &lt;&lt; rigidBody-&gt;getName()
+-                       &lt;&lt; &quot;\&quot;: Interact is not attached to that RigidBody.&quot;
+-                       &lt;&lt; endl;
+-  return false;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-09-09 19:12:57 UTC (rev 454)
+@@ -1,76 +1,27 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
+  *
+  */
+ 
+ #ifndef OpenFDM_Interact_H
+ #define OpenFDM_Interact_H
+ 
+-#include &lt;iosfwd&gt;
+-#include &lt;list&gt;
+ #include &lt;string&gt;
++#include &quot;MechanicInteractPort.h&quot;
++#include &quot;MechanicNode.h&quot;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Model.h&quot;
+-
+ namespace OpenFDM {
+ 
+-class Interact : public Model {
+-  OPENFDM_OBJECT(Interact, Model);
++class Interact : public MechanicNode {
++  OPENFDM_OBJECT(Interact, MechanicNode);
+ public:
+-  Interact(const std::string&amp; name, unsigned numParents);
+-  virtual ~Interact(void);
++  Interact(const std::string&amp; name);
++  virtual ~Interact();
+ 
+-  virtual const Interact* toInteract(void) const;
+-  virtual Interact* toInteract(void);
++  virtual void accept(NodeVisitor&amp; visitor);
+ 
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
+-
+-  /// This is the primary gate function which handles interaction
+-  virtual void interactWith(RigidBody* rigidBody) = 0;
+-
+-  virtual bool dependsDirectOn(Model* model);
+-
+-  SharedPtr&lt;const RigidBody&gt; getParentRigidBody(unsigned id = 0) const
+-  {
+-    OpenFDMAssert(id &lt; mParents.size());
+-    return mParents[id].lock();
+-  }
+-  SharedPtr&lt;RigidBody&gt; getParentRigidBody(unsigned id = 0)
+-  {
+-    OpenFDMAssert(id &lt; mParents.size());
+-    return mParents[id].lock();
+-  }
+-  bool isChildOf(const RigidBody* const rigidBody) const;
+-
+-private:
+-  bool attachTo(RigidBody* rigidBody, bool upstream);
+-  bool detachFrom(RigidBody* rigidBody);
+-
+-  /// Called whenever the local topology chages, use to manage frames with this
+-  /// interact
+-  virtual void recheckTopology(void) {}
+-
+-  friend class RigidBody;
+-
+-  void swapParents(void)
+-  {
+-    OpenFDMAssert(2 == mParents.size());
+-    mParents[0].swap(mParents[1]);
+-  }
+-
+-private:
+-  typedef std::vector&lt;WeakPtr&lt;RigidBody&gt; &gt; ParentList;
+-  ParentList mParents;
++protected:
++  MechanicInteractPort newMechanicInteractPort(const std::string&amp; name)
++  { return MechanicInteractPort(this, name); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-09 19:12:57 UTC (rev 454)
+@@ -30,6 +30,7 @@
+   Group.h \
+   ImplicitEuler.h \
+   Inertia.h \
++  Interact.h \
+   LeafContext.h \
+   LeafNode.h \
+   Limits.h \
+@@ -81,6 +82,7 @@
+   RealOutputPort.h \
+   RealStateInfo.h \
+   Referenced.h \
++  RigidBody.h \
+   Rotation.h \
+   SampleTime.h \
+   ScopeLock.h \
+@@ -115,6 +117,7 @@
+   ContinousStateValue.cpp \
+   Frame.cpp \
+   Group.cpp \
++  Interact.cpp \
+   LeafNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
+@@ -128,6 +131,7 @@
+   Planet.cpp \
+   PortInfo.cpp \
+   PortValue.cpp \
++  RigidBody.cpp \
+   SampleTime.cpp \
+   StateValue.cpp \
+   Time.cpp \
+@@ -175,7 +179,6 @@
+   Ground.h \
+   Input.h \
+   Integrator.h \
+-  Interact.h \
+   Joint.h \
+   Launchbar.h \
+   LinearSpringDamper.h \
+@@ -192,7 +195,6 @@
+   RevoluteActuatorFrame.h \
+   RevoluteJoint.h \
+   RevoluteJointFrame.h \
+-  RigidBody.h \
+   RootFrame.h \
+   Saturation.h \
+   Sensor.h \
+@@ -236,7 +238,6 @@
+ #   Gravity.cpp \
+ #   Ground.cpp \
+ #   Input.cpp \
+-#   Interact.cpp \
+ #   Joint.cpp \
+ #   Launchbar.cpp \
+ #   LinearSpringDamper.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-09-09 19:12:57 UTC (rev 454)
+@@ -4,10 +4,12 @@
+ 
+ #include &quot;NodeVisitor.h&quot;
+ 
++#include &quot;Group.h&quot;
++#include &quot;Interact.h&quot;
+ #include &quot;LeafNode.h&quot;
+ #include &quot;MechanicNode.h&quot;
+ #include &quot;Model.h&quot;
+-#include &quot;Group.h&quot;
++#include &quot;RigidBody.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -56,4 +58,16 @@
+   apply(static_cast&lt;LeafNode&amp;&gt;(node));
+ }
+ 
++void
++NodeVisitor::apply(RigidBody&amp; node)
++{
++  apply(static_cast&lt;MechanicNode&amp;&gt;(node));
++}
++
++void
++NodeVisitor::apply(Interact&amp; node)
++{
++  apply(static_cast&lt;MechanicNode&amp;&gt;(node));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-09-09 19:12:57 UTC (rev 454)
+@@ -14,6 +14,8 @@
+ class LeafNode;
+ class Model;
+ class MechanicNode;
++class RigidBody;
++class Interact;
+ 
+ class NodeVisitor {
+ public:
+@@ -26,6 +28,8 @@
+   virtual void apply(LeafNode&amp;);
+   virtual void apply(Model&amp;);
+   virtual void apply(MechanicNode&amp;);
++  virtual void apply(RigidBody&amp;);
++  virtual void apply(Interact&amp;);
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-09-09 19:12:57 UTC (rev 454)
+@@ -1,93 +1,29 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
+  *
+  */
+ 
+ #include &quot;RigidBody.h&quot;
+-#include &quot;Assert.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+-#include &quot;Mass.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;ModelGroup.h&quot;
++#include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
++BEGIN_OPENFDM_OBJECT_DEF(RigidBody, MechanicNode)
++  END_OPENFDM_OBJECT_DEF
++
+ RigidBody::RigidBody(const std::string&amp; name) :
+-  Model(name)
++  MechanicNode(name)
+ {
+ }
+ 
+-RigidBody::~RigidBody(void)
++RigidBody::~RigidBody()
+ {
+ }
+ 
+ void
+-RigidBody::output(const TaskInfo&amp; taskInfo)
++RigidBody::accept(NodeVisitor&amp; visitor)
+ {
+-  Log(ArtBody, Debug) &lt;&lt; &quot;Entry of computeArtValues of \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-
+-  // At first this is the inertia matrix of the current body.
+-  mArtInertia.clear();
+-  mArtForce.clear();
+-
+-  // Collect all articulated forces and inertias
+-  InteractList::iterator it;
+-  for (it = mInteracts.begin(); it != mInteracts.end(); ++it)
+-    (*it)-&gt;interactWith(this);
+-  
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;On exit of computeArtValues of \&quot;&quot; &lt;&lt; getName()
+-                       &lt;&lt; &quot;\&quot; Force is:\n&quot; &lt;&lt; trans(mArtForce)
+-                       &lt;&lt; &quot;\nInertia:\n&quot; &lt;&lt; mArtInertia &lt;&lt; endl;
++  visitor.apply(*this);
+ }
+ 
+-bool
+-RigidBody::dependsDirectOn(Model* model)
+-{
+-  InteractList::const_iterator i;
+-  for (i = mInteracts.begin(); i != mInteracts.end(); ++i)
+-    if ((*i) == model)
+-      return true;
+-  return Model::dependsDirectOn(model);
+-}
+ 
+-bool
+-RigidBody::setInboardJoint(Joint* joint)
+-{
+-  if (!joint-&gt;attachTo(this, true))
+-    return false;
+-  mInboardJoint = joint;
+-  return true;
+-}
+-
+-bool
+-RigidBody::addInteract(Interact* interact)
+-{
+-  if (!interact-&gt;attachTo(this, false))
+-    return false;
+-  mInteracts.push_back(interact);
+-  return true;
+-}
+-
+-bool
+-RigidBody::removeInteract(Interact* interact)
+-{
+-  InteractList::iterator it;
+-  for (it = mInteracts.begin(); it != mInteracts.end(); ++it) {
+-    if ((*it) == interact) {
+-      mInteracts.erase(it);
+-      if (!interact-&gt;detachFrom(this))
+-        return false;
+-      return true;
+-    }
+-  }
+-  return false;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-09-09 19:12:57 UTC (rev 454)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
+  *
+  */
+ 
+@@ -6,118 +6,22 @@
+ #define OpenFDM_RigidBody_H
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
++#include &quot;MechanicInteractPort.h&quot;
++#include &quot;MechanicNode.h&quot;
+ 
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-
+ namespace OpenFDM {
+ 
+-class Interact;
+-
+-// Rename to Body???
+-class RigidBody :
+-    public Model {
++class RigidBody : public MechanicNode {
++  OPENFDM_OBJECT(RigidBody, MechanicNode);
+ public:
+-  /// Constructor
+   RigidBody(const std::string&amp; name);
+-  /// Destructor
+-  virtual ~RigidBody(void);
++  virtual ~RigidBody();
+ 
+-  /** Compute articulated values outboard including this body.
+-      That function is part of the articulated body algorithm.
+-      It is used to compute the articulated force and articulated inertia
+-      of the tree of rigid bodies mounted below the current one.
+-      These articulated values (inertia and force) is then stored in the
+-      rigid body class and can be queried for computation of the inboard
+-      articulated values as well as for the computations of the relative
+-      accelerations in the next step.
+-      @see const SpatialInertia&amp; getArtInertia(void) const
+-      @see const Vector6&amp; getArtForce(void) const
+-   */
+-  virtual void output(const TaskInfo&amp; taskInfo);
++  virtual void accept(NodeVisitor&amp; visitor);
+ 
+-  /// Returns true if the Model this depends directly on @ref model.
+-  virtual bool dependsDirectOn(Model* model);
+-
+-// protected:
+-  /** Get the outboard articulated inertia.
+-      Returns a reference to the outboard articulated inertia.
+-      The returned inertia matrix is computed prevously by a call to
+-      @see computeArtValues(void).
+-   */
+-  const SpatialInertia&amp; getArtInertia(void) const
+-  { return mArtInertia; }
+-
+-  /** Get the outboard articulated force.
+-      Returns a reference to the outboard articulated force.
+-      The returned force vector is computed prevously by a call to
+-      @see computeArtValues(void).
+-   */
+-  const Vector6&amp; getArtForce(void) const
+-  { return mArtForce; }
+-
+-  /// Apply a force to that rigid body
+-  void applyForce(const Vector6&amp; force)
+-  { mArtForce -= force; }
+-
+-  /// Contribute articulated force as used in the articulated body algorithm
+-  void contributeForce(const Vector6&amp; force)
+-  { mArtForce += force; }
+-
+-  /// Contribute articulated inertia as used in the articulated body algorithm
+-  void contributeInertia(const SpatialInertia&amp; inertia)
+-  { mArtInertia += inertia; }
+-
+-  /// Contribute the articulated inertia and force of a local Mass object
+-  void contributeLocalInertia(const SpatialInertia&amp; inertia)
+-  {
+-    Vector6 iv = getFrame()-&gt;getSpVel();
+-    Vector6 Jiv = inertia*iv;
+-    mArtForce += Vector6(cross(iv.getAngular(), Jiv.getAngular()) +
+-                         cross(iv.getLinear(), Jiv.getLinear()),
+-                         cross(iv.getAngular(), Jiv.getLinear()));
+-    mArtInertia += inertia;
+-  }
+-
+-  /// Introduce an interface routine
+-  void setFrame(Frame* frame)
+-  {
+-    // take over all children
+-    frame-&gt;reparentChildren(mFrame);
+-    mFrame = frame;
+-  }
+-  Frame* getFrame(void)
+-  { return mFrame; }
+-  const Frame* getFrame(void) const
+-  { return mFrame; }
+-
+-  bool setInboardJoint(Joint* joint);
+-  bool addInteract(Interact* interact);
+-  bool removeInteract(Interact* interact);
+-
+-private:
+-  /// Outboard articulated inertia
+-  SpatialInertia mArtInertia;
+-
+-  /// Outboard articulated force
+-  Vector6 mArtForce;
+-
+-  /// Frame attached to this rigid body
+-  SharedPtr&lt;Frame&gt; mFrame;
+-
+-  /// One of our interacts is special ...
+-  /// FIXME Make that dynamic later, for now we need to know the tree root at
+-  /// MultiBodySystem build time
+-  SharedPtr&lt;Joint&gt; mInboardJoint;
+-  /// All Interacts attached to this RigidBody
+-  typedef std::vector&lt;SharedPtr&lt;Interact&gt; &gt; InteractList;
+-  InteractList mInteracts;
+-
+-  // HMM ... FIXME
+-  friend class Interact;
++protected:
++  MechanicInteractPort newMechanicInteractPort(const std::string&amp; name)
++  { return MechanicInteractPort(this, name); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-09 18:56:57 UTC (rev 453)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-09 19:12:57 UTC (rev 454)
+@@ -33,7 +33,8 @@
+ 
+ #include &lt;OpenFDM/LeafContext.h&gt;
+ 
+-#include &lt;OpenFDM/MechanicNode.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Interact.h&gt;
+ 
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+@@ -90,49 +91,6 @@
+   RealInputPort mInputPort;
+ };
+ 
+-class Body : public MechanicNode {
+-public:
+-  virtual void accept(NodeVisitor&amp; visitor)
+-  { visitor.apply(*this); }
+-
+-  // FIXME: is unclear: normal output port may depend on the velocities
+-  // or depend harder on the accelerations. The interface cannot ask for this
+-  // how about that??
+-//   enum OutputStage { Velocity, Articulation, Acceleration };
+-//   virtual bool dependsOn(OutputStage outputStage,
+-//                          const PortId&amp; in, const PortId&amp; out) const = 0;
+-
+-protected:
+-  MechanicBodyPort
+-  newMechanicBodyPort(const std::string&amp; name)
+-  { return MechanicBodyPort(this, name); }
+-};
+-
+-class Interact : public MechanicNode {
+-public:
+-  virtual void accept(NodeVisitor&amp; visitor)
+-  { visitor.apply(*this); }
+-
+-  // FIXME: is unclear: normal output port may depend on the velocities
+-  // or depend harder on the accelerations. The interface cannot ask for this
+-  // how about that??
+-//   enum OutputStage { Velocity, Articulation, Acceleration };
+-//   virtual bool dependsOn(OutputStage outputStage,
+-//                          const PortId&amp; in, const PortId&amp; out) const = 0;
+-
+-protected:
+-  MechanicInteractPort
+-  newMechanicInteractPort(const std::string&amp; name)
+-  { return MechanicInteractPort(this, name); }
+-};
+-
+-
+-
+-
+-
+-
+-
+-
+ class LeafInstance : public WeakReferenced {
+ public:
+   struct LeafPortData;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000425.html">[OpenFDM-svn] r453 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000427.html">[OpenFDM-svn] r455 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#426">[ date ]</a>
+              <a href="thread.html#426">[ thread ]</a>
+              <a href="subject.html#426">[ subject ]</a>
+              <a href="author.html#426">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,627 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r583 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r583%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810090555.m995tHg5024823%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000552.html">
+   <LINK REL="Next"  HREF="000554.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r583 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r583%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810090555.m995tHg5024823%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r583 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Oct  9 07:55:17 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000552.html">[OpenFDM-svn] r582 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000554.html">[OpenFDM-svn] r584 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#553">[ date ]</a>
+              <a href="thread.html#553">[ thread ]</a>
+              <a href="subject.html#553">[ subject ]</a>
+              <a href="author.html#553">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-09 07:55:16 +0200 (Thu, 09 Oct 2008)
+New Revision: 583
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Fraction.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h
+Log:
+Hmm, may be sample times like that...
+
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Node.h
+D    src/OpenFDM/SampleTime.cpp
+M    src/OpenFDM/Node.cpp
+A    src/OpenFDM/Fraction.h
+M    src/OpenFDM/SampleTime.h
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Fraction.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Fraction.h	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Fraction.h	2008-10-09 05:55:16 UTC (rev 583)
+@@ -0,0 +1,374 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Fraction_H
++#define OpenFDM_Fraction_H
++
++#include &lt;istream&gt;
++#include &lt;ostream&gt;
++#include &lt;cctype&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Limits.h&quot;
++#include &quot;Math.h&quot;
++
++namespace OpenFDM {
++
++class Fraction {
++public:
++  typedef long numerator_type;
++  typedef unsigned long denominator_type;
++
++  Fraction()
++  { }
++  Fraction(const numerator_type&amp; numerator) :
++    mNumerator(numerator),
++    mDenominator(1)
++  { }
++  Fraction(const numerator_type&amp; numerator,
++           const denominator_type&amp; denominator) :
++    mNumerator(numerator),
++    mDenominator(denominator)
++  { reduce(); }
++
++  const numerator_type&amp; getNumerator() const
++  { return mNumerator; }
++  const denominator_type&amp; getDenominator() const
++  { return mDenominator; }
++
++  real_type getRealValue() const
++  {
++    int exp2 = 0;
++    numerator_type n = getNumerator();
++    while (n != 0 &amp;&amp; (n&amp;1) == 0) {
++      ++exp2;
++      n &gt;&gt; 1;
++    }
++    denominator_type d = getDenominator();
++    while (d != 0 &amp;&amp; (d&amp;1) == 0) {
++      --exp2;
++      d &gt;&gt; 1;
++    }
++    
++    return ldexp(real_type(n)/real_type(d), exp2);
++  }
++
++  denominator_type reductionFactor() const
++  { return gcd(std::abs(mNumerator), mDenominator); }
++
++  Fraction&amp; reduce()
++  {
++    denominator_type tmp = reductionFactor();
++    if (tmp &lt;= 1)
++      return *this;
++    mNumerator /= tmp;
++    mDenominator /= tmp;
++    return *this;
++  }
++
++  Fraction&amp; operator+=(const Fraction&amp; fraction)
++  {
++    // Just in case that the argument is *this
++    numerator_type numerator = fraction.mNumerator;
++    denominator_type denumerator = fraction.mDenominator;
++
++    denominator_type g = gcd(mDenominator, denumerator);
++    mDenominator /= g;
++    mNumerator = mNumerator*(denumerator/g) + numerator*mDenominator;
++    g = gcd(std::abs(mNumerator), g);
++    mNumerator /= g;
++    mDenominator *= denumerator/g;
++
++    return *this;
++  }
++  Fraction&amp; operator-=(const Fraction&amp; fraction)
++  {
++    // Just in case that the argument is *this
++    numerator_type numerator = fraction.mNumerator;
++    denominator_type denumerator = fraction.mDenominator;
++
++    denominator_type g = gcd(mDenominator, denumerator);
++    mDenominator /= g;
++    mNumerator = mNumerator*(denumerator/g) - numerator*mDenominator;
++    g = gcd(std::abs(mNumerator), g);
++    mNumerator /= g;
++    mDenominator *= denumerator/g;
++
++    return *this;
++  }
++
++  Fraction&amp; operator*=(const Fraction&amp; fraction)
++  {
++    // Just in case that the argument is *this
++    numerator_type numerator = fraction.mNumerator;
++    denominator_type denumerator = fraction.mDenominator;
++
++    denominator_type g0 = gcd(std::abs(mNumerator), denumerator);
++    denominator_type g1 = gcd(std::abs(numerator), mDenominator);
++
++    mNumerator /= g0;
++    mNumerator *= numerator/g1;
++    mDenominator /= g1;
++    mDenominator *= denumerator/g0;
++    return *this;
++  }
++  Fraction&amp; operator/=(const Fraction&amp; fraction)
++  {
++    // Just in case that the argument is *this
++    numerator_type numerator = fraction.mNumerator;
++    denominator_type denumerator = fraction.mDenominator;
++
++    denominator_type g0 = gcd(mDenominator, denumerator);
++    denominator_type g1 = gcd(std::abs(mNumerator), std::abs(numerator));
++
++    mNumerator /= g1;
++    mNumerator *= denumerator/g0;
++    mDenominator /= g0;
++    mDenominator *= numerator/g1;
++    return *this;
++  }
++
++  Fraction operator+() const
++  { return *this; }
++
++  Fraction operator-() const
++  { return Fraction(-getNumerator(), getDenominator(), true); }
++
++  static Fraction NaN() { return Fraction(0, 0, true); }
++  static Fraction inf() { return Fraction(1, 0, true); }
++
++  static denominator_type gcd(denominator_type a, denominator_type b)
++  {
++    if (a == 0 || b == 0)
++      return 1;
++
++    while (b) {
++      denominator_type r = a % b;
++      a = b;
++      b = r;
++    }
++
++    return a;
++  }
++
++  static
++  bool
++  less(const Fraction&amp; u, const Fraction&amp; v)
++  {
++    // Avoid overflow
++    denominator_type ud = u.getDenominator();
++    denominator_type vd = v.getDenominator();
++    denominator_type gcdd = Fraction::gcd(ud, vd);
++    ud /= gcdd;
++    vd /= gcdd;
++    
++    numerator_type un = u.getNumerator();
++    numerator_type vn = v.getNumerator();
++    denominator_type gcdn = gcd(std::abs(un), std::abs(vn));
++    un /= gcdn;
++    vn /= gcdn;
++    
++    return un*vd &lt; ud*vn;
++  }
++
++  static
++  bool
++  equal(const Fraction&amp; u, const Fraction&amp; v)
++  {
++    // Avoid overflow
++    denominator_type ud = u.getDenominator();
++    denominator_type vd = v.getDenominator();
++    denominator_type gcdd = Fraction::gcd(ud, vd);
++    ud /= gcdd;
++    vd /= gcdd;
++    
++    numerator_type un = u.getNumerator();
++    numerator_type vn = v.getNumerator();
++    denominator_type gcdn = gcd(std::abs(un), std::abs(vn));
++    un /= gcdn;
++    vn /= gcdn;
++    
++    return un*vd == ud*vn;
++  }
++
++private:
++  Fraction(const numerator_type&amp; numerator,
++           const denominator_type&amp; denominator,
++           bool reduced) :
++    mNumerator(numerator),
++    mDenominator(denominator)
++  { if (!reduced) reduce(); }
++
++  numerator_type mNumerator;
++  denominator_type mDenominator;
++};
++
++inline
++Fraction
++operator+(const Fraction&amp; u, const Fraction&amp; v)
++{ return Fraction(u) += v; }
++
++inline
++Fraction
++operator-(const Fraction&amp; u, const Fraction&amp; v)
++{ return Fraction(u) -= v; }
++
++inline
++Fraction
++operator*(const Fraction&amp; u, const Fraction&amp; v)
++{ return Fraction(u) *= v; }
++
++inline
++Fraction
++operator/(const Fraction&amp; u, const Fraction&amp; v)
++{ return Fraction(u) /= v; }
++
++inline
++Fraction
++operator%(const Fraction&amp; x, const Fraction&amp; y)
++{
++  Fraction q = x/y;
++  Fraction::denominator_type n = std::abs(q.getNumerator())/q.getDenominator();
++  return x - n*y;
++}
++
++inline
++Fraction
++fmod(const Fraction&amp; x, const Fraction&amp; y)
++{ return x % y; }
++
++inline
++bool
++isfinite(const Fraction&amp; fraction)
++{ return fraction.getDenominator() != 0; }
++
++inline
++bool
++isnan(const Fraction&amp; fraction)
++{ return fraction.getNumerator() == 0 &amp;&amp; fraction.getDenominator() == 0; }
++
++inline
++bool
++operator==(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return Fraction::equal(u, v);
++}
++
++inline
++bool
++operator!=(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return !Fraction::equal(u, v);
++}
++
++inline
++bool
++operator&lt;(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return Fraction::less(u, v);
++}
++
++inline
++bool
++operator&lt;=(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return !Fraction::less(v, u);
++}
++
++inline
++bool
++operator&gt;(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return Fraction::less(v, u);
++}
++
++inline
++bool
++operator&gt;=(const Fraction&amp; u, const Fraction&amp; v)
++{
++  if (isnan(u) || isnan(v))
++    return false;
++  return !Fraction::less(u, v);
++}
++
++inline
++Fraction
++abs(const Fraction&amp; x)
++{ return Fraction(std::abs(x.getNumerator()), x.getDenominator()); }
++
++inline
++Fraction
++fabs(const Fraction&amp; x)
++{ return Fraction(std::abs(x.getNumerator()), x.getDenominator()); }
++
++
++/// Compute the greatest common divisor of a and b
++inline
++Fraction
++greatestCommonDivisor(Fraction a, Fraction b)
++{
++  a = abs(a);
++  b = abs(b);
++
++  while (b != 0) {
++    Fraction r = a % b;
++    a = b;
++    b = r;
++  }
++
++  return a;
++}
++
++
++template&lt;typename char_type, typename traits_type&gt; 
++inline
++std::basic_ostream&lt;char_type, traits_type&gt;&amp;
++operator&lt;&lt;(std::basic_ostream&lt;char_type, traits_type&gt;&amp; os, const Fraction&amp; f)
++{ return os &lt;&lt; f.getNumerator() &lt;&lt; os.widen('/') &lt;&lt; f.getDenominator(); }
++
++template&lt;typename char_type, typename traits_type&gt; 
++inline
++std::basic_istream&lt;char_type, traits_type&gt;&amp;
++operator&gt;&gt;(std::basic_istream&lt;char_type, traits_type&gt;&amp; is, Fraction&amp; f)
++{
++  Fraction::numerator_type numerator;
++  is &gt;&gt; numerator;
++  if (is.peek() == is.widen('/')) {
++    is.ignore(1);
++    Fraction::denominator_type denominator;
++    is &gt;&gt; denominator;
++    f = Fraction(numerator, denominator);
++    return is;
++
++  } else if (is.peek() == is.widen('.')) {
++    is.ignore(1);
++    
++    Fraction::denominator_type denominator = 1;
++    while (std::isdigit(is.peek())) {
++      char_type digit = is.get();
++      numerator = numerator*10 + digit - '0';
++      denominator *= 10;
++    }
++    f = Fraction(numerator, denominator);
++    
++    return is;
++  } else {
++    f = Fraction(numerator);
++    return is;
++  }
++}
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-09 05:55:16 UTC (rev 583)
+@@ -27,6 +27,7 @@
+   EnvironmentObject.h \
+   ExplicitAdams.h \
+   ExplicitEuler.h \
++  Fraction.h \
+   Frame.h \
+   FrameVisitor.h \
+   Function.h \
+@@ -156,7 +157,6 @@
+   PortValue.cpp \
+   RigidBody.cpp \
+   RootJoint.cpp \
+-  SampleTime.cpp \
+   StateValue.cpp \
+   System.cpp \
+   Time.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-09 05:55:16 UTC (rev 583)
+@@ -13,7 +13,8 @@
+   END_OPENFDM_OBJECT_DEF
+ 
+ Node::Node(const std::string&amp; name) :
+-  Object(name)
++  Object(name),
++  mSampleTime(0, 1)
+ {
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-09 05:55:16 UTC (rev 583)
+@@ -7,6 +7,7 @@
+ 
+ #include &lt;string&gt;
+ #include &lt;vector&gt;
++#include &quot;Fraction.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;PortId.h&quot;
+ #include &quot;PortInfo.h&quot;
+@@ -47,6 +48,11 @@
+   unsigned getPortIndex(const PortId&amp; portId) const;
+   bool checkPort(const PortId&amp; portId) const;
+ 
++  const Fraction&amp; getSampleTime() const
++  { return mSampleTime; }
++  void setSampleTime(const Fraction&amp; sampleTime)
++  { mSampleTime = sampleTime; }
++
+ protected:
+ 
+   void addParent(Node* parent);
+@@ -56,16 +62,22 @@
+   Node(const Node&amp;);
+   Node&amp; operator=(const Node&amp;);
+ 
++  /// Methods and variables for port handling.
++  friend class PortInfo;
++
+   void addPort(PortInfo* port);
+   void removePort(PortInfo* port);
+ 
+   typedef std::vector&lt;SharedPtr&lt;PortInfo&gt; &gt; PortList;
+   PortList mPortList;
+ 
+-  friend class PortInfo;
+-
++  /// Parents.
+   typedef std::vector&lt;WeakPtr&lt;Node&gt; &gt; ParentList;
+   ParentList mParentList;
++
++  /// Sample time handling.
++  /// FIXME Should that be something like the old sample time set??
++  Fraction mSampleTime;
+ };
+ 
+ } // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.cpp	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.cpp	2008-10-09 05:55:16 UTC (rev 583)
+@@ -1,13 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;SampleTime.h&quot;
+-
+-namespace OpenFDM {
+-
+-const SampleTime SampleTime::PerTimestep(-2);
+-const SampleTime SampleTime::Inherited(-1);
+-const SampleTime SampleTime::Continous(0);
+-
+-} // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h	2008-10-09 05:50:05 UTC (rev 582)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h	2008-10-09 05:55:16 UTC (rev 583)
+@@ -10,6 +10,7 @@
+ 
+ #include &quot;Types.h&quot;
+ #include &quot;Assert.h&quot;
++#include &quot;Fraction.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,10 +24,13 @@
+ /// animations
+ class SampleTime {
+ public:
+-  /// Default constructor, defaults to discrete sample time
+-  SampleTime(void) : mSampleTime(0) {}
++  /// Default constructor, defaults to continous sample time
++  SampleTime(const SampleTime&amp; sampleTime = getInherited()) :
++    mSampleTime(sampleTime.mSampleTime) {}
+   /// Constructor with given sample time
+-  SampleTime(real_type sampleTime) : mSampleTime(sampleTime) {}
++  SampleTime(const Fraction&amp; sampleTime) :
++    mSampleTime(sampleTime) {}
++  /// Constructor with given sample time
+   /// Returns true if the sample time is a continous sample time
+   bool isContinous(void) const
+   { return mSampleTime == 0; }
+@@ -41,7 +45,7 @@
+   bool isPerTimestep(void) const
+   { return mSampleTime == -2; }
+   /// Returns the actual sample time
+-  real_type getSampleTime(void) const
++  const Fraction&amp; getSampleTime(void) const
+   { return mSampleTime; }
+ 
+   /// Returns true if th sample time is valid
+@@ -53,12 +57,13 @@
+   bool operator!=(const SampleTime&amp; st) const
+   { return mSampleTime != st.mSampleTime; }
+ 
+-  static const SampleTime PerTimestep;
+-  static const SampleTime Inherited;
+-  static const SampleTime Continous;
++  static SampleTime getPerBasicStepSize() { return Fraction(-3); }
++  static SampleTime getPerTimestep() { return Fraction(-2); }
++  static SampleTime getInherited() { return Fraction(-1); }
++  static SampleTime getContinous() { return Fraction(0); }
+ 
+ private:
+-  real_type mSampleTime;
++  Fraction mSampleTime;
+ };
+ 
+ class SampleTimeSet {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000552.html">[OpenFDM-svn] r582 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000554.html">[OpenFDM-svn] r584 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#553">[ date ]</a>
+              <a href="thread.html#553">[ thread ]</a>
+              <a href="subject.html#553">[ subject ]</a>
+              <a href="author.html#553">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

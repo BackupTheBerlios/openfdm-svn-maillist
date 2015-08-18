@@ -1,0 +1,207 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r444 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r444%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809080453.m884rK6E019066%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000415.html">
+   <LINK REL="Next"  HREF="000417.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r444 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r444%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809080453.m884rK6E019066%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r444 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep  8 06:53:20 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000415.html">[OpenFDM-svn] r443 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000417.html">[OpenFDM-svn] r445 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#416">[ date ]</a>
+              <a href="thread.html#416">[ thread ]</a>
+              <a href="subject.html#416">[ subject ]</a>
+              <a href="author.html#416">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-08 06:53:19 +0200 (Mon, 08 Sep 2008)
+New Revision: 444
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Sort the list of leafs.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-08 03:58:21 UTC (rev 443)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-08 04:53:19 UTC (rev 444)
+@@ -125,6 +125,8 @@
+     { return mPortInfo; }
+ 
+     virtual bool connect(PortData*) = 0;
++    virtual bool isConnected(PortData*)
++    { return false; }
+ 
+     virtual void print()
+     { }
+@@ -156,6 +158,16 @@
+       return acceptorPortData-&gt;connectToProvider(this);
+     }
+ 
++    virtual bool isConnected(PortData* portData)
++    {
++      if (!portData)
++        return false;
++      AcceptorPortData* acceptorPortData = portData-&gt;toAcceptorPortData();
++      if (!acceptorPortData)
++        return false;
++      return acceptorPortData-&gt;isConnectedToProvider(this);
++    }
++
+     virtual void print()
+     {
+       std::cout &lt;&lt; &quot;  Provider Port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+@@ -209,6 +221,23 @@
+       return true;
+     }
+ 
++    virtual bool isConnected(PortData* portData)
++    {
++      if (!portData)
++        return false;
++      ProviderPortData* providerPortData = portData-&gt;toProviderPortData();
++      if (!providerPortData)
++        return false;
++      return isConnectedToProvider(providerPortData);
++    }
++
++    bool isConnectedToProvider(ProviderPortData* providerPortData)
++    {
++      if (!providerPortData)
++        return false;
++      return providerPortData == _providerPortData.lock();
++    }
++
+     virtual void print()
+     {
+       std::cout &lt;&lt; &quot;  Acceptor Port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
+@@ -265,6 +294,11 @@
+       }
+       return true;
+     }
++    // FIXME, make class hierarchy so that this cannot happen anyway ...
++    // Make the leaf instance have a pointer to a leaf port data and just use
++    // the proxy stuff to build the leaf list ...
++    virtual bool isConnected(PortData* portData)
++    { OpenFDMAssert(false); return false; }
+     std::vector&lt;SharedPtr&lt;PortData&gt; &gt; mPortDataList;
+   };
+ 
+@@ -284,6 +318,27 @@
+   const SharedPtr&lt;const LeafNode&gt;&amp; getLeafNode() const
+   { return mLeafNode; }
+ 
++  // Return true if this leaf directly depends on one of leafInstance outputs
++  bool dependsOn(LeafInstance* leafInstance)
++  {
++    for (unsigned i = 0; i &lt; mPortData.size(); ++i) {
++      for (unsigned j = 0; j &lt; leafInstance-&gt;mPortData.size(); ++j) {
++        if (!mPortData[i]-&gt;isConnected(leafInstance-&gt;mPortData[j]))
++          continue;
++        PortId inPortId = mLeafNode-&gt;getPortId(i);
++
++        // FIXME, may be other concept:
++        // make Model return a list of 'direct feedthrough ports'?
++        for (unsigned k = 0; k &lt; mPortData.size(); ++k) {
++          PortId outPortId = mLeafNode-&gt;getPortId(k);
++          if (mLeafNode-&gt;dependsOn(inPortId, outPortId))
++            return true;
++        }
++      }
++    }
++    return false;
++  }
++
+   void print()
+   {
+     std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; mLeafNode-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+@@ -442,6 +497,31 @@
+   typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; LeafPortDataMap;
+   LeafPortDataMap _leafPortDataMap;
+ 
++
++  // method to sort the leafs according to their dependency
++  bool sortLeafList()
++  {
++    LeafInstanceList sortedLeafInstanceList;
++    while (!_leafInstanceList.empty()) {
++      SharedPtr&lt;LeafInstance&gt; leafInstance = _leafInstanceList.front();
++      _leafInstanceList.pop_front();
++
++      LeafInstanceList::iterator i;
++      for (i = sortedLeafInstanceList.begin();
++           i != sortedLeafInstanceList.end();
++           ++i) {
++        if (!(*i)-&gt;dependsOn(leafInstance))
++          continue;
++        sortedLeafInstanceList.insert(i, leafInstance);
++        break;
++      }
++      if (i == sortedLeafInstanceList.end())
++        sortedLeafInstanceList.push_back(leafInstance);
++    }
++    _leafInstanceList.swap(sortedLeafInstanceList);
++  }
++
++  
+   void pushNodeId(const Group::NodeId&amp; nodeId)
+   { _nodeIdStack.push_back(nodeId); }
+   void popNodeId()
+@@ -498,6 +578,8 @@
+   LeafInstanceCollector nodeInstanceCollector;
+   topGroup-&gt;accept(nodeInstanceCollector);
+   
++  nodeInstanceCollector.sortLeafList();
++
+   std::cout &lt;&lt; nodeInstanceCollector._leafInstanceList.size() &lt;&lt; std::endl;
+ 
+   LeafInstanceCollector::LeafInstanceList::const_iterator i;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000415.html">[OpenFDM-svn] r443 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000417.html">[OpenFDM-svn] r445 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#416">[ date ]</a>
+              <a href="thread.html#416">[ thread ]</a>
+              <a href="subject.html#416">[ subject ]</a>
+              <a href="author.html#416">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

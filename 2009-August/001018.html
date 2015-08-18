@@ -1,0 +1,283 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1058 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1058%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908031830.n73IUxNi008756%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001017.html">
+   <LINK REL="Next"  HREF="001019.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1058 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1058%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908031830.n73IUxNi008756%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1058 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug  3 20:30:59 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001017.html">[OpenFDM-svn] r1057 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001019.html">[OpenFDM-svn] r1059 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1018">[ date ]</a>
+              <a href="thread.html#1018">[ thread ]</a>
+              <a href="subject.html#1018">[ subject ]</a>
+              <a href="author.html#1018">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-03 20:30:58 +0200 (Mon, 03 Aug 2009)
+New Revision: 1058
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Improove sorting.
+
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-08-03 16:27:40 UTC (rev 1057)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-08-03 18:30:58 UTC (rev 1058)
+@@ -77,6 +77,47 @@
+ /// FIXME: IMO THIS MUST WORK THIS WAY
+ ///
+ 
++/// Topological sorting.
++/// On success, the sourceList is empty and the sortedList contains the sorted
++/// entries.
++/// On failure, the sourceList contains those entries that could be sorted, and
++/// the sourceList still contains those that have cycles.
++template&lt;typename T, typename D&gt;
++static inline void
++tsort(std::list&lt;T&gt;&amp; sortedList, std::list&lt;T&gt;&amp; sourceList, const D&amp; dependency)
++{
++  /// The algorithm is simple.
++  /// Just push all those items from the sourceList into the sortedList
++  /// that do not depend on any item still in the sourceList.
++  /// Items that do depend on anything still in the source list are
++  /// moved to the tail of the sourceList.
++  /// Do that until sourceList is empty or until we do no longer find any
++  /// independent item.
++  typename std::list&lt;T&gt;::size_type size = sourceList.size();
++  typename std::list&lt;T&gt;::size_type tryCount = 0;
++  while (!sourceList.empty() &amp;&amp; size &lt;= tryCount) {
++    
++    // Check if the front item is independent of sourceList
++    typename std::list&lt;T&gt;::iterator i = sourceList.begin();
++    for (; i != sourceList.end(); ++i) {
++      if (dependency(sourceList.front(), *i))
++        break;
++    }
++    // If we came here with i == end, the front item is independent so
++    // schedule it now
++    if (i == sourceList.end()) {
++      sortedList.splice(sortedList.end(), sourceList, sourceList.begin());
++      --size;
++      tryCount = 0;
++    }
++    // Else defer that item
++    else {
++      sourceList.splice(sourceList.end(), sourceList, sourceList.begin());
++      ++tryCount;
++    }
++  }
++}
++
+ class ContinousSystemFunction : public Function {
+ public:
+   virtual size_type inSize(void) const
+@@ -559,6 +600,7 @@
+     MechanicContext* getMechanicContext()
+     { return mMechanicContext; }
+ 
++    // Currently unused
+     bool isLinkedTo(const MechanicInstanceData&amp; instance) const
+     {
+       unsigned numPorts = getNode()-&gt;getNumPorts();
+@@ -639,6 +681,29 @@
+       return false;
+     }
+ 
++    // detect if this child link is connected to any mechanic port of instance
++    bool isChildLinkedTo(const JointInstanceData&amp; instance) const
++    {
++      unsigned i = mChildLink-&gt;getIndex();
++      OpenFDMAssert(i &lt; mPortDataVector.size());
++      OpenFDMAssert(mPortDataVector[i]);
++
++      const Node* otherNode = instance.getNode();
++      unsigned otherNumPorts = otherNode-&gt;getNumPorts();
++      for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++        if (!otherNode-&gt;getPort(j)-&gt;toMechanicLink())
++          continue;
++        
++        OpenFDMAssert(j &lt; instance.mPortDataVector.size());
++        OpenFDMAssert(instance.mPortDataVector[j]);
++        if (!mPortDataVector[i]-&gt;isConnected(*instance.mPortDataVector[j]))
++          continue;
++        
++        return true;
++      }
++      return false;
++    }
++
+     // FIXME: do real checks in this case, connected and so forth ...
+     bool makeRemainigLinksChildLinks()
+     {
+@@ -1056,6 +1121,7 @@
+         
+           if ((*j)-&gt;isLinkedToAndSetChild(*(*i))) {
+             SharedPtr&lt;JointInstanceData&gt; mechanicInstanceData = *i;
++            mechanicInstanceData-&gt;makeRemainigLinksChildLinks();
+             nextLevelList.push_back(mechanicInstanceData);
+             i = mJointInstanceDataList.erase(i);
+ 
+@@ -1066,7 +1132,7 @@
+                  k != sortedJoints.end(); ++k) {
+               if (*k == *j)
+                 continue;
+-              if (mechanicInstanceData-&gt;isLinkedTo(*(*k))) {
++              if (mechanicInstanceData-&gt;isChildLinkedTo(*(*k))) {
+                 Log(Schedule,Warning)
+                   &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
+                   &lt;&lt; mechanicInstanceData-&gt;getNodeNamePath()
+@@ -1088,7 +1154,7 @@
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+         JointInstanceDataList::iterator i = j;
+         for (++i; i != nextLevelList.end(); ++i) {
+-          if ((*j)-&gt;isLinkedTo(*(*i))) {
++          if ((*j)-&gt;isChildLinkedTo(*(*i))) {
+             Log(Schedule,Warning)
+               &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
+               &lt;&lt; (*j)-&gt;getNodeNamePath()
+@@ -1101,8 +1167,6 @@
+       
+ 
+       for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
+-        // FIXME
+-        (*j)-&gt;makeRemainigLinksChildLinks();
+         sortedJoints.push_back(*j);
+       }
+     }
+@@ -1237,64 +1301,32 @@
+     return true;
+   }
+ 
+-  // method to sort the leafs according to their dependency
++  struct ModelInstanceDataDepend {
++    bool operator()(const SharedPtr&lt;ModelInstanceData&gt;&amp; m0,
++                    const SharedPtr&lt;ModelInstanceData&gt;&amp; m1) const
++    { return m0-&gt;dependsOn(*m1); }
++  };
++
+   bool sortModelList(ModelInstanceDataList&amp; modelInstanceDataList)
+   {
+     ModelInstanceDataList sortedModelInstanceDataList;
+-    while (!modelInstanceDataList.empty()) {
+-      SharedPtr&lt;ModelInstanceData&gt; modelInstanceData;
+-      modelInstanceData = modelInstanceDataList.front();
+-      modelInstanceDataList.pop_front();
++    tsort(sortedModelInstanceDataList, modelInstanceDataList,
++          ModelInstanceDataDepend());
+ 
+-      if (modelInstanceData-&gt;dependsOn(*modelInstanceData)) {
+-        Log(Schedule, Warning)
+-          &lt;&lt; &quot;Self referencing direct dependency for Model \&quot;&quot;
+-          &lt;&lt; modelInstanceData-&gt;getNodeNamePath()
+-          &lt;&lt; &quot;\&quot; detected!&quot; &lt;&lt; std::endl;
+-        return false;
+-      }
++    // Check if we have some unsorted cycles left
++    if (!modelInstanceDataList.empty()) {
++      Log(Schedule,Warning) &lt;&lt; &quot;Detected cyclic loop:&quot; &lt;&lt; std::endl;
+ 
+-      ModelInstanceDataList::iterator i;
+-      for (i = sortedModelInstanceDataList.begin();
+-           i != sortedModelInstanceDataList.end();
+-           ++i) {
+-        if (!(*i)-&gt;dependsOn(*modelInstanceData))
+-          continue;
+-
+-        // Something already sorted in depends on modelInstanceData,
+-        // so schedule that new thing just before.
+-        Log(Schedule, Debug)
+-          &lt;&lt; &quot;Inserting Model \&quot;&quot;
+-          &lt;&lt; modelInstanceData-&gt;getNodeNamePath()
+-          &lt;&lt; &quot;\&quot; before Model \&quot;&quot;
+-          &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-        i = sortedModelInstanceDataList.insert(i, modelInstanceData);
+-        break;
++      ModelInstanceDataList::iterator i = modelInstanceDataList.begin();
++      for (; i != modelInstanceDataList.end(); ++i) {
++        Log(Schedule,Warning)
++          &lt;&lt; &quot;  Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+       }
+-      if (i == sortedModelInstanceDataList.end()) {
+-        // nothing found so far that depends on model instance.
+-        // So put it at the end.
+-        Log(Schedule, Debug)
+-          &lt;&lt; &quot;Appending Model \&quot;&quot;
+-          &lt;&lt; modelInstanceData-&gt;getNodeNamePath()
+-          &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++      modelInstanceDataList.splice(modelInstanceDataList.begin(),
++                                   sortedModelInstanceDataList);
++      return false;
++    }
+ 
+-        sortedModelInstanceDataList.push_back(modelInstanceData);
+-      } else {
+-        // If it cannot be put at the end, check if modelInstanceData depends
+-        // on any model that is already scheduled behind to detect cyclic loops.
+-        for (; i != sortedModelInstanceDataList.end(); ++i) {
+-          if (!modelInstanceData-&gt;dependsOn(*(*i)))
+-            continue;
+-          Log(Schedule,Warning)
+-            &lt;&lt; &quot;Detected cyclic loop: Model \&quot;&quot;
+-            &lt;&lt; modelInstanceData-&gt;getNodeNamePath()
+-            &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
+-            &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-          return false;
+-        }
+-      }
+-    }
+     modelInstanceDataList.swap(sortedModelInstanceDataList);
+ 
+     Log(Schedule,Info) &lt;&lt; &quot;Model Schedule&quot; &lt;&lt; std::endl;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001017.html">[OpenFDM-svn] r1057 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001019.html">[OpenFDM-svn] r1059 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1018">[ date ]</a>
+              <a href="thread.html#1018">[ thread ]</a>
+              <a href="subject.html#1018">[ subject ]</a>
+              <a href="author.html#1018">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

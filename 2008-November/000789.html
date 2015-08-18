@@ -1,0 +1,299 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r821 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r821%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811301039.mAUAdcmM025562%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000788.html">
+   <LINK REL="Next"  HREF="000790.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r821 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r821%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811301039.mAUAdcmM025562%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r821 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 30 11:39:38 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000788.html">[OpenFDM-svn] r820 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000790.html">[OpenFDM-svn] r822 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#789">[ date ]</a>
+              <a href="thread.html#789">[ thread ]</a>
+              <a href="subject.html#789">[ subject ]</a>
+              <a href="author.html#789">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-30 11:39:38 +0100 (Sun, 30 Nov 2008)
+New Revision: 821
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.h
+Log:
+Readd the TimeDerivative model.
+
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/TimeDerivative.cpp
+M    src/OpenFDM/TimeDerivative.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-30 09:40:03 UTC (rev 820)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-30 10:39:38 UTC (rev 821)
+@@ -265,11 +265,11 @@
+   SimulationTime.cpp \
+   Summer.cpp \
+   Table.cpp \
++  TimeDerivative.cpp \
+   UnaryFunction.cpp \
+   UnitConversion.cpp
+ 
+ #   DiscBrake.cpp \
+-#   TimeDerivative.cpp \
+ #   TransferFunction.cpp \
+ #
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.cpp	2008-11-30 09:40:03 UTC (rev 820)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.cpp	2008-11-30 10:39:38 UTC (rev 821)
+@@ -5,6 +5,7 @@
+ #include &quot;TimeDerivative.h&quot;
+ 
+ #include &quot;Assert.h&quot;
++#include &quot;Task.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -12,13 +13,16 @@
+   END_OPENFDM_OBJECT_DEF
+ 
+ TimeDerivative::TimeDerivative(const std::string&amp; name) :
+-  Model(name)
++  Model(name),
++  mInputPort(newMatrixInputPort(&quot;input&quot;, false)),
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;))
+ {
+-  setDirectFeedThrough(true);
+-  setNumInputPorts(1);
+-
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;TimeDerivative::getDerivativeOutput);
++  mDerivativeStateInfo = new MatrixStateInfo;
++  addDiscreteStateInfo(mDerivativeStateInfo);
++  mOldValueStateInfo = new MatrixStateInfo;
++  addDiscreteStateInfo(mOldValueStateInfo);
++  mOldTStateInfo = new MatrixStateInfo;
++  addDiscreteStateInfo(mOldTStateInfo);
+ }
+ 
+ TimeDerivative::~TimeDerivative(void)
+@@ -26,57 +30,82 @@
+ }
+ 
+ bool
+-TimeDerivative::init(void)
++TimeDerivative::alloc(ModelContext&amp; leafContext) const
+ {
+-  mInputPort = getInputPort(0)-&gt;toMatrixPortHandle();
+-  if (!mInputPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of TimeDerivative model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++  Size sz = size(leafContext.getPortValueList()[mInputPort]);
++  Log(Initialization, Debug)
++    &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
++    &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
++  return true;
++}
+ 
+-  mDerivativeOutput.resize(mInputPort.getMatrixValue());
+-
+-  // Set a mark for the first step.
+-  mDt = 0.0;
+-
+-  return Model::init();
++void
++TimeDerivative::init(const Task&amp; task, DiscreteStateValueVector&amp; discreteState,
++                     ContinousStateValueVector&amp;,
++                     const PortValueList&amp; portValues) const
++{
++  Size sz = size(portValues[mInputPort]);
++  discreteState[*mDerivativeStateInfo].resize(sz(0), sz(1));
++  discreteState[*mDerivativeStateInfo].clear();
++  discreteState[*mOldValueStateInfo].resize(sz(0), sz(1));
++  discreteState[*mOldValueStateInfo] = portValues[mInputPort];
++  discreteState[*mOldTStateInfo].resize(1, 1);
++  discreteState[*mOldTStateInfo](0, 0) = task.getTime();
+ }
+ 
+ void
+-TimeDerivative::output(const TaskInfo&amp;)
++TimeDerivative::output(const Task&amp; task,
++                       const DiscreteStateValueVector&amp; discreteState,
++                       const ContinousStateValueVector&amp;,
++                       PortValueList&amp; portValues) const
+ {
+-  // If we are here at the first time, dt is set to zero.
+-  // So, computing a derivative is not possible in the first step.
+-  // Prepare zero output in this case.
+-  if (mDt != 0.0) {
+-    OpenFDMAssert(size(mInputPort.getMatrixValue()) == size(mPastInput));
+-    if (size(mInputPort.getMatrixValue()) == size(mPastInput)) {
+-      mDerivativeOutput = mInputPort.getMatrixValue() - mPastInput;
+-      mDerivativeOutput *= 1/mDt;
++  real_type tOld = discreteState[*mOldTStateInfo](0, 0);
++  real_type dt = task.getTime() - tOld;
++  real_type dtMin = sqrt(Limits&lt;real_type&gt;::epsilon());
++  if (dt &lt; dtMin) {
++    // For times very near at tOld, just use the old derivative
++    portValues[mOutputPort] = discreteState[*mDerivativeStateInfo];
++  } else {
++    // The numerical derivative
++    Matrix deriv = portValues[mInputPort] - discreteState[*mOldValueStateInfo];
++    deriv *= 1/dt;
++
++    if (dt &lt; 2*dtMin) {
++      // For times where numerical derivative starts having a value beyond
++      // roundoff interpolate between the old and the numerical derivative
++      portValues[mOutputPort]
++        = interpolate(dt, dtMin, discreteState[*mDerivativeStateInfo],
++                      2*dtMin, deriv);
++    } else {
++      // For times where numerical derivative provides valid values use the
++      // numerical derivative
++      portValues[mOutputPort] = deriv;
+     }
+-  } else {
+-    mDerivativeOutput.resize(mInputPort.getMatrixValue());
+-    mDerivativeOutput.clear();
+   }
+ }
+ 
+ void
+-TimeDerivative::update(const TaskInfo&amp; taskInfo)
++TimeDerivative::update(const DiscreteTask&amp; discreteTask,
++                       DiscreteStateValueVector&amp; discreteState,
++                       const ContinousStateValueVector&amp;,
++                       const PortValueList&amp; portValues) const
+ {
+-  // FIXME
+-  real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
+-  // Updating is just storing required information for the next output step.
+-  mPastInput = mInputPort.getMatrixValue();
+-  mDt = dt;
+-}
++  // Just compute the derivative.
++  real_type tOld = discreteState[*mOldTStateInfo](0, 0);
++  real_type dt = discreteTask.getTime() - tOld;
++  if (Limits&lt;real_type&gt;::safe_min() &lt; fabs(dt)) {
++    discreteState[*mDerivativeStateInfo]
++      = (1/dt)*(portValues[mInputPort] - discreteState[*mOldValueStateInfo]);
++  }
+ 
+-const Matrix&amp;
+-TimeDerivative::getDerivativeOutput(void) const
+-{
+-  return mDerivativeOutput;
++  // Store the old value and this current stepsize
++  discreteState[*mOldValueStateInfo] = portValues[mInputPort];
++  discreteState[*mOldTStateInfo](0, 0) = discreteTask.getTime();
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.h	2008-11-30 09:40:03 UTC (rev 820)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TimeDerivative.h	2008-11-30 10:39:38 UTC (rev 821)
+@@ -7,6 +7,7 @@
+ 
+ #include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;TemplateDiscreteStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -16,20 +17,24 @@
+   TimeDerivative(const std::string&amp; name);
+   virtual ~TimeDerivative(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-  virtual void update(const TaskInfo&amp; taskInfo);
++  virtual bool alloc(ModelContext&amp;) const;
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp; discreteState,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const;
++  virtual void output(const Task&amp;,const DiscreteStateValueVector&amp; discreteState,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++  virtual void update(const DiscreteTask&amp;, DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      const PortValueList&amp;) const;
+ 
+-  const Matrix&amp; getDerivativeOutput(void) const;
+-
+ private:
+-  /// Holds the current output.
+-  Matrix mDerivativeOutput;
+-  Matrix mPastInput;
+-  double mDt;
++  typedef TemplateDiscreteStateInfo&lt;Matrix&gt; MatrixStateInfo;
+ 
+-  /// The input port handle
+-  MatrixPortHandle mInputPort;
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mOutputPort;
++  SharedPtr&lt;MatrixStateInfo&gt; mDerivativeStateInfo;
++  SharedPtr&lt;MatrixStateInfo&gt; mOldValueStateInfo;
++  SharedPtr&lt;MatrixStateInfo&gt; mOldTStateInfo;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000788.html">[OpenFDM-svn] r820 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000790.html">[OpenFDM-svn] r822 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#789">[ date ]</a>
+              <a href="thread.html#789">[ thread ]</a>
+              <a href="subject.html#789">[ subject ]</a>
+              <a href="author.html#789">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

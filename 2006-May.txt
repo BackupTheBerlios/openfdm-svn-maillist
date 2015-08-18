@@ -1,0 +1,2763 @@
+From frohlich at berlios.de  Sat May 27 13:28:20 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sat, 27 May 2006 13:28:20 +0200
+Subject: [OpenFDM-svn] r275 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200605271128.k4RBSKa7022267@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-27 13:28:18 +0200 (Sat, 27 May 2006)
+New Revision: 275
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+Log:
+Only return a shared pointer in lock, if the reference count is positive
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-04-17 08:57:13 UTC (rev 274)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-05-27 11:28:18 UTC (rev 275)
+@@ -16,7 +16,7 @@
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+-  {}
++  { }
+   WeakPtr(T* ptr)
+   { assign(ptr); }
+   WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
+@@ -24,6 +24,9 @@
+   template<typename U>
+   WeakPtr(const SharedPtr<U>& p)
+   { assign(p.ptr()); }
++  template<typename U>
++  WeakPtr(const WeakPtr<U>& p)
++  { assign(p.ptr()); }
+   ~WeakPtr(void)
+   { }
+   
+@@ -31,13 +34,21 @@
+   WeakPtr& operator=(const SharedPtr<U>& p)
+   { assign(p.ptr()); return *this; }
+   template<typename U>
+-  WeakPtr& operator=(U* p)
++  WeakPtr& operator=(const WeakPtr<U>& p)
++  { assign(p.ptr()); return *this; }
++  WeakPtr& operator=(T* p)
+   { assign(p); return *this; }
+   WeakPtr& operator=(const WeakPtr& p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
+   SharedPtr<T> lock(void) const
+-  { return SharedPtr<T>(ptr()); }
++  {
++    T* p = ptr();
++    if (Referenced::count(p))
++      return SharedPtr<T>(p);
++    else
++      return SharedPtr<T>();
++  }
+ 
+   T* operator->(void) const
+   { return ptr(); }
+@@ -50,15 +61,13 @@
+ 
+ private:
+   T* ptr(void) const
+-  { return static_cast<T*>(objectPtr()); }
+-
+-  WeakReferenced* objectPtr(void) const
+   {
+     if (mWeakDataPtr)
+-      return mWeakDataPtr->object;
++      return static_cast<T*>(mWeakDataPtr->object);
+     else
+       return 0;
+   }
++
+   void assign(T* p)
+   {
+     if (p)
+
+
+
+From frohlich at berlios.de  Sat May 27 14:42:16 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 27 May 2006 14:42:16 +0200
+Subject: [OpenFDM-svn] r277 - trunk/flightgear
+Message-ID: <200605271242.k4RCgG3j013082@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-27 14:42:03 +0200 (Sat, 27 May 2006)
+New Revision: 277
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Other part of the port connectoin rework
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-05-27 12:41:29 UTC (rev 276)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-05-27 12:42:03 UTC (rev 277)
+@@ -10,7 +10,6 @@
+ #include <Main/globals.hxx>
+ #include <Main/fg_props.hxx>
+ 
+-#include <JSBSim/LegacyJSBSimReader.h>
+ #include <JSBSim/JSBSimReader.h>
+ #include <OpenFDM/Units.h>
+ #include <OpenFDM/Vehicle.h>
+@@ -300,33 +299,24 @@
+   reader.addAircraftPath(aircraftDir);
+   reader.addEnginePath(engineDir);
+   reader.loadAircraft(aircraftFile);
+-  if (!reader.getErrorState()) {
+-    mData->vehicle = reader.getVehicle();
+-  } else {
+-    // Try to read JSBSim legacy files.
+-    LegacyJSBSimReader legReader;
+-    legReader.addAircraftPath(aircraftDir);
+-    legReader.addEnginePath(engineDir);
+-    legReader.loadAircraft(aircraftFile);
+-    if (legReader.getErrorState()) {
+-      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
+-
+-      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from JSBSim reader:");
+-      ReaderWriter::StringList errors = reader.getErrors();
+-      ReaderWriter::StringList::const_iterator it;
+-      for (it = errors.begin(); it != errors.end(); ++it) {
+-        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+-      }
+-
+-      SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from legacy JSBSim reader:");
+-      errors = legReader.getErrors();
+-      for (it = errors.begin(); it != errors.end(); ++it) {
+-        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+-      }
+-      return;
++  if (reader.getErrorState()) {
++    SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() cannot read aircraft!");
++    
++    SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from JSBSim reader:");
++    ReaderWriter::StringList errors = reader.getErrors();
++    ReaderWriter::StringList::const_iterator it;
++    for (it = errors.begin(); it != errors.end(); ++it) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+     }
+-    mData->vehicle = legReader.getVehicle();
++    
++    SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from legacy JSBSim reader:");
++    errors = reader.getErrors();
++    for (it = errors.begin(); it != errors.end(); ++it) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++    }
++    return;
+   }
++  mData->vehicle = reader.getVehicle();
+ 
+   Vehicle* vehicle = mData->vehicle;
+   mData->ground = new FGGround(this);
+@@ -338,7 +328,10 @@
+   common_init();
+ 
+   // Hmm, twice ??
+-  vehicle->init();
++  if (!vehicle->init()) {
++    mData->vehicle = 0;
++    return;
++  }
+ 
+   MobileRootJoint* mobileRootJoint = vehicle->getMobileRootJoint();
+   // Check the position
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2006-05-27 12:41:29 UTC (rev 276)
++++ trunk/flightgear/FGPropertyAdapter.h	2006-05-27 12:42:03 UTC (rev 277)
+@@ -224,7 +224,7 @@
+ class FGRealPortReflector :
+     public SGRawValue<double> {
+ public:
+-  FGRealPortReflector(Port* port, unsigned index = 1u) :
++  FGRealPortReflector(NumericPortProvider* port, unsigned index = 1u) :
+     mPort(port), mIndex(index)
+   {}
+ 
+@@ -237,15 +237,15 @@
+     if (!mPort)
+       return 0;
+     if (mIndex == 1) {
+-      const Port* port = mPort;
+-      RealPortHandle realPortHandle = const_cast<Port*>(port)->toRealPortHandle();
++      NumericPortProvider* port = mPort;
++      RealPortHandle realPortHandle = port->getPortInterface()->toRealPortInterface();
+       if (realPortHandle.isConnected())
+         return realPortHandle.getRealValue();
+       else
+         return 0;
+     } else {
+-      const Port* port = mPort;
+-      MatrixPortHandle matrixPortHandle = const_cast<Port*>(port)->toMatrixPortHandle();
++      NumericPortProvider* port = mPort;
++      MatrixPortHandle matrixPortHandle = port->getPortInterface()->toMatrixPortInterface();
+       if (matrixPortHandle.isConnected()) {
+         Matrix m = matrixPortHandle.getMatrixValue();
+         unsigned r = mIndex % rows(m) + 1;
+@@ -265,7 +265,7 @@
+ 
+ private:
+   unsigned mIndex;
+-  WeakPtr<Port> mPort;
++  WeakPtr<NumericPortProvider> mPort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+
+From frohlich at berlios.de  Sat May 27 20:32:29 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sat, 27 May 2006 20:32:29 +0200
+Subject: [OpenFDM-svn] r278 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200605271832.k4RIWTIG021573@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-27 20:32:21 +0200 (Sat, 27 May 2006)
+New Revision: 278
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+Log:
+Make RigidBodies also Models
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-27 18:32:21 UTC (rev 278)
+@@ -57,8 +57,6 @@
+   Log(ArtBody, Debug) << "Preparing Body \""
+                       << outboardBody->getName() << "\" through joint \""
+                       << getName() << "\"" << endl;
+-  
+-  outboardBody->computeArtValues();
+ }
+ 
+ bool
+@@ -71,10 +69,13 @@
+   if (!outboardBody)
+     return false;
+   
++  if (model == outboardBody)
++    return true;
++  
+   Interact* interact = model->toInteract();
+   if (!interact)
+     return false;
+-  
++
+   return interact != this && interact->isChildOf(outboardBody);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-27 18:32:21 UTC (rev 278)
+@@ -83,7 +83,6 @@
+   Log(ArtBody, Debug) << "Computing mobile root accelerations for joint \""
+                       << getName() << "\"" << endl;
+   
+-  outboardBody->computeArtValues();
+   interactWith(getInboardBody());
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-27 18:32:21 UTC (rev 278)
+@@ -166,7 +166,7 @@
+   if (!mDirectFeedThrough)
+     return false;
+ 
+-  // FIXME HACK, outputs of interacts only deoend on its state ...
++  // FIXME HACK, outputs of interacts only depend on its state ...
+   // FIXME is this always true??
+   Interact* interact = model->toInteract();
+   if (interact)
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-05-27 18:32:21 UTC (rev 278)
+@@ -61,6 +61,7 @@
+   }
+   mRigidBodies.push_back(rigidBody);
+   rigidBody->setParentMultiBodySystem(this);
++  addModel(rigidBody);
+ }
+ 
+ void
+@@ -75,6 +76,7 @@
+     else
+       ++it;
+   }
++  removeModel(rigidBody);
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2006-05-27 18:32:21 UTC (rev 278)
+@@ -19,7 +19,7 @@
+ namespace OpenFDM {
+ 
+ RigidBody::RigidBody(const std::string& name) :
+-  Object(name)
++  Model(name)
+ {
+ }
+ 
+@@ -28,7 +28,7 @@
+ }
+ 
+ void
+-RigidBody::computeArtValues(void)
++RigidBody::output(const TaskInfo& taskInfo)
+ {
+   Log(ArtBody, Debug) << "Entry of computeArtValues of \"" << getName()
+                       << "\"" << endl;
+@@ -47,6 +47,16 @@
+                        << "\nInertia:\n" << mArtInertia << endl;
+ }
+ 
++bool
++RigidBody::dependsDirectOn(Model* model)
++{
++  InteractList::const_iterator i;
++  for (i = mInteracts.begin(); i != mInteracts.end(); ++i)
++    if ((*i) == model)
++      return true;
++  return Model::dependsDirectOn(model);
++}
++
+ void
+ RigidBody::setParentMultiBodySystem(MultiBodySystem* multiBodySystem)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-05-27 12:42:03 UTC (rev 277)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-05-27 18:32:21 UTC (rev 278)
+@@ -8,7 +8,7 @@
+ #include <string>
+ #include <vector>
+ 
+-#include "Object.h"
++#include "Model.h"
+ #include "Vector.h"
+ #include "Inertia.h"
+ #include "Frame.h"
+@@ -20,15 +20,13 @@
+ 
+ // Rename to Body???
+ class RigidBody :
+-    public Object {
++    public Model {
+ public:
+   /// Constructor
+   RigidBody(const std::string& name);
+   /// Destructor
+   virtual ~RigidBody(void);
+ 
+-
+-// protected:
+   /** Compute articulated values outboard including this body.
+       That function is part of the articulated body algorithm.
+       It is used to compute the articulated force and articulated inertia
+@@ -40,8 +38,12 @@
+       @see const SpatialInertia& getArtInertia(void) const
+       @see const Vector6& getArtForce(void) const
+    */
+-  void computeArtValues(void);
++  virtual void output(const TaskInfo& taskInfo);
+ 
++  /// Returns true if the Model this depends directly on @ref model.
++  virtual bool dependsDirectOn(Model* model);
++
++// protected:
+   /** Get the outboard articulated inertia.
+       Returns a reference to the outboard articulated inertia.
+       The returned inertia matrix is computed prevously by a call to
+
+
+
+From frohlich at berlios.de  Sat May 27 20:35:28 2006
+From: frohlich at berlios.de (frohlich at berlios.de)
+Date: Sat, 27 May 2006 20:35:28 +0200
+Subject: [OpenFDM-svn] r279 - trunk/flightgear
+Message-ID: <200605271835.k4RIZStZ022784@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-27 20:35:03 +0200 (Sat, 27 May 2006)
+New Revision: 279
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Remove obsolete debug message.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-05-27 18:32:21 UTC (rev 278)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-05-27 18:35:03 UTC (rev 279)
+@@ -309,11 +309,6 @@
+       SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+     }
+     
+-    SG_LOG(SG_FLIGHT, SG_ALERT, "FGOpenFDM::init() Error messages from legacy JSBSim reader:");
+-    errors = reader.getErrors();
+-    for (it = errors.begin(); it != errors.end(); ++it) {
+-      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
+-    }
+     return;
+   }
+   mData->vehicle = reader.getVehicle();
+
+
+
+From frohlich at berlios.de  Sun May 28 11:43:11 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 28 May 2006 11:43:11 +0200
+Subject: [OpenFDM-svn] r280 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200605280943.k4S9hB0c012251@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-28 11:43:10 +0200 (Sun, 28 May 2006)
+New Revision: 280
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Remove unused cast methods
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-28 09:43:10 UTC (rev 280)
+@@ -35,18 +35,6 @@
+   visitor.apply(*this);
+ }
+ 
+-const Joint*
+-Joint::toJoint(void) const
+-{
+-  return this;
+-}
+-
+-Joint*
+-Joint::toJoint(void)
+-{
+-  return this;
+-}
+-
+ void
+ Joint::output(const TaskInfo& taskInfo)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-28 09:43:10 UTC (rev 280)
+@@ -34,9 +34,6 @@
+   /// Double dispatch helper for the multibody system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+-  virtual const Joint* toJoint(void) const;
+-  virtual Joint* toJoint(void);
+-
+   virtual void output(const TaskInfo& taskInfo);
+ 
+   virtual bool dependsDirectOn(Model* model);
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 09:43:10 UTC (rev 280)
+@@ -37,18 +37,6 @@
+   visitor.apply(*this);
+ }
+ 
+-const MobileRootJoint*
+-MobileRootJoint::toMobileRootJoint(void) const
+-{
+-  return this;
+-}
+-
+-MobileRootJoint*
+-MobileRootJoint::toMobileRootJoint(void)
+-{
+-  return this;
+-}
+-
+ bool
+ MobileRootJoint::init(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 09:43:10 UTC (rev 280)
+@@ -33,9 +33,6 @@
+   /// Double dispatch helper for the multibody system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+-  virtual const MobileRootJoint* toMobileRootJoint(void) const;
+-  virtual MobileRootJoint* toMobileRootJoint(void);
+-
+   virtual bool init(void);
+   virtual void output(const TaskInfo& taskInfo);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 09:43:10 UTC (rev 280)
+@@ -91,30 +91,6 @@
+   return 0;
+ }
+ 
+-const Joint*
+-Model::toJoint(void) const
+-{
+-  return 0;
+-}
+-
+-Joint*
+-Model::toJoint(void)
+-{
+-  return 0;
+-}
+-
+-const MobileRootJoint*
+-Model::toMobileRootJoint(void) const
+-{
+-  return 0;
+-}
+-
+-MobileRootJoint*
+-Model::toMobileRootJoint(void)
+-{
+-  return 0;
+-}
+-
+ bool
+ Model::init(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-27 18:35:03 UTC (rev 279)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 09:43:10 UTC (rev 280)
+@@ -77,12 +77,6 @@
+   virtual const Interact* toInteract(void) const;
+   virtual Interact* toInteract(void);
+ 
+-  virtual const Joint* toJoint(void) const;
+-  virtual Joint* toJoint(void);
+-
+-  virtual const MobileRootJoint* toMobileRootJoint(void) const;
+-  virtual MobileRootJoint* toMobileRootJoint(void);
+-
+   /// Called on each system initialization.
+   virtual bool init(void);
+   /// Called when the outputs need to be prepared for the next step.
+
+
+
+From frohlich at berlios.de  Sun May 28 13:24:38 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 28 May 2006 13:24:38 +0200
+Subject: [OpenFDM-svn] r281 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200605281124.k4SBOcUU002961@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-28 13:24:35 +0200 (Sun, 28 May 2006)
+New Revision: 281
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+Log:
+Move joint computations into the output routine
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-28 11:24:35 UTC (rev 281)
+@@ -45,6 +45,18 @@
+   Log(ArtBody, Debug) << "Preparing Body \""
+                       << outboardBody->getName() << "\" through joint \""
+                       << getName() << "\"" << endl;
++
++  // We need the articulated inertia and force from the outboard body.
++  // Apply the joint degrees of freedom to that.
++  // If there was an error, (something was singular ???)
++  // just ignore that part. FIXME, ist this ok????
++  jointArticulation(mInboardInertia, mInboardForce,
++                    outboardBody->getArtInertia(),
++                    outboardBody->getArtForce());
++
++  Log(ArtBody, Debug3) << "Outboard Articulated values past joint "
++                       << "projection: Force:\n" << trans(mInboardForce)
++                       << "\nInertia\n" << mInboardInertia << endl;
+ }
+ 
+ bool
+@@ -71,6 +83,8 @@
+ Joint::interactWith(RigidBody* rigidBody)
+ {
+   // HMmMm
++  if (!rigidBody)
++    return;
+   if (rigidBody != getInboardBody())
+     return;
+   
+@@ -78,30 +92,10 @@
+   if (!outboardBody)
+     return;
+   
+-  Log(ArtBody, Debug) << "Contributing articulation from \""
+-                      << outboardBody->getName() << "\" through joint \""
+-                      << getName() << "\"" << endl;
+-  
+-  // We need the articulated inertia and force from the outboard body.
+-  SpatialInertia I;
+-  Vector6 F;
+-  
+-  // Apply the joint degrees of freedom to that.
+-  // If there was an error, (something was singular ???)
+-  // just ignore that part. FIXME, ist this ok????
+-  jointArticulation(I, F, outboardBody->getArtInertia(),
+-                    outboardBody->getArtForce());
+-  
+-  Log(ArtBody, Debug3) << "Outboard Articulated values past joint "
+-                       << "projection: Force:\n" << trans(F)
+-                       << "\nInertia\n" << I << endl;
+-  
+   // Contribute the transformed values to the parent.
+-  if (!rigidBody)
+-    return;
+   Frame* frame = outboardBody->getFrame();
+-  rigidBody->contributeInertia(frame->inertiaToParent(I));
+-  rigidBody->contributeForce(frame->forceToParent(F));
++  rigidBody->contributeInertia(frame->inertiaToParent(mInboardInertia));
++  rigidBody->contributeForce(frame->forceToParent(mInboardForce));
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-28 11:24:35 UTC (rev 281)
+@@ -49,7 +49,9 @@
+   virtual void jointArticulation(SpatialInertia& artI, Vector6& artF,
+                                  const SpatialInertia& outI,
+                                  const Vector6& outF) = 0;
+-
++private:
++  SpatialInertia mInboardInertia;
++  Vector6 mInboardForce;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 11:24:35 UTC (rev 281)
+@@ -62,19 +62,6 @@
+ }
+ 
+ void
+-MobileRootJoint::output(const TaskInfo& taskInfo)
+-{
+-  RigidBody* outboardBody = getOutboardBody();
+-  if (!outboardBody)
+-    return;
+-  
+-  Log(ArtBody, Debug) << "Computing mobile root accelerations for joint \""
+-                      << getName() << "\"" << endl;
+-  
+-  interactWith(getInboardBody());
+-}
+-
+-void
+ MobileRootJoint::recheckTopology(void)
+ {
+   // Hmm, works for the first cut, but rethink what happens with strange
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 11:24:35 UTC (rev 281)
+@@ -34,7 +34,6 @@
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+   virtual bool init(void);
+-  virtual void output(const TaskInfo& taskInfo);
+ 
+   virtual void recheckTopology(void);
+ 
+
+
+
+From frohlich at berlios.de  Sun May 28 15:14:05 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 28 May 2006 15:14:05 +0200
+Subject: [OpenFDM-svn] r282 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200605281314.k4SDE5SC003410@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-28 15:14:01 +0200 (Sun, 28 May 2006)
+New Revision: 282
+
+Removed:
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+   trunk/OpenFDM/src/OpenFDM/Vehicle.h
+   trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h
+Log:
+No longer require a special group for multibody systems.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-05-28 13:14:01 UTC (rev 282)
+@@ -271,7 +271,9 @@
+   // Allocate a new vehicle
+   mVehicle = new Vehicle;
+   mAeroForce = new AeroForce("Aerodynamic force");
++  mVehicle->getMultiBodySystem()->addModel(mAeroForce);
+   mVehicle->getTopBody()->addInteract(mAeroForce);
++
+   // Default discrete stepsize of JSBSim
+   mVehicle->getModelGroup()->addSampleTime(SampleTime(1.0/120));
+ 
+@@ -420,11 +422,11 @@
+   epFrame->setRelVelDot(Vector6::zeros());
+   mVehicle->getTopBody()->getFrame()->addChildFrame(epFrame);
+   Sensor* accelSensor = new Sensor("Acceleration Sensor");
++  mVehicle->getMultiBodySystem()->addModel(accelSensor);
++  mVehicle->getTopBody()->addInteract(accelSensor);
+   accelSensor->addSampleTime(SampleTime(1.0/120));
+-  mVehicle->getTopBody()->addInteract(accelSensor);
+   PortProvider* port = accelSensor->getOutputPort("nlfz");
+   registerJSBExpression("accelerations/n-pilot-z-norm", port);
+-//   epFrame->addInteract(accelSensor);
+   addOutputModel(port, "Normalized load value", "accelerations/nlf");
+   port = accelSensor->getOutputPort("az");
+   registerJSBExpression("accelerations/accel-z-norm", port);
+@@ -497,7 +499,9 @@
+     spi += inertiaFrom(structToBody(it->first), inertia);
+     ++it;
+   }
+-  mVehicle->getTopBody()->addInteract(new Mass("Emptyweight Mass", spi));
++  Mass* massModel = new Mass("Emptyweight Mass", spi);
++  mVehicle->getMultiBodySystem()->addModel(massModel);
++  mVehicle->getTopBody()->addInteract(massModel);
+ 
+   return true;
+ }
+@@ -508,14 +512,17 @@
+                           const Vector3& parentDesignPos)
+ {
+   RigidBody* wheel = new RigidBody(name + " Wheel");
++  mVehicle->getMultiBodySystem()->addModel(wheel);
+   InertiaMatrix wheelInertia = inertiaData(wheelElem->getElement("inertia"),
+                                            InertiaMatrix(10, 0, 0, 30, 0, 10));
+   real_type wheelMass = realData(wheelElem->getElement("mass"), 30);
+-  wheel->addInteract(new Mass(name + " Wheel Inertia",
+-                              SpatialInertia(wheelInertia, wheelMass)));
+-  mVehicle->getMultiBodySystem()->addRigidBody(wheel);
++  Mass* mass = new Mass(name + " Wheel Inertia",
++                        SpatialInertia(wheelInertia, wheelMass));
++  mVehicle->getMultiBodySystem()->addModel(mass);
++  wheel->addInteract(mass);
+   
+   RevoluteJoint* wj = new RevoluteJoint(name + " Wheel Joint");
++  mVehicle->getMultiBodySystem()->addModel(wj);
+   parent->addInteract(wj);
+   wheel->setInboardJoint(wj);
+   wj->setJointAxis(Vector3(0, 1, 0));
+@@ -559,6 +566,8 @@
+   
+   real_type wheelDiam = realData(wheelElem->getElement("wheelDiameter"));
+   WheelContact* wc = new WheelContact(name + " Wheel Contact");
++  mVehicle->getMultiBodySystem()->addModel(wc);
++  wheel->addInteract(wc);
+   wc->setWheelRadius(0.5*wheelDiam);
+   real_type tireSpring = realData(wheelElem->getElement("tireSpring"));
+   wc->setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
+@@ -566,7 +575,6 @@
+   wc->setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
+   real_type fc = realData(wheelElem->getElement("frictionCoef"), 0.9);
+   wc->setFrictionCoeficient(fc);
+-  wheel->addInteract(wc);
+   
+   PortProvider* port = wj->getOutputPort(0);
+   std::string nameBase = "Wheel " + numStr + " Position";
+@@ -594,6 +602,7 @@
+ 
+         // For jsbsim use simple gears
+         SimpleGear* sg = new SimpleGear(name);
++        mVehicle->getMultiBodySystem()->addModel(sg);
+         mVehicle->getTopBody()->addInteract(sg);
+         Vector3 loc
+           = locationData((*it)->getElement("location"), Vector3(0, 0, 0));
+@@ -677,6 +686,8 @@
+       } else if (type == "STRUCTURE" || type == "CONTACT") {
+         // Very simple contact force. Penalty method.
+         SimpleContact* sc = new SimpleContact((*it)->getAttribute("name"));
++        mVehicle->getMultiBodySystem()->addModel(sc);
++        mVehicle->getTopBody()->addInteract(sc);
+ 
+         Vector3 loc
+           = locationData((*it)->getElement("location"), Vector3(0, 0, 0));
+@@ -693,8 +704,6 @@
+         real_type fs = realData((*it)->getElement("static_friction"), 0);
+         sc->setFrictionCoeficient(fs);
+         
+-        mVehicle->getTopBody()->addInteract(sc);
+-
+       } else if (type == "NOSEGEAR") {
+         // Ok, a compressable gear like the F-18's main gear is.
+         // Some kind of hardcoding here ...
+@@ -713,12 +722,13 @@
+         if (steerable == "true" || steerable == "1") {
+           // A new part modelling the steering
+           RigidBody* steer = new RigidBody(name + " Steer");
+-          mVehicle->getMultiBodySystem()->addRigidBody(steer);
++          mVehicle->getMultiBodySystem()->addModel(steer);
+           
+           // connect that via a revolute joint to the toplevel body.
+           // Note the 0.05m below, most steering wheels have some kind of
+           // castering auto line up behavour. That is doe with this 0.05m.
+           RevoluteActuator* sj = new RevoluteActuator(name + " Steer Joint");
++          mVehicle->getMultiBodySystem()->addModel(sj);
+           strutParent->addInteract(sj);
+           steer->setInboardJoint(sj);
+           sj->setJointAxis(Vector3(0, 0, 1));
+@@ -759,6 +769,8 @@
+         const XMLElement* launchbarElem = (*it)->getElement("launchbar");
+         if (launchbarElem) {
+           Launchbar* launchbar = new Launchbar(name + " Launchbar");
++          addMultiBodyModel(launchbar);
++          strutParent->addInteract(launchbar);
+           real_type length = realData(launchbarElem->getElement("length"), 0.5);
+           launchbar->setLength(length);
+           real_type upAngle = realData(launchbarElem->getElement("upAngle"), 30);
+@@ -769,8 +781,6 @@
+           launchbar->setLaunchForce(force);
+           Vector3 loc = structToBody(locationData(launchbarElem->getElement("location")));
+           launchbar->setPosition(loc - parentPos);
+-          addMultiBodyModel(launchbar);
+-          strutParent->addInteract(launchbar);
+ 
+ 
+           if (!connectJSBExpression("/controls/gear/launchbar",
+@@ -791,11 +801,14 @@
+         
+         // Now the compressible part of the strut
+         RigidBody* arm = new RigidBody(name + " Strut");
+-        mVehicle->getMultiBodySystem()->addRigidBody(arm);
+-        arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(0, 0, 1), SpatialInertia(100))));
++        mVehicle->getMultiBodySystem()->addModel(arm);
++        Mass* mass = new Mass(name + " Strut Mass", inertiaFrom(Vector3(0, 0, 1), SpatialInertia(100)));
++        mVehicle->getMultiBodySystem()->addModel(mass);
++        arm->addInteract(mass);
+         
+         // This time it is a prismatic joint
+         PrismaticJoint* pj = new PrismaticJoint(name + " Compress Joint");
++        mVehicle->getMultiBodySystem()->addModel(pj);
+         strutParent->addInteract(pj);
+         arm->setInboardJoint(pj);
+         pj->setJointAxis(Vector3(0, 0, -1));
+@@ -833,11 +846,14 @@
+ 
+         // This is the movable part of the strut, doing the compression
+         RigidBody* arm = new RigidBody(name + " Arm");
+-        mVehicle->getMultiBodySystem()->addRigidBody(arm);
+-        arm->addInteract(new Mass(name + " Strut Mass", inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80))));
++        mVehicle->getMultiBodySystem()->addModel(arm);
++        Mass* mass = new Mass(name + " Strut Mass", inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80)));
++        mVehicle->getMultiBodySystem()->addModel(mass);
++        arm->addInteract(mass);
+         
+         // Connect that with a revolute joint to the main body
+         RevoluteJoint* rj = new RevoluteJoint(name + " Arm Joint");
++        mVehicle->getMultiBodySystem()->addModel(rj);
+         mVehicle->getTopBody()->addInteract(rj);
+         arm->setInboardJoint(rj);
+         Vector3 compressJointAxis = locationData((*it)->getElement("axis"),
+@@ -850,6 +866,9 @@
+         rj->setOrientation(Quaternion::unit());
+         
+         LineForce* lineForce = new LineForce(name + " Air Spring LineForce");
++        mVehicle->getMultiBodySystem()->addModel(lineForce);
++        mVehicle->getTopBody()->addInteract(lineForce);
++        arm->addInteract(lineForce);
+         /// FIXME that ordering in attachment is messy!
+         Vector3 asMnt0 = locationData((*it)->getElement("springMount0"),
+                                       compressJointPos -
+@@ -860,8 +879,6 @@
+         lineForce->setPosition0(structToBody(asMnt0));
+         lineForce->setPosition1(structToBody(asMnt1)
+                                 - structToBody(compressJointPos));
+-        mVehicle->getTopBody()->addInteract(lineForce);
+-        arm->addInteract(lineForce);
+         
+         // The damper element
+         const XMLElement* airSpringElem = (*it)->getElement("damper");
+@@ -894,6 +911,7 @@
+         std::string name = (*it)->getAttribute("name");
+ 
+         Tailhook* tailhook = new Tailhook(name + " Tailhook");
++        mVehicle->getMultiBodySystem()->addModel(tailhook);
+         real_type length = realData(tailhookElem->getElement("length"), 0.5);
+         tailhook->setLength(length);
+         real_type upAngle = realData(tailhookElem->getElement("upAngle"), 10);
+@@ -1148,6 +1166,7 @@
+   Connection::connect(fullForce->getOutputPort(0), prod->getInputPort(1));
+ 
+   ExternalForceModel* engineForce = new ExternalForceModel(namestr);
++  mVehicle->getMultiBodySystem()->addModel(engineForce);
+   mVehicle->getTopBody()->addInteract(engineForce);
+   engineForce->setPosition(pos);
+   engineForce->setOrientation(orientation);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-05-28 13:14:01 UTC (rev 282)
+@@ -85,7 +85,6 @@
+   Model.h \
+   ModelGroup.h \
+   ModelVisitor.h \
+-  MultiBodySystem.h \
+   Mutex.h \
+   Newton.h \
+   NumericPortAcceptor.h \
+@@ -190,7 +189,6 @@
+   MobileRootJoint.cpp \
+   Model.cpp \
+   ModelGroup.cpp \
+-  MultiBodySystem.cpp \
+   Newton.cpp \
+   Object.cpp \
+   ODESolver.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -25,7 +25,6 @@
+ namespace OpenFDM {
+ 
+ class ModelGroup;
+-class MultiBodySystem;
+ class Environment;
+ class GroupInput;
+ class GroupOutput;
+@@ -285,7 +284,6 @@
+ 
+   // FIXME
+   friend class ModelGroup;
+-  friend class MultiBodySystem;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -8,7 +8,6 @@
+ #include "Model.h"
+ #include "ModelGroup.h"
+ #include "RigidBody.h"
+-#include "MultiBodySystem.h"
+ #include "System.h"
+ 
+ namespace OpenFDM {
+@@ -21,8 +20,6 @@
+   { }
+   virtual void apply(ModelGroup& modelGroup)
+   { apply((Model&)modelGroup); }
+-  virtual void apply(MultiBodySystem& multiBodySystem)
+-  { apply((ModelGroup&)multiBodySystem); }
+   virtual void apply(System& system)
+   { apply((ModelGroup&)system); }
+   virtual void apply(Interact& interact)
+@@ -36,10 +33,6 @@
+   /// traverse downward
+   inline void traverse(ModelGroup& modelGroup)
+   { modelGroup.traverse(*this); }
+-  /// Call this in the apply(MultiBodySystem&) method if you want to
+-  /// traverse downward
+-  inline void traverse(MultiBodySystem& multiBodySystem)
+-  { multiBodySystem.traverse(*this); }
+   /// Call this in the apply(ModelGroup&) method if you want to
+   /// traverse upward
+   inline void ascend(Model& model)
+
+Deleted: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2006-05-28 13:14:01 UTC (rev 282)
+@@ -1,107 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#include "Assert.h"
+-#include "Object.h"
+-#include "Vector.h"
+-#include "Matrix.h"
+-#include "Quaternion.h"
+-#include "Inertia.h"
+-#include "Frame.h"
+-#include "RigidBody.h"
+-#include "ModelVisitor.h"
+-#include "Mass.h"
+-#include "Force.h"
+-#include "MultiBodySystem.h"
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(MultiBodySystem, ModelGroup)
+-  END_OPENFDM_OBJECT_DEF
+-
+-MultiBodySystem::MultiBodySystem(const std::string& name) :
+-  ModelGroup(name)
+-{
+-  // FIXME
+-  addSampleTime(SampleTime::Continous);
+-}
+-
+-MultiBodySystem::~MultiBodySystem(void)
+-{
+-}
+-
+-void
+-MultiBodySystem::accept(ModelVisitor& visitor)
+-{
+-  visitor.apply(*this);
+-}
+-
+-// bool
+-// MultiBodySystem::init(void)
+-// {
+-//   return true;
+-// }
+-
+-// void
+-// MultiBodySystem::output(const TaskInfo& taskInfo)
+-// {
+-// }
+-
+-void
+-MultiBodySystem::addRigidBody(RigidBody* rigidBody)
+-{
+-  if (!rigidBody)
+-    return;
+-  RigidBodyList::iterator it = mRigidBodies.begin();
+-  while (it != mRigidBodies.end()) {
+-    if ((*it) == rigidBody)
+-      return;
+-    ++it;
+-  }
+-  mRigidBodies.push_back(rigidBody);
+-  rigidBody->setParentMultiBodySystem(this);
+-  addModel(rigidBody);
+-}
+-
+-void
+-MultiBodySystem::removeRigidBody(RigidBody* rigidBody)
+-{
+-  RigidBodyList::iterator it = mRigidBodies.begin();
+-  while (it != mRigidBodies.end()) {
+-    if ((*it) == rigidBody) {
+-      it = mRigidBodies.erase(it);
+-      rigidBody->setParentMultiBodySystem(0);
+-    }
+-    else
+-      ++it;
+-  }
+-  removeModel(rigidBody);
+-}
+-
+-void
+-MultiBodySystem::addInteract(Interact* interact)
+-{
+-  if (!interact)
+-    return;
+-  /// Already in the list, might be already attached to an other rigid body
+-  if (this == interact->getParent())
+-    return;
+-  // FIXME incorporate that somehow into the depencencies ...
+-  if (dynamic_cast<MobileRootJoint*>(interact)) {
+-    mMobileRootJoint = dynamic_cast<MobileRootJoint*>(interact);
+-  }
+-  addModel(interact);
+-}
+-
+-void
+-MultiBodySystem::removeInteract(Interact* interact)
+-{
+-  if (!interact)
+-    return;
+-  if (this != interact->getParent())
+-    return;
+-  removeModel(interact);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -1,55 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_MultiBodySystem_H
+-#define OpenFDM_MultiBodySystem_H
+-
+-#include "Assert.h"
+-#include "Object.h"
+-#include "Vector.h"
+-#include "Matrix.h"
+-#include "Quaternion.h"
+-#include "Inertia.h"
+-#include "Frame.h"
+-#include "RigidBody.h"
+-#include "Joint.h"
+-#include "MobileRootJoint.h"
+-#include "RootFrame.h"
+-#include "ModelGroup.h"
+-
+-namespace OpenFDM {
+-
+-class MultiBodySystem : public ModelGroup {
+-  OPENFDM_OBJECT(MultiBodySystem, ModelGroup);
+-public:
+-  MultiBodySystem(const std::string& name);
+-  virtual ~MultiBodySystem(void);
+-
+-  /// Double dispatch helper for the multibody system visitor
+-  virtual void accept(ModelVisitor& visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-//   virtual void accept(ConstModelVisitor& visitor) const;
+-
+-//   virtual bool init(void);
+-//   virtual void output(const TaskInfo& taskInfo);
+-
+-  /// Add a RigidBody to that MultiBodySystem
+-  void addRigidBody(RigidBody* rigidBody);
+-  void removeRigidBody(RigidBody* rigidBody);
+-
+-  /// Add an Interact to that MultiBodySystem
+-  void addInteract(Interact* interact);
+-  void removeInteract(Interact* interact);
+-private:
+-  /// That is the root for now ...
+-  SharedPtr<MobileRootJoint> mMobileRootJoint;
+-
+-  /// A list of RigidBody objects in this MultiBodySystem
+-  typedef std::vector<SharedPtr<RigidBody> > RigidBodyList;
+-  RigidBodyList mRigidBodies;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2006-05-28 13:14:01 UTC (rev 282)
+@@ -13,7 +13,7 @@
+ #include "Force.h"
+ #include "Mass.h"
+ #include "Joint.h"
+-#include "MultiBodySystem.h"
++#include "ModelGroup.h"
+ #include "RigidBody.h"
+ 
+ namespace OpenFDM {
+@@ -57,48 +57,21 @@
+   return Model::dependsDirectOn(model);
+ }
+ 
+-void
+-RigidBody::setParentMultiBodySystem(MultiBodySystem* multiBodySystem)
+-{
+-  /// FIXME: rethink that ...
+-  mParentMultiBodySystem = multiBodySystem;
+-  if (!multiBodySystem)
+-    return;
+-  InteractList::iterator it;
+-  for (it = mInteracts.begin(); it != mInteracts.end(); ++it) {
+-    multiBodySystem->addInteract(*it);
+-  }
+-  if (mInboardJoint)
+-    multiBodySystem->addInteract(mInboardJoint);
+-}
+-
+-MultiBodySystem*
+-RigidBody::getParentMultiBodySystem(void)
+-{
+-  return mParentMultiBodySystem;
+-}
+-
+ bool
+ RigidBody::setInboardJoint(Joint* joint)
+ {
+-  mInboardJoint = joint;
+   if (!joint->attachTo(this, true))
+     return false;
+-  if (!mParentMultiBodySystem)
+-    return true;
+-  mParentMultiBodySystem->addInteract(joint);
++  mInboardJoint = joint;
+   return true;
+ }
+ 
+ bool
+ RigidBody::addInteract(Interact* interact)
+ {
+-  mInteracts.push_back(interact);
+   if (!interact->attachTo(this, false))
+     return false;
+-  if (!mParentMultiBodySystem)
+-    return true;
+-  mParentMultiBodySystem->addInteract(interact);
++  mInteracts.push_back(interact);
+   return true;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -16,7 +16,6 @@
+ namespace OpenFDM {
+ 
+ class Interact;
+-class MultiBodySystem;
+ 
+ // Rename to Body???
+ class RigidBody :
+@@ -95,9 +94,6 @@
+   const Frame* getFrame(void) const
+   { return mFrame; }
+ 
+-  void setParentMultiBodySystem(MultiBodySystem* multiBodySystem);
+-  MultiBodySystem* getParentMultiBodySystem(void);
+-
+   bool setInboardJoint(Joint* joint);
+   bool addInteract(Interact* interact);
+   bool removeInteract(Interact* interact);
+@@ -120,8 +116,6 @@
+   typedef std::vector<SharedPtr<Interact> > InteractList;
+   InteractList mInteracts;
+ 
+-  WeakPtr<MultiBodySystem> mParentMultiBodySystem;
+-
+   // HMM ... FIXME
+   friend class Interact;
+ };
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 13:14:01 UTC (rev 282)
+@@ -12,6 +12,8 @@
+ #include "Function.h"
+ #include "Newton.h"
+ #include "ModelVisitor.h"
++#include "Planet.h"
++#include "MobileRootJoint.h"
+ #include "System.h"
+ 
+ namespace OpenFDM {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2006-05-28 13:14:01 UTC (rev 282)
+@@ -24,25 +24,26 @@
+ 
+ Vehicle::Vehicle(void)
+ {
+-  mTopBody = new RigidBody("Topmost rigid body");
+-
+-  mMobileRootJoint = new MobileRootJoint("Mobile vehicle base");
+-  mTopBody->setInboardJoint(mMobileRootJoint);
+-
+   mSystem = new System("Top Vehicle System");
+ 
+-  mModelGroup = new ModelGroup("Flight Control System");
+-
+-  mMultiBodySystem = new MultiBodySystem("Multi Body System");
+-  mMultiBodySystem->addRigidBody(mTopBody);
+-
+ //   mSystem->setTimestepper(new ExplicitAdams);
+   mSystem->setTimestepper(new DoPri5);
+ //   mSystem->setTimestepper(new ImplicitEuler);
+ //   mSystem->setTimestepper(new MidpointRule);
+ 
++  mModelGroup = new ModelGroup("Flight Control System");
+   mSystem->addModel(mModelGroup);
++
++  mMultiBodySystem = new ModelGroup("Multi Body System");
+   mSystem->addModel(mMultiBodySystem);
++  mMultiBodySystem->addSampleTime(SampleTime::Continous);
++
++  mTopBody = new RigidBody("Topmost rigid body");
++  mMultiBodySystem->addModel(mTopBody);
++
++  mMobileRootJoint = new MobileRootJoint("Mobile vehicle base");
++  mMultiBodySystem->addModel(mMobileRootJoint);
++  mTopBody->setInboardJoint(mMobileRootJoint);
+ }
+ 
+ Vehicle::~Vehicle(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -13,7 +13,6 @@
+ #include "Frame.h"
+ #include "MobileRootJoint.h"
+ #include "RootFrame.h"
+-#include "MultiBodySystem.h"
+ #include "Planet.h"
+ #include "ODESolver.h"
+ #include "Environment.h"
+@@ -119,13 +118,13 @@
+   System* getSystem(void)
+   { return mSystem; }
+ 
+-  MultiBodySystem* getMultiBodySystem(void)
++  ModelGroup* getMultiBodySystem(void)
+   { return mMultiBodySystem; }
+ 
+ private:
+   SharedPtr<RigidBody> mTopBody;
+   SharedPtr<MobileRootJoint> mMobileRootJoint;
+-  SharedPtr<MultiBodySystem> mMultiBodySystem;
++  SharedPtr<ModelGroup> mMultiBodySystem;
+ 
+   SharedPtr<ModelGroup> mModelGroup;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h	2006-05-28 11:24:35 UTC (rev 281)
++++ trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h	2006-05-28 13:14:01 UTC (rev 282)
+@@ -13,7 +13,6 @@
+ #include "ModelVisitor.h"
+ #include "Model.h"
+ #include "ModelGroup.h"
+-#include "MultiBodySystem.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -46,16 +45,6 @@
+     --mIndent;
+     indent() << "</model>\n";
+   }
+-  virtual void apply(MultiBodySystem& multiBodySystem)
+-  {
+-    indent() << "<model type=\"MultiBodySystem\">\n";
+-    ++mIndent;
+-    dumpProperties(multiBodySystem);
+-    traverse(multiBodySystem);
+-    dumpConnections(multiBodySystem);
+-    --mIndent;
+-    indent() << "</model>\n";
+-  }
+   virtual void apply(System& system)
+   {
+     indent() << "<?xml version=\"1.0\"?>\n";
+
+
+
+From frohlich at berlios.de  Sun May 28 21:49:44 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 28 May 2006 21:49:44 +0200
+Subject: [OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200605281949.k4SJni2w000671@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-28 21:49:40 +0200 (Sun, 28 May 2006)
+New Revision: 283
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.h
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/Sensor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/System.h
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+   trunk/OpenFDM/src/OpenFDM/Tailhook.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.h
+Log:
+Change the way the environment is distributed across the System.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -78,10 +78,6 @@
+ bool
+ AeroForce::init(void)
+ {
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+-
+   if (getInputPort("roll"))
+     mBodyAxisTorque[0] = getInputPort("roll")->toRealPortHandle();
+   else
+@@ -119,7 +115,7 @@
+     Log(Model, Debug) << "AeroForce::output(): \"" << getName()
+                       << "\" computing ground plane below" << endl;
+     real_type t = taskInfo.getTime();
+-    mGroundVal = mEnvironment->getGround()->getGroundPlane(t, getRefPosition());
++    mGroundVal = getGround()->getGroundPlane(t, getRefPosition());
+   }
+   dirtyAll();
+ 
+@@ -204,12 +200,8 @@
+ AeroForce::getAirSpeed(void) const
+ {
+   if (mDirtyAirSpeed) {
+-    // FIXME temporary workaround
+-    if (!mEnvironment) {
+-      const_cast<AeroForce*>(this)->mEnvironment = getEnvironment();
+-    }
+     // Get the position in the earth centered coordinate frame.
+-    Vector3 windVel = mEnvironment->getWind()->getWindVel(getRefPosition());
++    Vector3 windVel = getWind()->getWindVel(getRefPosition());
+     windVel = mMountFrame->rotFromRef(windVel);
+     mAirSpeed = Vector6(Vector3::zeros(), windVel) + mMountFrame->getRefVel();
+     mDirtyAirSpeed = false;
+@@ -455,12 +447,8 @@
+ AeroForce::getAltitude(void) const
+ {
+   if (mDirtyAltitude) {
+-    // FIXME temporary workaround
+-    if (!mEnvironment) {
+-      const_cast<AeroForce*>(this)->mEnvironment = getEnvironment();
+-    }
+     // Get the altitude for the atmosphere.
+-    Geodetic geod = mEnvironment->getPlanet()->toGeod(getRefPosition());
++    Geodetic geod = getPlanet()->toGeod(getRefPosition());
+ 
+     // Get the Athmosphere information at this position and the given time.
+     mAltitude = geod.altitude;
+@@ -582,6 +570,12 @@
+ }
+ 
+ void
++AeroForce::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++}
++
++void
+ AeroForce::dirtyAll(void)
+ {
+   // Dirty everything.
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -83,6 +83,9 @@
+   const Vector3& getUnitDown(void) const;
+   const Plane& getLocalGroundPlane(void) const;
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void dirtyAll(void);
+   void computeAtmosphere(void) const;
+@@ -96,8 +99,12 @@
+   { return mEnvironment->getAtmosphere(); }
+   const Planet* getPlanet(void) const
+   { return mEnvironment->getPlanet(); }
++  const Ground* getGround(void) const
++  { return mEnvironment->getGround(); }
++  const Wind* getWind(void) const
++  { return mEnvironment->getWind(); }
+ 
+-  SharedPtr<Environment> mEnvironment;
++  SharedPtr<const Environment> mEnvironment;
+ 
+   real_type mWingSpan;
+   real_type mWingArea;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include "Vector.h"
+ #include "Frame.h"
+ #include "Force.h"
+-#include "Environment.h"
+ #include "Contact.h"
+ 
+ namespace OpenFDM {
+@@ -34,10 +33,6 @@
+ Contact::init(void)
+ {
+   setForce(Vector6::zeros());
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+-
+   return ExternalForce::init();
+ }
+ 
+@@ -110,13 +105,14 @@
+ }
+ 
+ void
+-Contact::getGround(real_type t)
++Contact::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Contact::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame->getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Contact.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -33,11 +33,14 @@
+   computeFrictionForce(real_type normForce, const Vector3& vel,
+                        const Vector3& groundNormal, real_type friction) const;
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+ 
+   GroundValues mGroundVal;
+-  SharedPtr<Environment> mEnvironment;
++  SharedPtr<const Environment> mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include "Vector.h"
+ #include "Frame.h"
+ #include "Force.h"
+-#include "Environment.h"
+ #include "Launchbar.h"
+ 
+ namespace OpenFDM {
+@@ -75,9 +74,6 @@
+     return false;
+   }
+ 
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -246,13 +242,14 @@
+ }
+ 
+ void
+-Launchbar::getGround(real_type t)
++Launchbar::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Launchbar::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame->getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -61,6 +61,9 @@
+   void setLaunchForce(const real_type& launchForce)
+   { mLaunchForce = launchForce; }
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+   bool computeCatFrame(real_type t, real_type& catLen);
+@@ -97,7 +100,7 @@
+   SharedPtr<FreeFrame> mCatFrame;
+ 
+   GroundValues mGroundVal;
+-  SharedPtr<Environment> mEnvironment;
++  SharedPtr<const Environment> mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -40,18 +40,12 @@
+ bool
+ MobileRootJoint::init(void)
+ {
+-  Environment* environment = getEnvironment();
+-  if (!environment) {
+-    Log(Model,Error) << "Can not get environment pointer! Most propably the"
+-      " Model is not put together correctly!" << endl;
+-    return false;
+-  }
+-  mGravity = environment->getGravity();
++  mGravity = mEnvironment->getGravity();
+   if (!mGravity) {
+     Log(Model,Error) << "Can not get gravity model!" << endl;
+     return false;
+   }
+-  Frame* rootFrame = environment->getRootFrame();
++  const Frame* rootFrame = mEnvironment->getRootFrame();
+   if (!rootFrame) {
+     Log(Model,Error) << "Can not get rootFrame model!" << endl;
+     return false;
+@@ -80,9 +74,8 @@
+     if (frame && !frame->isDirectParentFrameOf(mFrame))
+       frame->addChildFrame(mFrame);
+   } else {
+-    Environment* environment = getEnvironment();
+-    if (environment) {
+-      Frame* rootFrame = environment->getRootFrame();
++    if (mEnvironment) {
++      Frame* rootFrame = mEnvironment->getRootFrame();
+       if (rootFrame && !rootFrame->isDirectParentFrameOf(mFrame))
+         rootFrame->addChildFrame(mFrame);
+     }
+@@ -146,28 +139,25 @@
+ Geodetic
+ MobileRootJoint::getGeodPosition(void) const
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return Geodetic();
+-  return env->getPlanet()->toGeod(getRefPosition());
++  return mEnvironment->getPlanet()->toGeod(getRefPosition());
+ }
+ 
+ void
+ MobileRootJoint::setGeodPosition(const Geodetic& geod)
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return;
+-  setRefPosition(env->getPlanet()->toCart(geod));
++  setRefPosition(mEnvironment->getPlanet()->toCart(geod));
+ }
+ 
+ Quaternion
+ MobileRootJoint::getGeodOrientation(void) const
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return Quaternion::unit();
+-  Quaternion hlOr = env->getPlanet()->getGeodHLOrientation(getRefPosition());
++  Quaternion hlOr = mEnvironment->getPlanet()->getGeodHLOrientation(getRefPosition());
+   return inverse(hlOr)*getRefOrientation();
+ }
+ 
+@@ -231,4 +221,10 @@
+   stateDeriv.writeSubState(getRelVelDot());
+ }
+ 
++void
++MobileRootJoint::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -86,6 +86,9 @@
+    */
+   virtual void getStateDeriv(StateStream& state);
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   /// The commonly used gravity model from the environment class
+   /// It is initialized at the init() call
+@@ -93,6 +96,9 @@
+ 
+   /// The frame of the mobile root
+   SharedPtr<MobileRootJointFrame> mFrame;
++
++  /// The environment pointer
++  SharedPtr<Environment> mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -300,14 +300,6 @@
+   mOutputPorts[i] = portProvider;
+ }
+ 
+-Environment*
+-Model::getEnvironment(void) const
+-{
+-  if (mParentModel)
+-    return mParentModel->getEnvironment();
+-  return 0;
+-}
+-
+ void
+ Model::setParent(ModelGroup* model)
+ {
+@@ -348,6 +340,11 @@
+ }
+ 
+ void
++Model::setEnvironment(Environment* environment)
++{
++}
++
++void
+ Model::setEnabledUnconditional(bool enabled)
+ {
+   if (mEnabled) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -165,9 +165,6 @@
+   const ModelGroup* getParent(void) const;
+   ModelGroup* getParent(void);
+ 
+-  /// FIXME: have function returning the input ports a given output
+-  /// port depends on
+-
+ protected:
+   void setNumContinousStates(unsigned numContinousStates);
+   void setNumDiscreteStates(unsigned numDiscreteStates);
+@@ -247,7 +244,7 @@
+                      const Matrix& (M::*getter)(void) const)
+   { addOutputPort(name, new MatrixGetterPortInterface<M>(model, getter)); }
+ 
+-  virtual Environment* getEnvironment(void) const;
++  virtual void setEnvironment(Environment* environment);
+ 
+ // private:
+   // Sets the parent model.
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -152,6 +152,7 @@
+ 
+   // Update the number of states.
+   model->setParent(this);
++  model->setEnvironment(mEnvironment);
+ 
+   // add to the model list.
+   mModels.push_back(model);
+@@ -195,6 +196,7 @@
+ 
+   // remove the backreference to this group
+   // this also updates the number of states
++  model->setEnvironment(0);
+   model->setParent(0);
+ 
+   // remove from the model list.
+@@ -249,6 +251,17 @@
+   return mConnections[i];
+ }
+ 
++void
++ModelGroup::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++  ModelList::iterator i = mModels.begin();
++  while (i != mModels.end()) {
++    (*i)->setEnvironment(environment);
++    ++i;
++  }
++}
++
+ Model::Path
+ ModelGroup::getGroupPath() /* FIXME const*/
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -9,6 +9,7 @@
+ 
+ #include "Object.h"
+ #include "Model.h"
++#include "Environment.h"
+ #include "NumericPortProxy.h"
+ 
+ namespace OpenFDM {
+@@ -50,11 +51,17 @@
+   Connection* getConnection(unsigned i);
+   const Connection* getConnection(unsigned i) const;
+ 
++  virtual void setEnvironment(Environment* environment);
++
+   /// Returns the path of this ModelGroup. In contrast to getPath this returns
+   /// the path including the current ModelGroup.
+   Path getGroupPath() /* FIXME const*/;
+ 
++protected:
++  SharedPtr<Environment> mEnvironment;
++
+ private:
++
+   typedef std::vector<SharedPtr<Model> > ModelList;
+   typedef std::vector<SharedPtr<Connection> > ConnectionList;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Sensor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -11,6 +11,7 @@
+ #include "Gravity.h"
+ #include "Frame.h"
+ #include "RigidBody.h"
++#include "Environment.h"
+ #include "Interact.h"
+ 
+ namespace OpenFDM {
+@@ -54,7 +55,7 @@
+     Frame* frame = rigidBody->getFrame();
+     if (!frame)
+       return;
+-    const Gravity* grav = getEnvironment()->getGravity();
++    const Gravity* grav = mEnvironment->getGravity();
+     if (!grav)
+       return;
+     Vector3 accel = frame->getClassicAccel().getLinear();
+@@ -75,7 +76,12 @@
+   virtual void interactWith(RigidBody*)
+   {}
+ 
++protected:
++  virtual void setEnvironment(Environment* environment)
++  { mEnvironment = environment; }
++
+ private:
++  SharedPtr<Environment> mEnvironment;
+   real_type mNlfz;
+   real_type mNextNlfz;
+   real_type mAz;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -610,12 +610,6 @@
+   }
+ }
+ 
+-Environment*
+-System::getEnvironment(void) const
+-{
+-  return mEnvironment;
+-}
+-
+ void
+ System::evalFunction(real_type t, const Vector& v, Vector& out)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/System.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -64,8 +64,6 @@
+   /// Return a reference to the timestepping algorithm
+   ODESolver* getTimestepper(void) { return mTimestepper; }
+ 
+-  virtual Environment* getEnvironment(void) const;
+-
+   /// FIXME Hmm, may be different ...
+   /// May move into System ...
+   void evalFunction(real_type t, const Vector& v, Vector& out);
+@@ -74,6 +72,9 @@
+   /// differences
+   void evalJacobian(real_type t, const Vector& state, Matrix& jac);
+ 
++  Environment* getEnvironment(void) const
++  { return mEnvironment; }
++
+ private:
+   /// The timestepper used to get time discrete approximate solutions to the
+   /// continous system
+@@ -93,8 +94,6 @@
+   ModelList mDiscreteModelList;
+   ModelList mContinousModelList;
+ 
+-  SharedPtr<Environment> mEnvironment;
+-
+   /// The actual simulation time for the system
+   real_type mTime;
+ };
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include "Vector.h"
+ #include "Frame.h"
+ #include "Force.h"
+-#include "Environment.h"
+ #include "Tailhook.h"
+ 
+ namespace OpenFDM {
+@@ -61,9 +60,6 @@
+     return false;
+   }
+ 
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -186,13 +182,14 @@
+ }
+ 
+ void
+-Tailhook::getGround(real_type t)
++Tailhook::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Tailhook::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame->getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -46,6 +46,9 @@
+   void setDownAngle(const real_type& downAngle)
+   { mDownAngle = downAngle; }
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+   bool computeWireFrame(real_type t, real_type& width);
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include "Vector.h"
+ #include "Frame.h"
+ #include "Force.h"
+-#include "Environment.h"
+ #include "WheelContact.h"
+ 
+ namespace OpenFDM {
+@@ -41,9 +40,6 @@
+ bool
+ WheelContact::init(void)
+ {
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -160,13 +156,14 @@
+ }
+ 
+ void
+-WheelContact::getGround(real_type t)
++WheelContact::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++WheelContact::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame->posToRef(Vector3::zeros());
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -52,6 +52,10 @@
+   { mFrictionCoeficient = frictionCoeficient; }
+   const real_type& getFrictionCoeficient(void) const
+   { return mFrictionCoeficient; }
++
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+ 
+
+
+
+From frohlich at berlios.de  Tue May 30 21:42:53 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Tue, 30 May 2006 21:42:53 +0200
+Subject: [OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder
+Message-ID: <200605301942.k4UJgrox005643@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-05-30 21:42:49 +0200 (Tue, 30 May 2006)
+New Revision: 284
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Connection.cpp
+   trunk/OpenFDM/src/OpenFDM/Connection.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+   trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h
+   trunk/OpenFDM/src/OpenFDM/Port.h
+   trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+   trunk/OpenFDM/src/OpenFDM/PortAcceptor.h
+   trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+   trunk/OpenFDM/src/OpenFDM/PortProvider.h
+   trunk/OpenFDM/src/builder/Makefile.am
+   trunk/OpenFDM/src/builder/QOsgWidget.h
+Log:
+Cleanup connections a little bit
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Connection.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -22,40 +22,22 @@
+ }
+ 
+ Port::ConnectResult
+-Connection::connect(Port* port)
++Connection::setPortProvider(PortProvider* portProvider)
+ {
+-  if (!port)
+-    return Port::NoPort;
+-  return port->addConnection(this);
+-}
++  if (mPortProvider && portProvider)
++    return Port::AlreadyConnected;
+ 
+-bool
+-Connection::disconnect(Port* port)
+-{
+-  if (!port)
+-    return false;
+-  
+-  if (port == mPortProvider) {
+-    if (mPortAcceptor)
++  if (!portProvider) {
++    if (mPortAcceptor && mPortProvider) {
+       mPortAcceptor->disconnect(mPortProvider);
++    } else {
++      // FIXME
++//       modelGroup->removeConnection(this);
++    }
+     mPortProvider = 0;
+-    return true;
++    return Port::Success;
+   }
+-  if (port == mPortAcceptor) {
+-    if (mPortProvider)
+-      mPortAcceptor->disconnect(mPortProvider);
+-    mPortAcceptor = 0;
+-    return true;
+-  }
+-  return false;
+-}
+ 
+-Port::ConnectResult
+-Connection::setPortProvider(PortProvider* portProvider)
+-{
+-  if (mPortProvider && portProvider)
+-    return Port::AlreadyConnected;
+-
+   SharedPtr<Model> providerModel = portProvider->getModel().lock();
+   if (!providerModel)
+     return Port::StalePort;
+@@ -67,7 +49,6 @@
+     mPortProvider = portProvider;
+     ModelGroup* modelGroup = providerModel->getParent();
+     modelGroup->addConnection(this);
+-
+     return Port::Success;
+   }
+ 
+@@ -91,6 +72,17 @@
+   if (mPortAcceptor && portAcceptor)
+     return Port::AlreadyConnected;
+ 
++  if (!portAcceptor) {
++    if (mPortAcceptor && mPortProvider) {
++      mPortAcceptor->disconnect(mPortProvider);
++    } else {
++      // FIXME
++//       modelGroup->removeConnection(this);
++    }
++    mPortAcceptor = 0;
++    return Port::Success;
++  }
++    
+   SharedPtr<Model> acceptorModel = portAcceptor->getModel().lock();
+   if (!acceptorModel)
+     return Port::StalePort;
+@@ -124,10 +116,10 @@
+ Connection::connect(Port* port0, Port* port1)
+ {
+   SharedPtr<Connection> connection = new Connection;
+-  Port::ConnectResult result = connection->connect(port0);
++  Port::ConnectResult result = port0->addConnection(connection);
+   if (result != Port::Success)
+     return result;
+-  result = connection->connect(port1);
++  result = port1->addConnection(connection);
+   return result;
+ }
+ 
+@@ -184,8 +176,10 @@
+ void
+ Connection::disconnect()
+ {
+-  if (mPortProvider && mPortAcceptor)
+-    mPortAcceptor->disconnect(mPortProvider);
++  SharedPtr<PortProvider> portProvider = mPortProvider.lock();
++  SharedPtr<PortAcceptor> portAcceptor = mPortAcceptor.lock();
++  if (portProvider && portAcceptor)
++    portAcceptor->disconnect(portProvider);
+   mPortProvider = 0;
+   mPortAcceptor = 0;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Connection.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -25,11 +25,6 @@
+   Connection(const std::string& name = std::string());
+   virtual ~Connection();
+ 
+-  /// Connect this connection to the given Port
+-  Port::ConnectResult connect(Port* port);
+-  /// Disconnect this connection from the given Port
+-  bool disconnect(Port* port);
+-
+   /// Set the PortProvider end.
+   /// Tries to complete the connection if the other end is already connected.
+   Port::ConnectResult setPortProvider(PortProvider* portProvider);
+@@ -38,10 +33,10 @@
+   Port::ConnectResult setPortAcceptor(PortAcceptor* portAcceptor);
+ 
+   /// Return the PortProvider of this connection
+-  const PortProvider* getPortProvider() const
++  WeakPtr<const PortProvider> getPortProvider() const
+   { return mPortProvider; }
+   /// Return the PortAcceptor of this connection
+-  const PortAcceptor* getPortAcceptor() const
++  WeakPtr<const PortAcceptor> getPortAcceptor() const
+   { return mPortAcceptor; }
+ 
+   /// Connect the two given ports, zero checks are done.
+@@ -50,7 +45,8 @@
+   /// Connect the two given ports, zero checks are done.
+   /// The two ports must just belong to models of the same system.
+   /// If required ModelGroup inputs or outputs are inserted.
+-  static Port::ConnectResult connectRoute(PortProvider* port0, PortAcceptor* port1);
++  static Port::ConnectResult connectRoute(PortProvider* port0,
++                                          PortAcceptor* port1);
+ 
+ private:
+   /// Disconnect this connection from all attached Ports
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -95,9 +95,9 @@
+ Model::init(void)
+ {
+   if (mEnablePort)
+-    mEnablePortInterface = mEnablePort->toRealPortHandle();
++    mEnablePortHandle = mEnablePort->toRealPortHandle();
+   else
+-    mEnablePortInterface = 0;
++    mEnablePortHandle = 0;
+   return true;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -87,9 +87,9 @@
+   /// Convinience functions may make the virtuals protected ...
+   void outputIfEnabled(const TaskInfo& taskInfo)
+   {
+-    if (mEnablePortInterface.isConnected()) {
++    if (mEnablePortHandle.isConnected()) {
+       /// FIXME bool!!!!
+-      setEnabled(0.5 < fabs(mEnablePortInterface.getRealValue()));
++      setEnabled(0.5 < fabs(mEnablePortHandle.getRealValue()));
+     }
+     if (mEnabled)
+       output(taskInfo);
+@@ -268,7 +268,7 @@
+   bool mEnabled;
+   // the old obsolete one
+   SharedPtr<NumericPortAcceptor> mEnablePort;
+-  RealPortHandle mEnablePortInterface;
++  RealPortHandle mEnablePortHandle;
+   DisableMode mDisableMode;
+   SampleTimeSet mSampleTimeSet;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -9,6 +9,108 @@
+ 
+ namespace OpenFDM {
+ 
++class RealPortInterface;
++class MatrixPortInterface;
++
++class PortInterface : public Referenced {
++public:
++  virtual ~PortInterface(void) {}
++  virtual RealPortInterface* toRealPortInterface(void) { return 0; }
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return 0; }
++
++  virtual void evaluate(void) = 0;
++};
++
++class RealPortInterface : public PortInterface {
++public:
++  RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
++  virtual RealPortInterface* toRealPortInterface(void)
++  {
++    evaluate();
++    if (Size(1, 1) == size(mValue))
++      return this;
++    else
++      return 0;
++  }
++  // FIXME, move evaluate into seperate method
++  real_type getRealValue(void)
++  { evaluate(); return mValue(1, 1); }
++protected:
++  Matrix mValue;
++};
++
++class MatrixPortInterface : public RealPortInterface {
++public:
++  virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
++  // FIXME, move evaluate into seperate method
++  const Matrix& getMatrixValue(void)
++  { evaluate(); return mValue; }
++};
++
++
++/// Just a getter used for now
++template<typename M>
++class RealGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const real_type& (M::*Getter) () const;
++  RealGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue(1, 1) = (mSourceModel->*mGetter)(); }
++private:
++  WeakPtr<M> mSourceModel;
++  Getter mGetter;
++};
++template<typename M>
++class MatrixGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const Matrix& (M::*Getter) () const;
++  MatrixGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue = (mSourceModel->*mGetter)(); }
++private:
++  WeakPtr<M> mSourceModel;
++  Getter mGetter;
++};
++
++class RealPortHandle {
++public:
++  RealPortHandle(void)
++  { }
++  RealPortHandle(RealPortInterface* realPortInterface) :
++    mRealPortInterface(realPortInterface)
++  { }
++  real_type getRealValue(void)
++  { return mRealPortInterface->getRealValue(); }
++  bool isConnected(void) const
++  { return mRealPortInterface; }
++private:
++  SharedPtr<RealPortInterface> mRealPortInterface;
++};
++
++class MatrixPortHandle {
++public:
++  MatrixPortHandle(void)
++  { }
++  MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
++    mMatrixPortInterface(matrixPortInterface)
++  { }
++  const Matrix& getMatrixValue(void)
++  { return mMatrixPortInterface->getMatrixValue(); }
++  bool isConnected(void) const
++  { return mMatrixPortInterface; }
++private:
++  SharedPtr<MatrixPortInterface> mMatrixPortInterface;
++};
++
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++///////////////////////////////////////////////////////////////////////////
++
+ class NumericPortAcceptor :
+     public PortAcceptor {
+ public:
+@@ -24,10 +126,10 @@
+   }
+   virtual bool removeConnection(Connection* connection)
+   {
+-    if (connection && connection == mConnection)
++    if (!connection || connection != mConnection)
+       return false;
+     setPortInterface(0);
+-    connection->disconnect(this);
++    PortAcceptor::removeConnection(connection);
+     mConnection = 0;
+     return true;
+   }
+@@ -42,6 +144,9 @@
+   virtual bool disconnect(PortProvider* port)
+   { return port->unprovide(this); }
+ 
++
++
++
+   PortInterface* getPortInterface() const
+   { return mPortInterface; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/NumericPortProvider.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -30,7 +30,7 @@
+     if (i == mConnections.end())
+       return false;
+ 
+-    (*i)->disconnect(this);
++    PortProvider::removeConnection(*i);
+     mConnections.erase(i);
+     return true;
+   }
+@@ -38,7 +38,7 @@
+   {
+     ConnectionList::iterator i = mConnections.begin();
+     while (i != mConnections.end()) {
+-      (*i)->disconnect(this);
++      PortProvider::removeConnection(*i);
+       i = mConnections.erase(i);
+     }
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -6,113 +6,10 @@
+ #define OpenFDM_Port_H
+ 
+ #include "Object.h"
+-#include "SharedPtr.h"
+ #include "WeakPtr.h"
+ 
+ namespace OpenFDM {
+ 
+-class RealPortInterface;
+-class MatrixPortInterface;
+-
+-class PortInterface : public Referenced {
+-public:
+-  virtual ~PortInterface(void) {}
+-  virtual RealPortInterface* toRealPortInterface(void) { return 0; }
+-  virtual MatrixPortInterface* toMatrixPortInterface(void) { return 0; }
+-
+-  virtual void evaluate(void) = 0;
+-};
+-
+-class RealPortInterface : public PortInterface {
+-public:
+-  RealPortInterface(unsigned m = 1, unsigned n = 1) : mValue(m, n) {}
+-  virtual RealPortInterface* toRealPortInterface(void)
+-  {
+-    evaluate();
+-    if (Size(1, 1) == size(mValue))
+-      return this;
+-    else
+-      return 0;
+-  }
+-  // FIXME, move evaluate into seperate method
+-  real_type getRealValue(void)
+-  { evaluate(); return mValue(1, 1); }
+-protected:
+-  Matrix mValue;
+-};
+-
+-class MatrixPortInterface : public RealPortInterface {
+-public:
+-  virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
+-  // FIXME, move evaluate into seperate method
+-  const Matrix& getMatrixValue(void)
+-  { evaluate(); return mValue; }
+-};
+-
+-
+-/// Just a getter used for now
+-template<typename M>
+-class RealGetterPortInterface : public MatrixPortInterface {
+-public:
+-  typedef const real_type& (M::*Getter) () const;
+-  RealGetterPortInterface(M* sourceModel, Getter getter) :
+-    mSourceModel(sourceModel), mGetter(getter)
+-  { }
+-  virtual void evaluate(void)
+-  { mValue(1, 1) = (mSourceModel->*mGetter)(); }
+-private:
+-  WeakPtr<M> mSourceModel;
+-  Getter mGetter;
+-};
+-template<typename M>
+-class MatrixGetterPortInterface : public MatrixPortInterface {
+-public:
+-  typedef const Matrix& (M::*Getter) () const;
+-  MatrixGetterPortInterface(M* sourceModel, Getter getter) :
+-    mSourceModel(sourceModel), mGetter(getter)
+-  { }
+-  virtual void evaluate(void)
+-  { mValue = (mSourceModel->*mGetter)(); }
+-private:
+-  WeakPtr<M> mSourceModel;
+-  Getter mGetter;
+-};
+-
+-class RealPortHandle {
+-public:
+-  RealPortHandle(void)
+-  { }
+-  RealPortHandle(RealPortInterface* realPortInterface) :
+-    mRealPortInterface(realPortInterface)
+-  { }
+-  real_type getRealValue(void)
+-  { return mRealPortInterface->getRealValue(); }
+-  bool isConnected(void) const
+-  { return mRealPortInterface; }
+-private:
+-  SharedPtr<RealPortInterface> mRealPortInterface;
+-};
+-
+-class MatrixPortHandle {
+-public:
+-  MatrixPortHandle(void)
+-  { }
+-  MatrixPortHandle(MatrixPortInterface* matrixPortInterface) :
+-    mMatrixPortInterface(matrixPortInterface)
+-  { }
+-  const Matrix& getMatrixValue(void)
+-  { return mMatrixPortInterface->getMatrixValue(); }
+-  bool isConnected(void) const
+-  { return mMatrixPortInterface; }
+-private:
+-  SharedPtr<MatrixPortInterface> mMatrixPortInterface;
+-};
+-
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-///////////////////////////////////////////////////////////////////////////
+-
+ class Model;
+ class Connection;
+ 
+@@ -121,7 +18,6 @@
+ public:
+   enum ConnectResult {
+     Success = 0,
+-    NoPort, // The given port is a zero pointer
+     NoConnection, // The given Connection is a zero pointer
+     Running, // The System is running, stop the System before manipulating it
+     IsolatedModel, // Model does not belong to a parent Group
+@@ -145,7 +41,7 @@
+   virtual bool removeConnection(Connection* connection) = 0;
+   virtual void removeAllConnections() = 0;
+ 
+-  /// Sets the model it belongs to to zero and cuts all connections
++  /// Sets the model it belongs to zero and cuts all connections
+   void invalidate();
+ 
+   /// Return the model this port belongs to
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -26,4 +26,12 @@
+   return connection->setPortAcceptor(this);
+ }
+ 
++bool
++PortAcceptor::removeConnection(Connection* connection)
++{
++  if (!connection)
++    return false;
++  return connection->setPortAcceptor(0);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortAcceptor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortAcceptor.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortAcceptor.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -18,6 +18,7 @@
+   virtual ~PortAcceptor();
+ 
+   virtual ConnectResult addConnection(Connection* connection);
++  virtual bool removeConnection(Connection* connection);
+ 
+   virtual ConnectResult connect(PortProvider* port) = 0;
+   virtual bool disconnect(PortProvider* port) = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-05-30 19:42:49 UTC (rev 284)
+@@ -26,4 +26,12 @@
+   return connection->setPortProvider(this);
+ }
+ 
++bool
++PortProvider::removeConnection(Connection* connection)
++{
++  if (!connection)
++    return false;
++  return connection->setPortProvider(0);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortProvider.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortProvider.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/OpenFDM/PortProvider.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -19,6 +19,7 @@
+   virtual ~PortProvider();
+ 
+   virtual Port::ConnectResult addConnection(Connection* connection);
++  virtual bool removeConnection(Connection* connection);
+ 
+   virtual Port::ConnectResult provide(NumericPortAcceptor* port)
+   { return Port::IncompatiblePort; }
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-05-30 19:42:49 UTC (rev 284)
+@@ -8,8 +8,16 @@
+ othrlib=$(HOME)/sw/lib
+ osglib=$(HOME)/sw/lib
+ 
++MOC=$(QTDIR)/bin/moc
++
++SUFFIXES = _moc.cpp
++.h_moc.cpp:
++	$(MOC) $(CPPFLAGS) -o $@ $<
++
+ INCLUDES = -I$(srcdir)/.. -I$(qtinclude) -I$(othrinclude) -I$(osginclude)
+ 
++BUILT_SOURCES = QOsgWidget_moc.cpp
++
+ bin_PROGRAMS = openfdm
+ 
+ openfdm_SOURCES = \
+@@ -25,7 +33,8 @@
+ 	ModelItem.h \
+ 	ModelItem.cpp \
+ 	QOsgWidget.h \
+-	QOsgWidget.cpp
++	QOsgWidget.cpp \
++	QOsgWidget_moc.cpp
+ 
+ openfdm_LDADD = ../JSBSim/libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+
+Modified: trunk/OpenFDM/src/builder/QOsgWidget.h
+===================================================================
+--- trunk/OpenFDM/src/builder/QOsgWidget.h	2006-05-28 19:49:40 UTC (rev 283)
++++ trunk/OpenFDM/src/builder/QOsgWidget.h	2006-05-30 19:42:49 UTC (rev 284)
+@@ -19,8 +19,9 @@
+ 
+ class QtEventAdapter;
+ 
+-class QOsgWidget
+-  : public QGLWidget, protected osgGA::GUIActionAdapter {
++class QOsgWidget :
++  public QGLWidget, protected osgGA::GUIActionAdapter {
++  Q_OBJECT
+ public:
+   QOsgWidget(QWidget *parent = 0, const QGLWidget* shareWidget = 0,
+              Qt::WFlags f = 0);
+
+
+

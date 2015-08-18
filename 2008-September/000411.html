@@ -1,0 +1,148 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r439 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r439%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809061113.m86BDiOC032285%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000410.html">
+   <LINK REL="Next"  HREF="000412.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r439 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r439%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809061113.m86BDiOC032285%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r439 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  6 13:13:44 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000410.html">[OpenFDM-svn] r438 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000412.html">[OpenFDM-svn] r440 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#411">[ date ]</a>
+              <a href="thread.html#411">[ thread ]</a>
+              <a href="subject.html#411">[ subject ]</a>
+              <a href="author.html#411">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-06 13:13:44 +0200 (Sat, 06 Sep 2008)
+New Revision: 439
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add connect method.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-04 19:48:23 UTC (rev 438)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-06 11:13:44 UTC (rev 439)
+@@ -118,6 +118,8 @@
+     SharedPtr&lt;LeafInstance&gt; getLeafInstance() const
+     { return mLeafInstance.lock(); }
+ 
++    virtual bool connect(PortData*) = 0;
++
+   private:
+     WeakPtr&lt;LeafInstance&gt; mLeafInstance;
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+@@ -131,6 +133,18 @@
+     { }
+     virtual ProviderPortData* toProviderPortData()
+     { return this; }
++
++    virtual bool connect(PortData* portData)
++    {
++      if (!portData)
++        return false;
++      AcceptorPortData* acceptorPortData = portData-&gt;toAcceptorPortData();
++      if (!acceptorPortData)
++        return false;
++      return acceptorPortData-&gt;connectToProvider(this);
++    }
++
++  public:
+     SharedPtr&lt;const ProviderPortInfo&gt; _providerPort;
+     std::vector&lt;WeakPtr&lt;const AcceptorPortData&gt; &gt; _acceptorPortDataList;
+   };
+@@ -141,6 +155,29 @@
+     { _acceptorPortList.push_back(acceptorPort); }
+     virtual AcceptorPortData* toAcceptorPortData()
+     { return this; }
++
++    virtual bool connect(PortData* portData)
++    {
++      if (!portData)
++        return false;
++      ProviderPortData* providerPortData = portData-&gt;toProviderPortData();
++      if (!providerPortData)
++        return false;
++      return connectToProvider(providerPortData);
++    }
++
++    bool connectToProvider(ProviderPortData* providerPortData)
++    {
++      // The current one must not be connected already ...
++      OpenFDMAssert(!_providerPortData.lock());
++      if (!providerPortData)
++        return false;
++      providerPortData-&gt;_acceptorPortDataList.push_back(this);
++      _providerPortData = providerPortData;
++      return true;
++    }
++  public:
++
+     std::vector&lt;SharedPtr&lt;const AcceptorPortInfo&gt; &gt; _acceptorPortList;
+     WeakPtr&lt;const ProviderPortData&gt; _providerPortData;
+   };
+@@ -296,11 +333,8 @@
+         continue;
+       }
+ 
+-      // FIXME Error message ??? and abort visiting???
+-      if (acceptorPortData-&gt;_providerPortData.lock())
+-        std::cerr &lt;&lt; &quot;??? already have a provider port????&quot; &lt;&lt; std::endl;
+-      acceptorPortData-&gt;_providerPortData = providerPortData;
+-      providerPortData-&gt;_acceptorPortDataList.push_back(acceptorPortData);
++      if (!acceptorPortData-&gt;connect(providerPortData))
++        std::cerr &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
+     }
+ 
+     // Add a proxy LeafInstance that holds this groups ports, will be removed
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000410.html">[OpenFDM-svn] r438 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000412.html">[OpenFDM-svn] r440 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#411">[ date ]</a>
+              <a href="thread.html#411">[ thread ]</a>
+              <a href="subject.html#411">[ subject ]</a>
+              <a href="author.html#411">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

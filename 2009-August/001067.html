@@ -1,0 +1,268 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1109 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1109%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908221517.n7MFHd2J007729%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001066.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1109 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1109%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908221517.n7MFHd2J007729%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1109 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug 22 17:17:39 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001066.html">[OpenFDM-svn] r1108 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1067">[ date ]</a>
+              <a href="thread.html#1067">[ thread ]</a>
+              <a href="subject.html#1067">[ subject ]</a>
+              <a href="author.html#1067">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-22 17:17:36 +0200 (Sat, 22 Aug 2009)
+New Revision: 1109
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+Log:
+Put functions into subgroups.
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp	2009-08-22 10:00:15 UTC (rev 1108)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.cpp	2009-08-22 15:17:36 UTC (rev 1109)
+@@ -33,9 +33,9 @@
+     if (mPortList.empty())
+       return 0;
+ 
+-    // ok, shortcut for old style connections
++    // Should also not happen!
+     if (path.empty())
+-      return mPortList.front().portProvider;
++      return 0;
+ 
+     const NodePath&amp; originatingPath = mPortList.front().modelPath;
+     // fast return if the models are not connected to the same root system
+@@ -70,12 +70,18 @@
+       Group* group = const_cast&lt;Group*&gt;(dynamic_cast&lt;const Group*&gt;(path.back().get()));
+       group-&gt;addChild(groupInput);
+ 
++      SharedPtr&lt;Node&gt; parentNode = group-&gt;getParent(0).lock();
++      SharedPtr&lt;Group&gt; parentGroup = dynamic_cast&lt;Group*&gt;(parentNode.get());
++
++
++
++
+       PathPort pathPort;
+       pathPort.modelPath = groupInput-&gt;getNodePathList().front();
+-      pathPort.portProvider = group-&gt;getPort(groupInput-&gt;getExternalPortIndex());
++      pathPort.portProvider = groupInput-&gt;getPort(&quot;output&quot;);
+       mPortList.push_back(pathPort);
+ 
+-      if (!group-&gt;connect(portProvider, groupInput-&gt;getPort(&quot;input&quot;)))
++      if (!parentGroup-&gt;connect(portProvider, group-&gt;getPort(groupInput-&gt;getExternalPortIndex())))
+         return 0;
+       
+       return pathPort.portProvider.get();
+@@ -146,4 +152,21 @@
+   return true;
+ }
+ 
++bool
++JSBSimPropertyManager::connect(const Port* port0, Group* group0,
++                               const Port* port1, Group* group1)
++{
++  if (!port0)
++    return false;
++  if (!port1)
++    return false;
++  PortSet portSet(port0);
++  SharedPtr&lt;const Node&gt; node = port1-&gt;getNode();
++  if (!node.valid())
++    return false;
++  NodePathList nodePathList = node-&gt;getNodePathList();
++  const Port* p = portSet.routeTo(nodePathList.front());
++  return group1-&gt;connect(p, port1);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h	2009-08-22 10:00:15 UTC (rev 1108)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPropertyManager.h	2009-08-22 15:17:36 UTC (rev 1109)
+@@ -147,12 +147,16 @@
+   /// Returns true if this property is already registered
+   bool exists(const std::string&amp; propertyName) const
+   {
+-    PropertyMap::const_iterator i = mPropertyMap.find(JSBSimProperty::simplify(propertyName));
++    PropertyMap::const_iterator i;
++    i = mPropertyMap.find(JSBSimProperty::simplify(propertyName));
+     if (i == mPropertyMap.end())
+       return false;
+     return i-&gt;second.hasProviderPort();
+   }
+ 
++  static bool connect(const Port* port0, Group* group0,
++                      const Port* port1, Group* group1);
++
+ private:
+   PropertyMap mPropertyMap;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-22 10:00:15 UTC (rev 1108)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-22 15:17:36 UTC (rev 1109)
+@@ -1761,26 +1761,27 @@
+   if (slachPos != std::string::npos)
+     name = name.substr(slachPos+1);
+ 
+-  // FIXME put that into a group and use a GroupOutput for that
+-  SharedPtr&lt;Gain&gt; gain = new Gain(name);
+-  mTopLevelGroup-&gt;addChild(gain);
+-
++  SharedPtr&lt;Group&gt; group = new Group(name);
++  mTopLevelGroup-&gt;addChild(group);
++  GroupOutput* groupOutput = new GroupOutput(&quot;Output&quot;);
++  group-&gt;addChild(groupOutput);
++  
+   std::list&lt;const XMLElement*&gt; elements = function-&gt;getElements();
+   std::list&lt;const XMLElement*&gt;::iterator i;
+   for (i = elements.begin(); i != elements.end(); ++i) {
+     if ((*i)-&gt;getName() == &quot;description&quot;)
+       continue;
+-    if (!connectFunctionInput(*i, gain-&gt;getInputPort(0), mTopLevelGroup))
++    if (!connectFunctionInput(*i, groupOutput-&gt;getPort(&quot;input&quot;), group))
+       return error(&quot;Can not connect product input!&quot;);
+     // FIXME check that we get here only once
+   }
+ 
+   if (!bindName.empty())
+-    registerJSBExpression(bindName, gain-&gt;getOutputPort());
++    registerJSBExpression(bindName, group-&gt;getPort(groupOutput-&gt;getExternalPortIndex()));
+   if (sum) {
+     unsigned num = sum-&gt;getNumSummands();
+     sum-&gt;setNumSummands(num+1);
+-    mTopLevelGroup-&gt;connect(gain-&gt;getOutputPort(), sum-&gt;getInputPort(num));
++    mTopLevelGroup-&gt;connect(group-&gt;getPort(groupOutput-&gt;getExternalPortIndex()), sum-&gt;getInputPort(num));
+   }
+ 
+   return true;
+@@ -2026,9 +2027,12 @@
+ 
+       SharedPtr&lt;Table1D&gt; table = new Table1D(&quot;Table&quot;);
+       parentGroup-&gt;addChild(table);
+-      parentGroup-&gt;connect(portP, table-&gt;getInputPort(0));
+       table-&gt;setTableData(data);
+-      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++      if (!JSBSimPropertyManager::connect(portP, mTopLevelGroup,
++                                          table-&gt;getInputPort(0), parentGroup))
++        return false;
++      if (!parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;)))
++        return false;
+       return true;
+ 
+     } else if (dim == 2) {
+@@ -2049,10 +2053,16 @@
+       
+       SharedPtr&lt;Table2D&gt; table = new Table2D(&quot;Table&quot;);
+       parentGroup-&gt;addChild(table);
+-      parentGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
+-      parentGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
+       table-&gt;setTableData(data);
+-      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++
++      if (!JSBSimPropertyManager::connect(rPort, mTopLevelGroup,
++                                          table-&gt;getInputPort(0), parentGroup))
++        return false;
++      if (!JSBSimPropertyManager::connect(cPort, mTopLevelGroup,
++                                          table-&gt;getInputPort(1), parentGroup))
++        return false;
++      if (!parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;)))
++        return false;
+       return true;
+ 
+     } else if (dim == 3) {
+@@ -2075,11 +2085,20 @@
+       
+       SharedPtr&lt;Table3D&gt; table = new Table3D(&quot;Table&quot;);
+       parentGroup-&gt;addChild(table);
+-      parentGroup-&gt;connect(rPort, table-&gt;getInputPort(0));
+-      parentGroup-&gt;connect(cPort, table-&gt;getInputPort(1));
+-      parentGroup-&gt;connect(pPort, table-&gt;getInputPort(2));
+       table-&gt;setTableData(data);
+-      parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;));
++
++      if (!JSBSimPropertyManager::connect(rPort, mTopLevelGroup,
++                                          table-&gt;getInputPort(0), parentGroup))
++        return false;
++      if (!JSBSimPropertyManager::connect(cPort, mTopLevelGroup,
++                                          table-&gt;getInputPort(1), parentGroup))
++        return false;
++      if (!JSBSimPropertyManager::connect(pPort, mTopLevelGroup,
++                                          table-&gt;getInputPort(2), parentGroup))
++        return false;
++      if (!parentGroup-&gt;connect(port, table-&gt;getPort(&quot;output&quot;)))
++        return false;
++
+       return true;
+ 
+     }
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-22 10:00:15 UTC (rev 1108)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-22 15:17:36 UTC (rev 1109)
+@@ -923,7 +923,7 @@
+   // No sharable table lookup found, we need to create a new one
+   BreakPointLookup* tablePreLookup
+     = new BreakPointLookup(name + &quot; Table Prelookup&quot;);
+-  addMultiBodyModel(tablePreLookup);
++  mTopLevelGroup-&gt;addChild(tablePreLookup);
+   tablePreLookup-&gt;setBreakPointVector(tl);
+   connectJSBExpression(normalizedInputProperty,
+                        tablePreLookup-&gt;getInputPort(0));
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001066.html">[OpenFDM-svn] r1108 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1067">[ date ]</a>
+              <a href="thread.html#1067">[ thread ]</a>
+              <a href="subject.html#1067">[ subject ]</a>
+              <a href="author.html#1067">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,212 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r72 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r72%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511261522.jAQFMr1a015841%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000056.html">
+   <LINK REL="Next"  HREF="000058.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r72 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r72%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511261522.jAQFMr1a015841%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r72 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Nov 26 16:22:53 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000056.html">[OpenFDM-svn] r71 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000058.html">[OpenFDM-svn] r74 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#57">[ date ]</a>
+              <a href="thread.html#57">[ thread ]</a>
+              <a href="subject.html#57">[ subject ]</a>
+              <a href="author.html#57">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-26 16:22:35 +0100 (Sat, 26 Nov 2005)
+New Revision: 72
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+Log:
+Remove inputPortChanged notifier callback.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2005-11-26 15:22:35 UTC (rev 72)
+@@ -31,6 +31,9 @@
+ bool
+ BinaryFunctionModel::init(void)
+ {
++  OpenFDMAssert(mBinaryExpression);
++  mBinaryExpression-&gt;setInputProperty(0, getInputPort(0)-&gt;getProperty());
++  mBinaryExpression-&gt;setInputProperty(1, getInputPort(1)-&gt;getProperty());
+   OpenFDMAssert(mBinaryExpression-&gt;isValid());
+   return mBinaryExpression-&gt;isValid();
+ }
+@@ -48,12 +51,4 @@
+   return mFunctionValue;
+ }
+ 
+-void
+-BinaryFunctionModel::inputPortChanged(unsigned i)
+-{
+-  if (getNumInputPorts() &lt;= i)
+-    return;
+-  mBinaryExpression-&gt;setInputProperty(i, getInputPort(i)-&gt;getProperty());
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.h	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.h	2005-11-26 15:22:35 UTC (rev 72)
+@@ -29,8 +29,6 @@
+   const real_type&amp; getFunctionValue(void) const;
+ 
+ private:
+-  virtual void inputPortChanged(unsigned i);
+-
+   shared_ptr&lt;BinaryExpressionImpl&lt;real_type&gt; &gt; mBinaryExpression;
+ 
+   real_type mFunctionValue;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-26 15:22:35 UTC (rev 72)
+@@ -170,7 +170,6 @@
+   }
+ 
+   mInputPorts[i]-&gt;setProperty(prop);
+-  inputPortChanged(i);
+   return true;
+ }
+ 
+@@ -262,7 +261,6 @@
+   mInputPorts.resize(num);
+   for (; oldSize &lt; mInputPorts.size(); ++oldSize)
+     mInputPorts[oldSize] = new Port;
+-  inputPortChanged(num);
+ }
+ 
+ void
+@@ -270,15 +268,9 @@
+ {
+   OpenFDMAssert(i &lt; mInputPorts.size());
+   mInputPorts[i]-&gt;setName(name);
+-  inputPortChanged(i);
+ }
+ 
+ void
+-Model::inputPortChanged(unsigned)
+-{
+-}
+-
+-void
+ Model::setNumOutputPorts(unsigned num)
+ {
+   // Ok, strange, but required ...
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-26 15:22:35 UTC (rev 72)
+@@ -231,10 +231,6 @@
+   /// Sets the name of the i-th input property.
+   void setInputPortName(unsigned i, const std::string&amp; name);
+ 
+-  /// Gets called whenever an input property is changed.
+-  /// Lets a Model implementation catch up changes to the model.
+-  virtual void inputPortChanged(unsigned i);
+-
+   /// Sets the number of output properties.
+   void setNumOutputPorts(unsigned num);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2005-11-26 15:22:35 UTC (rev 72)
+@@ -31,6 +31,8 @@
+ bool
+ UnaryFunctionModel::init(void)
+ {
++  OpenFDMAssert(mUnaryExpression);
++  mUnaryExpression-&gt;setInputProperty(getInputPort(0)-&gt;getProperty());
+   OpenFDMAssert(mUnaryExpression-&gt;isValid());
+   return mUnaryExpression-&gt;isValid();
+ }
+@@ -48,12 +50,4 @@
+   return mFunctionValue;
+ }
+ 
+-void
+-UnaryFunctionModel::inputPortChanged(unsigned i)
+-{
+-  if (getNumInputPorts() &lt;= i)
+-    return;
+-  mUnaryExpression-&gt;setInputProperty(getInputPort(0)-&gt;getProperty());
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2005-11-26 12:11:09 UTC (rev 71)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2005-11-26 15:22:35 UTC (rev 72)
+@@ -29,8 +29,6 @@
+   const real_type&amp; getFunctionValue(void) const;
+ 
+ private:
+-  virtual void inputPortChanged(unsigned i);
+-
+   shared_ptr&lt;UnaryExpressionImpl&lt;real_type&gt; &gt; mUnaryExpression;
+ 
+   real_type mFunctionValue;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000056.html">[OpenFDM-svn] r71 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000058.html">[OpenFDM-svn] r74 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#57">[ date ]</a>
+              <a href="thread.html#57">[ thread ]</a>
+              <a href="subject.html#57">[ subject ]</a>
+              <a href="author.html#57">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

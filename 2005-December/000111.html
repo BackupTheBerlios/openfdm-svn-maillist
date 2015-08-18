@@ -1,0 +1,661 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r127 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r127%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512271055.jBRAtxTE020071%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000110.html">
+   <LINK REL="Next"  HREF="000112.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r127 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r127%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512271055.jBRAtxTE020071%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r127 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Dec 27 11:55:59 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000110.html">[OpenFDM-svn] r126 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000112.html">[OpenFDM-svn] r128 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#111">[ date ]</a>
+              <a href="thread.html#111">[ thread ]</a>
+              <a href="subject.html#111">[ subject ]</a>
+              <a href="author.html#111">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-27 11:55:54 +0100 (Tue, 27 Dec 2005)
+New Revision: 127
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+Log:
+Make the two joints use special frames
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-27 10:55:54 UTC (rev 127)
+@@ -251,6 +251,13 @@
+   }
+ }
+ 
++void
++Frame::setParentFrame(Frame* parent)
++{
++  mParentFrame = parent;
++  setPosDirty();
++}
++
+ SpatialInertia
+ Frame::inertiaToParent(const SpatialInertia&amp; I) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-27 10:55:54 UTC (rev 127)
+@@ -527,8 +527,7 @@
+ 
+ private:
+   /// Set the parent frame to the given one.
+-  void setParentFrame(Frame* parent)
+-  { mParentFrame = parent; }
++  void setParentFrame(Frame* parent);
+ 
+   // The offset of this frames origin wrt the parent frame measured in
+   // the parent frames coordinates.
+@@ -608,7 +607,14 @@
+     public Frame {
+ public:
+   PrismaticJointFrame(const std::string&amp; name) :
+-    Frame(name) { /*FIXME zero out members ...*/ }
++    Frame(name)
++  {
++    mZeroPos = Vector3::zeros();
++    mJointAxis = Vector3::unit(1);
++    mJointPos = 0;
++    mJointVel = 0;
++    mJointVelDot = 0;
++  }
+   virtual ~PrismaticJointFrame(void) {}
+ 
+   /// Gets the joint axis where this joint is allowed to rotate around.
+@@ -649,13 +655,14 @@
+   { mJointVelDot = velDot; setLinearRelAccel(mJointVelDot*mJointAxis); }
+ 
+   /// Sets the zero position of the joint.
+-  void setZeroPos(const Vector3&amp; zeroPos)
++  void setZeroPosition(const Vector3&amp; zeroPos)
+   { mZeroPos = zeroPos; setPosition(mZeroPos + mJointPos*mJointAxis); }
+-  const Vector3&amp; getZeroPos(void) const
++  const Vector3&amp; getZeroPosition(void) const
+   { return mZeroPos; }
+ 
++  using Frame::setOrientation;
+   /// FIXME Hdot
+-
++  
+ private:
+   /// The zero position with respect to the parent frame.
+   Vector3 mZeroPos;
+@@ -676,7 +683,14 @@
+     public Frame {
+ public:
+   RevoluteJointFrame(const std::string&amp; name) :
+-    Frame(name) { /*FIXME zero out members ...*/ }
++    Frame(name)
++  {
++    mZeroOrient = Quaternion::unit();
++    mJointAxis = Vector3::unit(1);
++    mJointPos = 0;
++    mJointVel = 0;
++    mJointVelDot = 0;
++  }
+   virtual ~RevoluteJointFrame(void) {}
+ 
+   /// Gets the joint axis where this joint is allowed to rotate around.
+@@ -719,15 +733,17 @@
+   void setJointVelDot(real_type velDot)
+   { mJointVelDot = velDot; setAngularRelAccel(mJointVelDot*mJointAxis); }
+ 
+-  /// Sets the zero position of the joint.
+-  void setZeroOrient(const Quaternion&amp; zeroOrient)
++  /// Sets the zero orientation of the joint.
++  void setZeroOrientation(const Quaternion&amp; zeroOrient)
+   {
+     mZeroOrient = zeroOrient;
+-    setOrientation(mZeroOrient*Quaternion::fromAngleAxis(mJointPos, mJointAxis));
++    setOrientation(zeroOrient*Quaternion::fromAngleAxis(mJointPos, mJointAxis));
+   }
+-  const Quaternion&amp; getZeroOrient(void) const
++  const Quaternion&amp; getZeroOrientation(void) const
+   { return mZeroOrient; }
+ 
++  using Frame::setPosition;
++
+   /// FIXME Hdot
+ 
+ private:
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-27 10:55:54 UTC (rev 127)
+@@ -104,12 +104,12 @@
+   Vector3 ga = mGravity-&gt;gravityAccel(mFrame-&gt;getRefPosition());
+   Vector6 grav = Vector6(Vector3::zeros(), mFrame-&gt;rotFromRef(ga));
+ 
+-  Log(ArtBody, Debug) &lt;&lt; &quot;grav = &quot; &lt;&lt; trans(grav) &lt;&lt; endl;
+-  Log(ArtBody, Debug) &lt;&lt; &quot;solve = &quot; &lt;&lt; trans(solve(artI, artF)) &lt;&lt; endl;
+-  Log(ArtBody, Debug) &lt;&lt; &quot;parent spatial accel = &quot; &lt;&lt; trans(mFrame-&gt;getParentSpAccel()) &lt;&lt; endl;
+-  Log(ArtBody, Debug) &lt;&lt; &quot;Hdot = &quot; &lt;&lt; trans(mFrame-&gt;getHdot()) &lt;&lt; endl;
++  Log(ArtBody, Debug) &lt;&lt; &quot;grav = &quot; &lt;&lt; trans(grav) &lt;&lt; endl
++                      &lt;&lt; &quot;solve = &quot; &lt;&lt; trans(solve(artI, artF)) &lt;&lt; endl
++                      &lt;&lt; &quot;parent spatial accel = &quot;
++                      &lt;&lt; trans(mFrame-&gt;getParentSpAccel()) &lt;&lt; endl
++                      &lt;&lt; &quot;Hdot = &quot; &lt;&lt; trans(mFrame-&gt;getHdot()) &lt;&lt; endl;
+   
+-
+   Vector6 accel = grav - solve(artI, artF)
+     - mFrame-&gt;getParentSpAccel() - mFrame-&gt;getHdot();
+   return accel;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-27 10:55:54 UTC (rev 127)
+@@ -106,13 +106,11 @@
+     Frame* frame0 = outboardBody-&gt;getFrame();
+     if (!frame0)
+       return false;
++    frame0-&gt;enableAccel();
+     FreeFrame* frame = dynamic_cast&lt;FreeFrame*&gt;(frame0);
+-    if (!frame)
+-      return false;
++    if (frame)
++      frame-&gt;setRelAccel(accel);
+ 
+-    frame-&gt;enableAccel();
+-    frame-&gt;setRelAccel(accel);
+-
+     outboardBody-&gt;computeAccel();
+ 
+     return true;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-27 10:55:54 UTC (rev 127)
+@@ -20,13 +20,8 @@
+   : Joint(name)
+ {
+   setNumContinousStates(2);
+-  mJointPosition = 0;
+-  mJointVelocity = 0;
+-  mJointAcceleration = 0;
+-  mJointAxis = Vector3::unit(1);
+-  mPosition = Vector3::zeros();
+ 
+-  mFrame = new FreeFrame(name);
++  mPrismaticJointFrame = new PrismaticJointFrame(name);
+ 
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, this, &amp;PrismaticJoint::getJointPos);
+@@ -46,34 +41,31 @@
+     return;
+   }
+ 
+-  mJointAxis = (1/nrm)*axis;
++  mPrismaticJointFrame-&gt;setJointAxis((1/nrm)*axis);
+ }
+ 
+ void
+ PrismaticJoint::setJointPos(real_type pos)
+ {
+-  mJointPosition = pos;
+-  mFrame-&gt;setPosition(mPosition + mJointPosition*mJointAxis);
++  mPrismaticJointFrame-&gt;setJointPos(pos);
+ }
+ 
+ void
+ PrismaticJoint::setJointVel(real_type vel)
+ {
+-  mJointVelocity = vel;
+-  mFrame-&gt;setRelVel(mJointVelocity*getJointAxis());
++  mPrismaticJointFrame-&gt;setJointVel(vel);
+ }
+ 
+ void
+ PrismaticJoint::setOrientation(const Quaternion&amp; orientation)
+ {
+-  mFrame-&gt;setPosition(mPosition + mJointPosition*mJointAxis);
++  mPrismaticJointFrame-&gt;setOrientation(orientation);
+ }
+ 
+ void
+ PrismaticJoint::setPosition(const Vector3&amp; position)
+ {
+-  mPosition = position;
+-  mFrame-&gt;setPosition(mPosition + mJointPosition*mJointAxis);
++  mPrismaticJointFrame-&gt;setZeroPosition(position);
+ }
+ 
+ bool
+@@ -92,7 +84,7 @@
+ PrismaticJoint::computeRelAccel(const SpatialInertia&amp;,
+                                 const Vector6&amp;)
+ {
+-  Vector6 parentAccel = mFrame-&gt;getParentSpAccel();
++  Vector6 parentAccel = mPrismaticJointFrame-&gt;getParentSpAccel();
+ 
+   RigidBody* out = getOutboardBody();
+   SpatialInertia artI = out-&gt;getArtInertia();
+@@ -100,7 +92,7 @@
+ 
+   JointT&lt;1&gt;::VectorN acc;
+   JointT&lt;1&gt;::computeRelAccel(artI, parentAccel, pAlpha, getJointAxis(), acc);
+-  mJointAcceleration = acc(1);
++  mPrismaticJointFrame-&gt;setJointVelDot(acc(1));
+   Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
+                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is &quot; &lt;&lt; trans(acc) &lt;&lt; endl;
+   return getJointAxis()*acc;
+@@ -109,22 +101,22 @@
+ void
+ PrismaticJoint::setState(const Vector&amp; state, unsigned offset)
+ {
+-  setJointPos(state(offset+1));
+-  setJointVel(state(offset+2));
++  mPrismaticJointFrame-&gt;setJointPos(state(offset+1));
++  mPrismaticJointFrame-&gt;setJointVel(state(offset+2));
+ }
+ 
+ void
+ PrismaticJoint::getState(Vector&amp; state, unsigned offset) const
+ {
+-  state(offset+1) = mJointPosition;
+-  state(offset+2) = mJointVelocity;
++  state(offset+1) = mPrismaticJointFrame-&gt;getJointPos();
++  state(offset+2) = mPrismaticJointFrame-&gt;getJointVel();
+ }
+ 
+ void
+ PrismaticJoint::getStateDeriv(Vector&amp; state, unsigned offset)
+ {
+-  state(offset+1) = mJointVelocity;
+-  state(offset+2) = mJointAcceleration;
++  state(offset+1) = mPrismaticJointFrame-&gt;getJointVel();
++  state(offset+2) = mPrismaticJointFrame-&gt;getJointVelDot();
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-27 10:55:54 UTC (rev 127)
+@@ -40,18 +40,18 @@
+ 
+     Frame* outFrame = getOutboardBody()-&gt;getFrame();
+     if (!outFrame) {
+-      getOutboardBody()-&gt;setFrame(mFrame);
++      getOutboardBody()-&gt;setFrame(mPrismaticJointFrame);
+     }
+     outFrame = getOutboardBody()-&gt;getFrame();
+     if (!outFrame-&gt;isParentFrame(inFrame)) {
+-      inFrame-&gt;addChildFrame(mFrame);
++      inFrame-&gt;addChildFrame(mPrismaticJointFrame);
+     }
+   }
+ 
+   /** Gets the joint axis where this joint is allowed to rotate around.
+    */
+   Vector6 getJointAxis(void) const
+-  { return Vector6(Vector3::zeros(), mJointAxis); }
++  { return Vector6(Vector3::zeros(), mPrismaticJointFrame-&gt;getJointAxis()); }
+ 
+   /** Sets the joint axis where this joint is allowed to rotate around.
+    */
+@@ -60,7 +60,7 @@
+   /** Returns the joint position.
+    */
+   const real_type&amp; getJointPos(void) const
+-  { return mJointPosition; }
++  { return mPrismaticJointFrame-&gt;getJointPos(); }
+ 
+   /** Sets the joint position.
+    */
+@@ -69,7 +69,7 @@
+   /** Returns the joint velocity.
+    */
+   const real_type&amp; getJointVel(void) const
+-  { return mJointVelocity; }
++  { return mPrismaticJointFrame-&gt;getJointVel(); }
+ 
+   /** Sets the joint velocity.
+    */
+@@ -95,7 +95,7 @@
+     if (!mLineForce)
+       return 0;
+     
+-    mLineForce-&gt;computeForce(mJointPosition, mJointVelocity);
++    mLineForce-&gt;computeForce(getJointPos(), getJointVel());
+     return mLineForce-&gt;getForce();
+   }
+ 
+@@ -117,32 +117,12 @@
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; state, unsigned offset);
+ 
+-  /** The joint rotation axis.
+-   */
+-  Vector3 mJointAxis;
+-
+-  /** The relative joint rotation with respect to the zero orientation.
+-   */
+-  real_type mJointPosition;
+-
+-  /** The rotational velocity with respect to the rotation axis.
+-   */
+-  real_type mJointVelocity;
+-
+-  /** The rotational velocity with respect to the rotation axis.
+-   */
+-  real_type mJointAcceleration;
+-
+-  /** The zero orientation with respect to the parent frame.
+-   */
+-  Vector3 mPosition;
+-
+   /** The direct joint interaction force
+    */
+   SharedPtr&lt;LineForce&gt; mLineForce;
+ 
+   /// The frame of the mobile root
+-  SharedPtr&lt;FreeFrame&gt; mFrame;
++  SharedPtr&lt;PrismaticJointFrame&gt; mPrismaticJointFrame;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-27 10:55:54 UTC (rev 127)
+@@ -16,18 +16,12 @@
+ 
+ namespace OpenFDM {
+ 
+-RevoluteJoint::RevoluteJoint(const std::string&amp; name, bool trackPosition)
+-  : Joint(name)
++RevoluteJoint::RevoluteJoint(const std::string&amp; name) :
++  Joint(name)
+ {
+-  setNumContinousStates(trackPosition ? 2 : 1);
+-  mTrackPosition = trackPosition;
+-  mJointPosition = 0;
+-  mJointVelocity = 0;
+-  mJointAcceleration = 0;
+-  mJointAxis = Vector3::unit(1);
+-  mOrientation = Quaternion::unit();
++  setNumContinousStates(2);
+ 
+-  mFrame = new FreeFrame(name);
++  mRevoluteJointFrame = new RevoluteJointFrame(name);
+ 
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, this, &amp;RevoluteJoint::getJointPos);
+@@ -46,39 +40,31 @@
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+-
+-  mJointAxis = (1/nrm)*axis;
++  mRevoluteJointFrame-&gt;setJointAxis((1/nrm)*axis);
+ }
+ 
+ void
+ RevoluteJoint::setJointPos(real_type pos)
+ {
+-  mJointPosition = pos;
+-  Quaternion q = mOrientation;
+-  q *= Quaternion::fromAngleAxis(mJointPosition, mJointAxis);
+-  mFrame-&gt;setOrientation(q);
++  mRevoluteJointFrame-&gt;setJointPos(pos);
+ }
+ 
+ void
+ RevoluteJoint::setJointVel(real_type vel)
+ {
+-  mJointVelocity = vel;
+-  mFrame-&gt;setRelVel(mJointVelocity*getJointAxis());
++  mRevoluteJointFrame-&gt;setJointVel(vel);
+ }
+ 
+ void
+ RevoluteJoint::setPosition(const Vector3&amp; position)
+ {
+-  mFrame-&gt;setPosition(position);
++  mRevoluteJointFrame-&gt;setPosition(position);
+ }
+ 
+ void
+ RevoluteJoint::setOrientation(const Quaternion&amp; orientation)
+ {
+-  mOrientation = orientation;
+-  Quaternion q = orientation;
+-  q *= Quaternion::fromAngleAxis(mJointPosition, mJointAxis);
+-  mFrame-&gt;setOrientation(q);
++  mRevoluteJointFrame-&gt;setZeroOrientation(orientation);
+ }
+ 
+ bool
+@@ -97,7 +83,7 @@
+ RevoluteJoint::computeRelAccel(const SpatialInertia&amp;,
+                                const Vector6&amp;)
+ {
+-  Vector6 parentAccel = mFrame-&gt;getParentSpAccel();
++  Vector6 parentAccel = mRevoluteJointFrame-&gt;getParentSpAccel();
+ 
+   RigidBody* out = getOutboardBody();
+   SpatialInertia artI = out-&gt;getArtInertia();
+@@ -105,7 +91,8 @@
+ 
+   JointT&lt;1&gt;::VectorN acc;
+   JointT&lt;1&gt;::computeRelAccel(artI, parentAccel, pAlpha, getJointAxis(), acc);
+-  mJointAcceleration = acc(1);
++  mRevoluteJointFrame-&gt;setJointVelDot(acc(1));
++  
+   Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
+                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is &quot; &lt;&lt; trans(acc) &lt;&lt; endl;
+   return getJointAxis()*acc;
+@@ -114,34 +101,22 @@
+ void
+ RevoluteJoint::setState(const Vector&amp; state, unsigned offset)
+ {
+-  if (mTrackPosition) {
+-    setJointPos(state(offset+1));
+-    setJointVel(state(offset+2));
+-  } else {
+-    setJointVel(state(offset+1));
+-  }
++  mRevoluteJointFrame-&gt;setJointPos(state(offset+1));
++  mRevoluteJointFrame-&gt;setJointVel(state(offset+2));
+ }
+ 
+ void
+ RevoluteJoint::getState(Vector&amp; state, unsigned offset) const
+ {
+-  if (mTrackPosition) {
+-    state(offset+1) = mJointPosition;
+-    state(offset+2) = mJointVelocity;
+-  } else {
+-    state(offset+1) = mJointVelocity;
+-  }
++  state(offset+1) = mRevoluteJointFrame-&gt;getJointPos();
++  state(offset+2) = mRevoluteJointFrame-&gt;getJointVel();
+ }
+ 
+ void
+ RevoluteJoint::getStateDeriv(Vector&amp; state, unsigned offset)
+ {
+-  if (mTrackPosition) {
+-    state(offset+1) = mJointVelocity;
+-    state(offset+2) = mJointAcceleration;
+-  } else {
+-    state(offset+1) = mJointAcceleration;
+-  }
++  state(offset+1) = mRevoluteJointFrame-&gt;getJointVel();
++  state(offset+2) = mRevoluteJointFrame-&gt;getJointVelDot();
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-27 08:25:14 UTC (rev 126)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-27 10:55:54 UTC (rev 127)
+@@ -22,7 +22,7 @@
+ class RevoluteJoint
+   : public Joint, public JointT&lt;1&gt; {
+ public:
+-  RevoluteJoint(const std::string&amp; name, bool trackPosition = true);
++  RevoluteJoint(const std::string&amp; name);
+   virtual ~RevoluteJoint(void);
+ 
+   virtual bool init(void)
+@@ -40,18 +40,18 @@
+ 
+     Frame* outFrame = getOutboardBody()-&gt;getFrame();
+     if (!outFrame) {
+-      getOutboardBody()-&gt;setFrame(mFrame);
++      getOutboardBody()-&gt;setFrame(mRevoluteJointFrame);
+     }
+     outFrame = getOutboardBody()-&gt;getFrame();
+     if (!outFrame-&gt;isParentFrame(inFrame)) {
+-      inFrame-&gt;addChildFrame(mFrame);
++      inFrame-&gt;addChildFrame(mRevoluteJointFrame);
+     }
+   }
+ 
+   /** Gets the joint axis where this joint is allowed to rotate around.
+    */
+   Vector6 getJointAxis(void) const
+-  { return Vector6(mJointAxis, Vector3::zeros()); }
++  { return Vector6(mRevoluteJointFrame-&gt;getJointAxis(), Vector3::zeros()); }
+ 
+   /** Sets the joint axis where this joint is allowed to rotate around.
+    */
+@@ -60,7 +60,7 @@
+   /** Returns the joint position.
+    */
+   const real_type&amp; getJointPos(void) const
+-  { return mJointPosition; }
++  { return mRevoluteJointFrame-&gt;getJointPos(); }
+ 
+   /** Sets the joint position.
+    */
+@@ -69,7 +69,7 @@
+   /** Returns the joint velocity.
+    */
+   const real_type&amp; getJointVel(void) const
+-  { return mJointVelocity; }
++  { return mRevoluteJointFrame-&gt;getJointVel(); }
+ 
+   /** Sets the joint velocity.
+    */
+@@ -95,7 +95,7 @@
+     if (!mLineForce)
+       return 0;
+     
+-    mLineForce-&gt;computeForce(mJointPosition, mJointVelocity);
++    mLineForce-&gt;computeForce(getJointPos(), getJointVel());
+     return mLineForce-&gt;getForce();
+   }
+ 
+@@ -117,39 +117,12 @@
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; state, unsigned offset);
+ 
+-  /** The joint rotation axis.
+-   */
+-  Vector3 mJointAxis;
+-
+-  /** The relative joint rotation with respect to the zero orientation.
+-   */
+-  real_type mJointPosition;
+-
+-  /** The rotational velocity with respect to the rotation axis.
+-   */
+-  real_type mJointVelocity;
+-
+-  /** The rotational velocity with respect to the rotation axis.
+-   */
+-  real_type mJointAcceleration;
+-
+-  /** The zero orientation with respect to the parent frame.
+-   */
+-  Quaternion mOrientation;
+-
+-  /** Signals if we should track the joint position in the ordinary
+-      differential equation part of the multibody system.
+-      This is useful for wheel models where the position of the wheel is
+-      only used for animations and thus could be postprocessed.
+-   */
+-  bool mTrackPosition;
+-
+   /** The direct joint interaction force
+    */
+   SharedPtr&lt;LineForce&gt; mLineForce;
+ 
+   /// The frame of the mobile root
+-  SharedPtr&lt;FreeFrame&gt; mFrame;
++  SharedPtr&lt;RevoluteJointFrame&gt; mRevoluteJointFrame;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000110.html">[OpenFDM-svn] r126 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000112.html">[OpenFDM-svn] r128 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#111">[ date ]</a>
+              <a href="thread.html#111">[ thread ]</a>
+              <a href="subject.html#111">[ subject ]</a>
+              <a href="author.html#111">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

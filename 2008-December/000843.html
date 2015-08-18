@@ -1,0 +1,160 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r875 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r875%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812100646.mBA6kO8C017988%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000842.html">
+   <LINK REL="Next"  HREF="000844.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r875 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r875%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812100646.mBA6kO8C017988%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r875 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec 10 07:46:24 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000842.html">[OpenFDM-svn] r874 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000844.html">[OpenFDM-svn] r876 - branches/OpenFDM-StateSeparation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#843">[ date ]</a>
+              <a href="thread.html#843">[ thread ]</a>
+              <a href="subject.html#843">[ subject ]</a>
+              <a href="author.html#843">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-10 07:46:23 +0100 (Wed, 10 Dec 2008)
+New Revision: 875
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+Log:
+Make use of the coordinate system.
+
+M    src/OpenFDM/InternalSensor.cpp
+M    src/OpenFDM/CoordinateSystem.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h	2008-12-10 06:18:57 UTC (rev 874)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CoordinateSystem.h	2008-12-10 06:46:23 UTC (rev 875)
+@@ -14,8 +14,6 @@
+ #include &quot;Rotation.h&quot;
+ #include &quot;Inertia.h&quot;
+ 
+-// #include &quot;Frame.h&quot;
+-
+ namespace OpenFDM {
+ 
+ class CoordinateSystem {
+@@ -40,11 +38,6 @@
+     mPosition(coordinateSystem.mPosition),
+     mOrientation(coordinateSystem.mOrientation)
+   { }
+-  /// For a transition time, this might be a good idea
+-//   CoordinateSystem(const Frame&amp; frame) :
+-//     mPosition(frame.getRefPos()),
+-//     mOrientation(frame.getRefOr())
+-//   { }
+ 
+   /// Return the position of this coordinate system wrt the reference coordinate
+   /// system. The position is measured in the reference coordinate
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-10 06:18:57 UTC (rev 874)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-10 06:46:23 UTC (rev 875)
+@@ -42,10 +42,18 @@
+   Vector3 position0 = mPosition0-portValues[mMechanicLink0].getDesignPosition();
+   Vector3 position1 = mPosition1-portValues[mMechanicLink1].getDesignPosition();
+ 
++  CoordinateSystem csys0(portValues[mMechanicLink0].getCoordinateSystem());
++  csys0 = csys0.getRelative(position0);
++  
++  CoordinateSystem csys1(portValues[mMechanicLink1].getCoordinateSystem());
++  csys1 = csys1.getRelative(position1);
++  
++  CoordinateSystem relSys = csys0.toLocal(csys1);
++
+   bool enableDistance = getEnableDistance();
+   bool enableVelocity = getEnableVelocity();
+   if (enableDistance || enableVelocity) {
+-    Vector3 relPos = frame0.posFromRef(frame1.posToRef(position1)) - position0;
++    Vector3 relPos = relSys.getPosition();
+     real_type nrmRelPos = norm(relPos);
+ 
+     // The relative distance of these two points
+@@ -72,15 +80,20 @@
+                              PortValueList&amp; portValues) const
+ {
+   if (getEnableForce()) {
+-    const Frame&amp; frame0 = portValues[mMechanicLink0].getFrame();
+-    const Frame&amp; frame1 = portValues[mMechanicLink1].getFrame();
+-
+     // FIXME, for now relative position
+     Vector3 position0=mPosition0-portValues[mMechanicLink0].getDesignPosition();
+     Vector3 position1=mPosition1-portValues[mMechanicLink1].getDesignPosition();
++
++    CoordinateSystem csys0(portValues[mMechanicLink0].getCoordinateSystem());
++    csys0 = csys0.getRelative(position0);
++
++    CoordinateSystem csys1(portValues[mMechanicLink1].getCoordinateSystem());
++    csys1 = csys1.getRelative(position1);
++
++    CoordinateSystem relSys = csys0.toLocal(csys1);
+     
+     // FIXME, already have that computed in the velocity step
+-    Vector3 relPos = frame0.posFromRef(frame1.posToRef(position1)) - position0;
++    Vector3 relPos = relSys.getPosition();
+     real_type nrmRelPos = norm(relPos);
+ 
+     // If we have reached the zero position, the force vector is undefined.
+@@ -92,7 +105,7 @@
+       Vector3 force0 = portValues[mForcePort]*dir;
+       portValues[mMechanicLink0].applyForce(forceFrom(position0, force0));
+       
+-      Vector3 force1 = -frame0.getRelOrientation(frame1).transform(force0);
++      Vector3 force1 = -relSys.rotToLocal(force0);
+       portValues[mMechanicLink1].applyForce(forceFrom(position1, force1));
+     }
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000842.html">[OpenFDM-svn] r874 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000844.html">[OpenFDM-svn] r876 - branches/OpenFDM-StateSeparation
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#843">[ date ]</a>
+              <a href="thread.html#843">[ thread ]</a>
+              <a href="subject.html#843">[ subject ]</a>
+              <a href="author.html#843">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

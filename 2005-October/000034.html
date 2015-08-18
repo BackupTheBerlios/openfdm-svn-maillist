@@ -1,0 +1,314 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r46 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r46%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510291300.j9TD0jKG031647%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000033.html">
+   <LINK REL="Next"  HREF="000035.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r46 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r46%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510291300.j9TD0jKG031647%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r46 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Oct 29 15:00:45 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000033.html">[OpenFDM-svn] r45 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000035.html">[OpenFDM-svn] r47 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#34">[ date ]</a>
+              <a href="thread.html#34">[ thread ]</a>
+              <a href="subject.html#34">[ subject ]</a>
+              <a href="author.html#34">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-29 15:00:41 +0200 (Sat, 29 Oct 2005)
+New Revision: 46
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+Log:
+Some cleanup.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-10-29 10:16:13 UTC (rev 45)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-10-29 13:00:41 UTC (rev 46)
+@@ -164,6 +164,49 @@
+ }
+ 
+ void
++Frame::computePositionDep(void) const
++{
++  if (hasParent()) {
++    mRefOrient = getParentFrame()-&gt;getRefOrientation()*getOrientation();
++    mRefPos = getParentFrame()-&gt;posToRef(getPosition());
++    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
++  } else {
++    mRefOrient = getOrientation();
++    mRefPos = getPosition();
++    mReferenceFrameId = getFrameId();
++  }
++  mDirtyPos = false;
++}
++
++void
++Frame::computeVelocityDep(void) const
++{
++  if (hasParent()) {
++    mParentSpVel = motionFromParent(getParentFrame()-&gt;getSpVel());
++    mRefVel = getRelVel() + motionFromParent(getParentFrame()-&gt;getRefVel());
++    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
++  } else {
++    mParentSpVel = Vector6::zeros();
++    mRefVel = Vector6::zeros();
++    mReferenceFrameId = getFrameId();
++  }
++  mDirtySpVel = false;
++}
++
++void
++Frame::computeAccelerationDep(void) const
++{
++  if (hasParent()) {
++    mParentSpAccel = motionFromParent(getParentFrame()-&gt;getSpAccel());
++    mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
++  } else {
++    mParentSpAccel = Vector6::zeros();
++    mReferenceFrameId = getFrameId();
++  }
++  mDirtySpAccel = false;
++}
++
++void
+ Frame::setPosDirtyUnconditional(void)
+ {
+   // Mark ourself dirty.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2005-10-29 10:16:13 UTC (rev 45)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2005-10-29 13:00:41 UTC (rev 46)
+@@ -184,7 +184,7 @@
+       parent frame. It is the only vector which is in the parent frames
+       coordinates.
+    */
+-  /* virtual */ const Vector3&amp; getPosition(void) const
++  const Vector3&amp; getPosition(void) const
+   { return mPosition; }
+ 
+   /** Orientation of the current frame.
+@@ -192,7 +192,7 @@
+       parent frame. The quaternion returned here rotates vectors in the parent
+       frames coordinated to vectors in current frames coordinates.
+    */
+-  /* virtual */ const Rotation&amp; getOrientation(void) const
++  const Rotation&amp; getOrientation(void) const
+   { return mOrientation; }
+ 
+ 
+@@ -201,7 +201,6 @@
+                frames coordinates.
+       @return  The vector v in the parent frames coordinates.
+    */
+-//   virtual 
+   Vector3 rotToParent(const Vector3&amp; v) const
+   { return getOrientation().backTransform(v); }
+ 
+@@ -210,7 +209,6 @@
+                frames coordinates.
+       @return  The vector v in the current frames coordinates.
+    */
+-//   virtual 
+   Vector3 rotFromParent(const Vector3&amp; v) const
+   { return getOrientation().transform(v); }
+ 
+@@ -220,7 +218,7 @@
+               to the parent frame. The velocity is in the current frames
+               coordinates.
+    */
+-  /* virtual */ const Vector6&amp; getRelVel(void) const
++  const Vector6&amp; getRelVel(void) const
+   { return mRelVel; }
+ 
+   /** Relative spatial acceleration.
+@@ -228,7 +226,7 @@
+               to the parent frame. The velocity is in the current frames
+               coordinates.
+    */
+-  /* virtual */ Vector6 getRelAccel(void) const 
++  Vector6 getRelAccel(void) const 
+   { return mRelAccel; }
+ 
+ 
+@@ -330,7 +328,6 @@
+ 
+   /** FIXME
+    */
+-//   virtual 
+   Vector6 getHdot(void) const
+   {
+     /**
+@@ -355,7 +352,6 @@
+       @param v The position vector in the parent frame to be transformed.
+       @return  The motion vector transformed to the current frame.
+    */
+-//   virtual 
+   Vector3 posFromParent(const Vector3&amp; v) const
+   { return posTo(getPosition(), getOrientation(), v); }
+ 
+@@ -365,7 +361,6 @@
+       @param v The position in the current frame to be transformed.
+       @return  The position transformed to the parent frame.
+    */
+-//   virtual 
+   Vector3 posToParent(const Vector3&amp; v) const
+   { return posFrom(getPosition(), getOrientation(), v); }
+ 
+@@ -375,7 +370,6 @@
+       @param v The motion vector in the parent frame to be transformed.
+       @return  The motion vector transformed to the current frame.
+    */
+-//   virtual 
+   Vector6 motionFromParent(const Vector6&amp; v) const
+   { return motionTo(getPosition(), getOrientation(), v); }
+ 
+@@ -385,7 +379,6 @@
+       @param v The motion vector in the current frame to be transformed.
+       @return  The motion vector transformed to the parent frame.
+    */
+-//   virtual 
+   Vector6 motionToParent(const Vector6&amp; v) const
+   { return motionFrom(getPosition(), getOrientation(), v); }
+ 
+@@ -395,7 +388,6 @@
+       @param v The force vector in the parent frame to be transformed.
+       @return  The force vector transformed to the current frame.
+    */
+-//   virtual 
+   Vector6 forceFromParent(const Vector6&amp; v) const
+   { return forceTo(getPosition(), getOrientation(), v); }
+ 
+@@ -405,7 +397,6 @@
+       @param v The force vector in the current frame to be transformed.
+       @return  The force vector transformed to the parent frame.
+    */
+-//   virtual 
+   Vector6 forceToParent(const Vector6&amp; v) const
+   { return forceFrom(getPosition(), getOrientation(), v); }
+ 
+@@ -465,7 +456,6 @@
+       @param v The motion vector in the parent frame to be transformed.
+       @return  The motion vector transformed to the current frame.
+    */
+-//   virtual 
+   Vector6 motionFromRef(const Vector6&amp; v) const
+   { return motionTo(getRefPosition(), getRefOrientation(), v) - getRefVel(); }
+ 
+@@ -475,7 +465,6 @@
+       @param v The motion vector in the current frame to be transformed.
+       @return  The motion vector transformed to the parent frame.
+    */
+-//   virtual 
+   Vector6 motionToRef(const Vector6&amp; v) const
+   { return motionFrom(getRefPosition(), getRefOrientation(), v + getRefVel()); }
+ 
+@@ -485,46 +474,6 @@
+   Plane planeToRef(const Plane&amp; plane) const
+   { return planeFrom(getRefPosition(), getRefOrientation(), plane); }
+ 
+-  void computePositionDep(void) const
+-  {
+-    if (hasParent()) {
+-      mRefOrient = getParentFrame()-&gt;getRefOrientation()*getOrientation();
+-      mRefPos = getParentFrame()-&gt;posToRef(getPosition());
+-      mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-    } else {
+-      mRefOrient = getOrientation();
+-      mRefPos = getPosition();
+-      mReferenceFrameId = getFrameId();
+-    }
+-    mDirtyPos = false;
+-  }
+-
+-  void computeVelocityDep(void) const
+-  {
+-    if (hasParent()) {
+-      mParentSpVel = motionFromParent(getParentFrame()-&gt;getSpVel());
+-      mRefVel = getRelVel() + motionFromParent(getParentFrame()-&gt;getRefVel());
+-      mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-    } else {
+-      mParentSpVel = Vector6::zeros();
+-      mRefVel = Vector6::zeros();
+-      mReferenceFrameId = getFrameId();
+-    }
+-    mDirtySpVel = false;
+-  }
+-
+-  void computeAccelerationDep(void) const
+-  {
+-    if (hasParent()) {
+-      mParentSpAccel = motionFromParent(getParentFrame()-&gt;getSpAccel());
+-      mReferenceFrameId = getParentFrame()-&gt;getRefFrameId();
+-    } else {
+-      mParentSpAccel = Vector6::zeros();
+-      mReferenceFrameId = getFrameId();
+-    }
+-    mDirtySpAccel = false;
+-  }
+-
+   /** Reference orientation.
+    * Returns the reference orientation of this frame wrt the topmost frame 
+    * this frame is attached to.
+@@ -606,6 +555,10 @@
+   void enableAccel(void)
+   { mDisableSpAccel = false; }
+ 
++  void computePositionDep(void) const;
++  void computeVelocityDep(void) const;
++  void computeAccelerationDep(void) const;
++
+ protected:
+   void setPosDirty(void)
+   {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000033.html">[OpenFDM-svn] r45 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000035.html">[OpenFDM-svn] r47 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#34">[ date ]</a>
+              <a href="thread.html#34">[ thread ]</a>
+              <a href="subject.html#34">[ subject ]</a>
+              <a href="author.html#34">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

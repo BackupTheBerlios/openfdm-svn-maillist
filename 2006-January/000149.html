@@ -1,0 +1,271 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r165 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r165%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601030748.k037m7Lg007137%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000148.html">
+   <LINK REL="Next"  HREF="000150.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r165 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r165%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601030748.k037m7Lg007137%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r165 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Jan  3 08:48:07 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000148.html">[OpenFDM-svn] r164 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000150.html">[OpenFDM-svn] r166 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#149">[ date ]</a>
+              <a href="thread.html#149">[ thread ]</a>
+              <a href="subject.html#149">[ subject ]</a>
+              <a href="author.html#149">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-03 08:48:02 +0100 (Tue, 03 Jan 2006)
+New Revision: 165
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+Log:
+Extend the ModelVisitor with morr classes
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-01-02 17:49:35 UTC (rev 164)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-01-03 07:48:02 UTC (rev 165)
+@@ -12,6 +12,7 @@
+ #include &quot;Interact.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;LogStream.h&quot;
++#include &quot;ModelVisitor.h&quot;
+ #include &quot;Joint.h&quot;
+ 
+ namespace OpenFDM {
+@@ -25,6 +26,12 @@
+ {
+ }
+ 
++void
++Joint::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
+ const Joint*
+ Joint::toJoint(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2006-01-02 17:49:35 UTC (rev 164)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2006-01-03 07:48:02 UTC (rev 165)
+@@ -21,12 +21,19 @@
+ /// FIXME: joint's should be lockable, which means trylock == true and
+ /// velocity small enough - keep position ...
+ 
++class ModelVisitor;
++
+ class Joint
+   : public Interact {
+ public:
+   Joint(const std::string&amp; name);
+   virtual ~Joint(void);
+ 
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
+   virtual const Joint* toJoint(void) const;
+   virtual Joint* toJoint(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-02 17:49:35 UTC (rev 164)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-03 07:48:02 UTC (rev 165)
+@@ -12,6 +12,7 @@
+ #include &quot;Gravity.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
++#include &quot;ModelVisitor.h&quot;
+ #include &quot;RootFrame.h&quot;
+ #include &quot;MobileRootJointFrame.h&quot;
+ #include &quot;MobileRootJoint.h&quot;
+@@ -30,6 +31,12 @@
+ {
+ }
+ 
++void
++MobileRootJoint::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
+ const MobileRootJoint*
+ MobileRootJoint::toMobileRootJoint(void) const
+ {
+@@ -126,18 +133,49 @@
+   mFrame-&gt;setAngularRelVel(vel);
+ }
+ 
++const Vector3&amp;
++MobileRootJoint::getRefPosition(void) const
++{
++  return mFrame-&gt;getRefPosition();
++}
++
+ void
+ MobileRootJoint::setRefPosition(const Vector3&amp; p)
+ {
+   mFrame-&gt;setRefPosition(p);
+ }
+ 
++const Quaternion&amp;
++MobileRootJoint::getRefOrientation(void) const
++{
++  return mFrame-&gt;getRefOrientation();
++}
++
+ void
+ MobileRootJoint::setRefOrientation(const Quaternion&amp; o)
+ {
+   mFrame-&gt;setRefOrientation(o);
+ }
+ 
++Geodetic
++MobileRootJoint::getGeodPosition(void) const
++{
++  Environment* env = getEnvironment();
++  if (!env)
++    return Geodetic();
++  return env-&gt;getPlanet()-&gt;toGeod(getRefPosition());
++}
++
++Quaternion
++MobileRootJoint::getGeodOrientation(void) const
++{
++  Environment* env = getEnvironment();
++  if (!env)
++    return Quaternion::unit();
++  Quaternion hlOr = env-&gt;getPlanet()-&gt;getGeodHLOrientation(getRefPosition());
++  return inverse(hlOr)*getRefOrientation();
++}
++
+ void
+ MobileRootJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+                              const SpatialInertia&amp; outI,
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-01-02 17:49:35 UTC (rev 164)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-01-03 07:48:02 UTC (rev 165)
+@@ -13,11 +13,13 @@
+ #include &quot;Inertia.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
++#include &quot;Planet.h&quot;
+ #include &quot;Joint.h&quot;
+ #include &quot;Environment.h&quot;
+ 
+ namespace OpenFDM {
+ 
++class ModelVisitor;
+ class MobileRootJointFrame;
+ 
+ class MobileRootJoint
+@@ -26,6 +28,11 @@
+   MobileRootJoint(const std::string&amp; name);
+   virtual ~MobileRootJoint(void);
+ 
++  /// Double dispatch helper for the multibody system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the multibody system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
+   virtual const MobileRootJoint* toMobileRootJoint(void) const;
+   virtual MobileRootJoint* toMobileRootJoint(void);
+ 
+@@ -41,11 +48,21 @@
+   /// Set the relative velocity.
+   void setAngularRelVel(const Vector3&amp; vel);
+ 
++  /// Get the reference position.
++  const Vector3&amp; getRefPosition(void) const;
+   /// Set the reference position.
+   void setRefPosition(const Vector3&amp; p);
++
++  /// Get the reference orientation.
++  const Quaternion&amp; getRefOrientation(void) const;
+   /// Set the reference orientation.
+   void setRefOrientation(const Quaternion&amp; o);
+ 
++  /// Get the geodetic position.
++  Geodetic getGeodPosition(void) const;
++  /// Get orientation wrt the geodetic hl frame.
++  Quaternion getGeodOrientation(void) const;
++
+ private:
+   /** Plugin function for the articulated body algorithm.
+    */
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2006-01-02 17:49:35 UTC (rev 164)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2006-01-03 07:48:02 UTC (rev 165)
+@@ -24,6 +24,10 @@
+   { apply((ModelGroup&amp;)multiBodySystem); }
+   virtual void apply(Interact&amp; interact)
+   { apply((Model&amp;)interact); }
++  virtual void apply(Joint&amp; joint)
++  { apply((Interact&amp;)joint); }
++  virtual void apply(MobileRootJoint&amp; mobileRootJoint)
++  { apply((Joint&amp;)mobileRootJoint); }
+ protected:
+   /// Call this in the apply(ModelGroup&amp;) method if you want to
+   /// traverse downward
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000148.html">[OpenFDM-svn] r164 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000150.html">[OpenFDM-svn] r166 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#149">[ date ]</a>
+              <a href="thread.html#149">[ thread ]</a>
+              <a href="subject.html#149">[ subject ]</a>
+              <a href="author.html#149">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

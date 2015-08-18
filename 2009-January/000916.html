@@ -1,0 +1,186 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r951 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r951%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901192045.n0JKj9nq004072%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000915.html">
+   <LINK REL="Next"  HREF="000917.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r951 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r951%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200901192045.n0JKj9nq004072%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r951 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jan 19 21:45:09 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000915.html">[OpenFDM-svn] r950 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000917.html">[OpenFDM-svn] r952 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#916">[ date ]</a>
+              <a href="thread.html#916">[ thread ]</a>
+              <a href="subject.html#916">[ subject ]</a>
+              <a href="author.html#916">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-19 21:45:09 +0100 (Mon, 19 Jan 2009)
+New Revision: 951
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+Improove normal force controller.
+
+M    tiretestrig.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-19 19:36:46 UTC (rev 950)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2009-01-19 20:45:09 UTC (rev 951)
+@@ -2,6 +2,8 @@
+  *
+  */
+ 
++#include &lt;OpenFDM/Bias.h&gt;
++#include &lt;OpenFDM/BinaryFunction.h&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/FixedRootJoint.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
+@@ -18,6 +20,7 @@
+ #include &lt;OpenFDM/RevoluteActuator.h&gt;
+ #include &lt;OpenFDM/RevoluteJoint.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Saturation.h&gt;
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+@@ -88,10 +91,11 @@
+ }
+ 
+ Node*
+-createController(const real_type&amp; p, const real_type&amp; i, const real_type&amp; d)
++createController()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Controller&quot;);
+ 
++  // The inputs from the outside
+   GroupInput* input = new GroupInput(&quot;Input&quot;);
+   group-&gt;addChild(input);
+   input-&gt;setExternalPortName(&quot;input&quot;);
+@@ -100,6 +104,29 @@
+   group-&gt;addChild(desiredInput);
+   desiredInput-&gt;setExternalPortName(&quot;desiredInput&quot;);
+ 
++
++  // As long as we have not reached 1% of the load, go with a speed of 1m/s
++  BinaryFunction* div = new BinaryFunction(&quot;Normalized Input&quot;,
++                                           BinaryFunction::Div);
++  group-&gt;addChild(div);
++  group-&gt;connect(input-&gt;getPort(&quot;output&quot;), div-&gt;getPort(&quot;input0&quot;));
++  group-&gt;connect(desiredInput-&gt;getPort(&quot;output&quot;), div-&gt;getPort(&quot;input1&quot;));
++
++  Bias* bias = new Bias(&quot;Relative Input Bias&quot;, -0.01);
++  group-&gt;addChild(bias);
++  group-&gt;connect(div-&gt;getPort(&quot;output&quot;), bias-&gt;getPort(&quot;input&quot;));
++
++  Saturation* saturation = new Saturation(&quot;Relative Saturation&quot;);
++  saturation-&gt;setMaxSaturation(Matrix(real_type(0)));
++  group-&gt;addChild(saturation);
++  group-&gt;connect(bias-&gt;getPort(&quot;output&quot;), saturation-&gt;getPort(&quot;input&quot;));
++
++  Gain* approachGain = new Gain(&quot;Approach Gain&quot;, -100);
++  group-&gt;addChild(approachGain);
++  group-&gt;connect(saturation-&gt;getPort(&quot;output&quot;), approachGain-&gt;getPort(&quot;input&quot;));
++
++
++  // The usual proportional controller
+   Summer* summer = new Summer(&quot;Error&quot;);
+   summer-&gt;setNumSummands(2);
+   summer-&gt;setInputSign(0, Summer::Minus);
+@@ -107,35 +134,21 @@
+   group-&gt;addChild(summer);
+   group-&gt;connect(input-&gt;getPort(0), summer-&gt;getPort(&quot;input0&quot;));
+   group-&gt;connect(desiredInput-&gt;getPort(0), summer-&gt;getPort(&quot;input1&quot;));
+-  
++
+   // the proportional thing
+   Gain* proportionalGain = new Gain(&quot;Proportional Gain&quot;);
+-  proportionalGain-&gt;setGain(p);
++  proportionalGain-&gt;setGain(1e-4);
+   group-&gt;addChild(proportionalGain);
+   group-&gt;connect(summer-&gt;getPort(&quot;output&quot;), proportionalGain-&gt;getPort(&quot;input&quot;));
+ 
+ 
+-  // the integral thing
+-  Integrator* integrator = new Integrator(&quot;Integrator&quot;);
+-  group-&gt;addChild(integrator);
+-  group-&gt;connect(summer-&gt;getPort(&quot;output&quot;), integrator-&gt;getPort(&quot;input&quot;));
+-
+-  Gain* integralGain = new Gain(&quot;Integral Gain&quot;);
+-  integralGain-&gt;setGain(i);
+-  group-&gt;addChild(integralGain);
+-  group-&gt;connect(integrator-&gt;getPort(&quot;output&quot;), integralGain-&gt;getPort(&quot;input&quot;));
+-
+-
+-  // the derivative thing
+-//   TimeDerivative* timeDerivative = new Integrator(&quot;Integrator&quot;);
+-
+   // The output sum
+   Summer* outputSum = new Summer(&quot;Output Sum&quot;);
+   outputSum-&gt;setNumSummands(2);
+   group-&gt;addChild(outputSum);
+   group-&gt;connect(proportionalGain-&gt;getPort(&quot;output&quot;),
+                  outputSum-&gt;getPort(&quot;input0&quot;));
+-  group-&gt;connect(integralGain-&gt;getPort(&quot;output&quot;),
++  group-&gt;connect(approachGain-&gt;getPort(&quot;output&quot;),
+                  outputSum-&gt;getPort(&quot;input1&quot;));
+   
+   GroupOutput* output = new GroupOutput(&quot;Output&quot;);
+@@ -170,7 +183,7 @@
+   ConstModel* normalForce = new ConstModel(&quot;Normal Force&quot;);
+   group-&gt;addChild(normalForce);
+ 
+-  Node* normalForceController = createController(1e-4, 0, 0);
++  Node* normalForceController = createController();
+   normalForceController-&gt;setName(&quot;Normal Force Controller&quot;);
+   group-&gt;addChild(normalForceController);
+   group-&gt;connect(normalForce-&gt;getPort(&quot;output&quot;),
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000915.html">[OpenFDM-svn] r950 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000917.html">[OpenFDM-svn] r952 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#916">[ date ]</a>
+              <a href="thread.html#916">[ thread ]</a>
+              <a href="subject.html#916">[ subject ]</a>
+              <a href="author.html#916">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

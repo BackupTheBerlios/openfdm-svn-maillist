@@ -1,0 +1,168 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r601 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r601%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810111058.m9BAwcBv021724%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000570.html">
+   <LINK REL="Next"  HREF="000572.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r601 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r601%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810111058.m9BAwcBv021724%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r601 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Oct 11 12:58:38 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000570.html">[OpenFDM-svn] r600 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000572.html">[OpenFDM-svn] r602 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#571">[ date ]</a>
+              <a href="thread.html#571">[ thread ]</a>
+              <a href="subject.html#571">[ subject ]</a>
+              <a href="author.html#571">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-11 12:58:35 +0200 (Sat, 11 Oct 2008)
+New Revision: 601
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add some more testcasesAdd some more testcases.
+
+M    src/test/structure.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-11 10:36:18 UTC (rev 600)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-11 10:58:35 UTC (rev 601)
+@@ -15,8 +15,8 @@
+ // Build a system with a single gain component referencing itself
+ bool testSelfReferencingDirectInput()
+ {
+-  SharedPtr&lt;Group&gt; group = new Group(&quot;group&quot;);
+-  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;));
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;Gain&quot;));
+   group-&gt;connect(gain, &quot;output&quot;, gain, &quot;input&quot;);
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Self referencing Gain&quot;);
+@@ -30,6 +30,61 @@
+   return true;
+ }
+ 
++// build up a cyclic direct input loop involving more than one model
++bool testCyclicDependency()
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++  Group::NodeId gain1 = group-&gt;addChild(new Gain(&quot;Gain 1&quot;));
++  Group::NodeId gain2 = group-&gt;addChild(new Gain(&quot;Gain 2&quot;));
++  group-&gt;connect(gain1, &quot;output&quot;, gain2, &quot;input&quot;);
++  group-&gt;connect(gain2, &quot;output&quot;, gain1, &quot;input&quot;);
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Cyclic loop&quot;);
++  system-&gt;setNode(group);
++
++  if (system-&gt;init()) {
++    std::cerr &lt;&lt; &quot;Detection of direct input loops failed!&quot;
++              &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++// build up a cyclic direct input loop involving more than one model
++bool testCyclicDependencyWithGroup()
++{
++  SharedPtr&lt;Group&gt; group1 = new Group(&quot;Group 1&quot;);
++  Group::NodeId groupInput1 = group1-&gt;addChild(new GroupInput(&quot;Input 1&quot;));
++  Group::NodeId gain1 = group1-&gt;addChild(new Gain(&quot;Gain 1&quot;));
++  Group::NodeId groupOutput1 = group1-&gt;addChild(new GroupOutput(&quot;Output 1&quot;));
++  group1-&gt;connect(groupInput1, &quot;output&quot;, gain1, &quot;input&quot;);
++  group1-&gt;connect(gain1, &quot;output&quot;, groupOutput1, &quot;input&quot;);
++
++  SharedPtr&lt;Group&gt; group2 = new Group(&quot;Group 2&quot;);
++  Group::NodeId groupInput2 = group2-&gt;addChild(new GroupInput(&quot;Input 2&quot;));
++  Group::NodeId gain2 = group2-&gt;addChild(new Gain(&quot;Gain 2&quot;));
++  Group::NodeId groupOutput2 = group2-&gt;addChild(new GroupOutput(&quot;Output 2&quot;));
++  group2-&gt;connect(groupInput2, &quot;output&quot;, gain2, &quot;input&quot;);
++  group2-&gt;connect(gain2, &quot;output&quot;, groupOutput2, &quot;input&quot;);
++
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++  Group::NodeId groupId1 = group-&gt;addChild(group1);
++  Group::NodeId groupId2 = group-&gt;addChild(group2);
++  group-&gt;connect(groupId1, &quot;output&quot;, groupId2, &quot;input&quot;);
++  group-&gt;connect(groupId2, &quot;output&quot;, groupId1, &quot;input&quot;);
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Cyclic loop through groups&quot;);
++  system-&gt;setNode(group);
++
++  if (system-&gt;init()) {
++    std::cerr &lt;&lt; &quot;Detection of direct input loops failed!&quot;
++              &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++
+ Node* buildContinousExample()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+@@ -112,7 +167,16 @@
+   if (!testSelfReferencingDirectInput())
+     return EXIT_FAILURE;
+ 
++  // Check for cyclic loop analysis
++  if (!testCyclicDependency())
++    return EXIT_FAILURE;
+ 
++  // Check for cyclic loop analysis through groups.
++  // Als kind of checks if connections through groups work
++  if (!testCyclicDependencyWithGroup())
++    return EXIT_FAILURE;
++
++
+   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000570.html">[OpenFDM-svn] r600 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000572.html">[OpenFDM-svn] r602 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#571">[ date ]</a>
+              <a href="thread.html#571">[ thread ]</a>
+              <a href="subject.html#571">[ subject ]</a>
+              <a href="author.html#571">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,974 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r84 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r84%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512072041.jB7KfGQc010546%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000067.html">
+   <LINK REL="Next"  HREF="000069.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r84 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r84%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512072041.jB7KfGQc010546%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r84 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Dec  7 21:41:16 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000067.html">[OpenFDM-svn] r83 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000069.html">[OpenFDM-svn] r85 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#68">[ date ]</a>
+              <a href="thread.html#68">[ thread ]</a>
+              <a href="subject.html#68">[ subject ]</a>
+              <a href="author.html#68">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-07 21:40:50 +0100 (Wed, 07 Dec 2005)
+New Revision: 84
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Bias.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+   trunk/OpenFDM/src/OpenFDM/DeadBand.h
+   trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Gain.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/LineActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/Product.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/Table.h
+   trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+Log:
+More on transition to the new port interface
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Bias.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Bias.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Bias.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -23,9 +23,9 @@
+   setInputPortName(0, &quot;input&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Bias::getOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Bias::getOutput);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;Bias::getOutput));
+-  
+   addProperty(&quot;bias&quot;, Property(this, &amp;Bias::getBias, &amp;Bias::setBias));
+ }
+ 
+@@ -62,8 +62,9 @@
+ Bias::output(const TaskInfo&amp;)
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  OpenFDMAssert(size(getInputPort(0)-&gt;getValue().toMatrix()) == size(mBias));
+-  mOutput = mBias + getInputPort(0)-&gt;getValue().toMatrix();
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mOutput = mh.getMatrixValue();
++  mOutput += mBias;
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/ConstSystem.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -12,7 +12,7 @@
+   addProperty(&quot;value&quot;, Property(this, &amp;ConstSystem::getValue, &amp;ConstSystem::setValue));
+ 
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;ConstSystem::getValue));
++  setOutputPort(0, &quot;output&quot;, this, &amp;ConstSystem::getValue);
+ }
+ 
+ ConstSystem::~ConstSystem(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -43,8 +43,10 @@
+     getGround(taskInfo.getTime());
+ 
+     // FIXME
+-    if (getInputPort(&quot;enabled&quot;)-&gt;isConnected())
+-      mEnabled = 0.5 &lt; getInputPort(&quot;enabled&quot;)-&gt;getValue().toReal();
++    if (getInputPort(&quot;enabled&quot;)-&gt;isConnected()) {
++      RealPortHandle rh = getInputPort(&quot;enabled&quot;)-&gt;toRealPortHandle();
++      mEnabled = 0.5 &lt; rh.getRealValue();
++    }
+   }
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -22,7 +22,7 @@
+   setInputPortName(0, &quot;input&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;DeadBand::getOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;DeadBand::getOutput);
+   
+   addProperty(&quot;width&quot;, Property(this, &amp;DeadBand::getWidth, &amp;DeadBand::setWidth));
+ }
+@@ -43,7 +43,8 @@
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+   
+-  mOutput = getInputPort(0)-&gt;getValue().toReal();
++  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++  mOutput = rh.getRealValue();
+   if (mOutput &lt; -mWidth)
+     mOutput += mWidth;
+   else if (mWidth &lt; mOutput)
+@@ -64,7 +65,7 @@
+   mWidth = width;
+ }
+ 
+-real_type
++const real_type&amp;
+ DeadBand::getOutput(void) const
+ {
+   return mOutput;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -26,7 +26,7 @@
+   const real_type&amp; getWidth(void) const;
+   void setWidth(const real_type&amp; width);
+ 
+-  real_type getOutput(void) const;
++  const real_type&amp; getOutput(void) const;
+ 
+ private:
+   real_type mWidth;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -90,7 +90,8 @@
+ void
+ DirectForce::output(const TaskInfo&amp;)
+ {
+-  mMagnitude = getInputPort(0)-&gt;getValue().toReal();
++  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++  mMagnitude = rh.getRealValue();
+   mForce = mMagnitude*mDirection;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -23,7 +23,12 @@
+ void
+ DiscBrake::output(const TaskInfo&amp; taskInfo)
+ {
+-  real_type brakeInput = getInputPort(0)-&gt;getValue().toReal();
++  Port* port = getInputPort(0);
++  real_type brakeInput = 0;
++  if (port-&gt;isConnected()) {
++    RealPortHandle rh = port-&gt;toRealPortHandle();
++    brakeInput = rh.getRealValue();
++  }
+   setForce(getVel()*(-1e1 + brakeInput*mFrictionConstant));
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -14,7 +14,7 @@
+   setInputPortName(0, &quot;derivatirve&quot;);
+ 
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;DiscreteIntegrator::getIntegralOutput);
+ 
+   addProperty(&quot;initialValue&quot;, Property(this, &amp;DiscreteIntegrator::getInitialValue, &amp;DiscreteIntegrator::setInitialValue));
+   addProperty(&quot;minSaturation&quot;, Property(this, &amp;DiscreteIntegrator::getMinSaturation, &amp;DiscreteIntegrator::setMinSaturation));
+@@ -67,18 +67,15 @@
+   // Just compute the integral.
+   // FIXME: make sure this is the only dt ...
+   real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
+-  Matrix input = getInputPort(0)-&gt;getValue().toMatrix();
+-  OpenFDMAssert(size(input) == size(mIntegralState));
+-  if (size(input) == size(mIntegralState))
+-    mIntegralState += dt*input;
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  if (size(mh.getMatrixValue()) == size(mIntegralState))
++    mIntegralState += dt*mh.getMatrixValue();
+ 
+   // Hmm, should that be done on state setting too???
+-  if (size(mMaxSaturation) == size(mInitialValue)) {
++  if (size(mMaxSaturation) == size(mInitialValue))
+     mIntegralState = LinAlg::min(mIntegralState, mMaxSaturation);
+-  }
+-  if (size(mMinSaturation) == size(mInitialValue)) {
++  if (size(mMinSaturation) == size(mInitialValue))
+     mIntegralState = LinAlg::max(mIntegralState, mMinSaturation);
+-  }
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Gain.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Gain.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Gain.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -23,7 +23,8 @@
+   setInputPortName(0, &quot;input&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Gain::getOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Gain::getOutput);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;Gain::getOutput));
+   
+   addProperty(&quot;gain&quot;, Property(this, &amp;Gain::getGain, &amp;Gain::setGain));
+@@ -47,7 +48,8 @@
+ void Gain::output(const TaskInfo&amp;)
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  mOutput = getInputPort(0)-&gt;getValue().toMatrix();
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mOutput = mh.getMatrixValue();
+   mOutput *= mGain;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -11,7 +11,7 @@
+   mInputGain(1)
+ {
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Input::getOutputValue));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Input::getOutputValue);
+ 
+   addProperty(&quot;inputValue&quot;,
+               Property(this, &amp;Input::getInputValue, &amp;Input::setInputValue));
+@@ -138,7 +138,8 @@
+ void
+ Output::output(const TaskInfo&amp;)
+ {
+-  mValue = mOutputGain*getInputPort(0)-&gt;getValue().toReal();
++  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++  mValue = rh.getRealValue();
+ }
+ 
+ const real_type&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -82,7 +82,8 @@
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+ 
+   // Just compute the integral.
+-  Matrix input = getInputPort(0)-&gt;getValue().toMatrix();
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  const Matrix&amp; input = mh.getMatrixValue();
+   OpenFDMAssert(size(input) == size(mIntegralState));
+ 
+   // FIXME reshape ...
+
+Modified: trunk/OpenFDM/src/OpenFDM/LineActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineActuator.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/LineActuator.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -24,7 +24,8 @@
+ void
+ LineActuator::output(const TaskInfo&amp; taskInfo)
+ {
+-  real_type posInput = getInputPort(0)-&gt;getValue().toReal();
++  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++  real_type posInput = rh.getRealValue();
+   real_type displacement = getPosition() - posInput;
+   setForce(mProportionalGain*displacement + getVel()*mDerivativeGain);
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -22,7 +22,8 @@
+   setInputPortName(1, &quot;Input 1&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;MaxModel::getMax));
++  setOutputPort(0, &quot;output&quot;, this, &amp;MaxModel::getMax);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;MaxModel::getMax));
+ 
+   addProperty(&quot;numMaxInputs&quot;, Property(this, &amp;MaxModel::getNumMaxInputs, &amp;MaxModel::setNumMaxInputs));
+@@ -54,9 +55,12 @@
+ void
+ MaxModel::output(const TaskInfo&amp;)
+ {
+-  mMax = getInputPort(0)-&gt;getValue().toMatrix();
+-  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i)
+-    mMax = LinAlg::max(mMax, getInputPort(i)-&gt;getValue().toMatrix());
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mMax = mh.getMatrixValue();
++  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i) {
++    MatrixPortHandle mh = getInputPort(i)-&gt;toMatrixPortHandle();
++    mMax = LinAlg::max(mMax, mh.getMatrixValue());
++  }
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -22,7 +22,8 @@
+   setInputPortName(1, &quot;Input 1&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;MinModel::getMin));
++  setOutputPort(0, &quot;output&quot;, this, &amp;MinModel::getMin);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;MinModel::getMin));
+ 
+   addProperty(&quot;numMinInputs&quot;, Property(this, &amp;MinModel::getNumMinInputs, &amp;MinModel::setNumMinInputs));
+@@ -54,9 +55,12 @@
+ void
+ MinModel::output(const TaskInfo&amp;)
+ {
+-  mMin = getInputPort(0)-&gt;getValue().toMatrix();
+-  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i)
+-    mMin = LinAlg::min(mMin, getInputPort(i)-&gt;getValue().toMatrix());
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mMin = mh.getMatrixValue();
++  for (unsigned i = 1; i &lt; getNumInputPorts(); ++i) {
++    MatrixPortHandle mh = getInputPort(i)-&gt;toMatrixPortHandle();
++    mMin = LinAlg::min(mMin, mh.getMatrixValue());
++  }
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -291,6 +291,17 @@
+ }
+ 
+ void
++Model::setOutputPort(unsigned i, const std::string&amp; name,
++                     PortInterface* portInterface)
++{
++  OpenFDMAssert(i &lt; mOutputPorts.size());
++  Port* port = new Port;
++  port-&gt;setPortInterface(portInterface);
++  port-&gt;setName(name);
++  mOutputPorts[i] = port;
++}
++
++void
+ Model::setParent(ModelGroup* modelGroup)
+ {
+   if (mParentModel) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -47,8 +47,8 @@
+     else
+       return 0;
+   }
+-  // FIXME, should not be a virtual function
+-  virtual real_type getRealValue(void)
++  // FIXME, move evaluate into seperate method
++  real_type getRealValue(void)
+   { evaluate(); return mValue(1, 1); }
+ protected:
+   Matrix mValue;
+@@ -57,8 +57,8 @@
+ class MatrixPortInterface : public RealPortInterface {
+ public:
+   virtual MatrixPortInterface* toMatrixPortInterface(void) { return this; }
+-  // FIXME, should not be a virtual function
+-  virtual const Matrix&amp; getMatrixValue(void)
++  // FIXME, move evaluate into seperate method
++  const Matrix&amp; getMatrixValue(void)
+   { evaluate(); return mValue; }
+ };
+ 
+@@ -70,14 +70,43 @@
+   PropertyPortInterface(const Property&amp; property) : mProperty(property)
+   { }
+   virtual void evaluate(void)
+-  {
+-    mValue = mProperty.getValue().toMatrix();
+-  }
++  { mValue = mProperty.getValue().toMatrix(); }
+   virtual bool isConnected(void) const
+   { return mProperty.isValid(); }
+ private:
+   mutable Property mProperty;
+ };
++/// Just a getter used for now
++template&lt;typename M&gt;
++class RealGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const real_type&amp; (M::*Getter) () const;
++  RealGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue(1, 1) = (mSourceModel-&gt;*mGetter)(); }
++  virtual bool isConnected(void) const
++  { return mSourceModel &amp;&amp; mGetter; }
++private:
++  managed_ptr&lt;M&gt; mSourceModel;
++  Getter mGetter;
++};
++template&lt;typename M&gt;
++class MatrixGetterPortInterface : public MatrixPortInterface {
++public:
++  typedef const Matrix&amp; (M::*Getter) () const;
++  MatrixGetterPortInterface(M* sourceModel, Getter getter) :
++    mSourceModel(sourceModel), mGetter(getter)
++  { }
++  virtual void evaluate(void)
++  { mValue = (mSourceModel-&gt;*mGetter)(); }
++  virtual bool isConnected(void) const
++  { return mSourceModel &amp;&amp; mGetter; }
++private:
++  managed_ptr&lt;M&gt; mSourceModel;
++  Getter mGetter;
++};
+ 
+ class RealPortHandle {
+ public:
+@@ -159,8 +188,22 @@
+ 
+   /// returns true if this port has a source port connected to it
+   bool isConnected() const
+-  { return mPortInterface-&gt;isConnected(); }
++  { return mPortInterface &amp;&amp; mPortInterface-&gt;isConnected(); }
+ 
++  /// returns true if the source port sourcePort is the value source for the
++  /// current port
++  bool isConnectedTo(const Port* sourcePort) const
++  {
++    const Port* port = mSourcePort;
++    while (port) {
++      if (sourcePort == port)
++        return true;
++      port = port-&gt;mSourcePort;
++    }
++
++    return false;
++  }
++
+   RealPortHandle toRealPortHandle(void)
+   { return RealPortHandle(mPortInterface-&gt;toRealPortInterface()); }
+   MatrixPortHandle toMatrixPortHandle(void)
+@@ -176,14 +219,16 @@
+   /// Generic thing. Don't use if you don't have to
+   Variant getValue(void)
+   {
+-    RealPortInterface* realPortInterface
+-      = mPortInterface-&gt;toRealPortInterface();
+-    if (realPortInterface)
+-      return Variant(realPortInterface-&gt;getRealValue());
+-    MatrixPortInterface* matrixPortInterface
+-      = mPortInterface-&gt;toMatrixPortInterface();
+-    if (matrixPortInterface)
+-      return Variant(matrixPortInterface-&gt;getMatrixValue());
++    if (mPortInterface) {
++      RealPortInterface* realPortInterface
++        = mPortInterface-&gt;toRealPortInterface();
++      if (realPortInterface)
++        return Variant(realPortInterface-&gt;getRealValue());
++      MatrixPortInterface* matrixPortInterface
++        = mPortInterface-&gt;toMatrixPortInterface();
++      if (matrixPortInterface)
++        return Variant(matrixPortInterface-&gt;getMatrixValue());
++    }
+     return Variant();
+   }
+ 
+@@ -361,9 +406,21 @@
+   void setNumOutputPorts(unsigned num);
+ 
+   /// Sets the name of the i-th output property.
++  /// obsolete ...
+   void setOutputPort(unsigned i, const std::string&amp; name,
+                      const Property&amp; prop);
+-
++  /// might be private ...
++  void setOutputPort(unsigned i, const std::string&amp; name,
++                     PortInterface* portInterface);
++  /// the real used interface
++  template&lt;typename M&gt;
++  void setOutputPort(unsigned i, const std::string&amp; name, M* model,
++                     const real_type&amp; (M::*getter)(void) const)
++  { setOutputPort(i, name, new RealGetterPortInterface&lt;M&gt;(model, getter)); }
++  template&lt;typename M&gt;
++  void setOutputPort(unsigned i, const std::string&amp; name, M* model,
++                     const Matrix&amp; (M::*getter)(void) const)
++  { setOutputPort(i, name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
+ private:
+   // Sets the parent model.
+   // That is the one which is informed if the number of states changes.
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -172,8 +172,11 @@
+ {
+   // Try to resolve direct feedthrough dependencies.
+   // Bail out if not possible.
+-  if (!sortModels())
++  if (!sortModels()) {
++    Log(Model, Error) &lt;&lt; &quot;Could not sort models of ModelGroup \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot;!&quot;&lt;&lt; endl;
+     return false;
++  }
+   // Just init all children.
+   ModelList::iterator it;
+   for (it = mModels.begin(); it != mModels.end(); ++it) {
+@@ -304,7 +307,18 @@
+   }
+ }
+ 
++/// Returns true if the given Model is the source for the input port inputPort
+ bool
++ModelGroup::dependsOn(Port* inputPort, Model* model)
++{
++  for (unsigned k = 0; k &lt; model-&gt;getNumOutputPorts(); ++k) {
++    if (inputPort-&gt;isConnectedTo(model-&gt;getOutputPort(k)))
++      return true;
++  }
++  return false;
++}
++
++bool
+ ModelGroup::appendDependecies(const Model* firstModel, Model* model, ModelList&amp; newList)
+ {
+   // If the model in question does not have dependencies, stop.
+@@ -314,18 +328,13 @@
+   // Check, all inputs for dependencies.
+   unsigned numInputs = model-&gt;getNumInputPorts();
+   for (unsigned i = 0; i &lt; numInputs; ++i) {
+-    Property prop = model-&gt;getInputPort(i)-&gt;getProperty();
+-    // might happen if some inputs are disabled
+-    if (!prop.isValid())
+-      continue;
++    // Determine the model which is the source for this port
++    Port* port = model-&gt;getInputPort(i);
+ 
+-    // Get the dependent model.
+-    Object* object = prop.getObject();
+-
+     // Check if it is still in the list to be scheduled.
+     ModelList::iterator it = mModels.begin();
+     while (it != mModels.end()) {
+-      if (*it == object)
++      if (dependsOn(port, *it))
+         break;
+       ++it;
+     }
+@@ -353,6 +362,8 @@
+     // push that one in question.
+     newList.push_back(tmpModel);
+   }
++
++  return true;
+ }
+ 
+ bool
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -56,7 +56,8 @@
+ private:
+   typedef std::vector&lt;shared_ptr&lt;Model&gt; &gt; ModelList;
+ 
+-  /// Helper function to sort the models according their dependencies
++  /// Helper functions to sort the models according their dependencies
++  static bool dependsOn(Port* inputPort, Model* model);
+   bool appendDependecies(const Model* firstModel, Model* model,
+                          ModelList&amp; newList);
+   /// Sorts the models depending their dependencies
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -27,8 +27,8 @@
+   mPosition = Vector3::zeros();
+ 
+   setNumOutputPorts(2);
+-  setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;PrismaticJoint::getJointPos));
+-  setOutputPort(1, &quot;jointVel&quot;, Property(this, &amp;PrismaticJoint::getJointVel));
++  setOutputPort(0, &quot;jointPos&quot;, this, &amp;PrismaticJoint::getJointPos);
++  setOutputPort(1, &quot;jointVel&quot;, this, &amp;PrismaticJoint::getJointVel);
+ }
+ 
+ PrismaticJoint::~PrismaticJoint(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -36,7 +36,7 @@
+ 
+   /** Returns the joint position.
+    */
+-  real_type getJointPos(void) const
++  const real_type&amp; getJointPos(void) const
+   { return mJointPosition; }
+ 
+   /** Sets the joint position.
+@@ -45,7 +45,7 @@
+ 
+   /** Returns the joint velocity.
+    */
+-  real_type getJointVel(void) const
++  const real_type&amp; getJointVel(void) const
+   { return mJointVelocity; }
+ 
+   /** Sets the joint velocity.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Product.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Product.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Product.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -21,7 +21,8 @@
+   setInputPortName(1, &quot;*&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Product::getProduct));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Product::getProduct);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;Product::getProduct));
+ 
+   addProperty(&quot;numFactors&quot;, Property(this, &amp;Product::getNumFactors, &amp;Product::setNumFactors));
+@@ -45,7 +46,6 @@
+     if (Size(1,1) != size(a))
+       return false;
+   }
+-  mProduct.resize(1, 1);
+   mProduct.resize(getInputPort(0)-&gt;getValue().toMatrix());
+   return true;
+ }
+@@ -53,13 +53,14 @@
+ void
+ Product::output(const TaskInfo&amp;)
+ {
+-  mProduct = getInputPort(0)-&gt;getValue().toMatrix();
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mProduct = mh.getMatrixValue();
+   for (unsigned i = 1; i &lt; getNumInputPorts(); ++i) {
+-    Matrix a = getInputPort(i)-&gt;getValue().toMatrix();
++    RealPortHandle rh = getInputPort(i)-&gt;toRealPortHandle();
+     if (getInputPortName(i) == &quot;*&quot;)
+-      mProduct(1,1) *= a(1,1);
++      mProduct *= rh.getRealValue();
+     else
+-      mProduct(1,1) /= a(1,1);
++      mProduct *= 1/rh.getRealValue();
+   }
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -28,8 +28,8 @@
+   mOrientation = Quaternion::unit();
+ 
+   setNumOutputPorts(2);
+-  setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;RevoluteJoint::getJointPos));
+-  setOutputPort(1, &quot;jointVel&quot;, Property(this, &amp;RevoluteJoint::getJointVel));
++  setOutputPort(0, &quot;jointPos&quot;, this, &amp;RevoluteJoint::getJointPos);
++  setOutputPort(1, &quot;jointVel&quot;, this, &amp;RevoluteJoint::getJointVel);
+ }
+ 
+ RevoluteJoint::~RevoluteJoint(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -36,7 +36,7 @@
+ 
+   /** Returns the joint position.
+    */
+-  real_type getJointPos(void) const
++  const real_type&amp; getJointPos(void) const
+   { return mJointPosition; }
+ 
+   /** Sets the joint position.
+@@ -45,7 +45,7 @@
+ 
+   /** Returns the joint velocity.
+    */
+-  real_type getJointVel(void) const
++  const real_type&amp; getJointVel(void) const
+   { return mJointVelocity; }
+ 
+   /** Sets the joint velocity.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -23,7 +23,8 @@
+   setInputPortName(0, &quot;input&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Saturation::getOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Saturation::getOutput);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;Saturation::getOutput));
+ 
+   addProperty(&quot;minSaturation&quot;, Property(this, &amp;Saturation::getMinSaturation, &amp;Saturation::setMinSaturation));
+@@ -55,16 +56,12 @@
+ Saturation::output(const TaskInfo&amp;)
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  
+-  mOutput = getInputPort(0)-&gt;getValue().toMatrix();
+-  unsigned r = rows(mOutput);
+-  unsigned c = cols(mOutput);
+-  if (0 &lt; rows(mMaxSaturation) &amp;&amp; 0 &lt; cols(mMaxSaturation)) {
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mOutput = mh.getMatrixValue();
++  if (0 &lt; rows(mMaxSaturation) &amp;&amp; 0 &lt; cols(mMaxSaturation))
+     mOutput = LinAlg::min(mOutput, mMaxSaturation);
+-  }
+-  if (0 &lt; rows(mMinSaturation) &amp;&amp; 0 &lt; cols(mMinSaturation)) {
++  if (0 &lt; rows(mMinSaturation) &amp;&amp; 0 &lt; cols(mMinSaturation))
+     mOutput = LinAlg::max(mOutput, mMinSaturation);
+-  }
+ }
+ 
+ const Matrix&amp;
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -59,10 +59,14 @@
+ {
+   if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
+                           SampleTime::PerTimestep)) {
+-    if (getInputPort(&quot;brakeCommand&quot;)-&gt;isConnected())
+-      mBrake = getInputPort(&quot;brakeCommand&quot;)-&gt;getValue().toReal();
+-    if (getInputPort(&quot;steeringAngle&quot;)-&gt;isConnected())
+-      mSteeringAngle = getInputPort(&quot;steeringAngle&quot;)-&gt;getValue().toReal();
++    if (getInputPort(&quot;brakeCommand&quot;)-&gt;isConnected()) {
++      RealPortHandle rh = getInputPort(&quot;brakeCommand&quot;)-&gt;toRealPortHandle();
++      mBrake = rh.getRealValue();
++    }
++    if (getInputPort(&quot;steeringAngle&quot;)-&gt;isConnected()) {
++      RealPortHandle rh = getInputPort(&quot;steeringAngle&quot;)-&gt;toRealPortHandle();
++      mSteeringAngle = rh.getRealValue();
++    }
+   }
+ 
+   Contact::output(taskInfo);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -22,7 +22,8 @@
+   setInputPortName(1, &quot;+&quot;);
+   
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;Summer::getSum));
++  setOutputPort(0, &quot;output&quot;, this, &amp;Summer::getSum);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;Summer::getSum));
+ 
+   addProperty(&quot;numSummands&quot;, Property(this, &amp;Summer::getNumSummands, &amp;Summer::setNumSummands));
+@@ -56,11 +57,12 @@
+ {
+   mSum.clear();
+   for (unsigned i = 0; i &lt; getNumInputPorts(); ++i) {
+-    Matrix a = getInputPort(i)-&gt;getValue().toMatrix();
++    /// FIXME could be preevaluated
++    MatrixPortHandle ph = getInputPort(i)-&gt;toMatrixPortHandle();
+     if (getInputPortName(i) == &quot;-&quot;)
+-      mSum -= a;
++      mSum -= ph.getMatrixValue();
+     else
+-      mSum += a;
++      mSum += ph.getMatrixValue();
+   }
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-07 20:40:50 UTC (rev 84)
+@@ -288,8 +288,8 @@
+   {
+     OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+     TableData&lt;1&gt;::InterpVector interpVec;
+-    real_type iv = getInputPort(0)-&gt;getValue().toReal();
+-    interpVec(1) = mTableLookup.lookup(iv);
++    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++    interpVec(1) = mTableLookup.lookup(rh.getRealValue());
+     mOutput = mTableData.interpolate(interpVec);
+   }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -14,7 +14,8 @@
+   setNumInputPorts(1);
+ 
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;TimeDerivative::getDerivativeOutput));
++  setOutputPort(0, &quot;output&quot;, this, &amp;TimeDerivative::getDerivativeOutput);
++
+   addProperty(&quot;output&quot;, Property(this, &amp;TimeDerivative::getDerivativeOutput));
+ }
+ 
+@@ -39,19 +40,18 @@
+ TimeDerivative::output(const TaskInfo&amp;)
+ {
+   OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
+   // If we are here at the first time, dt is set to zero.
+   // So, computing a derivative is not possible in the first step.
+   // Prepare zero output in this case.
+   if (mDt != 0.0) {
+-    Matrix input = getInputPort(0)-&gt;getValue().toMatrix();
+-    OpenFDMAssert(size(input) == size(mPastInput));
+-    if (size(input) == size(mPastInput)) {
+-      mDerivativeOutput = input - mPastInput;
++    OpenFDMAssert(size(mh.getMatrixValue()) == size(mPastInput));
++    if (size(mh.getMatrixValue()) == size(mPastInput)) {
++      mDerivativeOutput = mh.getMatrixValue() - mPastInput;
+       mDerivativeOutput *= 1/mDt;
+     }
+   } else {
+-    mDerivativeOutput.resize(getInputPort(0)-&gt;getValue().toMatrix());
++    mDerivativeOutput.resize(mh.getMatrixValue());
+     mDerivativeOutput.clear();
+   }
+ }
+@@ -64,7 +64,8 @@
+   // FIXME
+   real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
+   // Updating is just storing required information for the next output step.
+-  mPastInput = getInputPort(0)-&gt;getValue().toMatrix();
++  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
++  mPastInput = mh.getMatrixValue();
+   mDt = dt;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2005-12-04 19:17:24 UTC (rev 83)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2005-12-07 20:40:50 UTC (rev 84)
+@@ -128,7 +128,8 @@
+ DiscreteTransferFunction::output(const TaskInfo&amp;)
+ {
+   // Compute the output ...
+-  real_type input = getInputPort(0)-&gt;getValue().toReal();
++  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++  real_type input = rh.getRealValue();
+   mOutput = dot(mNumNorm, mState) + mD*input;
+ }
+ 
+@@ -141,7 +142,8 @@
+   if (0 &lt; rows(mState)) {
+     // FIXME: use exponential integration scheme here ...
+     // looks very benificial, since it is exact here!
+-    real_type input = getInputPort(0)-&gt;getValue().toReal();
++    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++    real_type input = rh.getRealValue();
+     if (mState.size() == 1) {
+       /// On dimensional exponetial integrator ...
+       real_type z = -dt*dot(mDenNorm, mState);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000067.html">[OpenFDM-svn] r83 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000069.html">[OpenFDM-svn] r85 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#68">[ date ]</a>
+              <a href="thread.html#68">[ thread ]</a>
+              <a href="subject.html#68">[ subject ]</a>
+              <a href="author.html#68">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

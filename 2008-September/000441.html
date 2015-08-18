@@ -1,0 +1,161 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r469 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r469%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809121847.m8CIlWVi003798%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000440.html">
+   <LINK REL="Next"  HREF="000442.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r469 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r469%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809121847.m8CIlWVi003798%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r469 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Sep 12 20:47:32 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000440.html">[OpenFDM-svn] r468 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000442.html">[OpenFDM-svn] r470 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#441">[ date ]</a>
+              <a href="thread.html#441">[ thread ]</a>
+              <a href="subject.html#441">[ subject ]</a>
+              <a href="author.html#441">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-12 20:47:32 +0200 (Fri, 12 Sep 2008)
+New Revision: 469
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Make use of ConstNodeVisitor.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-12 18:42:20 UTC (rev 468)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-12 18:47:32 UTC (rev 469)
+@@ -431,25 +431,25 @@
+ };
+ 
+ 
+-class LeafInstanceCollector : public NodeVisitor {
++class LeafInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+-  virtual void apply(Node&amp; node)
++  virtual void apply(const Node&amp; node)
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+-  virtual void apply(LeafNode&amp; leaf)
++  virtual void apply(const LeafNode&amp; leaf)
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+-  virtual void apply(LibraryNode&amp; libraryNode)
++  virtual void apply(const LibraryNode&amp; libraryNode)
+   { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+ 
+-  virtual void apply(RootJoint&amp; node)
++  virtual void apply(const RootJoint&amp; node)
+   {
+     // Need to stor the root nodes to build up the spanning tree for the
+     // mechanical system here.
+-    apply(static_cast&lt;Interact&amp;&gt;(node));
++    apply(static_cast&lt;const Interact&amp;&gt;(node));
+   }
+ 
+   // Aussen acceptor, innen provider
+-  virtual void apply(GroupAcceptorNode&amp; leaf)
++  virtual void apply(const GroupAcceptorNode&amp; leaf)
+   {
+     OpenFDMAssert(leaf.getPort(0));
+     PortId portId = leaf.getPortId(0);
+@@ -458,7 +458,7 @@
+     _leafPortDataMap[getCurrentNodeId()][portId] = pd;
+   }
+   // Aussen provider, innen acceptor
+-  virtual void apply(GroupProviderNode&amp; leaf)
++  virtual void apply(const GroupProviderNode&amp; leaf)
+   {
+     OpenFDMAssert(leaf.getPort(0));
+     PortId portId = leaf.getPortId(0);
+@@ -467,7 +467,7 @@
+     _leafPortDataMap[getCurrentNodeId()][portId] = ad;
+   }
+ 
+-  void allocPortData(LeafInstance* leafInstance, LeafNode&amp; leaf)
++  void allocPortData(LeafInstance* leafInstance, const LeafNode&amp; leaf)
+   {
+     // FIXME: move to LeafInstance??
+     for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+@@ -477,14 +477,14 @@
+     }
+   }
+ 
+-  virtual void apply(MechanicNode&amp; node)
++  virtual void apply(const MechanicNode&amp; node)
+   {
+     MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
+     _leafInstanceList.push_back(mechanicInstance);
+     _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+-  virtual void apply(Model&amp; node)
++  virtual void apply(const Model&amp; node)
+   {
+     ModelInstance* modelInstance = new ModelInstance(&amp;node);
+     _leafInstanceList.push_back(modelInstance);
+@@ -492,7 +492,7 @@
+     allocPortData(modelInstance, node);
+   }
+ 
+-  virtual void apply(Group&amp; group)
++  virtual void apply(const Group&amp; group)
+   {
+     // Prepare a new leaf map for the child group
+     LeafPortDataMap parentLeafPortDataMap;
+@@ -713,7 +713,6 @@
+   return 0;
+ }
+ 
+-
+ // Kabelbaum &lt;-&gt; PortBundle ??? Original Kabelbaum == Cabel Bundle
+ // Oder Cable Set &lt;-&gt; Port Set???
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000440.html">[OpenFDM-svn] r468 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000442.html">[OpenFDM-svn] r470 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#441">[ date ]</a>
+              <a href="thread.html#441">[ thread ]</a>
+              <a href="subject.html#441">[ subject ]</a>
+              <a href="author.html#441">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

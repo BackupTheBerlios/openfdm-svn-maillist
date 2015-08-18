@@ -1,0 +1,184 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r40 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r40%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510271820.j9RIKolf009691%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000027.html">
+   <LINK REL="Next"  HREF="000029.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r40 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r40%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510271820.j9RIKolf009691%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r40 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Oct 27 20:20:50 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000027.html">[OpenFDM-svn] r39 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000029.html">[OpenFDM-svn] r41 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#28">[ date ]</a>
+              <a href="thread.html#28">[ thread ]</a>
+              <a href="subject.html#28">[ subject ]</a>
+              <a href="author.html#28">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-27 20:20:46 +0200 (Thu, 27 Oct 2005)
+New Revision: 40
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+Log:
+Add Saturation to the discrete integrator.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-10-27 16:26:37 UTC (rev 39)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-10-27 18:20:46 UTC (rev 40)
+@@ -20,6 +20,9 @@
+   setOutputPort(0, &quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
+ 
+   addProperty(&quot;initialValue&quot;, Property(this, &amp;DiscreteIntegrator::getInitialValue, &amp;DiscreteIntegrator::setInitialValue));
++  addProperty(&quot;minSaturation&quot;, Property(this, &amp;DiscreteIntegrator::getMinSaturation, &amp;DiscreteIntegrator::setMinSaturation));
++  addProperty(&quot;maxSaturation&quot;, Property(this, &amp;DiscreteIntegrator::getMaxSaturation, &amp;DiscreteIntegrator::setMaxSaturation));
++
+   addProperty(&quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
+ }
+ 
+@@ -38,6 +41,13 @@
+     mInitialValue.clear();
+   }
+ 
++  if (size(mMinSaturation) != Size(0, 0)) {
++    OpenFDMAssert(size(mMinSaturation) == size(mInitialValue));
++  }
++  if (size(mMaxSaturation) != Size(0, 0)) {
++    OpenFDMAssert(size(mMaxSaturation) == size(mInitialValue));
++  }
++
+   setNumDiscreteStates(rows(mInitialValue)*cols(mInitialValue));
+ 
+   mIntegralState = mInitialValue;
+@@ -64,6 +74,22 @@
+   OpenFDMAssert(size(input) == size(mIntegralState));
+   if (size(input) == size(mIntegralState))
+     mIntegralState += dt*input;
++
++  // Hmm, should that be done on state setting too???
++  if (size(mMaxSaturation) == size(mInitialValue)) {
++    for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++      for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++        mIntegralState(i, j) = min(mIntegralState(i, j), mMaxSaturation(i, j));
++      }
++    }
++  }
++  if (size(mMinSaturation) == size(mInitialValue)) {
++    for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++      for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++        mIntegralState(i, j) = max(mIntegralState(i, j), mMinSaturation(i, j));
++      }
++    }
++  }
+ }
+ 
+ void
+@@ -101,6 +127,30 @@
+ }
+ 
+ const Matrix&amp;
++DiscreteIntegrator::getMinSaturation(void) const
++{
++  return mMinSaturation;
++}
++
++void
++DiscreteIntegrator::setMinSaturation(const Matrix&amp; value)
++{
++  mMinSaturation = value;
++}
++
++const Matrix&amp;
++DiscreteIntegrator::getMaxSaturation(void) const
++{
++  return mMaxSaturation;
++}
++
++void
++DiscreteIntegrator::setMaxSaturation(const Matrix&amp; value)
++{
++  mMaxSaturation = value;
++}
++
++const Matrix&amp;
+ DiscreteIntegrator::getIntegralOutput(void) const
+ {
+   return mIntegralOutput;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-10-27 16:26:37 UTC (rev 39)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-10-27 18:20:46 UTC (rev 40)
+@@ -28,6 +28,12 @@
+   const Matrix&amp; getInitialValue(void) const;
+   void setInitialValue(const Matrix&amp; value);
+ 
++  const Matrix&amp; getMinSaturation(void) const;
++  void setMinSaturation(const Matrix&amp; value);
++
++  const Matrix&amp; getMaxSaturation(void) const;
++  void setMaxSaturation(const Matrix&amp; value);
++
+   const Matrix&amp; getIntegralOutput(void) const;
+ 
+ private:
+@@ -37,6 +43,10 @@
+   Matrix mIntegralState;
+   /// Holds the current integral initial state.
+   Matrix mInitialValue;
++  /// Holds the minimum saturation
++  Matrix mMinSaturation;
++  /// Holds the maximum saturation
++  Matrix mMaxSaturation;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000027.html">[OpenFDM-svn] r39 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000029.html">[OpenFDM-svn] r41 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#28">[ date ]</a>
+              <a href="thread.html#28">[ thread ]</a>
+              <a href="subject.html#28">[ subject ]</a>
+              <a href="author.html#28">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,380 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1121 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2010-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1121%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C201002101957.o1AJv1h8015844%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="001080.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1121 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1121%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C201002101957.o1AJv1h8015844%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1121 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Feb 10 20:57:01 CET 2010</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="001080.html">[OpenFDM-svn] r1123 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1079">[ date ]</a>
+              <a href="thread.html#1079">[ thread ]</a>
+              <a href="subject.html#1079">[ subject ]</a>
+              <a href="author.html#1079">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2010-02-10 20:56:59 +0100 (Wed, 10 Feb 2010)
+New Revision: 1121
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Referenced.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SharedPtr.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WeakPtr.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.h
+Log:
+Rework WeakPtr to work better for yet unassigned objects.
+
+M    src/OpenFDM/WeakPtr.h
+M    src/OpenFDM/Makefile.am
+AM   src/OpenFDM/WeakReferenced.cpp
+M    src/OpenFDM/WeakReferenced.h
+M    src/OpenFDM/SharedPtr.h
+M    src/OpenFDM/Referenced.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -189,6 +189,7 @@
+   Time.cpp \
+   Unit.cpp \
+   Variant.cpp \
++  WeakReferenced.cpp \
+   WGS84Planet.cpp
+ 
+ #   ReaderWriter.cpp
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Referenced.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Referenced.h	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Referenced.h	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -21,10 +21,14 @@
+   Referenced&amp; operator=(const Referenced&amp;)
+   { return *this; }
+ 
+-  static unsigned get(const Referenced* ref)
+-  { if (ref) return ++(ref-&gt;_refcount); else return 0u; }
++  static void get(const Referenced* ref)
++  { if (!ref) return; ++(ref-&gt;_refcount); }
++  static void getFirst(const Referenced* ref)
++  { get(ref); }
+   static unsigned put(const Referenced* ref)
+   { if (ref) return --(ref-&gt;_refcount); else return ~0u; }
++  static void release(const Referenced* ref)
++  { if (!ref) return; --(ref-&gt;_refcount); }
+   static unsigned count(const Referenced* ref)
+   { if (ref) return ref-&gt;_refcount; else return 0u; }
+   static bool shared(const Referenced* ref)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SharedPtr.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SharedPtr.h	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SharedPtr.h	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -19,7 +19,7 @@
+   SharedPtr(void) : _ptr(0)
+   {}
+   SharedPtr(T* ptr) : _ptr(ptr)
+-  { T::get(_ptr); }
++  { T::getFirst(_ptr); }
+   SharedPtr(const SharedPtr&amp; p) : _ptr(p.get())
+   { T::get(_ptr); }
+   template&lt;typename U&gt;
+@@ -35,7 +35,7 @@
+   { assign(p.get()); return *this; }
+   template&lt;typename U&gt;
+   SharedPtr&amp; operator=(U* p)
+-  { assign(p); return *this; }
++  { assignFirst(p); return *this; }
+ 
+   T* operator-&gt;(void) const
+   { return _ptr; }
+@@ -49,7 +49,7 @@
+   T* get() const
+   { return _ptr; }
+   T* release()
+-  { T* tmp = _ptr; _ptr = 0; T::put(tmp); return tmp; }
++  { T* tmp = _ptr; _ptr = 0; T::release(tmp); return tmp; }
+ 
+   bool isShared(void) const
+   { return T::shared(_ptr); }
+@@ -67,6 +67,8 @@
+ private:
+   void assign(T* p)
+   { T::get(p); put(); _ptr = p; }
++  void assignFirst(T* p)
++  { T::getFirst(p); put(); _ptr = p; }
+   void assignNonRef(T* p)
+   { put(); _ptr = p; }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WeakPtr.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WeakPtr.h	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WeakPtr.h	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -47,7 +47,7 @@
+     if (!mWeakData)
+       return SharedPtr&lt;T&gt;();
+     SharedPtr&lt;T&gt; sharedPtr;
+-    sharedPtr.assignNonRef(mWeakData-&gt;getPointer&lt;T&gt;());
++    sharedPtr.assignNonRef(static_cast&lt;T*&gt;(mWeakData-&gt;getWeakReferenced()));
+     return sharedPtr;
+   }
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.cpp	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.cpp	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -0,0 +1,67 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;WeakReferenced.h&quot;
++
++#include &quot;Referenced.h&quot;
++#include &quot;ScopeLock.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++WeakReferenced::WeakData::WeakData(WeakReferenced* weakReferenced) :
++  mRefcount(lastbit()),
++  mWeakReferenced(weakReferenced)
++{
++}
++
++WeakReferenced::WeakData::~WeakData()
++{
++}
++
++void
++WeakReferenced::WeakData::weakReferencedGetFirst()
++{
++  unsigned count = mRefcount;
++  for (;;) {
++    unsigned newcount = (count &amp; (~lastbit())) + 1;
++    if (mRefcount.compareAndExchange(count, newcount))
++      return;
++    count = mRefcount;
++  }
++}
++
++void
++WeakReferenced::WeakData::weakReferencedRelease()
++{
++  unsigned count = mRefcount;
++  for (;;) {
++    unsigned newcount = count - 1;
++    if (newcount == 0)
++      newcount |= lastbit();
++    if (mRefcount.compareAndExchange(count, newcount))
++      return;
++    count = mRefcount;
++  }
++}
++
++WeakReferenced*
++WeakReferenced::WeakData::getWeakReferenced()
++{
++  // Try to increment the reference count if the count is greater
++  // then zero. Since it should only be incremented iff it is nonzero, we
++  // need to check that value and try to do an atomic test and set. If this
++  // fails, try again. The usual lockless algorithm ...
++  unsigned count;
++  do {
++    count = mRefcount;
++    if (count == 0)
++      return 0;
++  } while (!mRefcount.compareAndExchange(count, count + 1));
++  // We know that as long as the refcount is not zero, the pointer still
++  // points to valid data. So it is safe to work on it.
++  return mWeakReferenced;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.cpp
+___________________________________________________________________
+Name: svn:executable
+   + *
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.h	2009-12-30 18:49:46 UTC (rev 1120)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WeakReferenced.h	2010-02-10 19:56:59 UTC (rev 1121)
+@@ -24,6 +24,33 @@
+   /// have an atomic decision using the reference count of this current object
+   /// if the backref is still valid. At the time where the atomic count is
+   /// equal to zero the object is considered dead.
++  ///
++  /// Special care is taken for objects that are not yet assigned to
++  /// a shared pointer but weak pointers are already assigned and actions need
++  /// to be taken with the weak referenced objects.
++  /// To make this work, a new allocated object has its last bit set in the
++  /// reference count. Consequently you can already call WeakRef::lock() and
++  /// get back a valid object, even if we do not yet have assigned that to
++  /// a SharedPtr. Once we assign the pointer to s SharedPtr through a raw
++  /// pointer argument, this bit is cleared. This way, the object is not
++  /// deleted until we have a more permanent reference to the object assigned.
++  /// The following example shows the intented use of that:
++  ///
++  /// O* object = new Object;
++  /// { // assume some scope that might be called in initialization of Object
++  ///   WeakPtr&lt;O&gt; w = o;
++  ///   SharedPtr&lt;O&gt; s = o.lock(); // valid
++  /// }
++  /// SharedPtr&lt;O&gt; permanent = object;
++  ///
++  /// Whereas the following code doesn't work as expected:
++  ///
++  /// WeakPtr&lt;O&gt; w = new Object;
++  /// SharedPtr&lt;O&gt; s = w.lock();
++  ///
++  /// In this case the last bit is still set and the Object instance is
++  /// never destroyed.
++  ///
+   WeakReferenced(void) :
+     mWeakData(new WeakData(this))
+   {}
+@@ -31,7 +58,7 @@
+     mWeakData(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+-  { mWeakData-&gt;mWeakReferenced = 0; }
++  { mWeakData-&gt;clear(); }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced&amp; operator=(const WeakReferenced&amp;)
+@@ -39,12 +66,16 @@
+ 
+   /// The usual operations on weak pointers.
+   /// The interface should stay the same then what we have in Referenced.
+-  static unsigned get(const WeakReferenced* ref)
+-  { if (ref) return ++(ref-&gt;mWeakData-&gt;mRefcount); else return 0u; }
++  static void get(const WeakReferenced* ref)
++  { if (!ref) return; ref-&gt;mWeakData-&gt;weakReferencedGet(); }
++  static void getFirst(const WeakReferenced* ref)
++  { if (!ref) return; ref-&gt;mWeakData-&gt;weakReferencedGetFirst(); }
+   static unsigned put(const WeakReferenced* ref)
+-  { if (ref) return --(ref-&gt;mWeakData-&gt;mRefcount); else return ~0u; }
++  { if (!ref) return ~0u; return ref-&gt;mWeakData-&gt;weakReferencedPut(); }
++  static void release(const WeakReferenced* ref)
++  { if (!ref) return; return ref-&gt;mWeakData-&gt;weakReferencedRelease(); }
+   static unsigned count(const WeakReferenced* ref)
+-  { if (ref) return ref-&gt;mWeakData-&gt;mRefcount; else return 0u; }
++  { if (!ref) return ~0u; return ref-&gt;mWeakData-&gt;weakReferencedCount(); }
+ 
+   template&lt;typename T&gt;
+   static void destroy(T* ref)
+@@ -56,36 +87,34 @@
+   /// reference which is zeroed out on destruction of the current object
+   class WeakData : public Referenced {
+   public:
+-    WeakData(WeakReferenced* weakReferenced) :
+-      mRefcount(0u),
+-      mWeakReferenced(weakReferenced)
+-    { }
++    WeakData(WeakReferenced* weakReferenced);
++    ~WeakData();
+ 
+-    template&lt;typename T&gt;
+-    T* getPointer()
+-    {
+-      // Try to increment the reference count if the count is greater
+-      // then zero. Since it should only be incremented iff it is nonzero, we
+-      // need to check that value and try to do an atomic test and set. If this
+-      // fails, try again. The usual lockless algorithm ...
+-      unsigned count;
+-      do {
+-        count = mRefcount;
+-        if (count == 0)
+-          return 0;
+-      } while (!mRefcount.compareAndExchange(count, count + 1));
+-      // We know that as long as the refcount is not zero, the pointer still
+-      // points to valid data. So it is safe to work on it.
+-      return static_cast&lt;T*&gt;(mWeakReferenced);
+-    }
++    void weakReferencedGet()
++    { ++mRefcount; }
++    void weakReferencedGetFirst();
+ 
+-    Atomic mRefcount;
+-    WeakReferenced* mWeakReferenced;
++    unsigned weakReferencedPut()
++    { return --mRefcount; }
++    void weakReferencedRelease();
++    unsigned weakReferencedCount()
++    { return mRefcount &amp; (~lastbit()); }
+ 
++    void clear()
++    { mWeakReferenced = 0; }
++
++    WeakReferenced* getWeakReferenced();
++
++    static unsigned lastbit()
++    { return ~((~unsigned(0)) &gt;&gt; 1); }
++
+   private:
+     WeakData(void);
+     WeakData(const WeakData&amp;);
+     WeakData&amp; operator=(const WeakData&amp;);
++
++    Atomic mRefcount;
++    WeakReferenced* mWeakReferenced;
+   };
+ 
+   SharedPtr&lt;WeakData&gt; mWeakData;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="001080.html">[OpenFDM-svn] r1123 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1079">[ date ]</a>
+              <a href="thread.html#1079">[ thread ]</a>
+              <a href="subject.html#1079">[ subject ]</a>
+              <a href="author.html#1079">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,517 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r131 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r131%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512271529.jBRFTYux006993%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000114.html">
+   <LINK REL="Next"  HREF="000116.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r131 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r131%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512271529.jBRFTYux006993%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r131 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Dec 27 16:29:34 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000114.html">[OpenFDM-svn] r130 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000116.html">[OpenFDM-svn] r132 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#115">[ date ]</a>
+              <a href="thread.html#115">[ thread ]</a>
+              <a href="subject.html#115">[ subject ]</a>
+              <a href="author.html#115">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-27 16:29:26 +0100 (Tue, 27 Dec 2005)
+New Revision: 131
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/CartesianJointFrame.h
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h
+Log:
+Rename RelAccel to RelVelDot
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-27 15:29:26 UTC (rev 131)
+@@ -707,13 +707,13 @@
+     spi += inertiaFrom(structToBody(it-&gt;first), inertia);
+     ++it;
+   }
+-  mVehicle-&gt;getTopBody()-&gt;addInteract(new Mass(spi));
++  mVehicle-&gt;getTopBody()-&gt;addInteract(new Mass(&quot;Emptyweight Mass&quot;, spi));
+ 
+   // Attach the eye point.
+   FreeFrame* epFrame = new FreeFrame(&quot;Eyepoint Frame&quot;);
+   epFrame-&gt;setPosition(structToBody(ep));
+   epFrame-&gt;setRelVel(Vector6::zeros());
+-  epFrame-&gt;setRelAccel(Vector6::zeros());
++  epFrame-&gt;setRelVelDot(Vector6::zeros());
+   Sensor* accelSensor = new Sensor(&quot;Acceleration Sensor&quot;);
+   accelSensor-&gt;addSampleTime(SampleTime(1.0/120));
+   Port* port = accelSensor-&gt;getOutputPort(&quot;nz&quot;);
+@@ -738,13 +738,12 @@
+ {
+   RigidBody* wheel = new RigidBody(name + &quot; Wheel&quot;);
+   InertiaMatrix wheelInertia(10, 0, 0, 100, 0, 10);
+-  wheel-&gt;addInteract(new Mass(SpatialInertia(wheelInertia, 50)));
+-  parent-&gt;getFrame()-&gt;addChildFrame(wheel-&gt;getFrame());
++  wheel-&gt;addInteract(new Mass(&quot;Wheel Inertia&quot;, SpatialInertia(wheelInertia, 50)));
+   mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(wheel);
+   
+   RevoluteJoint* wj = new RevoluteJoint(name + &quot; Wheel Joint&quot;);
+   parent-&gt;addInteract(wj);
+-  wheel-&gt;addInteract(wj);
++  wheel-&gt;setInboardJoint(wj);
+   wj-&gt;setJointAxis(Vector3(0, 1, 0));
+   wj-&gt;setPosition(pos);
+   wj-&gt;setOrientation(Quaternion::unit());
+@@ -926,13 +925,12 @@
+       // This is the movable part of the strut, doing the compression
+       RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+-      mVehicle-&gt;getTopBody()-&gt;getFrame()-&gt;addChildFrame(arm-&gt;getFrame());
+-      arm-&gt;addInteract(new Mass(inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
++      arm-&gt;addInteract(new Mass(&quot;Strut Mass&quot;, inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
+ 
+       // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+       mVehicle-&gt;getTopBody()-&gt;addInteract(rj);
+-      arm-&gt;addInteract(rj);
++      arm-&gt;setInboardJoint(rj);
+       rj-&gt;setJointAxis(Vector3(0, 1, 0));
+       rj-&gt;setJointPos(0);
+       rj-&gt;setJointVel(0);
+@@ -1001,14 +999,13 @@
+         // A new part modelling the steering
+         RigidBody* steer = new RigidBody(name + &quot; Steer&quot;);
+         mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(steer);
+-        strutParent-&gt;getFrame()-&gt;addChildFrame(steer-&gt;getFrame());
+ 
+         // connect that via a revolute joint to the toplevel body.
+         // Note the 0.05m below, most steering wheels have some kind of
+         // castering auto line up behavour. That is doe with this 0.05m.
+         RevoluteJoint* sj = new RevoluteJoint(name + &quot; Steer Joint&quot;);
+         strutParent-&gt;addInteract(sj);
+-        steer-&gt;addInteract(sj);
++        steer-&gt;setInboardJoint(sj);
+         sj-&gt;setJointAxis(Vector3(0, 0, 1));
+         sj-&gt;setJointPos(0);
+         sj-&gt;setJointVel(0);
+@@ -1044,13 +1041,12 @@
+       // Now the compressible part of the strut
+       RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+-      strutParent-&gt;getFrame()-&gt;addChildFrame(arm-&gt;getFrame());
+-      arm-&gt;addInteract(new Mass(inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
++      arm-&gt;addInteract(new Mass(&quot;Strut Mass&quot;, inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
+ 
+       // This time it is a prismatic joint
+       PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
+       strutParent-&gt;addInteract(pj);
+-      arm-&gt;addInteract(pj);
++      arm-&gt;setInboardJoint(pj);
+       pj-&gt;setJointAxis(Vector3(0, 0, -1));
+       if (strutParent == mVehicle-&gt;getTopBody())
+         pj-&gt;setPosition(structToBody(compressJointPos));
+
+Modified: trunk/OpenFDM/src/OpenFDM/CartesianJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CartesianJointFrame.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/CartesianJointFrame.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -64,8 +64,8 @@
+     return true;
+   }
+   
+-  void computeRelAccel(const Matrix6N&amp; jointAxis,
+-                       VectorN&amp; jointAccel) const
++  void computeRelVelDot(const Matrix6N&amp; jointAxis,
++                        VectorN&amp; jointAccel) const
+   {
+     if (hIh.singular()) {
+       jointAccel.clear();
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2005-12-27 15:29:26 UTC (rev 131)
+@@ -26,14 +26,14 @@
+   setPosition(Vector3::zeros());
+   setOrientation(Quaternion::unit());
+   setRelVel(Vector6::zeros());
+-  setRelAccel(Vector6::zeros());
++  setRelVelDot(Vector6::zeros());
+ 
+   addProperty(&quot;position&quot;, Property(this, &amp;Frame::getPosition));
+   addProperty(&quot;orienatation&quot;, Property(this, &amp;Frame::getOrientation));
+   addProperty(&quot;relVel&quot;, Property(this, &amp;Frame::getRelVel));
+   addProperty(&quot;spVel&quot;, Property(this, &amp;Frame::getSpVel));
+   addProperty(&quot;refVel&quot;, Property(this, &amp;Frame::getRefVel));
+-  addProperty(&quot;relAccel&quot;, Property(this, &amp;Frame::getRelAccel));
++  addProperty(&quot;relVelDot&quot;, Property(this, &amp;Frame::getRelVelDot));
+   addProperty(&quot;spAccel&quot;, Property(this, &amp;Frame::getSpAccel));
+   addProperty(&quot;classicAccel&quot;, Property(this, &amp;Frame::getClassicAccel));
+   addProperty(&quot;refPosition&quot;, Property(this, &amp;Frame::getRefPosition));
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -42,8 +42,6 @@
+ parent frame.
+ */
+ 
+-/// FIXME: RelAccel-&gt;VelDot ...
+-
+ class Frame :
+     public Object {
+ public:
+@@ -155,8 +153,8 @@
+               to the parent frame. The velocity is in the current frames
+               coordinates.
+    */
+-  const Vector6&amp; getRelAccel(void) const 
+-  { return mRelAccel; }
++  const Vector6&amp; getRelVelDot(void) const 
++  { return mRelVelDot; }
+ 
+ 
+   /** Linear velocity with respect to parent.
+@@ -204,15 +202,15 @@
+       @return The linear acceleration of this frame with respect to the parent
+       frame.
+    */
+-  Vector3 getLinearRelAccel(void) const
+-  { return getRelAccel().getLinear(); }
++  Vector3 getLinearRelVelDot(void) const
++  { return getRelVelDot().getLinear(); }
+ 
+   /** Angular acceleration with respect to parent.
+       @return The angular acceleration of this frame with respect to the parent
+       frame.
+    */
+-  Vector3 getAngularRelAccel(void) const
+-  { return getRelAccel().getAngular(); }
++  Vector3 getAngularRelVelDot(void) const
++  { return getRelVelDot().getAngular(); }
+ 
+   /** Spatial acceleration of the parent frame.
+       @return The spatial acceleration of the parent frame with respect to an
+@@ -238,7 +236,7 @@
+   Vector6 getSpAccel(void) const
+   {
+     OpenFDMAssert(!mDisableSpAccel);
+-    return getRelAccel() + getParentSpAccel() + getHdot();
++    return getRelVelDot() + getParentSpAccel() + getHdot();
+   }
+ 
+   /** Classical acceleration of the current frame.
+@@ -250,7 +248,7 @@
+   {
+     OpenFDMAssert(!mDisableSpAccel);
+     Vector6 iv = getSpVel();
+-    return getRelAccel() + getParentSpAccel() + getHdot()
++    return getRelVelDot() + getParentSpAccel() + getHdot()
+       + Vector6(Vector3::zeros(), cross(iv.getAngular(), iv.getLinear()));
+   }
+ 
+@@ -472,12 +470,12 @@
+   { setVelDirty(); mRelVel.setLinear(v); }
+   void setAngularRelVel(const Vector3&amp; rotVel)
+   { setVelDirty(); mRelVel.setAngular(rotVel); }
+-  void setRelAccel(const Vector6&amp; accel)
+-  { setAccelDirty(); mRelAccel = accel; }
+-  void setLinearRelAccel(const Vector3&amp; accel)
+-  { setAccelDirty(); mRelAccel.setLinear(accel); }
+-  void setAngularRelAccel(const Vector3&amp; accel)
+-  { setAccelDirty(); mRelAccel.setAngular(accel); }
++  void setRelVelDot(const Vector6&amp; accel)
++  { setAccelDirty(); mRelVelDot = accel; }
++  void setLinearRelVelDot(const Vector3&amp; accel)
++  { setAccelDirty(); mRelVelDot.setLinear(accel); }
++  void setAngularRelVelDot(const Vector3&amp; accel)
++  { setAccelDirty(); mRelVelDot.setAngular(accel); }
+ 
+   void disableAccel(void)
+   { mDisableSpAccel = true; }
+@@ -542,7 +540,7 @@
+ 
+   // The spatial acceleration of this frame wrt the parent frame.
+   // True? more the relative acceleration ...
+-  Vector6 mRelAccel;
++  Vector6 mRelVelDot;
+ 
+   mutable Vector6 mParentSpVel;
+   mutable Vector6 mParentSpAccel;
+@@ -590,12 +588,12 @@
+   { Frame::setLinearRelVel(vel); }
+   void setAngularRelVel(const Vector3&amp; vel)
+   { Frame::setAngularRelVel(vel); }
+-  void setRelAccel(const Vector6&amp; accel)
+-  { Frame::setRelAccel(accel); }
+-  void setLinearRelAccel(const Vector3&amp; accel)
+-  { Frame::setLinearRelAccel(accel); }
+-  void setAngularRelAccel(const Vector3&amp; accel)
+-  { Frame::setAngularRelAccel(accel); }
++  void setRelVelDot(const Vector6&amp; accel)
++  { Frame::setRelVelDot(accel); }
++  void setLinearRelVelDot(const Vector3&amp; accel)
++  { Frame::setLinearRelVelDot(accel); }
++  void setAngularRelVelDot(const Vector3&amp; accel)
++  { Frame::setAngularRelVelDot(accel); }
+ 
+   void setRefPosition(const Vector3&amp; p)
+   { Frame::setRefPosition(p); }
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-27 15:29:26 UTC (rev 131)
+@@ -89,13 +89,13 @@
+ }
+ 
+ Vector6
+-FreeJoint::computeRelAccel(const SpatialInertia&amp; artI,
+-                           const Vector6&amp; artF)
++FreeJoint::computeRelVelDot(const SpatialInertia&amp; artI,
++                            const Vector6&amp; artF)
+ {
+   RigidBody* topBody = getParentRigidBody(0);
+   OpenFDMAssert(topBody);
+ 
+-  Log(ArtBody, Debug) &lt;&lt; &quot;FreeJoint::computeRelAccel():\n&quot; &lt;&lt; artI &lt;&lt; endl;
++  Log(ArtBody, Debug) &lt;&lt; &quot;FreeJoint::computeRelVelDot():\n&quot; &lt;&lt; artI &lt;&lt; endl;
+ 
+   // Assumption: body is small compared to the distance to the planets
+   // center of mass. That means gravity could be considered equal for the whole
+@@ -169,7 +169,7 @@
+   state(offset+6) = vel(2);
+   state(offset+7) = vel(3);
+   
+-  Vector6 accel = mFrame-&gt;getRelAccel();
++  Vector6 accel = mFrame-&gt;getRelVelDot();
+   state(offset+8)  = accel(1);
+   state(offset+9)  = accel(2);
+   state(offset+10) = accel(3);
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -51,8 +51,8 @@
+   virtual bool jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF);
+   /** Plugin function for the articulated body algorithm.
+    */
+-  virtual Vector6 computeRelAccel(const SpatialInertia&amp; artI,
+-                                  const Vector6&amp; artF);
++  virtual Vector6 computeRelVelDot(const SpatialInertia&amp; artI,
++                                   const Vector6&amp; artF);
+ 
+ 
+   /** Plugin function for the state propagation.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -71,8 +71,8 @@
+   // Joint slot ...
+   // FIXME: pure virtual
+   virtual bool jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF) = 0;
+-  virtual Vector6 computeRelAccel(const SpatialInertia&amp; artI,
+-                                  const Vector6&amp; artF) = 0;
++  virtual Vector6 computeRelVelDot(const SpatialInertia&amp; artI,
++                                   const Vector6&amp; artF) = 0;
+ 
+   //???
+   bool updateAccels(RigidBody* rigidBody)
+@@ -85,8 +85,8 @@
+       return false;
+ 
+     // Set the local acceleration
+-    Vector6 accel = computeRelAccel(outboardBody-&gt;getArtInertia(),
+-                                    outboardBody-&gt;getArtForce());
++    Vector6 accel = computeRelVelDot(outboardBody-&gt;getArtInertia(),
++                                     outboardBody-&gt;getArtForce());
+     
+     Frame* frame0 = outboardBody-&gt;getFrame();
+     if (!frame0)
+@@ -94,7 +94,7 @@
+     frame0-&gt;enableAccel();
+     FreeFrame* frame = dynamic_cast&lt;FreeFrame*&gt;(frame0);
+     if (frame)
+-      frame-&gt;setRelAccel(accel);
++      frame-&gt;setRelVelDot(accel);
+ 
+     outboardBody-&gt;computeAccel();
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-27 15:29:26 UTC (rev 131)
+@@ -84,11 +84,11 @@
+ }
+ 
+ Vector6
+-PrismaticJoint::computeRelAccel(const SpatialInertia&amp;,
+-                                const Vector6&amp;)
++PrismaticJoint::computeRelVelDot(const SpatialInertia&amp;,
++                                 const Vector6&amp;)
+ {
+   CartesianJointFrame&lt;1&gt;::VectorN acc;
+-  mPrismaticJointFrame-&gt;computeRelAccel(getJointAxis(), acc);
++  mPrismaticJointFrame-&gt;computeRelVelDot(getJointAxis(), acc);
+   mPrismaticJointFrame-&gt;setJointVelDot(acc(1));
+   Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
+                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is &quot; &lt;&lt; trans(acc) &lt;&lt; endl;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -108,8 +108,8 @@
+   /** Computes the relative acceleration of this body with respect to its
+       parent. It is part of the articulated body algorithm.
+    */
+-  virtual Vector6 computeRelAccel(const SpatialInertia&amp; artI,
+-                                  const Vector6&amp; artF);
++  virtual Vector6 computeRelVelDot(const SpatialInertia&amp; artI,
++                                   const Vector6&amp; artF);
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -42,7 +42,7 @@
+     mJointAxis = axis;
+     setPosition(mZeroPos + mJointPos*mJointAxis);
+     setLinearRelVel(mJointVel*mJointAxis);
+-    setLinearRelAccel(mJointVelDot*mJointAxis);
++    setLinearRelVelDot(mJointVelDot*mJointAxis);
+   }
+ 
+   /// Returns the joint position.
+@@ -67,7 +67,7 @@
+ 
+   /// Returns the derivative of the relative velocity
+   void setJointVelDot(real_type velDot)
+-  { mJointVelDot = velDot; setLinearRelAccel(mJointVelDot*mJointAxis); }
++  { mJointVelDot = velDot; setLinearRelVelDot(mJointVelDot*mJointAxis); }
+ 
+   /// Sets the zero position of the joint.
+   void setZeroPosition(const Vector3&amp; zeroPos)
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-27 15:29:26 UTC (rev 131)
+@@ -83,11 +83,11 @@
+ }
+ 
+ Vector6
+-RevoluteJoint::computeRelAccel(const SpatialInertia&amp;,
+-                               const Vector6&amp;)
++RevoluteJoint::computeRelVelDot(const SpatialInertia&amp;,
++                                const Vector6&amp;)
+ {
+   CartesianJointFrame&lt;1&gt;::VectorN acc;
+-  mRevoluteJointFrame-&gt;computeRelAccel(getJointAxis(), acc);
++  mRevoluteJointFrame-&gt;computeRelVelDot(getJointAxis(), acc);
+   mRevoluteJointFrame-&gt;setJointVelDot(acc(1));
+   
+   Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -108,8 +108,8 @@
+   /** Computes the relative acceleration of this body with respect to its
+       parent. It is part of the articulated body algorithm.
+    */
+-  virtual Vector6 computeRelAccel(const SpatialInertia&amp; artI,
+-                                  const Vector6&amp; artF);
++  virtual Vector6 computeRelVelDot(const SpatialInertia&amp; artI,
++                                   const Vector6&amp; artF);
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h	2005-12-27 14:56:05 UTC (rev 130)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h	2005-12-27 15:29:26 UTC (rev 131)
+@@ -42,7 +42,7 @@
+     mJointAxis = axis;
+     setOrientation(mZeroOrient*Quaternion::fromAngleAxis(mJointPos, mJointAxis));
+     setAngularRelVel(mJointVel*mJointAxis);
+-    setAngularRelAccel(mJointVelDot*mJointAxis);
++    setAngularRelVelDot(mJointVelDot*mJointAxis);
+   }
+ 
+   /// Returns the joint position.
+@@ -70,7 +70,7 @@
+ 
+   /// Returns the derivative of the relative velocity
+   void setJointVelDot(real_type velDot)
+-  { mJointVelDot = velDot; setAngularRelAccel(mJointVelDot*mJointAxis); }
++  { mJointVelDot = velDot; setAngularRelVelDot(mJointVelDot*mJointAxis); }
+ 
+   /// Sets the zero orientation of the joint.
+   void setZeroOrientation(const Quaternion&amp; zeroOrient)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000114.html">[OpenFDM-svn] r130 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000116.html">[OpenFDM-svn] r132 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#115">[ date ]</a>
+              <a href="thread.html#115">[ thread ]</a>
+              <a href="subject.html#115">[ subject ]</a>
+              <a href="author.html#115">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

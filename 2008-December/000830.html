@@ -1,0 +1,990 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r862 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r862%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812061350.mB6Do5tB028084%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000829.html">
+   <LINK REL="Next"  HREF="000831.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r862 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r862%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812061350.mB6Do5tB028084%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r862 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Dec  6 14:50:05 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000829.html">[OpenFDM-svn] r861 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000831.html">[OpenFDM-svn] r863 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#830">[ date ]</a>
+              <a href="thread.html#830">[ thread ]</a>
+              <a href="subject.html#830">[ subject ]</a>
+              <a href="author.html#830">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-06 14:50:04 +0100 (Sat, 06 Dec 2008)
+New Revision: 862
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.h
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+Log:
+Distribute sperical and elliptical stuff across the planets.
+
+M    src/test/foucault.cpp
+A    src/OpenFDM/WGS84Planet.h
+M    src/OpenFDM/Makefile.am
+D    src/OpenFDM/EllipticPlanet.cpp
+M    src/OpenFDM/SphericalEarth.cpp
+D    src/OpenFDM/EllipticPlanet.h
+M    src/OpenFDM/SphericalEarth.h
+A    src/OpenFDM/WGS84Planet.cpp
+
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-12-06 13:50:04 UTC (rev 862)
+@@ -1,242 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;EllipticPlanet.h&quot;
+-
+-#include &quot;Environment.h&quot;
+-#include &quot;Types.h&quot;
+-#include &quot;Unit.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
+-
+-namespace OpenFDM {
+-
+-EllipticPlanet::EllipticPlanet(void)
+-{
+-  // values taken from simgear
+-  setAequatorialRadius(6378137.0);
+-  setFlattening(298.257223563);
+-
+-  // Major semi axis or Aequatorial Radius is called a
+-  // Minor semi axis or polar radius is called b.
+-  // The the flattening f is defined by f = (a-b)/a.
+-  // For our earth these parameters are.
+-  //  a = 6378137.0
+-  //  b = 6356752.3142
+-  //  f = 1/298.257223563
+-}
+-
+-EllipticPlanet::~EllipticPlanet(void)
+-{
+-}
+-
+-real_type
+-EllipticPlanet::getAequatorialRadius(void) const
+-{
+-  return a;
+-}
+-
+-void
+-EllipticPlanet::setAequatorialRadius(real_type r)
+-{
+-  a = r;
+-  ra2 = 1/(a*a);
+-}
+-
+-void
+-EllipticPlanet::setFlattening(real_type flat)
+-{
+-  real_type squash = 1 - 1/flat;
+-  e2 = fabs(1 - squash*squash);
+-  e = sqrt(e2);
+-  e4 = e2*e2;
+-}
+-
+-Plane
+-EllipticPlanet::getHorizont(const Vector3&amp; position) const
+-{
+-  Geodetic geodetic = toGeod(position);
+-  geodetic.altitude = 0;
+-  Vector down = getGeodHLOrientation(geodetic).backTransform(Vector3::unit(2));
+-  return Plane(down, toCart(geodetic));
+-}
+-
+-Vector3
+-EllipticPlanet::getGravityAcceleration(const Vector3&amp; cart) const
+-{
+-  real_type dist = norm(cart);
+-  return (-5.9742e24*gravity_constant/(dist*dist*dist))*cart;
+-}
+-
+-Vector3
+-EllipticPlanet::getAngularVelocity(const real_type&amp; t) const
+-{
+-  return Vector3(0, 0, pi2/(24*60*60));
+-}
+-
+-Vector6
+-EllipticPlanet::getAcceleration(const real_type&amp; t) const
+-{
+-  return Vector6::zeros();
+-}
+-
+-Geodetic
+-EllipticPlanet::toGeod(const Vector3&amp; cart) const
+-{
+-  // according to
+-  // H. Vermeille,
+-  // Direct transformation from geocentric to geodetic ccordinates,
+-  // Journal of Geodesy (2002) 76:451-454
+-  real_type X = cart(0);
+-  real_type Y = cart(1);
+-  real_type Z = cart(2);
+-  real_type XXpYY = X*X+Y*Y;
+-  real_type sqrtXXpYY = sqrt(XXpYY);
+-  real_type p = XXpYY*ra2;
+-  real_type q = Z*Z*(1-e*e)*ra2;
+-  real_type r = 1.0/6.0*(p+q-e4);
+-  real_type s = e4*p*q/(4.0*r*r*r);
+-  real_type t = pow(1.0+s+sqrt(s*(2.0+s)), real_type(1)/3);
+-  real_type u = r*(1.0+t+1.0/t);
+-  real_type v = sqrt(u*u+e4*q);
+-  real_type w = e2*(u+v-q)/(2.0*v);
+-  real_type k = sqrt(u+v+w*w)-w;
+-  real_type D = k*sqrtXXpYY/(k+e2);
+-  real_type lambda = 2.0*atan2(Y, X+sqrtXXpYY);
+-  real_type sqrtDDpZZ = sqrt(D*D+Z*Z);
+-  real_type phi = 2.0*atan2(Z, D+sqrtDDpZZ);
+-  real_type h = (k+e2-1)*sqrtDDpZZ/k;
+-  return Geodetic(phi, lambda, h);
+-}
+-
+-Vector3
+-EllipticPlanet::toCart(const Geodetic&amp; geod) const
+-{
+-  // according to
+-  // H. Vermeille,
+-  // Direct transformation from geocentric to geodetic ccordinates,
+-  // Journal of Geodesy (2002) 76:451-454
+-  real_type lambda = geod.longitude;
+-  real_type phi = geod.latitude;
+-  real_type h = geod.altitude;
+-  real_type sphi = sin(phi);
+-  real_type n = a/sqrt(1.0-e2*sphi*sphi);
+-  real_type cphi = cos(phi);
+-  real_type slambda = sin(lambda);
+-  real_type clambda = cos(lambda);
+-  real_type X = (h+n)*cphi*clambda;
+-  real_type Y = (h+n)*cphi*slambda;
+-  real_type Z = (h+n-e2*n)*sphi;
+-  return Vector3(X, Y, Z);
+-}
+-
+-Geocentric
+-EllipticPlanet::toGeoc(const Vector3&amp; cart) const
+-{
+-  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0)
+-    ? real_type(0) : atan2(cart(1), cart(0));
+-  real_type nxy = sqrt(cart(0)*cart(0)+cart(1)*cart(1));
+-  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0)
+-    ? real_type(0) : atan2(cart(2), nxy);
+-  return Geocentric(lat, lon, norm(cart));
+-}
+-
+-Vector3
+-EllipticPlanet::toCart(const Geocentric&amp; geoc) const
+-{
+-  real_type slat = sin(geoc.latitude);
+-  real_type clat = cos(geoc.latitude);
+-  real_type slon = sin(geoc.longitude);
+-  real_type clon = cos(geoc.longitude);
+-  return geoc.radius*Vector3( clat*clon, clat*slon, slat );
+-}
+-
+-Geocentric
+-EllipticPlanet::toGeoc(const Geodetic&amp; geod) const
+-{
+-  return toGeoc(toCart(geod));
+-}
+-
+-Geodetic
+-EllipticPlanet::toGeod(const Geocentric&amp; geoc) const
+-{
+-  return toGeod(toCart(geoc));
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeodHLOrientation(const Geodetic&amp; pos) const
+-{
+-  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeodHLOrientation(const Vector3&amp; pos) const
+-{
+-  return getGeodHLOrientation(toGeod(pos));
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeodHLOrientation(const Geocentric&amp; pos) const
+-{
+-  return getGeodHLOrientation(toCart(pos));
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeocHLOrientation(const Geodetic&amp; pos) const
+-{
+-  return getGeocHLOrientation(toCart(pos));
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeocHLOrientation(const Vector3&amp; pos) const
+-{
+-  return getGeocHLOrientation(toGeoc(pos));
+-}
+-
+-Quaternion
+-EllipticPlanet::getGeocHLOrientation(const Geocentric&amp; pos) const
+-{
+-  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
+-}
+-
+-Vector3
+-EllipticPlanet::getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  Quaternion hlOrientation = getGeocHLOrientation(pos);
+-  Vector3 hlVel = hlOrientation.transform(ecVel);
+-  Vector3 hlRate = Vector3(hlVel(1), -hlVel(0), -hlVel(1)*tan(pos.latitude));
+-  return hlOrientation.backTransform((1/pos.radius)*hlRate);
+-}
+-
+-Vector3
+-EllipticPlanet::getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  return getGoecHLRate(toGeoc(pos), ecVel);
+-}
+-
+-Vector3
+-EllipticPlanet::getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  return getGoecHLRate(toCart(pos), ecVel);
+-}
+-
+-std::ostream&amp;
+-operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod)
+-{
+-  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geod.longitude
+-            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geod.latitude
+-            &lt;&lt; &quot;, alt = &quot; &lt;&lt; geod.altitude
+-            &lt;&lt; &quot; ]&quot;;
+-}
+-
+-std::ostream&amp;
+-operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc)
+-{
+-  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geoc.longitude
+-            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geoc.latitude
+-            &lt;&lt; &quot;, rad = &quot; &lt;&lt; geoc.radius
+-            &lt;&lt; &quot; ]&quot;;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-12-06 13:50:04 UTC (rev 862)
+@@ -1,168 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_EllipticPlanet_H
+-#define OpenFDM_EllipticPlanet_H
+-
+-#include &lt;iosfwd&gt;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;AbstractPlanet.h&quot;
+-
+-namespace OpenFDM {
+-
+-/**
+- * Datatype for the Geodetic position on some ellipsoid.
+- */
+-struct Geodetic {
+-  Geodetic(real_type lat = 0.0, real_type lon = 0.0, real_type alt = 0.0)
+-    : latitude(lat), longitude(lon), altitude(alt)
+-  {}
+-  real_type latitude;
+-  real_type longitude;
+-  real_type altitude;
+-};
+-
+-/**
+- * Datatype for a position in speric coordinates.
+- */
+-struct Geocentric {
+-  Geocentric(real_type lat = 0.0, real_type lon = 0.0, real_type rad = 0.0)
+-    : latitude(lat), longitude(lon), radius(rad)
+-  {}
+-  real_type latitude;
+-  real_type longitude;
+-  real_type radius;
+-};
+-
+-/**
+- * The EllipticPlanet class.
+- *
+- * It holds some information about the planet the simulation is running on.
+- */
+-class EllipticPlanet : public AbstractPlanet {
+-public:
+-  /** Elliptic constructor.
+-   */
+-  EllipticPlanet(void);
+-
+-  /** Elliptic destructor.
+-   */
+-  virtual ~EllipticPlanet(void);
+-
+-  /** Get aequatorial radius.
+-   */
+-  real_type getAequatorialRadius(void) const;
+-
+-  /** Set aequatorial radius.
+-   */
+-  void setAequatorialRadius(real_type r);
+-
+-  /** Set planet flattening.
+-   */
+-  void setFlattening(real_type flat);
+-
+-  /** Returns the horizontal plane at zero altitude.
+-   *  Plane normal points downward.
+-   */
+-  virtual Plane getHorizont(const Vector3&amp; position) const;
+-
+-  /** Returns the gravitational acceleration for the given position.
+-   *  Note that this should not contain the effects of a non inertial
+-   *  reference frame as this effect is captured by the inertial
+-   *  frame methods.
+-   */
+-  virtual Vector3 getGravityAcceleration(const Vector3&amp;) const;
+-
+-  /** Return the global reference frames velocity and acceleration.
+-   *  Note that these both must fit together to make the simulation
+-   *  simulate something usable.
+-   */
+-  virtual Vector3 getAngularVelocity(const real_type&amp; t) const;
+-  virtual Vector6 getAcceleration(const real_type&amp; t) const;
+-
+-
+-  /** Transform cartesian coordinates to geodetic coordinates.
+-   */
+-  Geodetic toGeod(const Vector3&amp; cart) const;
+-
+-  /** Transform geodetic coordinates to cartesian coordinates.
+-   */
+-  Vector3 toCart(const Geodetic&amp; geod) const;
+-
+-  /** Transform cartesian coordinates to geocentric coordinates.
+-   */
+-  Geocentric toGeoc(const Vector3&amp; cart) const;
+-
+-  /** Transform geocentric coordinates to cartesian coordinates.
+-   */
+-  Vector3 toCart(const Geocentric&amp; geoc) const;
+-
+-  /** Transform geocentric coordinates to geodetic coordinates.
+-   */
+-  Geocentric toGeoc(const Geodetic&amp; geod) const;
+-
+-  /** Transform geodetic coordinates to geocentric coordinates.
+-   */
+-  Geodetic toGeod(const Geocentric&amp; geoc) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  Quaternion getGeodHLOrientation(const Geodetic&amp; pos) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  Quaternion getGeodHLOrientation(const Vector3&amp; pos) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  Quaternion getGeodHLOrientation(const Geocentric&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Geodetic&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Vector3&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Geocentric&amp; pos) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const;
+-
+-private:
+-  /**
+-   */
+-  real_type a;
+-  real_type ra2;
+-  real_type e;
+-  real_type e2;
+-  real_type e4;
+-};
+-
+-/** Pretty printing of geodetic coordinates.
+- */
+-std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod);
+-
+-/** Pretty printing of geocentric coordinates.
+- */
+-std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc);
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-06 13:50:04 UTC (rev 862)
+@@ -31,7 +31,6 @@
+   CowPtr.h \
+   DiscreteStateValueVector.h \
+   DoPri5.h \
+-  EllipticPlanet.h \
+   Environment.h \
+   ExplicitAdams.h \
+   ExplicitEuler.h \
+@@ -127,6 +126,7 @@
+   Vector.h \
+   WeakPtr.h \
+   WeakReferenced.h \
++  WGS84Planet.h \
+   XMLDumpModelVisitor.h
+ 
+ OpenFDMCoreSOURCES = \
+@@ -144,7 +144,6 @@
+   ConstNodeVisitor.cpp \
+   ContinousStateValue.cpp \
+   DoPri5.cpp \
+-  EllipticPlanet.cpp \
+   Environment.cpp \
+   ExplicitAdams.cpp \
+   ExplicitEuler.cpp \
+@@ -185,7 +184,8 @@
+   SystemOutput.cpp \
+   Time.cpp \
+   Unit.cpp \
+-  Variant.cpp
++  Variant.cpp \
++  WGS84Planet.cpp
+ 
+ #   ReaderWriter.cpp
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.cpp	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.cpp	2008-12-06 13:50:04 UTC (rev 862)
+@@ -85,4 +85,61 @@
+   return Vector6::zeros();
+ }
+ 
++Geocentric
++SphericalEarth::toGeoc(const Vector3&amp; cart) const
++{
++  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0)
++    ? real_type(0) : atan2(cart(1), cart(0));
++  real_type nxy = sqrt(cart(0)*cart(0)+cart(1)*cart(1));
++  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0)
++    ? real_type(0) : atan2(cart(2), nxy);
++  return Geocentric(lat, lon, norm(cart));
++}
++
++Vector3
++SphericalEarth::toCart(const Geocentric&amp; geoc) const
++{
++  real_type slat = sin(geoc.latitude);
++  real_type clat = cos(geoc.latitude);
++  real_type slon = sin(geoc.longitude);
++  real_type clon = cos(geoc.longitude);
++  return geoc.radius*Vector3( clat*clon, clat*slon, slat );
++}
++
++Quaternion
++SphericalEarth::getGeocHLOrientation(const Vector3&amp; pos) const
++{
++  return getGeocHLOrientation(toGeoc(pos));
++}
++
++Quaternion
++SphericalEarth::getGeocHLOrientation(const Geocentric&amp; pos) const
++{
++  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
++}
++
++Vector3
++SphericalEarth::getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const
++{
++  Quaternion hlOrientation = getGeocHLOrientation(pos);
++  Vector3 hlVel = hlOrientation.transform(ecVel);
++  Vector3 hlRate = Vector3(hlVel(1), -hlVel(0), -hlVel(1)*tan(pos.latitude));
++  return hlOrientation.backTransform((1/pos.radius)*hlRate);
++}
++
++Vector3
++SphericalEarth::getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const
++{
++  return getGoecHLRate(toGeoc(pos), ecVel);
++}
++
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc)
++{
++  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geoc.longitude
++            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geoc.latitude
++            &lt;&lt; &quot;, rad = &quot; &lt;&lt; geoc.radius
++            &lt;&lt; &quot; ]&quot;;
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.h	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SphericalEarth.h	2008-12-06 13:50:04 UTC (rev 862)
+@@ -5,13 +5,25 @@
+ #ifndef OpenFDM_SphericalEarth_H
+ #define OpenFDM_SphericalEarth_H
+ 
+-#include &quot;Types.h&quot;
++#include &quot;AbstractPlanet.h&quot;
++#include &quot;Quaternion.h&quot;
+ #include &quot;Vector.h&quot;
+-#include &quot;AbstractPlanet.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /**
++ * Datatype for a position in speric coordinates.
++ */
++struct Geocentric {
++  Geocentric(real_type lat = 0.0, real_type lon = 0.0, real_type rad = 0.0)
++    : latitude(lat), longitude(lon), radius(rad)
++  {}
++  real_type latitude;
++  real_type longitude;
++  real_type radius;
++};
++
++/**
+  * The SphericalEarth class.
+  *
+  * It holds some information about the gravity the simulation is running on.
+@@ -70,12 +82,40 @@
+   virtual Vector3 getAngularVelocity(const real_type&amp; t) const;
+   virtual Vector6 getAcceleration(const real_type&amp; t) const;
+ 
++  /** Transform cartesian coordinates to geocentric coordinates.
++   */
++  Geocentric toGeoc(const Vector3&amp; cart) const;
++
++  /** Transform geocentric coordinates to cartesian coordinates.
++   */
++  Vector3 toCart(const Geocentric&amp; geoc) const;
++
++  /** Orientation of the Geocentric horizontal local frame.
++   */
++  Quaternion getGeocHLOrientation(const Vector3&amp; pos) const;
++
++  /** Orientation of the Geocentric horizontal local frame.
++   */
++  Quaternion getGeocHLOrientation(const Geocentric&amp; pos) const;
++
++  /** Rotation rate of the Geocentric horizontal local frame.
++   */
++  Vector3 getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const;
++
++  /** Rotation rate of the Geocentric horizontal local frame.
++   */
++  Vector3 getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const;
++
+ private:
+   real_type mMass;
+   real_type mRadius;
+   Vector3 mAngularVelocity;
+ };
+ 
++/** Pretty printing of geocentric coordinates.
++ */
++std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc);
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.cpp (from rev 860, branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-12-06 13:29:41 UTC (rev 860)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.cpp	2008-12-06 13:50:04 UTC (rev 862)
+@@ -0,0 +1,158 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;WGS84Planet.h&quot;
++
++#include &quot;Environment.h&quot;
++#include &quot;Types.h&quot;
++#include &quot;Unit.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Quaternion.h&quot;
++
++namespace OpenFDM {
++
++WGS84Planet::WGS84Planet(void)
++{
++  // values taken from simgear
++  setAequatorialRadius(6378137.0);
++  setFlattening(298.257223563);
++
++  // Major semi axis or Aequatorial Radius is called a
++  // Minor semi axis or polar radius is called b.
++  // The the flattening f is defined by f = (a-b)/a.
++  // For our earth these parameters are.
++  //  a = 6378137.0
++  //  b = 6356752.3142
++  //  f = 1/298.257223563
++}
++
++WGS84Planet::~WGS84Planet(void)
++{
++}
++
++real_type
++WGS84Planet::getAequatorialRadius(void) const
++{
++  return a;
++}
++
++void
++WGS84Planet::setAequatorialRadius(real_type r)
++{
++  a = r;
++  ra2 = 1/(a*a);
++}
++
++void
++WGS84Planet::setFlattening(real_type flat)
++{
++  real_type squash = 1 - 1/flat;
++  e2 = fabs(1 - squash*squash);
++  e = sqrt(e2);
++  e4 = e2*e2;
++}
++
++Plane
++WGS84Planet::getHorizont(const Vector3&amp; position) const
++{
++  Geodetic geodetic = toGeod(position);
++  geodetic.altitude = 0;
++  Vector down = getGeodHLOrientation(geodetic).backTransform(Vector3::unit(2));
++  return Plane(down, toCart(geodetic));
++}
++
++Vector3
++WGS84Planet::getGravityAcceleration(const Vector3&amp; cart) const
++{
++  // FIXME, this is not WGS84!!!
++  Geodetic geodetic = toGeod(cart);
++  Vector down = getGeodHLOrientation(geodetic).backTransform(Vector3::unit(2));
++  real_type dist2 = dot(cart, cart);
++  return (-5.9742e24*gravity_constant/(dist2))*down;
++}
++
++Vector3
++WGS84Planet::getAngularVelocity(const real_type&amp; t) const
++{
++  return Vector3(0, 0, pi2/(24*60*60));
++}
++
++Vector6
++WGS84Planet::getAcceleration(const real_type&amp; t) const
++{
++  return Vector6::zeros();
++}
++
++Geodetic
++WGS84Planet::toGeod(const Vector3&amp; cart) const
++{
++  // according to
++  // H. Vermeille,
++  // Direct transformation from geocentric to geodetic ccordinates,
++  // Journal of Geodesy (2002) 76:451-454
++  real_type X = cart(0);
++  real_type Y = cart(1);
++  real_type Z = cart(2);
++  real_type XXpYY = X*X+Y*Y;
++  real_type sqrtXXpYY = sqrt(XXpYY);
++  real_type p = XXpYY*ra2;
++  real_type q = Z*Z*(1-e*e)*ra2;
++  real_type r = 1.0/6.0*(p+q-e4);
++  real_type s = e4*p*q/(4.0*r*r*r);
++  real_type t = pow(1.0+s+sqrt(s*(2.0+s)), real_type(1)/3);
++  real_type u = r*(1.0+t+1.0/t);
++  real_type v = sqrt(u*u+e4*q);
++  real_type w = e2*(u+v-q)/(2.0*v);
++  real_type k = sqrt(u+v+w*w)-w;
++  real_type D = k*sqrtXXpYY/(k+e2);
++  real_type lambda = 2.0*atan2(Y, X+sqrtXXpYY);
++  real_type sqrtDDpZZ = sqrt(D*D+Z*Z);
++  real_type phi = 2.0*atan2(Z, D+sqrtDDpZZ);
++  real_type h = (k+e2-1)*sqrtDDpZZ/k;
++  return Geodetic(phi, lambda, h);
++}
++
++Vector3
++WGS84Planet::toCart(const Geodetic&amp; geod) const
++{
++  // according to
++  // H. Vermeille,
++  // Direct transformation from geocentric to geodetic ccordinates,
++  // Journal of Geodesy (2002) 76:451-454
++  real_type lambda = geod.longitude;
++  real_type phi = geod.latitude;
++  real_type h = geod.altitude;
++  real_type sphi = sin(phi);
++  real_type n = a/sqrt(1.0-e2*sphi*sphi);
++  real_type cphi = cos(phi);
++  real_type slambda = sin(lambda);
++  real_type clambda = cos(lambda);
++  real_type X = (h+n)*cphi*clambda;
++  real_type Y = (h+n)*cphi*slambda;
++  real_type Z = (h+n-e2*n)*sphi;
++  return Vector3(X, Y, Z);
++}
++
++Quaternion
++WGS84Planet::getGeodHLOrientation(const Geodetic&amp; pos) const
++{
++  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
++}
++
++Quaternion
++WGS84Planet::getGeodHLOrientation(const Vector3&amp; pos) const
++{
++  return getGeodHLOrientation(toGeod(pos));
++}
++
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod)
++{
++  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geod.longitude
++            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geod.latitude
++            &lt;&lt; &quot;, alt = &quot; &lt;&lt; geod.altitude
++            &lt;&lt; &quot; ]&quot;;
++}
++
++} // namespace OpenFDM
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.h (from rev 860, branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-12-06 13:29:41 UTC (rev 860)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WGS84Planet.h	2008-12-06 13:50:04 UTC (rev 862)
+@@ -0,0 +1,108 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WGS84Planet_H
++#define OpenFDM_WGS84Planet_H
++
++#include &lt;iosfwd&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;AbstractPlanet.h&quot;
++
++namespace OpenFDM {
++
++/**
++ * Datatype for the Geodetic position on some ellipsoid.
++ */
++struct Geodetic {
++  Geodetic(real_type lat = 0.0, real_type lon = 0.0, real_type alt = 0.0)
++    : latitude(lat), longitude(lon), altitude(alt)
++  {}
++  real_type latitude;
++  real_type longitude;
++  real_type altitude;
++};
++
++/**
++ * The WGS84Planet class.
++ *
++ * It holds some information about the planet the simulation is running on.
++ */
++class WGS84Planet : public AbstractPlanet {
++public:
++  /** Elliptic constructor.
++   */
++  WGS84Planet(void);
++
++  /** Elliptic destructor.
++   */
++  virtual ~WGS84Planet(void);
++
++  /** Get aequatorial radius.
++   */
++  real_type getAequatorialRadius(void) const;
++
++  /** Set aequatorial radius.
++   */
++  void setAequatorialRadius(real_type r);
++
++  /** Set planet flattening.
++   */
++  void setFlattening(real_type flat);
++
++  /** Returns the horizontal plane at zero altitude.
++   *  Plane normal points downward.
++   */
++  virtual Plane getHorizont(const Vector3&amp; position) const;
++
++  /** Returns the gravitational acceleration for the given position.
++   *  Note that this should not contain the effects of a non inertial
++   *  reference frame as this effect is captured by the inertial
++   *  frame methods.
++   */
++  virtual Vector3 getGravityAcceleration(const Vector3&amp;) const;
++
++  /** Return the global reference frames velocity and acceleration.
++   *  Note that these both must fit together to make the simulation
++   *  simulate something usable.
++   */
++  virtual Vector3 getAngularVelocity(const real_type&amp; t) const;
++  virtual Vector6 getAcceleration(const real_type&amp; t) const;
++
++
++  /** Transform cartesian coordinates to geodetic coordinates.
++   */
++  Geodetic toGeod(const Vector3&amp; cart) const;
++
++  /** Transform geodetic coordinates to cartesian coordinates.
++   */
++  Vector3 toCart(const Geodetic&amp; geod) const;
++
++  /** Orientation of the Geodetic horizontal local frame.
++   */
++  Quaternion getGeodHLOrientation(const Geodetic&amp; pos) const;
++
++  /** Orientation of the Geodetic horizontal local frame.
++   */
++  Quaternion getGeodHLOrientation(const Vector3&amp; pos) const;
++
++private:
++  /**
++   */
++  real_type a;
++  real_type ra2;
++  real_type e;
++  real_type e2;
++  real_type e4;
++};
++
++/** Pretty printing of geodetic coordinates.
++ */
++std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod);
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-12-06 13:36:29 UTC (rev 861)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-12-06 13:50:04 UTC (rev 862)
+@@ -6,13 +6,13 @@
+ #include &lt;OpenFDM/Sensor.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+-#include &lt;OpenFDM/EllipticPlanet.h&gt;
++#include &lt;OpenFDM/WGS84Planet.h&gt;
+ 
+ using namespace OpenFDM;
+ 
+ int main()
+ {
+-  SharedPtr&lt;EllipticPlanet&gt; planet = new EllipticPlanet;
++  SharedPtr&lt;WGS84Planet&gt; planet = new WGS84Planet;
+ 
+   // Model of the paris pendulum or foucault pendulum to test coriolis effects.
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000829.html">[OpenFDM-svn] r861 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000831.html">[OpenFDM-svn] r863 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#830">[ date ]</a>
+              <a href="thread.html#830">[ thread ]</a>
+              <a href="subject.html#830">[ subject ]</a>
+              <a href="author.html#830">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

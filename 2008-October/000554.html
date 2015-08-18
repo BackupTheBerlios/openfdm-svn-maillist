@@ -1,0 +1,551 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r584 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r584%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810091841.m99If1tf023875%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000553.html">
+   <LINK REL="Next"  HREF="000555.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r584 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r584%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810091841.m99If1tf023875%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r584 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Oct  9 20:41:01 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000553.html">[OpenFDM-svn] r583 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000555.html">[OpenFDM-svn] r585 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#554">[ date ]</a>
+              <a href="thread.html#554">[ thread ]</a>
+              <a href="subject.html#554">[ subject ]</a>
+              <a href="author.html#554">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-09 20:41:00 +0200 (Thu, 09 Oct 2008)
+New Revision: 584
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Improove group interface nodes.
+M    src/test/structure.cpp
+M    src/OpenFDM/Group.h
+M    src/OpenFDM/Group.cpp
+M    src/OpenFDM/Node.h
+M    src/OpenFDM/NodeVisitor.h
+M    src/OpenFDM/ConstNodeVisitor.h
+M    src/OpenFDM/Node.cpp
+M    src/OpenFDM/NodeVisitor.cpp
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/ConstNodeVisitor.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -33,24 +33,12 @@
+ }
+ 
+ void
+-ConstNodeVisitor::apply(const GroupInput&amp; node)
++ConstNodeVisitor::apply(const GroupInterfaceNode&amp; node)
+ {
+   apply(static_cast&lt;const Node&amp;&gt;(node));
+ }
+ 
+ void
+-ConstNodeVisitor::apply(const GroupOutput&amp; node)
+-{
+-  apply(static_cast&lt;const Node&amp;&gt;(node));
+-}
+-
+-void
+-ConstNodeVisitor::apply(const GroupMechanicLink&amp; node)
+-{
+-  apply(static_cast&lt;const Node&amp;&gt;(node));
+-}
+-
+-void
+ ConstNodeVisitor::apply(const LibraryNode&amp; libraryNode)
+ {
+   apply(static_cast&lt;const Node&amp;&gt;(libraryNode));
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-09 18:41:00 UTC (rev 584)
+@@ -13,9 +13,7 @@
+ 
+ class Node;
+ class Group;
+-class GroupInput;
+-class GroupOutput;
+-class GroupMechanicLink;
++class GroupInterfaceNode;
+ class LibraryNode;
+ class LeafNode;
+ class Model;
+@@ -32,9 +30,7 @@
+   virtual void apply(const Node&amp;);
+ 
+   virtual void apply(const Group&amp;);
+-  virtual void apply(const GroupInput&amp;);
+-  virtual void apply(const GroupOutput&amp;);
+-  virtual void apply(const GroupMechanicLink&amp;);
++  virtual void apply(const GroupInterfaceNode&amp;);
+ 
+   virtual void apply(const LibraryNode&amp;);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -8,24 +8,6 @@
+ 
+ namespace OpenFDM {
+ 
+-GroupInput::GroupInput(const std::string&amp; name) :
+-  Node(name),
+-  mGroupInternalPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0)))
+-{
+-}
+-
+-GroupOutput::GroupOutput(const std::string&amp; name) :
+-  Node(name),
+-  mGroupInternalPort(new InputPortInfo(this, &quot;input&quot;, Size(0, 0), false))
+-{
+-}
+-
+-GroupMechanicLink::GroupMechanicLink(const std::string&amp; name) :
+-  Node(name),
+-  mGroupInternalPort(new MechanicLinkInfo(this, &quot;link&quot;))
+-{
+-}
+-
+ BEGIN_OPENFDM_OBJECT_DEF(Group, Node)
+   END_OPENFDM_OBJECT_DEF
+ 
+@@ -67,6 +49,10 @@
+ Group::NodeId
+ Group::addChild(const SharedPtr&lt;Node&gt;&amp; node)
+ {
++  if (!node)
++    return NodeId();
++  if (!node-&gt;addParent(this))
++    return NodeId();
+   _childList.push_back(new Child(this, node));
+   return NodeId(_childList.back());
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-09 18:41:00 UTC (rev 584)
+@@ -18,51 +18,97 @@
+ 
+ namespace OpenFDM {
+ 
+-/// Port structure:
+-/// InputPort (NumericPortValue, size constraint?)
+-/// OutputPort (NumericPortValue, size constraint?)
+-/// MechanicLink (MechanicLinkValue ...)
+-
+-class GroupInput : public Node {
++class GroupInterfaceNode : public Node {
+ public:
+-  GroupInput(const std::string&amp; name = std::string());
++  GroupInterfaceNode(const std::string&amp; name) : Node(name) {}
+   virtual void accept(NodeVisitor&amp; visitor)
+-  { visitor.apply(*this); }
++  {
++    visitor.handleNodePathAndApply(this);
++  }
+   virtual void accept(ConstNodeVisitor&amp; visitor) const
+-  { visitor.apply(*this); }
++  {
++    visitor.handleNodePathAndApply(this);
++  }
++
+   unsigned getExternalPortIndex() const
+   { return mExternalPortInfo-&gt;getIndex(); }
++protected:
++  virtual bool addParent(Node* parent)
++  {
++    if (getNumParents()) {
++      Log(Model,Warning) &lt;&lt; &quot;Group Interface Nodes cannot have more than &quot;
++        &quot;one parent!&quot; &lt;&lt; std::endl;
++      return false;
++    }
++    
++    return Node::addParent(parent);
++  }
++  virtual void removeParent(Node* parent)
++  {
++    Node::removeParent(parent);
++  }
+ 
++  void setExternalPortInfo(PortInfo* portInfo)
++  {
++    mExternalPortInfo = portInfo;
++  }
++
++private:
++  SharedPtr&lt;PortInfo&gt; mExternalPortInfo;
++};
++
++class GroupInput : public GroupInterfaceNode {
++public:
++  GroupInput(const std::string&amp; name) :
++    GroupInterfaceNode(name),
++    mGroupInternalPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0)))
++  { }
++protected:
++  virtual bool addParent(Node* parent)
++  {
++    if (!GroupInterfaceNode::addParent(parent))
++      return false;
++    setExternalPortInfo(new InputPortInfo(parent, &quot;input&quot;, Size(0, 0), false));
++    return true;
++  }
++private:
+   SharedPtr&lt;OutputPortInfo&gt; mGroupInternalPort;
+-  SharedPtr&lt;const PortInfo&gt; mExternalPortInfo;
+ };
+ 
+-class GroupOutput : public Node {
++class GroupOutput : public GroupInterfaceNode {
+ public:
+-  GroupOutput(const std::string&amp; name = std::string());
+-  virtual void accept(NodeVisitor&amp; visitor)
+-  { visitor.apply(*this); }
+-  virtual void accept(ConstNodeVisitor&amp; visitor) const
+-  { visitor.apply(*this); }
+-  unsigned getExternalPortIndex() const
+-  { return mExternalPortInfo-&gt;getIndex(); }
+-
++  GroupOutput(const std::string&amp; name) :
++    GroupInterfaceNode(name),
++    mGroupInternalPort(new InputPortInfo(this, &quot;input&quot;, Size(0, 0), false))
++  { }
++protected:
++  virtual bool addParent(Node* parent)
++  {
++    if (!GroupInterfaceNode::addParent(parent))
++      return false;
++    setExternalPortInfo(new OutputPortInfo(parent, &quot;output&quot;, Size(0, 0)));
++    return true;
++  }
++private:
+   SharedPtr&lt;InputPortInfo&gt; mGroupInternalPort;
+-  SharedPtr&lt;const PortInfo&gt; mExternalPortInfo;
+ };
+ 
+-class GroupMechanicLink : public Node {
++class GroupMechanicLink : public GroupInterfaceNode {
+ public:
+-  GroupMechanicLink(const std::string&amp; name = std::string());
+-  virtual void accept(NodeVisitor&amp; visitor)
+-  { visitor.apply(*this); }
+-  virtual void accept(ConstNodeVisitor&amp; visitor) const
+-  { visitor.apply(*this); }
+-  unsigned getExternalPortIndex() const
+-  { return mExternalPortInfo-&gt;getIndex(); }
+-
++  GroupMechanicLink(const std::string&amp; name) :
++    GroupInterfaceNode(name),
++    mGroupInternalPort(new MechanicLinkInfo(this, &quot;link&quot;))
++  { }
++protected:
++  virtual bool addParent(Node* parent)
++  {
++    if (!GroupInterfaceNode::addParent(parent))
++      return false;
++    setExternalPortInfo(new MechanicLinkInfo(parent, &quot;link&quot;));
++    return true;
++  }
++private:
+   SharedPtr&lt;MechanicLinkInfo&gt; mGroupInternalPort;
+-  SharedPtr&lt;const PortInfo&gt; mExternalPortInfo;
+ };
+ 
+ class Group : public Node {
+@@ -84,35 +130,6 @@
+   SharedPtr&lt;Node&gt; getChild(unsigned i);
+   SharedPtr&lt;const Node&gt; getChild(unsigned i) const;
+ 
+-  // add a new group port to the group
+-  NodeId addGroupInput()
+-  {
+-    GroupInput *groupAcceptorNode = new GroupInput;
+-    NodeId nodeId = addChild(groupAcceptorNode);
+-    InputPortInfo* inputPortInfo;
+-    inputPortInfo = new InputPortInfo(this, &quot;input&quot;, Size(0, 0), false);
+-    groupAcceptorNode-&gt;mExternalPortInfo = inputPortInfo;
+-    return nodeId;
+-  }
+-  NodeId addGroupOutput()
+-  {
+-    GroupOutput *groupProviderNode = new GroupOutput;
+-    NodeId nodeId = addChild(groupProviderNode);
+-    OutputPortInfo* outputPortInfo;
+-    outputPortInfo = new OutputPortInfo(this, &quot;output&quot;, Size(0, 0));
+-    groupProviderNode-&gt;mExternalPortInfo = outputPortInfo;
+-    return nodeId;
+-  }
+-  NodeId addGroupMechanicLink()
+-  {
+-    GroupMechanicLink *groupProviderNode = new GroupMechanicLink;
+-    NodeId nodeId = addChild(groupProviderNode);
+-    MechanicLinkInfo* outputPortInfo;
+-    outputPortInfo = new MechanicLinkInfo(this, &quot;link&quot;);
+-    groupProviderNode-&gt;mExternalPortInfo = outputPortInfo;
+-    return nodeId;
+-  }
+-
+   bool connect(const NodeId&amp; nodeId0, const std::string&amp; portName0,
+                const NodeId&amp; nodeId1, const std::string&amp; portName1)
+   { return connect(nodeId0, nodeId0.getPortId(portName0),
+@@ -126,15 +143,17 @@
+                const NodeId&amp; nodeId1, const PortId&amp; portId1)
+   {
+     // Make sure the models belong to this group
+-    if (!getChild(nodeId0))
++    SharedPtr&lt;Node&gt; child0 = getChild(nodeId0);
++    if (!child0)
+       return false;
+-    if (!getChild(nodeId1))
++    SharedPtr&lt;Node&gt; child1 = getChild(nodeId1);
++    if (!child1)
+       return false;
+ 
+-    SharedPtr&lt;const PortInfo&gt; port0 = nodeId0.getPortPtr(portId0);
++    SharedPtr&lt;const PortInfo&gt; port0 = child0-&gt;getPort(portId0);
+     if (!port0)
+       return false;
+-    SharedPtr&lt;const PortInfo&gt; port1 = nodeId1.getPortPtr(portId1);
++    SharedPtr&lt;const PortInfo&gt; port1 = child1-&gt;getPort(portId1);
+     if (!port1)
+       return false;
+ 
+@@ -224,17 +243,6 @@
+       return node-&gt;getPortId(name);
+     }
+ 
+-    const PortInfo* getPortPtr(const PortId&amp; portId) const // FIXME??
+-    {
+-      SharedPtr&lt;Child&gt; child = _child.lock();
+-      if (!child)
+-        return 0;
+-      SharedPtr&lt;Node&gt; node = child-&gt;node;
+-      if (!node)
+-        return 0;
+-      return node-&gt;getPort(portId);
+-    }
+-
+   private:
+     friend class Group;
+     NodeId(const SharedPtr&lt;Child&gt;&amp; child) : _child(child) {}
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -140,12 +140,13 @@
+   return i != mPortList.end();
+ }
+ 
+-void
++bool
+ Node::addParent(Node* parent)
+ {
+   if (!parent)
+-    return;
++    return false;
+   mParentList.push_back(parent);
++  return true;
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-09 18:41:00 UTC (rev 584)
+@@ -15,6 +15,7 @@
+ 
+ namespace OpenFDM {
+ 
++class Group;
+ class Node;
+ class NodeVisitor;
+ class ConstNodeVisitor;
+@@ -55,8 +56,9 @@
+ 
+ protected:
+ 
+-  void addParent(Node* parent);
+-  void removeParent(Node* parent);
++  friend class Group;
++  virtual bool addParent(Node* parent);
++  virtual void removeParent(Node* parent);
+ 
+ private:
+   Node(const Node&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -33,24 +33,12 @@
+ }
+ 
+ void
+-NodeVisitor::apply(GroupInput&amp; node)
++NodeVisitor::apply(GroupInterfaceNode&amp; node)
+ {
+   apply(static_cast&lt;Node&amp;&gt;(node));
+ }
+ 
+ void
+-NodeVisitor::apply(GroupOutput&amp; node)
+-{
+-  apply(static_cast&lt;Node&amp;&gt;(node));
+-}
+-
+-void
+-NodeVisitor::apply(GroupMechanicLink&amp; node)
+-{
+-  apply(static_cast&lt;Node&amp;&gt;(node));
+-}
+-
+-void
+ NodeVisitor::apply(LibraryNode&amp; libraryNode)
+ {
+   apply(static_cast&lt;Node&amp;&gt;(libraryNode));
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-09 18:41:00 UTC (rev 584)
+@@ -13,9 +13,7 @@
+ 
+ class Node;
+ class Group;
+-class GroupInput;
+-class GroupOutput;
+-class GroupMechanicLink;
++class GroupInterfaceNode;
+ class LibraryNode;
+ class LeafNode;
+ class Model;
+@@ -32,9 +30,7 @@
+   virtual void apply(Node&amp;);
+ 
+   virtual void apply(Group&amp;);
+-  virtual void apply(GroupInput&amp;);
+-  virtual void apply(GroupOutput&amp;);
+-  virtual void apply(GroupMechanicLink&amp;);
++  virtual void apply(GroupInterfaceNode&amp;);
+ 
+   virtual void apply(LibraryNode&amp;);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -354,28 +354,13 @@
+     return portDataList;
+   }
+ 
+-  /// FIXME: may be collapse them into one class with a type argument?
+-  virtual void apply(const GroupInput&amp; leaf)
++  virtual void apply(const GroupInterfaceNode&amp; leaf)
+   {
+     PortDataList* portDataList = buildNodeContext(leaf);
+     OpenFDMAssert(leaf.getPort(0));
+     PortData* portData = portDataList-&gt;newPortData(leaf.getPort(0));
+     _groupPortDataMap[leaf.getExternalPortIndex()] = portData;
+   }
+-  virtual void apply(const GroupOutput&amp; leaf)
+-  {
+-    PortDataList* portDataList = buildNodeContext(leaf);
+-    OpenFDMAssert(leaf.getPort(0));
+-    PortData* portData = portDataList-&gt;newPortData(leaf.getPort(0));
+-    _groupPortDataMap[leaf.getExternalPortIndex()] = portData;
+-  }
+-  virtual void apply(const GroupMechanicLink&amp; leaf)
+-  {
+-    PortDataList* portDataList = buildNodeContext(leaf);
+-    OpenFDMAssert(leaf.getPort(0));
+-    PortData* portData = portDataList-&gt;newPortData(leaf.getPort(0));
+-    _groupPortDataMap[leaf.getExternalPortIndex()] = portData;
+-  }
+ 
+   void allocPortData(AbstractNodeInstance* nodeInstance, const LeafNode&amp; leaf)
+   {
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-09 05:55:16 UTC (rev 583)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-09 18:41:00 UTC (rev 584)
+@@ -51,7 +51,7 @@
+   group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
+   group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+ 
+-  Group::NodeId groupOutputNode = group-&gt;addGroupOutput();
++  Group::NodeId groupOutputNode = group-&gt;addChild(new GroupOutput(&quot;GIO&quot;));
+   group-&gt;connect(integrator2, &quot;output&quot;, groupOutputNode, &quot;input&quot;);
+ 
+   SharedPtr&lt;Group&gt; topGroup = new Group(&quot;G1&quot;);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000553.html">[OpenFDM-svn] r583 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000555.html">[OpenFDM-svn] r585 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#554">[ date ]</a>
+              <a href="thread.html#554">[ thread ]</a>
+              <a href="subject.html#554">[ subject ]</a>
+              <a href="author.html#554">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

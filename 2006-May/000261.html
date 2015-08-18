@@ -1,0 +1,754 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r283%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605281949.k4SJni2w000671%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000260.html">
+   <LINK REL="Next"  HREF="000262.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r283%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605281949.k4SJni2w000671%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r283 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun May 28 21:49:44 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000260.html">[OpenFDM-svn] r282 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000262.html">[OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#261">[ date ]</a>
+              <a href="thread.html#261">[ thread ]</a>
+              <a href="subject.html#261">[ subject ]</a>
+              <a href="author.html#261">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-05-28 21:49:40 +0200 (Sun, 28 May 2006)
+New Revision: 283
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.h
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/Sensor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/System.h
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+   trunk/OpenFDM/src/OpenFDM/Tailhook.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.h
+Log:
+Change the way the environment is distributed across the System.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -78,10 +78,6 @@
+ bool
+ AeroForce::init(void)
+ {
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+-
+   if (getInputPort(&quot;roll&quot;))
+     mBodyAxisTorque[0] = getInputPort(&quot;roll&quot;)-&gt;toRealPortHandle();
+   else
+@@ -119,7 +115,7 @@
+     Log(Model, Debug) &lt;&lt; &quot;AeroForce::output(): \&quot;&quot; &lt;&lt; getName()
+                       &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+     real_type t = taskInfo.getTime();
+-    mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, getRefPosition());
++    mGroundVal = getGround()-&gt;getGroundPlane(t, getRefPosition());
+   }
+   dirtyAll();
+ 
+@@ -204,12 +200,8 @@
+ AeroForce::getAirSpeed(void) const
+ {
+   if (mDirtyAirSpeed) {
+-    // FIXME temporary workaround
+-    if (!mEnvironment) {
+-      const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
+-    }
+     // Get the position in the earth centered coordinate frame.
+-    Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(getRefPosition());
++    Vector3 windVel = getWind()-&gt;getWindVel(getRefPosition());
+     windVel = mMountFrame-&gt;rotFromRef(windVel);
+     mAirSpeed = Vector6(Vector3::zeros(), windVel) + mMountFrame-&gt;getRefVel();
+     mDirtyAirSpeed = false;
+@@ -455,12 +447,8 @@
+ AeroForce::getAltitude(void) const
+ {
+   if (mDirtyAltitude) {
+-    // FIXME temporary workaround
+-    if (!mEnvironment) {
+-      const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
+-    }
+     // Get the altitude for the atmosphere.
+-    Geodetic geod = mEnvironment-&gt;getPlanet()-&gt;toGeod(getRefPosition());
++    Geodetic geod = getPlanet()-&gt;toGeod(getRefPosition());
+ 
+     // Get the Athmosphere information at this position and the given time.
+     mAltitude = geod.altitude;
+@@ -582,6 +570,12 @@
+ }
+ 
+ void
++AeroForce::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++}
++
++void
+ AeroForce::dirtyAll(void)
+ {
+   // Dirty everything.
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -83,6 +83,9 @@
+   const Vector3&amp; getUnitDown(void) const;
+   const Plane&amp; getLocalGroundPlane(void) const;
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void dirtyAll(void);
+   void computeAtmosphere(void) const;
+@@ -96,8 +99,12 @@
+   { return mEnvironment-&gt;getAtmosphere(); }
+   const Planet* getPlanet(void) const
+   { return mEnvironment-&gt;getPlanet(); }
++  const Ground* getGround(void) const
++  { return mEnvironment-&gt;getGround(); }
++  const Wind* getWind(void) const
++  { return mEnvironment-&gt;getWind(); }
+ 
+-  SharedPtr&lt;Environment&gt; mEnvironment;
++  SharedPtr&lt;const Environment&gt; mEnvironment;
+ 
+   real_type mWingSpan;
+   real_type mWingArea;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Force.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;Contact.h&quot;
+ 
+ namespace OpenFDM {
+@@ -34,10 +33,6 @@
+ Contact::init(void)
+ {
+   setForce(Vector6::zeros());
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+-
+   return ExternalForce::init();
+ }
+ 
+@@ -110,13 +105,14 @@
+ }
+ 
+ void
+-Contact::getGround(real_type t)
++Contact::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Contact::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame-&gt;getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Contact.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -33,11 +33,14 @@
+   computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+                        const Vector3&amp; groundNormal, real_type friction) const;
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+ 
+   GroundValues mGroundVal;
+-  SharedPtr&lt;Environment&gt; mEnvironment;
++  SharedPtr&lt;const Environment&gt; mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Force.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;Launchbar.h&quot;
+ 
+ namespace OpenFDM {
+@@ -75,9 +74,6 @@
+     return false;
+   }
+ 
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -246,13 +242,14 @@
+ }
+ 
+ void
+-Launchbar::getGround(real_type t)
++Launchbar::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Launchbar::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame-&gt;getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -61,6 +61,9 @@
+   void setLaunchForce(const real_type&amp; launchForce)
+   { mLaunchForce = launchForce; }
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+   bool computeCatFrame(real_type t, real_type&amp; catLen);
+@@ -97,7 +100,7 @@
+   SharedPtr&lt;FreeFrame&gt; mCatFrame;
+ 
+   GroundValues mGroundVal;
+-  SharedPtr&lt;Environment&gt; mEnvironment;
++  SharedPtr&lt;const Environment&gt; mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -40,18 +40,12 @@
+ bool
+ MobileRootJoint::init(void)
+ {
+-  Environment* environment = getEnvironment();
+-  if (!environment) {
+-    Log(Model,Error) &lt;&lt; &quot;Can not get environment pointer! Most propably the&quot;
+-      &quot; Model is not put together correctly!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mGravity = environment-&gt;getGravity();
++  mGravity = mEnvironment-&gt;getGravity();
+   if (!mGravity) {
+     Log(Model,Error) &lt;&lt; &quot;Can not get gravity model!&quot; &lt;&lt; endl;
+     return false;
+   }
+-  Frame* rootFrame = environment-&gt;getRootFrame();
++  const Frame* rootFrame = mEnvironment-&gt;getRootFrame();
+   if (!rootFrame) {
+     Log(Model,Error) &lt;&lt; &quot;Can not get rootFrame model!&quot; &lt;&lt; endl;
+     return false;
+@@ -80,9 +74,8 @@
+     if (frame &amp;&amp; !frame-&gt;isDirectParentFrameOf(mFrame))
+       frame-&gt;addChildFrame(mFrame);
+   } else {
+-    Environment* environment = getEnvironment();
+-    if (environment) {
+-      Frame* rootFrame = environment-&gt;getRootFrame();
++    if (mEnvironment) {
++      Frame* rootFrame = mEnvironment-&gt;getRootFrame();
+       if (rootFrame &amp;&amp; !rootFrame-&gt;isDirectParentFrameOf(mFrame))
+         rootFrame-&gt;addChildFrame(mFrame);
+     }
+@@ -146,28 +139,25 @@
+ Geodetic
+ MobileRootJoint::getGeodPosition(void) const
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return Geodetic();
+-  return env-&gt;getPlanet()-&gt;toGeod(getRefPosition());
++  return mEnvironment-&gt;getPlanet()-&gt;toGeod(getRefPosition());
+ }
+ 
+ void
+ MobileRootJoint::setGeodPosition(const Geodetic&amp; geod)
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return;
+-  setRefPosition(env-&gt;getPlanet()-&gt;toCart(geod));
++  setRefPosition(mEnvironment-&gt;getPlanet()-&gt;toCart(geod));
+ }
+ 
+ Quaternion
+ MobileRootJoint::getGeodOrientation(void) const
+ {
+-  Environment* env = getEnvironment();
+-  if (!env)
++  if (!mEnvironment)
+     return Quaternion::unit();
+-  Quaternion hlOr = env-&gt;getPlanet()-&gt;getGeodHLOrientation(getRefPosition());
++  Quaternion hlOr = mEnvironment-&gt;getPlanet()-&gt;getGeodHLOrientation(getRefPosition());
+   return inverse(hlOr)*getRefOrientation();
+ }
+ 
+@@ -231,4 +221,10 @@
+   stateDeriv.writeSubState(getRelVelDot());
+ }
+ 
++void
++MobileRootJoint::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -86,6 +86,9 @@
+    */
+   virtual void getStateDeriv(StateStream&amp; state);
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   /// The commonly used gravity model from the environment class
+   /// It is initialized at the init() call
+@@ -93,6 +96,9 @@
+ 
+   /// The frame of the mobile root
+   SharedPtr&lt;MobileRootJointFrame&gt; mFrame;
++
++  /// The environment pointer
++  SharedPtr&lt;Environment&gt; mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -300,14 +300,6 @@
+   mOutputPorts[i] = portProvider;
+ }
+ 
+-Environment*
+-Model::getEnvironment(void) const
+-{
+-  if (mParentModel)
+-    return mParentModel-&gt;getEnvironment();
+-  return 0;
+-}
+-
+ void
+ Model::setParent(ModelGroup* model)
+ {
+@@ -348,6 +340,11 @@
+ }
+ 
+ void
++Model::setEnvironment(Environment* environment)
++{
++}
++
++void
+ Model::setEnabledUnconditional(bool enabled)
+ {
+   if (mEnabled) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -165,9 +165,6 @@
+   const ModelGroup* getParent(void) const;
+   ModelGroup* getParent(void);
+ 
+-  /// FIXME: have function returning the input ports a given output
+-  /// port depends on
+-
+ protected:
+   void setNumContinousStates(unsigned numContinousStates);
+   void setNumDiscreteStates(unsigned numDiscreteStates);
+@@ -247,7 +244,7 @@
+                      const Matrix&amp; (M::*getter)(void) const)
+   { addOutputPort(name, new MatrixGetterPortInterface&lt;M&gt;(model, getter)); }
+ 
+-  virtual Environment* getEnvironment(void) const;
++  virtual void setEnvironment(Environment* environment);
+ 
+ // private:
+   // Sets the parent model.
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -152,6 +152,7 @@
+ 
+   // Update the number of states.
+   model-&gt;setParent(this);
++  model-&gt;setEnvironment(mEnvironment);
+ 
+   // add to the model list.
+   mModels.push_back(model);
+@@ -195,6 +196,7 @@
+ 
+   // remove the backreference to this group
+   // this also updates the number of states
++  model-&gt;setEnvironment(0);
+   model-&gt;setParent(0);
+ 
+   // remove from the model list.
+@@ -249,6 +251,17 @@
+   return mConnections[i];
+ }
+ 
++void
++ModelGroup::setEnvironment(Environment* environment)
++{
++  mEnvironment = environment;
++  ModelList::iterator i = mModels.begin();
++  while (i != mModels.end()) {
++    (*i)-&gt;setEnvironment(environment);
++    ++i;
++  }
++}
++
+ Model::Path
+ ModelGroup::getGroupPath() /* FIXME const*/
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -9,6 +9,7 @@
+ 
+ #include &quot;Object.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;Environment.h&quot;
+ #include &quot;NumericPortProxy.h&quot;
+ 
+ namespace OpenFDM {
+@@ -50,11 +51,17 @@
+   Connection* getConnection(unsigned i);
+   const Connection* getConnection(unsigned i) const;
+ 
++  virtual void setEnvironment(Environment* environment);
++
+   /// Returns the path of this ModelGroup. In contrast to getPath this returns
+   /// the path including the current ModelGroup.
+   Path getGroupPath() /* FIXME const*/;
+ 
++protected:
++  SharedPtr&lt;Environment&gt; mEnvironment;
++
+ private:
++
+   typedef std::vector&lt;SharedPtr&lt;Model&gt; &gt; ModelList;
+   typedef std::vector&lt;SharedPtr&lt;Connection&gt; &gt; ConnectionList;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Sensor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -11,6 +11,7 @@
+ #include &quot;Gravity.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
++#include &quot;Environment.h&quot;
+ #include &quot;Interact.h&quot;
+ 
+ namespace OpenFDM {
+@@ -54,7 +55,7 @@
+     Frame* frame = rigidBody-&gt;getFrame();
+     if (!frame)
+       return;
+-    const Gravity* grav = getEnvironment()-&gt;getGravity();
++    const Gravity* grav = mEnvironment-&gt;getGravity();
+     if (!grav)
+       return;
+     Vector3 accel = frame-&gt;getClassicAccel().getLinear();
+@@ -75,7 +76,12 @@
+   virtual void interactWith(RigidBody*)
+   {}
+ 
++protected:
++  virtual void setEnvironment(Environment* environment)
++  { mEnvironment = environment; }
++
+ private:
++  SharedPtr&lt;Environment&gt; mEnvironment;
+   real_type mNlfz;
+   real_type mNextNlfz;
+   real_type mAz;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -610,12 +610,6 @@
+   }
+ }
+ 
+-Environment*
+-System::getEnvironment(void) const
+-{
+-  return mEnvironment;
+-}
+-
+ void
+ System::evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/System.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -64,8 +64,6 @@
+   /// Return a reference to the timestepping algorithm
+   ODESolver* getTimestepper(void) { return mTimestepper; }
+ 
+-  virtual Environment* getEnvironment(void) const;
+-
+   /// FIXME Hmm, may be different ...
+   /// May move into System ...
+   void evalFunction(real_type t, const Vector&amp; v, Vector&amp; out);
+@@ -74,6 +72,9 @@
+   /// differences
+   void evalJacobian(real_type t, const Vector&amp; state, Matrix&amp; jac);
+ 
++  Environment* getEnvironment(void) const
++  { return mEnvironment; }
++
+ private:
+   /// The timestepper used to get time discrete approximate solutions to the
+   /// continous system
+@@ -93,8 +94,6 @@
+   ModelList mDiscreteModelList;
+   ModelList mContinousModelList;
+ 
+-  SharedPtr&lt;Environment&gt; mEnvironment;
+-
+   /// The actual simulation time for the system
+   real_type mTime;
+ };
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Force.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;Tailhook.h&quot;
+ 
+ namespace OpenFDM {
+@@ -61,9 +60,6 @@
+     return false;
+   }
+ 
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -186,13 +182,14 @@
+ }
+ 
+ void
+-Tailhook::getGround(real_type t)
++Tailhook::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++Tailhook::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame-&gt;getRefPosition();
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -46,6 +46,9 @@
+   void setDownAngle(const real_type&amp; downAngle)
+   { mDownAngle = downAngle; }
+ 
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+   bool computeWireFrame(real_type t, real_type&amp; width);
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-05-28 19:49:40 UTC (rev 283)
+@@ -8,7 +8,6 @@
+ #include &quot;Vector.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Force.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &quot;WheelContact.h&quot;
+ 
+ namespace OpenFDM {
+@@ -41,9 +40,6 @@
+ bool
+ WheelContact::init(void)
+ {
+-  mEnvironment = getEnvironment();
+-  if (!mEnvironment)
+-    return false;
+   return ExternalForce::init();
+ }
+ 
+@@ -160,13 +156,14 @@
+ }
+ 
+ void
+-WheelContact::getGround(real_type t)
++WheelContact::setEnvironment(Environment* environment)
+ {
+-  // FIXME
+-  if (!mEnvironment) {
+-    mEnvironment = getEnvironment();
+-  }
++  mEnvironment = environment;
++}
+ 
++void
++WheelContact::getGround(real_type t)
++{
+   // Get the position of the contact in the reference system.
+   Vector3 pos = mMountFrame-&gt;posToRef(Vector3::zeros());
+   // Query for the ground parameters at this point.
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-05-28 13:14:01 UTC (rev 282)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-05-28 19:49:40 UTC (rev 283)
+@@ -52,6 +52,10 @@
+   { mFrictionCoeficient = frictionCoeficient; }
+   const real_type&amp; getFrictionCoeficient(void) const
+   { return mFrictionCoeficient; }
++
++protected:
++  virtual void setEnvironment(Environment* environment);
++
+ private:
+   void getGround(real_type t);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000260.html">[OpenFDM-svn] r282 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000262.html">[OpenFDM-svn] r284 - in trunk/OpenFDM/src: OpenFDM builder
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#261">[ date ]</a>
+              <a href="thread.html#261">[ thread ]</a>
+              <a href="subject.html#261">[ subject ]</a>
+              <a href="author.html#261">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

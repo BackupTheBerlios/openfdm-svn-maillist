@@ -1,0 +1,122 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1111 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1111%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200909052138.n85LcYDx029723%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001068.html">
+   <LINK REL="Next"  HREF="001070.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1111 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1111%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200909052138.n85LcYDx029723%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1111 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  5 23:38:34 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001068.html">[OpenFDM-svn] r1110 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001070.html">[OpenFDM-svn] r1112 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1069">[ date ]</a>
+              <a href="thread.html#1069">[ thread ]</a>
+              <a href="subject.html#1069">[ subject ]</a>
+              <a href="author.html#1069">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-09-05 23:38:34 +0200 (Sat, 05 Sep 2009)
+New Revision: 1111
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+Log:
+Use tanh for the smoothSaturate implementation.
+
+M    Math.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-05 13:52:56 UTC (rev 1110)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Math.h	2009-09-05 21:38:34 UTC (rev 1111)
+@@ -103,34 +103,23 @@
+ inline T
+ smoothSaturate(const T&amp; val)
+ {
+-  return atan(val*Constants&lt;T&gt;::pi()/2)*2/Constants&lt;T&gt;::pi();
++  // The tanh function has values in [-1, 1].
++  // The slope at zero is 1. The two squares/roots make the edges sharper.
++  // An alernative implementation uses atan to get a saturation, but atan is
++  // less sharp at its edges, thus requires more squares/roots or the very
++  // expensive pow function.
++  // The tanh function appears to be much cheaper to compute.
++  return sqrt(sqrt(tanh(sqr(sqr(val)))));
+ }
+ 
+ // Saturate value between -saturate and saturate.
+-// template&lt;typename T&gt;
+-// inline T
+-// smoothSaturate(const T&amp; val, const T&amp; saturation)
+-// {
+-//   if (saturation &lt;= Limits&lt;T&gt;::min())
+-//     return 0;
+-//   return saturation*smoothSaturate(val/saturation);
+-// }
+-
+-// Saturate value between -saturate and saturate.
+-// The higher the p value the sharper the edge.
+ template&lt;typename T&gt;
+ inline T
+-smoothSaturate(const T&amp; val, const T&amp; saturation, const T&amp; p = T(10))
++smoothSaturate(const T&amp; val, const T&amp; saturation)
+ {
+   if (saturation &lt;= Limits&lt;T&gt;::min())
+     return 0;
+-
+-  T sEpsP = pow(Limits&lt;T&gt;::epsilon(), T(1)/(T(2)*p));
+-  T absVal = fabs(val/saturation);
+-  if (absVal &lt;= sEpsP)
+-    return val;
+-  T limitedVal = min(T(1), pow(smoothSaturate(pow(absVal, p)), T(1)/p));
+-  return saturation*sign(val)*limitedVal;
++  return saturation*smoothSaturate(val/saturation);
+ }
+ 
+ template&lt;typename T&gt;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001068.html">[OpenFDM-svn] r1110 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001070.html">[OpenFDM-svn] r1112 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1069">[ date ]</a>
+              <a href="thread.html#1069">[ thread ]</a>
+              <a href="subject.html#1069">[ subject ]</a>
+              <a href="author.html#1069">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,892 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r255 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r255%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603051213.k25CDPuc027964%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000233.html">
+   <LINK REL="Next"  HREF="000235.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r255 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r255%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603051213.k25CDPuc027964%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r255 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Mar  5 13:13:25 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000233.html">[OpenFDM-svn] r254 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000235.html">[OpenFDM-svn] r256 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#234">[ date ]</a>
+              <a href="thread.html#234">[ thread ]</a>
+              <a href="subject.html#234">[ subject ]</a>
+              <a href="author.html#234">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-03-05 13:13:09 +0100 (Sun, 05 Mar 2006)
+New Revision: 255
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimKinemat.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/Sensor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp
+Log:
+Varoius changes, most notably a step to better model scheduling,
+correct acceleration sensor handling and correct initialization
+of discrete integrators.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimKinemat.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimKinemat.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/JSBSim/JSBSimKinemat.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -63,8 +63,7 @@
+   Matrix tmp(1, 1);
+   tmp(1, 1) = 1;
+   integrator-&gt;setInitialValue(tmp);
+-  /// FIXME: should happen in this way, fix when ports are reworked
+-//   integrator-&gt;getInputPort(1)-&gt;connect(mInputSaturation-&gt;getOutputPort(0));
++  integrator-&gt;getInputPort(1)-&gt;connect(mInputSaturation-&gt;getOutputPort(0));
+   
+   Gain* feedbackGain = new Gain(&quot;Feedback Gain&quot;);
+   getModelGroup()-&gt;addModel(feedbackGain);
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -420,15 +420,23 @@
+   epFrame-&gt;setRelVelDot(Vector6::zeros());
+   Sensor* accelSensor = new Sensor(&quot;Acceleration Sensor&quot;);
+   accelSensor-&gt;addSampleTime(SampleTime(1.0/120));
+-  Port* port = accelSensor-&gt;getOutputPort(&quot;nz&quot;);
++  Port* port = accelSensor-&gt;getOutputPort(&quot;nlfz&quot;);
+   registerJSBExpression(&quot;accelerations/n-pilot-z-norm&quot;, port);
+ //   epFrame-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;getFrame()-&gt;addChildFrame(epFrame);
+   addOutputModel(port, &quot;Normalized load value&quot;, &quot;accelerations/nlf&quot;);
++  port = accelSensor-&gt;getOutputPort(&quot;az&quot;);
++  registerJSBExpression(&quot;accelerations/accel-z-norm&quot;, port);
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce-&gt;setPosition(structToBody(ap));
++  port = lookupJSBExpression(&quot;aero/alpha-deg&quot;);
++  addOutputModel(port, &quot;Alpha&quot;, &quot;orientation/alpha-deg&quot;);
++  port = lookupJSBExpression(&quot;aero/beta-rad&quot;);
++  addOutputModel(port, &quot;Beta rad&quot;, &quot;orientation/side-slip-rad&quot;);
++  port = lookupJSBExpression(&quot;aero/beta-deg&quot;);
++  addOutputModel(port, &quot;Beta&quot;, &quot;orientation/side-slip-deg&quot;);
+ 
+   return true;
+ }
+@@ -622,6 +630,18 @@
+           // FIXME: FCS might later define something for that gain ...
+ //           prop = lookupJSBExpression(&quot;fcs/steer-pos-deg[&quot; + numStr + &quot;]&quot;);
+           Port* port = lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;);
++          UnaryFunctionModel* scale
++            = new UnaryFunctionModel(name + &quot; Scale&quot;, UnaryFunctionModel::Abs);
++          scale-&gt;getInputPort(0)-&gt;connect(port);
++          addFCSModel(scale);
++
++          Product* sProd = new Product(name + &quot; SProd&quot;);
++          sProd-&gt;setNumFactors(2);
++          sProd-&gt;getInputPort(0)-&gt;connect(port);
++          sProd-&gt;getInputPort(1)-&gt;connect(scale-&gt;getOutputPort(0));
++          port = sProd-&gt;getOutputPort(0);
++          addFCSModel(sProd);
++
+           Gain* gain = new Gain(name + &quot; Steer Gain&quot;);
+           gain-&gt;setGain(maxSteer);
+           gain-&gt;getInputPort(0)-&gt;connect(port);
+@@ -706,6 +726,18 @@
+           sj-&gt;setOrientation(Quaternion::unit());
+           
+           Port* port = lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;);
++          UnaryFunctionModel* scale
++            = new UnaryFunctionModel(name + &quot; Scale&quot;, UnaryFunctionModel::Abs);
++          scale-&gt;getInputPort(0)-&gt;connect(port);
++          addFCSModel(scale);
++
++          Product* sProd = new Product(name + &quot; SProd&quot;);
++          sProd-&gt;setNumFactors(2);
++          sProd-&gt;getInputPort(0)-&gt;connect(port);
++          sProd-&gt;getInputPort(1)-&gt;connect(scale-&gt;getOutputPort(0));
++          port = sProd-&gt;getOutputPort(0);
++          addFCSModel(sProd);
++
+           sj-&gt;getInputPort(0)-&gt;connect(port);
+   
+           strutParent = steer;
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -574,13 +574,13 @@
+     port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
+   } else if (propName == &quot;fdm/jsbsim/aero/mag-beta-rad&quot;) {
+     port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
+-    port = addMultiBodyAbsModel(&quot;Angle of attack mag&quot;, port);
++    port = addMultiBodyAbsModel(&quot;Angle of sideslip mag&quot;, port);
+   } else if (propName == &quot;fdm/jsbsim/aero/beta-deg&quot;) {
+     port = mAeroForce-&gt;getOutputPort(&quot;beta&quot;);
+-    port = addMultiBodyToUnit(&quot;Angle of attack deg&quot;, uDegree, port);
++    port = addMultiBodyToUnit(&quot;Angle of sideslip deg&quot;, uDegree, port);
+   } else if (propName == &quot;fdm/jsbsim/aero/mag-beta-deg&quot;) {
+     port = lookupJSBExpression(&quot;aero/beta-deg&quot;);
+-    port = addMultiBodyAbsModel(&quot;Angle of attack mag deg&quot;, port);
++    port = addMultiBodyAbsModel(&quot;Angle of sideslip mag deg&quot;, port);
+ 
+   } else if (propName == &quot;fdm/jsbsim/aero/alphadot-rad_sec&quot;) {
+     port = mAeroForce-&gt;getOutputPort(&quot;alphaDot&quot;);
+@@ -592,7 +592,7 @@
+     port = mAeroForce-&gt;getOutputPort(&quot;betaDot&quot;);
+   } else if (propName == &quot;fdm/jsbsim/aero/betadot-deg_sec&quot;) {
+     port = mAeroForce-&gt;getOutputPort(&quot;betaDot&quot;);
+-    port = addMultiBodyToUnit(&quot;Angle of attack deriv deg_sec&quot;, uDegree, port);
++    port = addMultiBodyToUnit(&quot;Angle of sideslip deriv deg_sec&quot;, uDegree, port);
+ 
+   } else if (propName == &quot;fdm/jsbsim/metrics/bw-ft&quot;) {
+     /// FIXME, just schedule a constant block for that??
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -313,15 +313,23 @@
+   epFrame-&gt;setRelVelDot(Vector6::zeros());
+   Sensor* accelSensor = new Sensor(&quot;Acceleration Sensor&quot;);
+   accelSensor-&gt;addSampleTime(SampleTime(1.0/120));
+-  Port* port = accelSensor-&gt;getOutputPort(&quot;nz&quot;);
++  Port* port = accelSensor-&gt;getOutputPort(&quot;nlfz&quot;);
+   registerJSBExpression(&quot;accelerations/n-pilot-z-norm&quot;, port);
+ //   epFrame-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addInteract(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;getFrame()-&gt;addChildFrame(epFrame);
+   addOutputModel(port, &quot;Normalized load value&quot;, &quot;accelerations/nlf&quot;);
++  port = accelSensor-&gt;getOutputPort(&quot;az&quot;);
++  registerJSBExpression(&quot;accelerations/accel-z-norm&quot;, port);
+ 
+   // Set the position of the aerodynamic force frame.
+   mAeroForce-&gt;setPosition(structToBody(ap));
++  port = lookupJSBExpression(&quot;aero/alpha-deg&quot;);
++  addOutputModel(port, &quot;Alpha&quot;, &quot;orientation/alpha-deg&quot;);
++  port = lookupJSBExpression(&quot;aero/beta-rad&quot;);
++  addOutputModel(port, &quot;Beta rad&quot;, &quot;orientation/side-slip-rad&quot;);
++  port = lookupJSBExpression(&quot;aero/beta-deg&quot;);
++  addOutputModel(port, &quot;Beta&quot;, &quot;orientation/side-slip-deg&quot;);
+ 
+   return true;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -39,9 +39,9 @@
+   }
+ 
+   // The initial value defaults to zero
+-  if (getInputPort(1)-&gt;isConnected()) {
+-    MatrixPortHandle mh = getInputPort(1)-&gt;toMatrixPortHandle();
+-    mIntegralState = mh.getMatrixValue();
++  mInitialValuePort = getInputPort(1)-&gt;toMatrixPortHandle();
++  if (mInitialValuePort.isConnected()) {
++    mIntegralState = mInitialValuePort.getMatrixValue();
+   } else {
+     if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+       mInitialValue.resize(getInputPort(0)-&gt;getValue().toMatrix());
+@@ -66,6 +66,12 @@
+ void
+ DiscreteIntegrator::output(const TaskInfo&amp;)
+ {
++  if (mInitialValuePort.isConnected()) {
++    mIntegralState = mInitialValuePort.getMatrixValue();
++    // FIXME: must have a reset slot or something like that
++    mInitialValuePort = 0;
++  }
++
+   mIntegralOutput = mIntegralState;
+ }
+ 
+@@ -98,6 +104,19 @@
+   state.writeSubState(mIntegralState);
+ }
+ 
++bool
++DiscreteIntegrator::dependsDirectOn(Model* model)
++{
++  if (getInputPort(1)-&gt;isConnected()) {
++    // return true if we find the one connected to the initial value port
++    for (unsigned j = 0; j &lt; model-&gt;getNumOutputPorts(); ++j)
++      if (getInputPort(1)-&gt;isConnectedTo(model-&gt;getOutputPort(j)))
++        return true;
++  }
++
++  return false;
++}
++
+ const Matrix&amp;
+ DiscreteIntegrator::getInitialValue(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2006-03-05 12:13:09 UTC (rev 255)
+@@ -23,6 +23,8 @@
+   virtual void setDiscreteState(const StateStream&amp; state);
+   virtual void getDiscreteState(StateStream&amp; state) const;
+ 
++  virtual bool dependsDirectOn(Model* model);
++
+   const Matrix&amp; getInitialValue(void) const;
+   void setInitialValue(const Matrix&amp; value);
+ 
+@@ -47,6 +49,8 @@
+   Matrix mMaxSaturation;
+   /// Holds a matrix handle to the integrators input
+   MatrixPortHandle mDerivativePort;
++  /// Holds a matrix handle to the integrators initial value input
++  MatrixPortHandle mInitialValuePort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -103,6 +103,7 @@
+   Model(name),
+   mOutputGain(1)
+ {
++  setDirectFeedThrough(true);
+   setNumInputPorts(1);
+   setInputPortName(0, &quot;input&quot;);
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -50,6 +50,37 @@
+ }
+ 
+ bool
++Interact::dependsDirectOn(Model* model)
++{
++  // HACK HACK HACK FIXME
++  // non joint interacts need to have their inputs, but the outputs are
++  // already present when the state is set ...
++  // We need to split out sensors which could be scheduled earlier
++  setDirectFeedThrough(true);
++  if (Model::dependsDirectOn(model)) {
++    setDirectFeedThrough(false);
++    return true;
++  }
++  setDirectFeedThrough(false);
++  
++  return false;
++}
++
++bool
++Interact::isChildOf(const RigidBody* const rigidBody) const
++{
++  if (!rigidBody)
++    return false;
++  ParentList::const_iterator it = mParents.begin();
++  while (it != mParents.end()) {
++    if ((*it) == rigidBody)
++      return true;
++    ++it;
++  }
++  return false;
++}
++
++bool
+ Interact::attachTo(RigidBody* rigidBody, bool upstream)
+ {
+   if (!rigidBody) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2006-03-05 12:13:09 UTC (rev 255)
+@@ -38,6 +38,8 @@
+   /// This is the primary gate function which handles interaction
+   virtual void interactWith(RigidBody* rigidBody) = 0;
+ 
++  virtual bool dependsDirectOn(Model* model);
++
+   const RigidBody* getParentRigidBody(unsigned id = 0) const
+   {
+     OpenFDMAssert(id &lt; mParents.size());
+@@ -48,18 +50,7 @@
+     OpenFDMAssert(id &lt; mParents.size());
+     return mParents[id];
+   }
+-  bool isChildOf(const RigidBody* const rigidBody) const
+-  {
+-    if (!rigidBody)
+-      return false;
+-    ParentList::const_iterator it = mParents.begin();
+-    while (it != mParents.end()) {
+-      if ((*it) == rigidBody)
+-        return true;
+-      ++it;
+-    }
+-    return false;
+-  }
++  bool isChildOf(const RigidBody* const rigidBody) const;
+ 
+ private:
+   bool attachTo(RigidBody* rigidBody, bool upstream);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -61,6 +61,23 @@
+   outboardBody-&gt;computeArtValues();
+ }
+ 
++bool
++Joint::dependsDirectOn(Model* model)
++{
++  if (Interact::dependsDirectOn(model))
++    return true;
++  
++  RigidBody* outboardBody = getOutboardBody();
++  if (!outboardBody)
++    return false;
++  
++  Interact* interact = model-&gt;toInteract();
++  if (!interact)
++    return false;
++  
++  return interact != this &amp;&amp; interact-&gt;isChildOf(outboardBody);
++}
++
+ void
+ Joint::interactWith(RigidBody* rigidBody)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2006-03-05 12:13:09 UTC (rev 255)
+@@ -39,6 +39,8 @@
+ 
+   virtual void output(const TaskInfo&amp; taskInfo);
+ 
++  virtual bool dependsDirectOn(Model* model);
++
+   RigidBody* getOutboardBody(void)
+   { return getParentRigidBody(0); }
+   RigidBody* getInboardBody(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -19,7 +19,8 @@
+   mNumContinousStates(0l),
+   mNumDiscreteStates(0l),
+   mDirectFeedThrough(false),
+-  mMultiBodyAcceleration(false)
++  mEnabled(true),
++  mDisableMode(Hold)
+ {
+ }
+ 
+@@ -146,6 +147,27 @@
+ {
+ }
+ 
++bool
++Model::dependsDirectOn(Model* model)
++{
++  if (!mDirectFeedThrough)
++    return false;
++
++  // FIXME HACK, outputs of interacts only deoend on its state ...
++  // FIXME is this always true??
++  Interact* interact = model-&gt;toInteract();
++  if (interact)
++    return false;
++
++  // return true if any output of model is connected to any input of this
++  for (unsigned i = 0; i &lt; getNumInputPorts(); ++i)
++    for (unsigned j = 0; j &lt; model-&gt;getNumOutputPorts(); ++j)
++      if (getInputPort(i)-&gt;isConnectedTo(model-&gt;getOutputPort(j)))
++        return true;
++
++  return false;
++}
++
+ const std::string&amp;
+ Model::getInputPortName(unsigned i) const
+ {
+@@ -298,6 +320,34 @@
+ }
+ 
+ void
++Model::setEnabledUnconditional(bool enabled)
++{
++  if (enabled) {
++    switch (mDisableMode) {
++    case ResetHold:
++      /// If disabled, the models output/state is initialized
++      init();
++      break;
++    default:
++      break;
++    }
++  } else {
++    switch (mDisableMode) {
++    case HoldReset:
++      /// If disabled, the models output/state is just held. On reenable, the
++      /// the model is initialized
++      /// If disabled, the models output/state is initialized
++      init();
++      break;
++    default:
++      break;
++    }
++  }
++
++  mEnabled = enabled;
++}
++
++void
+ Model::adjustNumContinousStates(unsigned newCount, unsigned oldCount)
+ {
+   unsigned numContinousStates = getNumContinousStates();
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-03-05 12:13:09 UTC (rev 255)
+@@ -36,6 +36,17 @@
+ class Model : public Object {
+   OPENFDM_OBJECT(Model, Object);
+ public:
++  enum DisableMode {
++    /// If disabled, the models output/state is just held. On reenable, the
++    /// the model just continues to work
++    Hold,
++    /// If disabled, the models output/state is just held. On reenable, the
++    /// the model is initialized
++    HoldReset,
++    /// If disabled, the models output/state is initialized
++    ResetHold
++  };
++
+   Model(const std::string&amp; name);
+   virtual ~Model(void);
+ 
+@@ -81,6 +92,8 @@
+   virtual void setDiscreteState(const StateStream&amp; state);
+   virtual void getDiscreteState(StateStream&amp; state) const;
+ 
++  virtual bool dependsDirectOn(Model* model);
++
+   /// Return the number of continous states
+   unsigned getNumContinousStates(void) const
+   { return mNumContinousStates; }
+@@ -90,12 +103,16 @@
+   /// Return if the outputs containe a direct dependency on an input
+   bool getDirectFeedThrough(void) const
+   { return mDirectFeedThrough; }
++  /// Return if the outputs containe a direct dependency on an input
++  bool getEnabled(void) const
++  { return mEnabled; }
++  void setEnabled(bool enabled)
++  { if (mEnabled != enabled) setEnabledUnconditional(enabled); }
++  DisableMode getDisableMode(void) const
++  { return mDisableMode; }
++  void setDisableMode(DisableMode disableMode)
++  { mDisableMode = disableMode; }
+ 
+-  /// Returns true if it needs to know the accelerations ...
+-  /// FIXME: do that in a different way ...
+-  bool getMultiBodyAcceleration(void) const
+-  { return mMultiBodyAcceleration; }
+-
+   bool addSampleTime(const SampleTime&amp; sampleTime)
+   { return mSampleTimeSet.addSampleTime(sampleTime); }
+   bool removeSampleTime(const SampleTime&amp; sampleTime)
+@@ -139,8 +156,6 @@
+   void setNumDiscreteStates(unsigned numDiscreteStates);
+   void setDirectFeedThrough(bool directFeedThrough)
+   { mDirectFeedThrough = directFeedThrough; }
+-  void setMultiBodyAcceleration(bool multiBodyAcceleration)
+-  { mMultiBodyAcceleration = multiBodyAcceleration; }
+ 
+   /// Sets the number of input properties.
+   void setNumInputPorts(unsigned num);
+@@ -187,6 +202,8 @@
+   // That is the one which is informed if the number of states changes.
+   void setParent(Model* model);
+ 
++  void setEnabledUnconditional(bool enabled);
++
+   /// FIXME: use visitor for that
+   void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+   void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+@@ -195,9 +212,11 @@
+   unsigned mNumContinousStates;
+   unsigned mNumDiscreteStates;
+   bool mDirectFeedThrough;
++  /// True if the Model is enabled
++  bool mEnabled;
++  DisableMode mDisableMode;
+   // FIXME, at the moment used to state that this model must be scheduled
+   // past all joint interacts
+-  bool mMultiBodyAcceleration;
+   SampleTimeSet mSampleTimeSet;
+   std::vector&lt;SharedPtr&lt;Port&gt; &gt; mInputPorts;
+   std::vector&lt;SharedPtr&lt;Port&gt; &gt; mOutputPorts;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Sensor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-03-05 12:13:09 UTC (rev 255)
+@@ -8,6 +8,7 @@
+ #include &quot;Assert.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
++#include &quot;Gravity.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Interact.h&quot;
+@@ -20,42 +21,65 @@
+   Sensor(const std::string&amp; name) :
+     Interact(name, 1)
+   {
+-    mAccel.resize(6, 1);
+-    setNumOutputPorts(1);
+-    setMultiBodyAcceleration(true);
+-    setOutputPort(0, &quot;nz&quot;, this, &amp;Sensor::getNZ);
++    setNumOutputPorts(2);
++    setOutputPort(0, &quot;nlfz&quot;, this, &amp;Sensor::getNlfz);
++    setOutputPort(1, &quot;az&quot;, this, &amp;Sensor::getAz);
+   }
+   virtual ~Sensor(void)
+   { }
+ 
+-  void output(const TaskInfo&amp; taskInfo)
++  virtual bool init(void)
+   {
++    mNextNlfz = 0;
++    mNextAz = 0;
++    return true;
++  }
++
++  virtual void output(const TaskInfo&amp; taskInfo)
++  {
++    mNlfz = mNextNlfz;
++    mAz = mNextAz;
++  }
++
++  virtual void update(const TaskInfo&amp; taskInfo)
++  {
+     if (!nonZeroIntersection(taskInfo.getSampleTimeSet(), getSampleTimeSet()))
+         return;
+ 
++    mNextNlfz = 0;
++    mNextAz = 0;
+     RigidBody* rigidBody = getParentRigidBody(0);
+-    if (!rigidBody) {
+-      mAccel = Vector6::zeros();
++    if (!rigidBody)
+       return;
+-    }
+     Frame* frame = rigidBody-&gt;getFrame();
+-    if (!frame) {
+-      mAccel = Vector6::zeros();
++    if (!frame)
+       return;
+-    }
+-    mAccel = frame-&gt;getClassicAccel();
+-    mNz = mAccel(6, 1)/9.81;
++    const Gravity* grav = getEnvironment()-&gt;getGravity();
++    if (!grav)
++      return;
++    Vector3 accel = frame-&gt;getClassicAccel().getLinear();
++    // That is the acceleration like sensed by a gyro
++    mNextAz = accel(3);
++
++    // Now compute the acceleration like sensed by anything sensing the
++    // gravitational stuff too
++    accel -= frame-&gt;rotFromRef(grav-&gt;gravityAccel(frame-&gt;getRefPosition()));
++    mNextNlfz = accel(3)/9.81;
+   }
+ 
+-  const real_type&amp; getNZ(void) const
+-  { return mNz; }
++  const real_type&amp; getNlfz(void) const
++  { return mNlfz; }
++  const real_type&amp; getAz(void) const
++  { return mAz; }
+ 
+   virtual void interactWith(RigidBody*)
+   {}
+ 
+ private:
+-  Matrix mAccel;
+-  real_type mNz;
++  real_type mNlfz;
++  real_type mNextNlfz;
++  real_type mAz;
++  real_type mNextAz;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -660,6 +660,7 @@
+   }
+ }
+ 
++// FIXME make a member of TaskInfo
+ static void
+ fillTaskInfo(TaskInfo&amp; taskInfo, const ModelList2&amp; modelList)
+ {
+@@ -672,55 +673,19 @@
+   }
+ }
+ 
+-/// Returns true if the given Model is the source for the input port inputPort
+ static bool
+-dependsOn(Port* inputPort, Model* model)
++appendModel(ModelList2&amp; mModels, Model* firstModel, ModelListEntry model,
++            ModelList2&amp; newList)
+ {
+-  for (unsigned k = 0; k &lt; model-&gt;getNumOutputPorts(); ++k) {
+-    if (inputPort-&gt;isConnectedTo(model-&gt;getOutputPort(k)))
+-      return true;
++  if (model.model-&gt;dependsDirectOn(firstModel)) {
++    Log(Model,Error) &lt;&lt; &quot;Detected circular dependency starting from Model \&quot;&quot;
++                     &lt;&lt; firstModel-&gt;getName() &lt;&lt; &quot;\&quot; to Model \&quot;&quot;
++                     &lt;&lt; model.model-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+   }
+-  return false;
+-}
+ 
+-static bool
+-dependsOnMultiBody(Joint* joint1, Joint* joint2)
+-{
+-  return joint1-&gt;getOutboardBody() == joint2-&gt;getInboardBody();
+-}
+-
+-static bool
+-appendModel(ModelList2&amp; mModels, const Model* firstModel, ModelListEntry model, ModelList2&amp; newList)
+-{
+-  Interact* interact = model.model-&gt;toInteract();
+-  Joint* joint = model.model-&gt;toJoint();
+-  if (joint) {
+-    for (;;) {
+-      ModelList2::iterator it = mModels.begin();
+-      while (it != mModels.end()) {
+-        Joint* joint2 = (*it).model-&gt;toJoint();
+-        if (joint2 &amp;&amp; dependsOnMultiBody(joint, joint2))
+-          break;
+-
+-        Interact* interact2 = (*it).model-&gt;toInteract();
+-        if (interact2 &amp;&amp; interact2-&gt;isChildOf(joint-&gt;getOutboardBody())
+-            &amp;&amp; !interact2-&gt;getMultiBodyAcceleration())
+-          break;
+-
+-        ++it;
+-      }
+-      if (it == mModels.end())
+-        break;
+-
+-      // FIXME: does not work in this algorithm
+-      // Detect a circular dependency.
+-//       if (*it == firstModel) {
+-//         Log(Model, Warning)
+-//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
+-//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
+-//         return false;
+-//       }
+-
++  ModelList2::iterator it = mModels.begin();
++  while (it != mModels.end()) {
++    if (model.model-&gt;dependsDirectOn(it-&gt;model)) {
+       // We need to store that one here since the iterator possibly invalidates
+       // during the next append dependency call
+       ModelListEntry tmpModel = *it;
+@@ -729,87 +694,12 @@
+       // Now recurse into that model.
+       if (!appendModel(mModels, firstModel, tmpModel, newList))
+         return false;
+-    }
+-  }
+ 
+-  // Special case: if we depend on the accelerations, like acceleration
+-  // sensors, we depend on the mobile root ...
+-  // Well a bit croase now, but until there is something better ...
+-  if (model.model-&gt;getMultiBodyAcceleration()) {
+-    ModelList2::iterator it = mModels.begin();
+-    while (it != mModels.end()) {
+-      MobileRootJoint* joint = (*it).model-&gt;toMobileRootJoint();
+-      if (joint)
+-        break;
++      // the iterator is most likely invalid ...
++      it = mModels.begin();
++    } else
+       ++it;
+-    }
+-    if (it != mModels.end()) {
+-      // FIXME: does not work in this algorithm
+-      // Detect a circular dependency.
+-//       if (*it == firstModel) {
+-//         Log(Model, Warning)
+-//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
+-//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
+-//         return false;
+-//       }
+-
+-      // We need to store that one here since the iterator possibly invalidates
+-      // during the next append dependency call
+-      ModelListEntry tmpModel = *it;
+-      mModels.erase(it);
+-
+-      // Now recurse into that model.
+-      if (!appendModel(mModels, firstModel, tmpModel, newList))
+-        return false;
+-    }
+   }
+-
+-  // If the model in question does not have dependencies, stop.
+-  if (model.model-&gt;getDirectFeedThrough() || joint || interact) {
+-
+-    // Check, all inputs for dependencies.
+-    unsigned numInputs = model.model-&gt;getNumInputPorts();
+-    for (unsigned i = 0; i &lt; numInputs; ++i) {
+-      // Determine the model which is the source for this port
+-      Port* port = model.model-&gt;getInputPort(i);
+-      
+-      // Check if it is still in the list to be scheduled.
+-      ModelList2::iterator it = mModels.begin();
+-      while (it != mModels.end()) {
+-        /// Horrible special case for now:
+-        /// Output's from joints are only state dependent,
+-        /// thus these 'output ports' do not have direct feedthrough:
+-        /// Possible workarounds: extra sensor models or direct feedthrough
+-        /// is a property of the port ...
+-        Joint* joint2 = (*it).model-&gt;toJoint();
+-        if (dependsOn(port, (*it).model) &amp;&amp; !joint2)
+-          break;
+-        ++it;
+-      }
+-      if (it == mModels.end())
+-        continue;
+-      
+-      // FIXME: does not work in this algorithm
+-      // Detect a circular dependency.
+-//       if (*it == firstModel) {
+-//         Log(Model, Warning)
+-//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
+-//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
+-//         return false;
+-//       }
+-      
+-      // We need to store that one here since the iterator possibly invalidates
+-      // during the next append dependency call
+-      ModelListEntry tmpModel = *it;
+-      mModels.erase(it);
+-      
+-      // Now recurse into that model.
+-      if (!appendModel(mModels, firstModel, tmpModel, newList))
+-        return false;
+-    }
+-  }
+-
+-  Log(Model, Debug) &lt;&lt; &quot;Scheduling: \&quot;&quot; &lt;&lt; model.model-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+   newList.push_back(model);
+   return true;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp	2006-03-04 11:07:57 UTC (rev 254)
++++ trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp	2006-03-05 12:13:09 UTC (rev 255)
+@@ -14,7 +14,8 @@
+ {
+   ModelList::const_iterator it = mModelList.begin();
+   for (; it != mModelList.end(); ++it)
+-    (*it)-&gt;output(*this);
++    if ((*it)-&gt;getEnabled())
++      (*it)-&gt;output(*this);
+ }
+ 
+ void
+@@ -22,7 +23,8 @@
+ {
+   ModelList::const_iterator it = mModelList.begin();
+   for (; it != mModelList.end(); ++it)
+-    (*it)-&gt;update(*this);
++    if ((*it)-&gt;getEnabled())
++      (*it)-&gt;update(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000233.html">[OpenFDM-svn] r254 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000235.html">[OpenFDM-svn] r256 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#234">[ date ]</a>
+              <a href="thread.html#234">[ thread ]</a>
+              <a href="subject.html#234">[ subject ]</a>
+              <a href="author.html#234">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

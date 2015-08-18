@@ -1,0 +1,152 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r717 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r717%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811111909.mABJ9ZOp021361%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000685.html">
+   <LINK REL="Next"  HREF="000687.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r717 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r717%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811111909.mABJ9ZOp021361%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r717 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 11 20:09:35 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000685.html">[OpenFDM-svn] r716 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000687.html">[OpenFDM-svn] r718 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#686">[ date ]</a>
+              <a href="thread.html#686">[ thread ]</a>
+              <a href="subject.html#686">[ subject ]</a>
+              <a href="author.html#686">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-11 20:09:34 +0100 (Tue, 11 Nov 2008)
+New Revision: 717
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Move PortValue assignment and context alloc into the context allocation method.
+
+M    src/OpenFDM/Model.h
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/Model.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-11 18:49:04 UTC (rev 716)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-11 19:09:34 UTC (rev 717)
+@@ -36,9 +36,25 @@
+ }
+ 
+ ModelContext*
+-Model::newModelContext() const
++Model::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  return new ModelContext(this);
++  SharedPtr&lt;ModelContext&gt; context = new ModelContext(this);
++  for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
++    PortValue* portValue = portValueList.getPortValue(i);
++    if (!portValue) {
++      Log(Model, Error) &lt;&lt; &quot;No port value given for model \&quot;&quot; &lt;&lt; getName()
++                        &lt;&lt; &quot;\&quot; and port \&quot;&quot; &lt;&lt; getPort(i)-&gt;getName()
++                        &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return false;
++    }
++    context-&gt;setPortValue(*getPort(i), portValue);
++  }
++  if (!context-&gt;alloc()) {
++    Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++    return false;
++  }
++  return context.release();
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-11 18:49:04 UTC (rev 716)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-11 19:09:34 UTC (rev 717)
+@@ -35,7 +35,7 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  virtual ModelContext* newModelContext() const;
++  virtual ModelContext* newModelContext(PortValueList&amp; portValueList) const;
+ 
+   // FIXME: May be we want to collapse all state values in one
+   // argument? May be it is sufficient to have a const and non const version??
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-11 18:49:04 UTC (rev 716)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-11 19:09:34 UTC (rev 717)
+@@ -517,21 +517,12 @@
+     bool createModelContext()
+     {
+       OpenFDMAssert(!mModelContext);
+-      mModelContext = mModel-&gt;newModelContext();
++      mModelContext = mModel-&gt;newModelContext(mPortValueList);
+       if (!mModelContext) {
+         Log(Schedule, Warning) &lt;&lt; &quot;Could not create context for model \&quot;&quot;
+                                &lt;&lt; getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+         return false;
+       }
+-      OpenFDMAssert(mModel-&gt;getNumPorts() == mPortDataVector.size());
+-      for (unsigned i = 0; i &lt; mModel-&gt;getNumPorts(); ++i)
+-        mModelContext-&gt;setPortValue(*mModel-&gt;getPort(i),
+-                                    mPortValueList.getPortValue(i));
+-      if (!mModelContext-&gt;alloc()) {
+-        Log(Schedule, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
+-                               &lt;&lt; getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-        return false;
+-      }
+       return true;
+     }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000685.html">[OpenFDM-svn] r716 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000687.html">[OpenFDM-svn] r718 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#686">[ date ]</a>
+              <a href="thread.html#686">[ thread ]</a>
+              <a href="subject.html#686">[ subject ]</a>
+              <a href="author.html#686">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

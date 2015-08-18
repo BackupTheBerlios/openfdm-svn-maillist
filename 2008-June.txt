@@ -1,0 +1,599 @@
+From frohlich at mail.berlios.de  Mon Jun  2 20:47:13 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Jun 2008 20:47:13 +0200
+Subject: [OpenFDM-svn] r402 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806021847.m52IlDuQ031453@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-02 20:47:13 +0200 (Mon, 02 Jun 2008)
+New Revision: 402
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+Log:
+Use the methods of the template type T instead of
+those from Referenced.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-05-30 09:27:41 UTC (rev 401)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-06-02 18:47:13 UTC (rev 402)
+@@ -19,12 +19,12 @@
+   SharedPtr(void) : _ptr(0)
+   {}
+   SharedPtr(T* ptr) : _ptr(ptr)
+-  { Referenced::get(_ptr); }
++  { T::get(_ptr); }
+   SharedPtr(const SharedPtr& p) : _ptr(p.get())
+-  { Referenced::get(_ptr); }
++  { T::get(_ptr); }
+   template<typename U>
+   SharedPtr(const SharedPtr<U>& p) : _ptr(p.get())
+-  { Referenced::get(_ptr); }
++  { T::get(_ptr); }
+   ~SharedPtr(void)
+   { put(); }
+   
+@@ -49,12 +49,12 @@
+   T* get() const
+   { return _ptr; }
+   T* release()
+-  { T* tmp = _ptr; _ptr = 0; Referenced::put(tmp); return tmp; }
++  { T* tmp = _ptr; _ptr = 0; T::put(tmp); return tmp; }
+ 
+   bool isShared(void) const
+-  { return Referenced::shared(_ptr); }
++  { return T::shared(_ptr); }
+   unsigned getNumRefs(void) const
+-  { return Referenced::count(_ptr); }
++  { return T::count(_ptr); }
+ 
+   void clear()
+   { put(); }
+@@ -63,12 +63,12 @@
+ 
+ private:
+   void assign(T* p)
+-  { Referenced::get(p); put(); _ptr = p; }
++  { T::get(p); put(); _ptr = p; }
+   void assignNonRef(T* p)
+   { put(); _ptr = p; }
+ 
+   void put(void)
+-  { if (!Referenced::put(_ptr)) T::destroy(_ptr); _ptr = 0; }
++  { if (!T::put(_ptr)) T::destroy(_ptr); _ptr = 0; }
+   
+   // The reference itself.
+   T* _ptr;
+@@ -77,6 +77,11 @@
+   friend class WeakPtr;
+ };
+ 
++template<typename T>
++inline bool
++operator<(const SharedPtr<T>& sharedPtr0, const SharedPtr<T>& sharedPtr1)
++{ return sharedPtr0.get() < sharedPtr1.get(); }
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+
+From frohlich at mail.berlios.de  Mon Jun  2 21:12:45 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 2 Jun 2008 21:12:45 +0200
+Subject: [OpenFDM-svn] r403 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806021912.m52JCjEQ002023@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-02 21:12:45 +0200 (Mon, 02 Jun 2008)
+New Revision: 403
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Remove the need for the Mutex in WeakReferenced.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -29,18 +29,6 @@
+   { if (ref) return ref->_refcount; else return 0u; }
+   static bool shared(const Referenced* ref)
+   { if (ref) return 1u < ref->_refcount; else return false; }
+-  static unsigned getNonZero(const Referenced* ref)
+-  {
+-    if (!ref)
+-      return 0u;
+-    unsigned count;
+-    do {
+-      count = ref->_refcount;
+-      if (count == 0)
+-        return 0u;
+-    } while (!ref->_refcount.compareAndExchange(count, count+1));
+-    return count + 1;
+-  }
+ 
+   template<typename T>
+   static void destroy(T* ref)
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -15,7 +15,7 @@
+ public:
+   WeakPtr(void)
+   { }
+-  WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
++  WeakPtr(const WeakPtr& p) : mWeakData(p.mWeakData)
+   { }
+   template<typename U>
+   WeakPtr(const SharedPtr<U>& p)
+@@ -35,33 +35,33 @@
+   WeakPtr& operator=(const WeakPtr<U>& p)
+   { SharedPtr<T> sharedPtr = p.lock(); assign(sharedPtr.get()); return *this; }
+   WeakPtr& operator=(const WeakPtr& p)
+-  { mWeakDataPtr = p.mWeakDataPtr; return *this; }
++  { mWeakData = p.mWeakData; return *this; }
+ 
+   SharedPtr<T> lock(void) const
+   {
+-    if (!mWeakDataPtr)
++    if (!mWeakData)
+       return SharedPtr<T>();
+     SharedPtr<T> sharedPtr;
+-    sharedPtr.assignNonRef(mWeakDataPtr->get<T>());
++    sharedPtr.assignNonRef(mWeakData->getPointer<T>());
+     return sharedPtr;
+   }
+ 
+   void clear()
+-  { mWeakDataPtr = 0; }
++  { mWeakData = 0; }
+   void swap(WeakPtr& weakPtr)
+-  { mWeakDataPtr.swap(weakPtr.mWeakDataPtr); }
++  { mWeakData.swap(weakPtr.mWeakData); }
+ 
+ private:
+   void assign(T* p)
+   {
+     if (p)
+-      mWeakDataPtr = p->mWeakDataPtr;
++      mWeakData = p->mWeakData;
+     else
+-      mWeakDataPtr = 0;
++      mWeakData = 0;
+   }
+   
+   // The indirect reference itself.
+-  SharedPtr<WeakReferenced::WeakData> mWeakDataPtr;
++  SharedPtr<WeakReferenced::WeakData> mWeakData;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -15,58 +15,81 @@
+ template<typename T>
+ class WeakPtr;
+ 
+-class WeakReferenced : public Referenced {
++class WeakReferenced {
+ public:
+-  /// Note that object construction is atomic anyway.
+-  /// This way we do not need to guard setting the mWeakDataPtr variable
+-  WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
++  /// The object backref and the reference count for this object need to be
++  /// there in any case. Also these are per object and shall not be copied nor
++  /// assigned.
++  /// The reference count for this object is stored in a secondary object that
++  /// is shared with all weak pointers to this current object. This way we
++  /// have an atomic decision using the reference count of this current object
++  /// if the backref is still valid. At the time where the atomic count is
++  /// equal to zero the object is considered dead.
++  WeakReferenced(void) :
++    mWeakData(new WeakData(this))
+   {}
+-  // Do not copy the weak backward references ...
+   WeakReferenced(const WeakReferenced& weakReferenced) :
+-    Referenced(weakReferenced), mWeakDataPtr(new WeakData(this))
++    mWeakData(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+-  { mWeakDataPtr->clear(); }
++  { mWeakData->mWeakReferenced = 0; }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced& operator=(const WeakReferenced&)
+-  { Referenced::operator=(*this); return *this; }
++  { return *this; }
+ 
++  /// The usual operations on weak pointers.
++  /// The interface should stay the same then what we have in Referenced.
++  static unsigned get(const WeakReferenced* ref)
++  { if (ref) return ++(ref->mWeakData->mRefcount); else return 0u; }
++  static unsigned put(const WeakReferenced* ref)
++  { if (ref) return --(ref->mWeakData->mRefcount); else return ~0u; }
++  static unsigned count(const WeakReferenced* ref)
++  { if (ref) return ref->mWeakData->mRefcount; else return 0u; }
++
++  template<typename T>
++  static void destroy(T* ref)
++  { delete ref; }
++
+ private:
+   /// Support for weak references, not increasing the reference count
+   /// that is done through that small helper class which holds an uncounted
+   /// reference which is zeroed out on destruction of the current object
+   class WeakData : public Referenced {
+   public:
+-    WeakData(WeakReferenced* object) : mObject(object) {}
++    WeakData(WeakReferenced* weakReferenced) :
++      mRefcount(0u),
++      mWeakReferenced(weakReferenced)
++    { }
++
+     template<typename T>
+-    T* get()
++    T* getPointer()
+     {
+-      // This lock guarantees that the object is not deleted in between.
+-      ScopeLock scopeLock(mMutex);
+-      if (WeakReferenced::getNonZero(mObject) == 0)
+-        return 0;
+-      else
+-        return static_cast<T*>(mObject);
++      // Try to increment the reference count if the count is greater
++      // then zero. Since it should only be incremented iff it is nonzero, we
++      // need to check that value and try to do an atomic test and set. If this
++      // fails, try again. The usual lockless algorithm ...
++      unsigned count;
++      do {
++        count = mRefcount;
++        if (count == 0)
++          return 0;
++      } while (!mRefcount.compareAndExchange(count, count + 1));
++      // We know that as long as the refcount is not zero, the pointer still
++      // points to valid data. So it is safe to work on it.
++      return static_cast<T*>(mWeakReferenced);
+     }
+-    void clear()
+-    {
+-      ScopeLock scopeLock(mMutex);
+-      mObject = 0;
+-    }
++
++    Atomic mRefcount;
++    WeakReferenced* mWeakReferenced;
++
+   private:
+     WeakData(void);
+     WeakData(const WeakData&);
+     WeakData& operator=(const WeakData&);
+-
+-    // Mutex to protect the non atomic pointer assignment and that avoids
+-    // access to an object that is not yet zeroed out but deletion is in
+-    // progress.
+-    Mutex mMutex;
+-    WeakReferenced* mObject;
+   };
+ 
+-  SharedPtr<WeakData> mWeakDataPtr;
++  SharedPtr<WeakData> mWeakData;
+ 
+   template<typename T>
+   friend class WeakPtr;
+
+
+
+From frohlich at mail.berlios.de  Sat Jun  7 10:46:44 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 7 Jun 2008 10:46:44 +0200
+Subject: [OpenFDM-svn] r404 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806070846.m578kisS012290@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-07 10:46:43 +0200 (Sat, 07 Jun 2008)
+New Revision: 404
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/TypeTraits.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Add template helper class.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-06-02 19:12:45 UTC (rev 403)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-06-07 08:46:43 UTC (rev 404)
+@@ -73,6 +73,7 @@
+   Transform.h \
+   TypeInfo.h \
+   Types.h \
++  TypeTraits.h \
+   Unit.h \
+   Variant.h \
+   Vector.h \
+
+Added: trunk/OpenFDM/src/OpenFDM/TypeTraits.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TypeTraits.h	2008-06-02 19:12:45 UTC (rev 403)
++++ trunk/OpenFDM/src/OpenFDM/TypeTraits.h	2008-06-07 08:46:43 UTC (rev 404)
+@@ -0,0 +1,52 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_TypeTraits_H
++#define OpenFDM_TypeTraits_H
++
++namespace OpenFDM {
++
++template<typename S, typename T>
++struct TypeTraits;
++
++template<typename T>
++struct TypeTraits<T,T> {
++  typedef T result_type;
++  typedef T limits_type;
++};
++
++template<>
++struct TypeTraits<float,double> {
++  typedef double result_type;
++  typedef float limits_type;
++};
++template<>
++struct TypeTraits<double,float> {
++  typedef double result_type;
++  typedef float limits_type;
++};
++template<>
++struct TypeTraits<float,long double> {
++  typedef long double result_type;
++  typedef float limits_type;
++};
++template<>
++struct TypeTraits<long double,float> {
++  typedef long double result_type;
++  typedef float limits_type;
++};
++template<>
++struct TypeTraits<double,long double> {
++  typedef long double result_type;
++  typedef double limits_type;
++};
++template<>
++struct TypeTraits<long double,double> {
++  typedef long double result_type;
++  typedef double limits_type;
++};
++
++}
++
++#endif
+
+
+
+From frohlich at mail.berlios.de  Mon Jun 16 21:48:37 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 16 Jun 2008 21:48:37 +0200
+Subject: [OpenFDM-svn] r405 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806161948.m5GJmbig015194@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-16 21:48:36 +0200 (Mon, 16 Jun 2008)
+New Revision: 405
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Math.h
+Log:
+Improove smoothSaturate
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Math.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Math.h	2008-06-07 08:46:43 UTC (rev 404)
++++ trunk/OpenFDM/src/OpenFDM/Math.h	2008-06-16 19:48:36 UTC (rev 405)
+@@ -91,14 +91,39 @@
+   return T(0);
+ }
+ 
++// Saturate value between -1 and 1.
+ template<typename T>
+ inline T
+-smoothSaturate(const T& val, const T& saturation)
++smoothSaturate(const T& val)
+ {
++  return atan(val*Constants<T>::pi()/2)*2/Constants<T>::pi();
++}
++
++// Saturate value between -saturate and saturate.
++// template<typename T>
++// inline T
++// smoothSaturate(const T& val, const T& saturation)
++// {
++//   if (saturation <= Limits<T>::min())
++//     return 0;
++//   return saturation*smoothSaturate(val/saturation);
++// }
++
++// Saturate value between -saturate and saturate.
++// The higher the p value the sharper the edge.
++template<typename T>
++inline T
++smoothSaturate(const T& val, const T& saturation, const T& p = T(10))
++{
+   if (saturation <= Limits<T>::min())
+     return 0;
+-  else
+-    return atan(val*Constants<T>::pi()/(2*saturation))*2*saturation/Constants<T>::pi();
++
++  T sEpsP = pow(Limits<T>::epsilon(), T(1)/(T(2)*p));
++  T absVal = fabs(val/saturation);
++  if (absVal <= sEpsP)
++    return val;
++  T limitedVal = min(T(1), pow(smoothSaturate(pow(absVal, p)), T(1)/p));
++  return saturation*sign(val)*limitedVal;
+ }
+ 
+ template<typename T>
+
+
+
+From frohlich at mail.berlios.de  Mon Jun 16 21:50:14 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 16 Jun 2008 21:50:14 +0200
+Subject: [OpenFDM-svn] r406 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806161950.m5GJoEJG015369@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-16 21:50:12 +0200 (Mon, 16 Jun 2008)
+New Revision: 406
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+Log:
+Implement relation operators for weak pointers
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-06-16 19:48:36 UTC (rev 405)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-06-16 19:50:12 UTC (rev 406)
+@@ -77,11 +77,21 @@
+   friend class WeakPtr;
+ };
+ 
+-template<typename T>
+-inline bool
+-operator<(const SharedPtr<T>& sharedPtr0, const SharedPtr<T>& sharedPtr1)
+-{ return sharedPtr0.get() < sharedPtr1.get(); }
++// Hmmm, what if we get an automatic cast to a shared pointer of a fresh
++// allocated object pointer?
++// This will be gone after destruction of the temporary object ...
++// The same applies to the < operator below ...
+ 
++// template<typename T>
++// inline bool
++// operator==(const SharedPtr<T>& sharedPtr0, const SharedPtr<T>& sharedPtr1)
++// { return sharedPtr0.get() == sharedPtr1.get(); }
++
++// template<typename T>
++// inline bool
++// operator<(const SharedPtr<T>& sharedPtr0, const SharedPtr<T>& sharedPtr1)
++// { return sharedPtr0.get() < sharedPtr1.get(); }
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-16 19:48:36 UTC (rev 405)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-16 19:50:12 UTC (rev 406)
+@@ -11,6 +11,11 @@
+ namespace OpenFDM {
+ 
+ template<typename T>
++inline bool operator==(const WeakPtr<T>& p1, const WeakPtr<T>& p2);
++template<typename T>
++inline bool operator<(const WeakPtr<T>& p1, const WeakPtr<T>& p2);
++
++template<typename T>
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+@@ -62,8 +67,43 @@
+   
+   // The indirect reference itself.
+   SharedPtr<WeakReferenced::WeakData> mWeakData;
++
++  template<typename S>
++  friend bool operator==(const WeakPtr<S>& p1, const WeakPtr<S>& p2);
++  template<typename S>
++  friend bool operator<(const WeakPtr<S>& p1, const WeakPtr<S>& p2);
+ };
+ 
++template<typename T>
++inline bool
++operator==(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return p1.mWeakData == p2.mWeakData; }
++
++template<typename T>
++inline bool
++operator!=(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return !(p1 == p2); }
++
++template<typename T>
++inline bool
++operator<(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return p1.mWeakData < p2.mWeakData; }
++
++template<typename T>
++inline bool
++operator>(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return p2 < p1; }
++
++template<typename T>
++inline bool
++operator<=(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return !(p1 > p2); }
++
++template<typename T>
++inline bool
++operator>=(const WeakPtr<T>& p1, const WeakPtr<T>& p2)
++{ return !(p1 < p2); }
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+
+From frohlich at mail.berlios.de  Mon Jun 23 19:27:54 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 23 Jun 2008 19:27:54 +0200
+Subject: [OpenFDM-svn] r407 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200806231727.m5NHRsvU007060@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-06-23 19:27:48 +0200 (Mon, 23 Jun 2008)
+New Revision: 407
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+Log:
+Remove unneeded alignment.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-06-16 19:50:12 UTC (rev 406)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-06-23 17:27:48 UTC (rev 407)
+@@ -98,9 +98,6 @@
+ #if defined(OpenFDM_USE_MUTEX)
+   mutable Mutex mMutex;
+ #endif
+-#if defined(OpenFDM_USE_WIN32_INTERLOCKED)
+-  __declspec(align(32))
+-#endif
+   unsigned mValue;
+ };
+ 
+
+
+

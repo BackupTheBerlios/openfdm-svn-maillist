@@ -1,0 +1,134 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r414 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r414%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200807221956.m6MJuCQG030458%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000385.html">
+   <LINK REL="Next"  HREF="000387.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r414 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r414%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200807221956.m6MJuCQG030458%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r414 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jul 22 21:56:12 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000385.html">[OpenFDM-svn] r413 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000387.html">[OpenFDM-svn] r415 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#386">[ date ]</a>
+              <a href="thread.html#386">[ thread ]</a>
+              <a href="subject.html#386">[ subject ]</a>
+              <a href="author.html#386">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-07-22 21:56:12 +0200 (Tue, 22 Jul 2008)
+New Revision: 414
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+Log:
+Add port value initialization methods.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-07-20 16:04:15 UTC (rev 413)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-07-22 19:56:12 UTC (rev 414)
+@@ -25,6 +25,9 @@
+ public:
+ 
+   // Accessors for real valued ports
++  bool isConnected(const RealOutputPort&amp; port) const
++  { return port.getPortValue(mPortValueVector); }
++
+   const real_type&amp; getValue(const RealInputPort&amp; port) const
+   { return port.getPortValue(mPortValueVector)-&gt;getValue()(0, 0); }
+   void setValue(const RealOutputPort&amp; port, const real_type&amp; value)
+@@ -36,29 +39,38 @@
+   { return port.getPortValue(mPortValueVector)-&gt;getValue()(0, 0); }
+ 
+   // Accessors for matrix valued ports
++  bool isConnected(const MatrixOutputPort&amp; port) const
++  { return port.getPortValue(mPortValueVector); }
++
+   const Matrix&amp; getValue(const MatrixInputPort&amp; port) const
+   { return port.getPortValue(mPortValueVector)-&gt;getValue(); }
+   void setValue(const MatrixOutputPort&amp; port, const Matrix&amp; matrix)
+   { port.getPortValue(mPortValueVector)-&gt;setValue(matrix); }
+-  // FIXME, will have them, but cannot ensure currently that the size does not change.
++
+   const Matrix&amp; operator[](const MatrixInputPort&amp; port) const
+   { return port.getPortValue(mPortValueVector)-&gt;getValue(); }
+-//   Matrix&amp; operator[](const MatrixOutputPort&amp; port)
+-//   { return port.getPortValue(mPortValueVector)-&gt;getValue(); }
++  // FIXME, make sure that the size cannot change.
++  // May be we have some kind of base class of Matrix that has no resize call
++  // and no resizing assignment/copy???
++  Matrix&amp; operator[](const MatrixOutputPort&amp; port)
++  { return port.getPortValue(mPortValueVector)-&gt;getValue(); }
+ 
+-  bool isConnected(const RealOutputPort&amp; port) const
+-  { return port.getPortValue(mPortValueVector); }
+-  bool isConnected(const MatrixOutputPort&amp; port) const
+-  { return port.getPortValue(mPortValueVector); }
+ 
+-  void setPortValue(unsigned idx, PortValue* portValue) // FIXME
++  // FIXME, avoid this method here. With this method the output stage of a model
++  // can change the port values, this should not be available in a model.
++  // may be this must be a derived class that provides some more access??
++  void setPortValue(unsigned idx, PortValue* portValue)
+   {
+     if (mPortValueVector.size() &lt;= idx)
+       mPortValueVector.resize(idx+1);
+     mPortValueVector[idx] = portValue;
+   }
++  void setPortSize(const MatrixOutputPort&amp; port, const Size&amp; size)
++  {
++    setPortValue(port.getPortIndex(), new NumericPortValue(size));
++  }
+ 
+-private:
++protected:
+   PortValueVector mPortValueVector;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000385.html">[OpenFDM-svn] r413 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000387.html">[OpenFDM-svn] r415 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#386">[ date ]</a>
+              <a href="thread.html#386">[ thread ]</a>
+              <a href="subject.html#386">[ subject ]</a>
+              <a href="author.html#386">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

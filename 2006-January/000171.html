@@ -1,0 +1,810 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r187 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r187%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051241.k05CfkNa008145%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000170.html">
+   <LINK REL="Next"  HREF="000172.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r187 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r187%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051241.k05CfkNa008145%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r187 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 13:41:46 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000170.html">[OpenFDM-svn] r186 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000172.html">[OpenFDM-svn] r188 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#171">[ date ]</a>
+              <a href="thread.html#171">[ thread ]</a>
+              <a href="subject.html#171">[ subject ]</a>
+              <a href="author.html#171">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 13:41:34 +0100 (Thu, 05 Jan 2006)
+New Revision: 187
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+   trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp
+   trunk/OpenFDM/src/OpenFDM/ConstantForce.h
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.h
+   trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+   trunk/OpenFDM/src/OpenFDM/DirectForce.h
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+   trunk/OpenFDM/src/OpenFDM/WheelContact.h
+Log:
+Clean unp force and external force models
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-05 12:41:34 UTC (rev 187)
+@@ -15,19 +15,12 @@
+ AeroForce::AeroForce(const std::string&amp; name)
+   : ExternalForce(name)
+ {
+-  setPosition(Vector3::zeros());
+-  setOrientation(Quaternion::unit());
+-
+   mWingSpan = 0.0;
+   mWingArea = 0.0;
+   mCoord = 0.0;
+ 
+   dirtyAll();
+ 
+-  addProperty(&quot;position&quot;,
+-              Property(this, &amp;AeroForce::getPosition, &amp;AeroForce::setPosition));
+-//   addProperty(&quot;orientation&quot;, Property(this, &amp;AeroForce::getOrientation, &amp;AeroForce::setOrientation));
+-
+   addProperty(&quot;wingSpan&quot;,
+               Property(this, &amp;AeroForce::getWingSpan, &amp;AeroForce::setWingSpan));
+   addProperty(&quot;wingArea&quot;,
+@@ -179,30 +172,33 @@
+     mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, getRefPosition());
+   }
+   dirtyAll();
+-}
+ 
+-void
+-AeroForce::setPosition(const Vector3&amp; p)
+-{
+-  mPosition = p;
+-}
++  // FIXME: they can be computed cheaper ...
++  real_type ca = cos(getAlpha());
++  real_type sa = sin(getAlpha());
++  real_type cb = cos(getBeta());
++  real_type sb = sin(getBeta());
++  Matrix33 Ts2b(-ca*cb, -ca*sb,  sa,
++                   -sb,     cb,   0,
++                -sa*cb, -sa*sb, -ca);
+ 
+-const Vector3&amp;
+-AeroForce::getPosition(void) const
+-{
+-  return mPosition;
+-}
++  // This is simple here. Just collect all summands ...
++  Vector3 stabilityForce = Vector3::zeros();
++  /// Lift points upward
++  /// Drag points backward
++  for (int i = 0; i &lt; 3; ++i)
++    if (mStabilityAxisForce[i].isConnected())
++      stabilityForce(i+1) = mStabilityAxisForce[i].getRealValue();
+ 
+-void
+-AeroForce::setOrientation(const Quaternion&amp; o)
+-{
+-  mOrientation = o;
+-}
++  Vector3 bodyTorque = Vector3::zeros();
++  for (int i = 0; i &lt; 3; ++i)
++    if (mBodyAxisTorque[i].isConnected())
++      bodyTorque(i+1) = mBodyAxisTorque[i].getRealValue();
+ 
+-const Rotation&amp;
+-AeroForce::getOrientation(void) const
+-{
+-  return mOrientation;
++  Vector6 force(bodyTorque, Ts2b*stabilityForce);
++  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::output() &quot;
++                       &lt;&lt; trans(force) &lt;&lt; endl;
++  setForce(force);
+ }
+ 
+ void
+@@ -245,17 +241,9 @@
+ AeroForce::getRefPosition(void) const
+ {
+   if (mDirtyRefPosition) {
+-    const RigidBody* body = getParentRigidBody(0);
+-    OpenFDMAssert(body);
+-    if (body) {
+-      const Frame* frame = body-&gt;getFrame();
+-      OpenFDMAssert(frame);
+-      if (frame) {
+-        // Get the position in the earth centered coordinate frame.
+-        mRefPosition = frame-&gt;posToRef(getPosition());
+-        mDirtyRefPosition = false;
+-      }
+-    }
++    // Get the position in the earth centered coordinate frame.
++    mRefPosition = mMountFrame-&gt;getRefPosition();
++    mDirtyRefPosition = false;
+   }
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getRefPosition()&quot;
+                        &lt;&lt; trans(mRefPosition) &lt;&lt; endl;
+@@ -266,27 +254,15 @@
+ AeroForce::getAirSpeed(void) const
+ {
+   if (mDirtyAirSpeed) {
+-    const RigidBody* body = getParentRigidBody(0);
+-    OpenFDMAssert(body);
+-    if (body) {
+-      const Frame* frame = body-&gt;getFrame();
+-      OpenFDMAssert(frame);
+-      if (frame) {
+-        // FIXME temporary workaround
+-        if (!mEnvironment) {
+-          const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
+-        }
+-        // Get the position in the earth centered coordinate frame.
+-        Vector3 pos = frame-&gt;posToRef(getPosition());
+-        Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(pos);
+-        windVel = frame-&gt;rotFromRef(windVel);
+-        Vector6 sAirSpeed = Vector6(Vector3::zeros(), windVel)
+-          + frame-&gt;getRefVel();
+-        mAirSpeed = motionTo(getPosition(), getOrientation(), sAirSpeed);
+-        
+-        mDirtyAirSpeed = false;
+-      }
++    // FIXME temporary workaround
++    if (!mEnvironment) {
++      const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
+     }
++    // Get the position in the earth centered coordinate frame.
++    Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(getRefPosition());
++    windVel = mMountFrame-&gt;rotFromRef(windVel);
++    mAirSpeed = Vector6(Vector3::zeros(), windVel) + mMountFrame-&gt;getRefVel();
++    mDirtyAirSpeed = false;
+   }
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getAirSpeed()&quot;
+                        &lt;&lt; trans(mAirSpeed) &lt;&lt; endl;
+@@ -633,21 +609,13 @@
+ AeroForce::getUnitDown(void) const
+ {
+   if (mDirtyUnitDown) {
+-    const RigidBody* body = getParentRigidBody(0);
+-    OpenFDMAssert(body);
+-    if (body) {
+-      const Frame* frame = body-&gt;getFrame();
+-      OpenFDMAssert(frame);
+-      if (frame) {
+-        // Compute the geodetic unit down vector at our current position.
+-        // So we will need the orientation of the horizontal local frame at our
+-        // current position.
+-        Quaternion gcHL = getPlanet()-&gt;getGeocHLOrientation(getRefPosition());
+-        // Transform that unit down vector to the current frame.
+-        mUnitDown = frame-&gt;rotFromRef(gcHL.backTransform(Vector3::unit(3)));
+-        mDirtyUnitDown = false;
+-      }
+-    }
++    // Compute the geodetic unit down vector at our current position.
++    // So we will need the orientation of the horizontal local frame at our
++    // current position.
++    Quaternion gcHL = getPlanet()-&gt;getGeocHLOrientation(getRefPosition());
++    // Transform that unit down vector to the current frame.
++    mUnitDown = mMountFrame-&gt;rotFromRef(gcHL.backTransform(Vector3::unit(3)));
++    mDirtyUnitDown = false;
+   }
+   return mUnitDown;
+ }
+@@ -656,53 +624,14 @@
+ AeroForce::getLocalGroundPlane(void) const
+ {
+   if (mDirtyLocalGroundPlane) {
+-    const RigidBody* body = getParentRigidBody(0);
+-    OpenFDMAssert(body);
+-    if (body) {
+-      const Frame* frame = body-&gt;getFrame();
+-      OpenFDMAssert(frame);
+-      if (frame) {
+-        // Transform the plane equation to the local frame.
+-        mLocalGroundPlane = frame-&gt;planeFromRef(mGroundVal.plane);
+-        mDirtyLocalGroundPlane = false;
+-      }
+-    }
++    // Transform the plane equation to the local frame.
++    mLocalGroundPlane = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
++    mDirtyLocalGroundPlane = false;
+   }
+   return mLocalGroundPlane;
+ }
+ 
+ void
+-AeroForce::computeForce(void)
+-{
+-  // FIXME: they can be computed cheaper ...
+-  real_type ca = cos(getAlpha());
+-  real_type sa = sin(getAlpha());
+-  real_type cb = cos(getBeta());
+-  real_type sb = sin(getBeta());
+-  Matrix33 Ts2b(-ca*cb, -ca*sb,  sa,
+-                   -sb,     cb,   0,
+-                -sa*cb, -sa*sb, -ca);
+-
+-  // This is simple here. Just collect all summands ...
+-  Vector3 stabilityForce = Vector3::zeros();
+-  /// Lift points upward
+-  /// Drag points backward
+-  for (int i = 0; i &lt; 3; ++i)
+-    if (mStabilityAxisForce[i].isConnected())
+-      stabilityForce(i+1) = mStabilityAxisForce[i].getRealValue();
+-
+-  Vector3 bodyTorque = Vector3::zeros();
+-  for (int i = 0; i &lt; 3; ++i)
+-    if (mBodyAxisTorque[i].isConnected())
+-      bodyTorque(i+1) = mBodyAxisTorque[i].getRealValue();
+-
+-  Vector6 force(bodyTorque, Ts2b*stabilityForce);
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::computeForce() &quot;
+-                       &lt;&lt; trans(force) &lt;&lt; endl;
+-  applyForce(forceFrom(mPosition, mOrientation, force));
+-}
+-
+-void
+ AeroForce::dirtyAll(void)
+ {
+   // Dirty everything.
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -27,12 +27,6 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  void setPosition(const Vector3&amp; p);
+-  const Vector3&amp; getPosition(void) const;
+-
+-  void setOrientation(const Quaternion&amp; o);
+-  const Rotation&amp; getOrientation(void) const;
+-
+   void setWingSpan(const real_type&amp; winSpan);
+   const real_type&amp; getWingSpan(void) const;
+ 
+@@ -89,9 +83,6 @@
+   const Vector3&amp; getUnitDown(void) const;
+   const Plane&amp; getLocalGroundPlane(void) const;
+ 
+-  // The interface to the mechanical system.
+-  virtual void computeForce(void);
+-
+ private:
+   void dirtyAll(void);
+   void computeAtmosphere(void) const;
+@@ -108,9 +99,6 @@
+ 
+   SharedPtr&lt;Environment&gt; mEnvironment;
+ 
+-  Vector3 mPosition;
+-  Rotation mOrientation;
+-
+   real_type mWingSpan;
+   real_type mWingArea;
+   real_type mCoord;
+
+Modified: trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/ConstantForce.cpp	2006-01-05 12:41:34 UTC (rev 187)
+@@ -8,19 +8,13 @@
+ namespace OpenFDM {
+ 
+ ConstantForce::ConstantForce(const std::string&amp; name, const Vector6&amp; force)
+-  : ExternalForce(name), mForce(force)
++  : ExternalForce(name)
+ {
++  setForce(force);
+ }
+ 
+ ConstantForce::~ConstantForce(void)
+ {
+ }
+ 
+-void
+-ConstantForce::computeForce(void)
+-{
+-  // FIXME: do once ...
+-  applyForce(forceFrom(mPosition, mOrientation, mForce));
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ConstantForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ConstantForce.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/ConstantForce.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -20,28 +20,7 @@
+                 const Vector6&amp; force = Vector6::zeros());
+   virtual ~ConstantForce(void);
+ 
+-  void setPosition(const Vector3&amp; p)
+-  { mPosition = p; }
+-  const Vector3&amp; getPosition(void) const
+-  { return mPosition; }
+-
+-  void setOrientation(const Quaternion&amp; o)
+-  { mOrientation = o; }
+-  const Rotation&amp; getOrientation(void) const
+-  { return mOrientation; }
+-
+-  void setForce(const Vector6&amp; force)
+-  { mForce = force; }
+-
+-protected:
+-  /**
+-   */
+-  virtual void computeForce(void);
+-
+-private:
+-  Vector3 mPosition;
+-  Rotation mOrientation;
+-  Vector6 mForce;
++  using ExternalForce::setForce;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-05 12:41:34 UTC (rev 187)
+@@ -17,8 +17,6 @@
+   : ExternalForce(name)
+ {
+   mEnabled = true;
+-  setPosition(Vector3::zeros());
+-
+   unsigned inputPortBase = getNumInputPorts();
+   setNumInputPorts(inputPortBase + 1);
+   setInputPortName(inputPortBase + 0, &quot;enabled&quot;);
+@@ -56,47 +54,30 @@
+       mEnabled = 0.5 &lt; rh.getRealValue();
+     }
+   }
+-}
+ 
+-void
+-Contact::computeForce(void)
+-{
+   if (!mEnabled) {
+-    applyForce(Vector6::zeros());
++    setForce(Vector6::zeros());
+     return;
+   }
+ 
+-  const RigidBody* body = getParentRigidBody(0);
+-  OpenFDMAssert(body);
+-  if (!body) {
+-    applyForce(Vector6::zeros());
+-    return;
+-  }
+-  const Frame* frame = body-&gt;getFrame();
+-  OpenFDMAssert(frame);
+-  if (!frame) {
+-    applyForce(Vector6::zeros());
+-    return;
+-  }
+-
+   // Transform the plane equation to the local frame.
+-  Plane lp = frame-&gt;planeFromRef(mGroundVal.plane);
++  Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
+   
+   // Get the intersection length.
+-  real_type compressLength = lp.getDist(getPosition());
++  real_type compressLength = lp.getDist(Vector3::zeros());
+   
+   // Don't bother if we do not intersect the ground.
+   if (compressLength &lt; 0) {
+-    applyForce(Vector6::zeros());
++    setForce(Vector6::zeros());
+     return;
+   }
+   
+   // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel(frame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
+-                    frame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
+-  groundVel -= frame-&gt;getRefVel();
++  Vector6 groundVel(mMountFrame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
++                    mMountFrame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
++  groundVel -= mMountFrame-&gt;getRefVel();
+   // Now get the relative velocity of the ground wrt the contact point
+-  Vector3 relVel = - motionTo(getPosition(), groundVel).getLinear();
++  Vector3 relVel = - groundVel.getLinear();
+ 
+   // The velocity perpandicular to the plane.
+   // Positive when the contact spring is compressed,
+@@ -120,7 +101,7 @@
+   Vector3 force = fricForce - normForce*lp.getNormal();
+   
+   // We don't have an angular moment.
+-  applyForce(forceFrom(getPosition(), force));
++  setForce(Vector6(Vector3::zeros(), force));
+ }
+ 
+ real_type
+@@ -140,22 +121,13 @@
+ void
+ Contact::getGround(real_type t)
+ {
+-  const RigidBody* body = getParentRigidBody(0);
+-  OpenFDMAssert(body);
+-  if (!body)
+-    return;
+-  const Frame* frame = body-&gt;getFrame();
+-  OpenFDMAssert(frame);
+-  if (!frame)
+-    return;
+-
+   // FIXME
+   if (!mEnvironment) {
+     mEnvironment = getEnvironment();
+   }
+ 
+   // Get the position of the contact in the reference system.
+-  Vector3 pos = frame-&gt;posToRef(getPosition());
++  Vector3 pos = mMountFrame-&gt;getRefPosition();
+   // Query for the ground parameters at this point.
+   mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/Contact.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -24,14 +24,6 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  Vector3 mPosition;
+-  void setPosition(const Vector3&amp; p)
+-  { mPosition = p; }
+-  const Vector3&amp; getPosition(void) const
+-  { return mPosition; }
+-
+-  virtual void computeForce(void);
+-
+   // Compute the plane normal force.
+   virtual real_type
+   computeNormalForce(real_type compressLen, real_type compressVel) const;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DirectForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/DirectForce.cpp	2006-01-05 12:41:34 UTC (rev 187)
+@@ -9,24 +9,16 @@
+ 
+ DirectForce::DirectForce(const std::string&amp; name, const Vector6&amp; direction) :
+   ExternalForce(name),
+-  mPosition(Vector3::zeros()),
+-  mOrientation(Quaternion::unit()),
+   mDirection(direction),
+-  mForce(Vector6::zeros()),
+   mMagnitude(0)
+ {
+-  addProperty(&quot;position&quot;, Property(this, &amp;DirectForce::getPosition, &amp;DirectForce::setPosition));
+-  addProperty(&quot;orientation&quot;, Property(this, &amp;DirectForce::getOrientation, &amp;DirectForce::setOrientation));
+   addProperty(&quot;direction&quot;, Property(this, &amp;DirectForce::getDirection, &amp;DirectForce::setDirection));
+   addProperty(&quot;magnitude&quot;, Property(this, &amp;DirectForce::getMagnitude));
+-  addProperty(&quot;force&quot;, Property(this, &amp;DirectForce::getForce));
+ 
+   setDirectFeedThrough(true);
+ 
+   setNumInputPorts(1);
+   setInputPortName(0, &quot;magnitude&quot;);
+-//   setNumOutputPorts(1);
+-//   setOutputPort(0, &quot;force&quot;, this, &amp;DirectForce::getForce);
+ }
+ 
+ DirectForce::~DirectForce(void)
+@@ -34,30 +26,6 @@
+ }
+ 
+ void
+-DirectForce::setPosition(const Vector3&amp; p)
+-{
+-  mPosition = p;
+-}
+-
+-const Vector3&amp;
+-DirectForce::getPosition(void) const
+-{
+-  return mPosition;
+-}
+-
+-void
+-DirectForce::setOrientation(const Quaternion&amp; o)
+-{
+-  mOrientation = o;
+-}
+-
+-const Quaternion&amp;
+-DirectForce::getOrientation(void) const
+-{
+-  return mOrientation;
+-}
+-
+-void
+ DirectForce::setDirection(const Vector6&amp; direction)
+ {
+   mDirection = direction;
+@@ -75,12 +43,6 @@
+   return mMagnitude;
+ }
+ 
+-const Vector6&amp;
+-DirectForce::getForce(void) const
+-{
+-  return mForce;
+-}
+-
+ bool
+ DirectForce::init(void)
+ {
+@@ -92,13 +54,7 @@
+ {
+   RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+   mMagnitude = rh.getRealValue();
+-  mForce = mMagnitude*mDirection;
++  setForce(mMagnitude*mDirection);
+ }
+ 
+-void
+-DirectForce::computeForce(void)
+-{
+-  applyForce(forceFrom(mPosition, mOrientation, mForce));
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/DirectForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DirectForce.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/DirectForce.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -20,32 +20,16 @@
+               const Vector6&amp; direction = Vector6::unit(4));
+   virtual ~DirectForce(void);
+ 
+-  void setPosition(const Vector3&amp; p);
+-  const Vector3&amp; getPosition(void) const;
+-
+-  void setOrientation(const Quaternion&amp; o);
+-  const Quaternion&amp; getOrientation(void) const;
+-  const Rotation&amp; getRotation(void) const;
+-
+   void setDirection(const Vector6&amp; direction);
+   const Vector6&amp; getDirection(void) const;
+ 
+   real_type getMagnitude(void) const;
+-  const Vector6&amp; getForce(void) const;
+ 
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-protected:
+-  /**
+-   */
+-  virtual void computeForce(void);
+-
+ private:
+-  Vector3 mPosition;
+-  Rotation mOrientation;
+   Vector6 mDirection;
+-  Vector6 mForce;
+   real_type mMagnitude;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -52,13 +52,10 @@
+   // Needs to call applyForce once ...
+   virtual void interactWith(RigidBody* rigidBody)
+   {
+-    computeForce();
+-    rigidBody-&gt;applyForce(mForce);
++    OpenFDMAssert(rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame));
++    rigidBody-&gt;applyForce(mMountFrame-&gt;forceToParent(mForce));
+   }
+ 
+-  /// FIXME here for compatibility
+-  virtual void computeForce(void) = 0;
+-
+   const Vector3&amp; getPosition(void) const
+   { return mMountFrame-&gt;getPosition(); }
+   void setPosition(const Vector3&amp; pos)
+@@ -69,18 +66,20 @@
+   void setOrientation(const Quaternion&amp; pos)
+   { mMountFrame-&gt;setOrientation(pos); }
+ 
++  const Vector6&amp; getForce(void) const
++  { return mForce; }
++
+ protected:
+   /** Sets the force contribution of this force element.
+    * Sets the force contribution of this current force element to
+    * the parent rigid body to force.
+    */
+-  void applyForce(const Vector6&amp; force)
+-  {
+-    mForce = force;
+-  }
++  void setForce(const Vector6&amp; force)
++  { mForce = force; }
+ 
+-private:
+   SharedPtr&lt;FreeFrame&gt; mMountFrame;
++
++private:
+   Vector6 mForce;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-05 12:41:34 UTC (rev 187)
+@@ -48,28 +48,9 @@
+                       &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+     getGround(taskInfo.getTime());
+   }
+-}
+ 
+-void
+-WheelContact::computeForce(void)
+-{
+-  // FIXME: check all signs here, I get the feeling that we have
+-  // just even much minuses here instead of exactly the right ones ...
+-  const RigidBody* body = getParentRigidBody(0);
+-  OpenFDMAssert(body);
+-  if (!body) {
+-    applyForce(Vector6::zeros());
+-    return;
+-  }
+-  const Frame* frame = body-&gt;getFrame();
+-  OpenFDMAssert(frame);
+-  if (!frame) {
+-    applyForce(Vector6::zeros());
+-    return;
+-  }
+-
+   // Transform the plane equation to the local frame.
+-  Plane lp = frame-&gt;planeFromRef(mGroundVal.plane);
++  Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
+   
+   // Get the intersection length.
+   real_type distHubGround = fabs(lp.getDist(Vector3::zeros()));
+@@ -77,21 +58,21 @@
+   
+   // Don't bother if we do not intersect the ground.
+   if (compressLength &lt; 0) {
+-    applyForce(Vector6::zeros());
++    setForce(Vector6::zeros());
+     return;
+   }
+ 
+   Vector3 contactPoint = distHubGround*lp.getNormal();
+   
+   // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel(frame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
+-                    frame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
+-  groundVel -= frame-&gt;getRefVel();
++  Vector6 groundVel(mMountFrame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
++                    mMountFrame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
++  groundVel -= mMountFrame-&gt;getRefVel();
+   // Now get the relative velocity of the ground wrt the hub
+   Vector6 relVel = - groundVel;
+-//   Log(Model,Error) &lt;&lt; trans(frame-&gt;getRelVel()) &lt;&lt; &quot; &quot;
++//   Log(Model,Error) &lt;&lt; trans(mMountFrame-&gt;getRelVel()) &lt;&lt; &quot; &quot;
+ //                    &lt;&lt; trans(groundVel) &lt;&lt; &quot; &quot;
+-//                    &lt;&lt; trans(frame-&gt;motionToParent(relVel)) &lt;&lt; endl;
++//                    &lt;&lt; trans(mMountFrame-&gt;motionToParent(relVel)) &lt;&lt; endl;
+ 
+ 
+   // The velocity perpandicular to the plane.
+@@ -138,7 +119,7 @@
+     - normForce*lp.getNormal();
+   
+   // We don't have an angular moment.
+-  applyForce(forceFrom(contactPoint, force));
++  setForce(forceFrom(contactPoint, force));
+ }
+ 
+ real_type
+@@ -173,22 +154,13 @@
+ void
+ WheelContact::getGround(real_type t)
+ {
+-  const RigidBody* body = getParentRigidBody(0);
+-  OpenFDMAssert(body);
+-  if (!body)
+-    return;
+-  const Frame* frame = body-&gt;getFrame();
+-  OpenFDMAssert(frame);
+-  if (!frame)
+-    return;
+-
+   // FIXME
+   if (!mEnvironment) {
+     mEnvironment = getEnvironment();
+   }
+ 
+   // Get the position of the contact in the reference system.
+-  Vector3 pos = frame-&gt;posToRef(Vector3::zeros());
++  Vector3 pos = mMountFrame-&gt;posToRef(Vector3::zeros());
+   // Query for the ground parameters at this point.
+   mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-01-05 11:11:06 UTC (rev 186)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.h	2006-01-05 12:41:34 UTC (rev 187)
+@@ -24,8 +24,6 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  virtual void computeForce(void);
+-
+   // Compute the plane normal force.
+   virtual real_type
+   computeNormalForce(real_type compressLen, real_type compressVel) const;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000170.html">[OpenFDM-svn] r186 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000172.html">[OpenFDM-svn] r188 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#171">[ date ]</a>
+              <a href="thread.html#171">[ thread ]</a>
+              <a href="subject.html#171">[ subject ]</a>
+              <a href="author.html#171">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

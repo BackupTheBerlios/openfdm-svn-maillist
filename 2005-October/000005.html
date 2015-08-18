@@ -1,0 +1,601 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Openfdm-svn] r12 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r12%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200510071235.j97CZnvB003306%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000004.html">
+   <LINK REL="Next"  HREF="000006.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Openfdm-svn] r12 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r12%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200510071235.j97CZnvB003306%40sheep.berlios.de%3E"
+       TITLE="[Openfdm-svn] r12 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Oct  7 14:35:49 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000004.html">[Openfdm-svn] r11 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000006.html">[Openfdm-svn] r13 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#5">[ date ]</a>
+              <a href="thread.html#5">[ thread ]</a>
+              <a href="subject.html#5">[ subject ]</a>
+              <a href="author.html#5">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-07 14:35:48 +0200 (Fri, 07 Oct 2005)
+New Revision: 12
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+Implement a continous integrator, move the discrete
+integrator into its own file.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBReader.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/JSBSim/JSBReader.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -17,7 +17,7 @@
+ #include &lt;OpenFDM/ModelGroup.h&gt;
+ #include &lt;OpenFDM/TimeDerivative.h&gt;
+ #include &lt;OpenFDM/TransferFunction.h&gt;
+-#include &lt;OpenFDM/Integrator.h&gt;
++#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/Saturation.h&gt;
+
+Added: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -0,0 +1,106 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;Types.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Expression.h&quot;
++#include &quot;DiscreteIntegrator.h&quot;
++
++namespace OpenFDM {
++
++DiscreteIntegrator::DiscreteIntegrator(const std::string&amp; name) :
++  Model(name)
++{
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;derivatirve&quot;);
++
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
++
++  addProperty(&quot;initialValue&quot;, Property(this, &amp;DiscreteIntegrator::getInitialValue, &amp;DiscreteIntegrator::setInitialValue));
++  addProperty(&quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
++}
++
++DiscreteIntegrator::~DiscreteIntegrator(void)
++{
++}
++
++bool
++DiscreteIntegrator::init(void)
++{
++  OpenFDMAssert(getInputPort(0).isValid());
++
++  // The initial value defaults to zero
++  if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
++    mInitialValue.resize(getInputPort(0).getValue().toMatrix());
++    mInitialValue.clear();
++  }
++
++  setNumDiscreteStates(rows(mInitialValue)*cols(mInitialValue));
++
++  mIntegralState = mInitialValue;
++  mIntegralOutput = mIntegralState;
++  return true;
++}
++
++void
++DiscreteIntegrator::output(void)
++{
++  mIntegralOutput = mIntegralState;
++}
++
++void
++DiscreteIntegrator::update(real_type dt)
++{
++  OpenFDMAssert(getInputPort(0).isValid());
++
++  // Just compute the integral.
++  Matrix input = getInputPort(0).getValue().toMatrix();
++  OpenFDMAssert(size(input) == size(mIntegralState));
++  if (size(input) == size(mIntegralState))
++    mIntegralState += dt*input;
++}
++
++void
++DiscreteIntegrator::setDiscreteState(const Vector&amp; state, unsigned offset)
++{
++  // FIXME reshape ...
++  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++      mIntegralState(i, j) = state(offset + i + (j-1)*rows(mIntegralState));
++    }
++  }
++}
++
++void
++DiscreteIntegrator::getDiscreteState(Vector&amp; state, unsigned offset) const
++{
++  // FIXME reshape ...
++  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++      state(offset + i + (j-1)*rows(mIntegralState)) = mIntegralState(i, j);
++    }
++  }
++}
++
++const Matrix&amp;
++DiscreteIntegrator::getInitialValue(void) const
++{
++  return mInitialValue;
++}
++
++void
++DiscreteIntegrator::setInitialValue(const Matrix&amp; value)
++{
++  mInitialValue = value;
++}
++
++const Matrix&amp;
++DiscreteIntegrator::getIntegralOutput(void) const
++{
++  return mIntegralOutput;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h	2005-10-07 12:35:48 UTC (rev 12)
+@@ -0,0 +1,44 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_DiscreteIntegrator_H
++#define OpenFDM_DiscreteIntegrator_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Types.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++class DiscreteIntegrator :
++    public Model {
++public:
++  DiscreteIntegrator(const std::string&amp; name);
++  virtual ~DiscreteIntegrator(void);
++
++  virtual bool init(void);
++  virtual void output(void);
++  virtual void update(real_type dt);
++
++  virtual void setDiscreteState(const Vector&amp; state, unsigned offset);
++  virtual void getDiscreteState(Vector&amp; state, unsigned offset) const;
++
++  const Matrix&amp; getInitialValue(void) const;
++  void setInitialValue(const Matrix&amp; value);
++
++  const Matrix&amp; getIntegralOutput(void) const;
++
++private:
++  /// Holds the current output.
++  Matrix mIntegralOutput;
++  /// Holds the current integral state.
++  Matrix mIntegralState;
++  /// Holds the current integral initial state.
++  Matrix mInitialValue;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -10,66 +10,104 @@
+ 
+ namespace OpenFDM {
+ 
+-DiscreteIntegrator::DiscreteIntegrator(const std::string&amp; name) :
++Integrator::Integrator(const std::string&amp; name) :
+   Model(name)
+ {
+   setNumInputPorts(1);
+-  addProperty(&quot;initialValue&quot;, Property(this, &amp;DiscreteIntegrator::getInitialValue, &amp;DiscreteIntegrator::setInitialValue));
++  setInputPortName(0, &quot;derivatirve&quot;);
+ 
+   setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
+-  addProperty(&quot;output&quot;, Property(this, &amp;DiscreteIntegrator::getIntegralOutput));
++  setOutputPort(0, &quot;output&quot;,
++                Property(this, &amp;Integrator::getIntegralOutput));
++
++  addProperty(&quot;initialValue&quot;,
++              Property(this, &amp;Integrator::getInitialValue,
++                       &amp;Integrator::setInitialValue));
++  addProperty(&quot;output&quot;,
++              Property(this, &amp;Integrator::getIntegralOutput));
+ }
+ 
+-DiscreteIntegrator::~DiscreteIntegrator(void)
++Integrator::~Integrator(void)
+ {
+ }
+ 
+ bool
+-DiscreteIntegrator::init(void)
++Integrator::init(void)
+ {
+   OpenFDMAssert(getInputPort(0).isValid());
+-  if (mInitialValue.rows() == 0 || mInitialValue.cols() == 0) {
++
++  // The initial value defaults to zero
++  if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+     mInitialValue.resize(getInputPort(0).getValue().toMatrix());
+     mInitialValue.clear();
+   }
++
++  setNumContinousStates(rows(mInitialValue)*cols(mInitialValue));
++
+   mIntegralState = mInitialValue;
+   mIntegralOutput = mIntegralState;
+   return true;
+ }
+ 
+ void
+-DiscreteIntegrator::output(void)
++Integrator::output(void)
+ {
+   mIntegralOutput = mIntegralState;
+ }
+ 
+ void
+-DiscreteIntegrator::update(real_type dt)
++Integrator::setState(real_type, const Vector&amp; state, unsigned offset)
+ {
++  // FIXME reshape ...
++  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++      mIntegralState(i, j) = state(offset + i + (j-1)*rows(mIntegralState));
++    }
++  }
++}
++
++void
++Integrator::getState(Vector&amp; state, unsigned offset) const
++{
++  // FIXME reshape ...
++  for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
++    for (unsigned i = 1; i &lt;= rows(mIntegralState); ++i) {
++      state(offset + i + (j-1)*rows(mIntegralState)) = mIntegralState(i, j);
++    }
++  }
++}
++
++void
++Integrator::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
++{
+   OpenFDMAssert(getInputPort(0).isValid());
+ 
+   // Just compute the integral.
+   Matrix input = getInputPort(0).getValue().toMatrix();
+   OpenFDMAssert(size(input) == size(mIntegralState));
+-  if (size(input) == size(mIntegralState))
+-    mIntegralState += dt*input;
++
++  // FIXME reshape ...
++  for (unsigned j = 1; j &lt;= cols(input); ++j) {
++    for (unsigned i = 1; i &lt;= rows(input); ++i) {
++      stateDeriv(offset + i + (j-1)*rows(input)) = input(i, j);
++    }
++  }
+ }
+ 
+ const Matrix&amp;
+-DiscreteIntegrator::getInitialValue(void) const
++Integrator::getInitialValue(void) const
+ {
+   return mInitialValue;
+ }
+ 
+ void
+-DiscreteIntegrator::setInitialValue(const Matrix&amp; value)
++Integrator::setInitialValue(const Matrix&amp; value)
+ {
+   mInitialValue = value;
+ }
+ 
+ const Matrix&amp;
+-DiscreteIntegrator::getIntegralOutput(void) const
++Integrator::getIntegralOutput(void) const
+ {
+   return mIntegralOutput;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-10-07 12:35:48 UTC (rev 12)
+@@ -12,16 +12,19 @@
+ 
+ namespace OpenFDM {
+ 
+-class DiscreteIntegrator :
++class Integrator :
+     public Model {
+ public:
+-  DiscreteIntegrator(const std::string&amp; name);
+-  virtual ~DiscreteIntegrator(void);
++  Integrator(const std::string&amp; name);
++  virtual ~Integrator(void);
+ 
+   virtual bool init(void);
+   virtual void output(void);
+-  virtual void update(real_type dt);
+ 
++  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void getState(Vector&amp; state, unsigned offset) const;
++  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
++
+   const Matrix&amp; getInitialValue(void) const;
+   void setInitialValue(const Matrix&amp; value);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-10-07 12:35:48 UTC (rev 12)
+@@ -47,6 +47,7 @@
+   DefaultGround.h \
+   DefaultPlanet.h \
+   DirectForce.h \
++  DiscreteIntegrator.h \
+   DoPri5.h \
+   Environment.h \
+   EnvironmentObject.h \
+@@ -124,6 +125,7 @@
+   DefaultGround.cpp \
+   DefaultPlanet.cpp \
+   DirectForce.cpp \
++  DiscreteIntegrator.cpp \
+   DoPri5.cpp \
+   Environment.cpp \
+   EnvironmentObject.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -72,6 +72,16 @@
+ }
+ 
+ void
++Model::evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
++{
++  /// FIXME Hmm, may be different ...
++  setState(t, v, 0);
++  output();
++  out.resize(getNumContinousStates());
++  getStateDeriv(out, 0);
++}
++
++void
+ Model::evalJacobian(real_type t, const Vector&amp; v,
+                    Matrix&amp; jac, unsigned offset)
+ {
+@@ -84,6 +94,7 @@
+   // Get the function value at the current position.
+   Vector fv(nStates);
+   setState(t, v, 0);
++  output();
+   getStateDeriv(fv, 0);
+ 
+   real_type sqrteps = 1e4*sqrt(Limits&lt;real_type&gt;::epsilon());
+@@ -95,6 +106,7 @@
+ 
+     // Evaluate then function ...
+     setState(t, tmpv, 0);
++    output();
+     getStateDeriv(tmpfv, 0);
+ 
+     // ... and compute the differencequotient to approximate the derivative.
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-10-07 12:35:48 UTC (rev 12)
+@@ -39,8 +39,7 @@
+   virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+ 
+   /// FIXME Hmm, may be different ...
+-  void evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+-  { setState(t, v, 0); out.resize(getNumContinousStates()); getStateDeriv(out, 0); }
++  void evalFunction(real_type t, const Vector&amp; v, Vector&amp; out);
+   /// Compute the jacobian
+   /// The default implementation computes a numeric approximation by finite
+   /// differences
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -206,8 +206,6 @@
+ void
+ MultiBodySystem::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
+ {
+-  OpenFDMAssert(offset == 0);
+-
+   // Compute the external and interaction forces.
+   ForceComputationVisitor forceVisitor;
+   mRootFrame-&gt;accept(forceVisitor);
+@@ -223,9 +221,7 @@
+   // And finally extract the derivative vector from the tree.
+   GetStateDerivVisitor gsdv(getNumContinousStates());
+   mRootFrame-&gt;accept(gsdv);
+-//   stateDeriv(Range(offset+1, offset+getNumContinousStates()))
+-//     = gsdv.getStateDeriv();
+-  stateDeriv
++  stateDeriv(Range(offset+1, offset+getNumContinousStates()))
+     = gsdv.getStateDeriv();
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2005-10-06 10:12:46 UTC (rev 11)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2005-10-07 12:35:48 UTC (rev 12)
+@@ -40,19 +40,22 @@
+ #include &lt;OpenFDM/LogStream.h&gt;
+ #include &lt;OpenFDM/Variant.h&gt;
+ #include &lt;OpenFDM/Property.h&gt;
++
++// Model includes
+ #include &lt;OpenFDM/Model.h&gt;
+ #include &lt;OpenFDM/ModelGroup.h&gt;
++#include &lt;OpenFDM/Bias.h&gt;
+ #include &lt;OpenFDM/ConstSystem.h&gt;
++#include &lt;OpenFDM/DeadBand.h&gt;
++#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
++#include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/TimeDerivative.h&gt;
+ #include &lt;OpenFDM/UnaryFunctionModel.h&gt;
+ #include &lt;OpenFDM/BinaryFunctionModel.h&gt;
+ #include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/Saturation.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+-#include &lt;OpenFDM/Bias.h&gt;
+-#include &lt;OpenFDM/Gain.h&gt;
+-#include &lt;OpenFDM/DeadBand.h&gt;
+-#include &lt;OpenFDM/Saturation.h&gt;
+ 
+ #include &quot;XML/XMLReader.h&quot;
+ 
+@@ -309,14 +312,18 @@
+       model = new ConstSystem(name, Matrix()); // FIXME
+     } else if (type == &quot;DeadBand&quot;) {
+       model = new DeadBand(name);
++    } else if (type == &quot;DiscreteIntegrator&quot;) {
++      model = new DiscreteIntegrator(name);
+     } else if (type == &quot;Gain&quot;) {
+       model = new Gain(name);
+     } else if (type == &quot;Integrator&quot;) {
+-      model = new DiscreteIntegrator(name);
++      model = new Integrator(name);
+     } else if (type == &quot;Product&quot;) {
+       model = new Product(name);
+     } else if (type == &quot;Saturation&quot;) {
+       model = new Saturation(name);
++    } else if (type == &quot;TimeDerivative&quot;) {
++      model = new TimeDerivative(name);
+     } else
+       return error(std::string(&quot;Error loading Models: Unknown Model type \&quot;&quot;)
+                    + type + &quot;\&quot; !&quot;);
+@@ -605,19 +612,18 @@
+ 
+   printVehicle(vehicle);
+ 
++  System* system = vehicle-&gt;getSystem();
++  bool initOk = system-&gt;init();
++  if (!initOk) {
++    cout &lt;&lt; &quot;Error  in init&quot; &lt;&lt; endl;
++    return -17;
++  }
+   ModelGroup* modelGroup = vehicle-&gt;getModelGroup();
+   for (unsigned i = 0; i &lt; modelGroup-&gt;getNumModels(); ++i) {
+     cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getName() &lt;&lt; endl;
+   }
+-
+-  bool initOk = modelGroup-&gt;init();
+-  if (!initOk) {
+-    cout &lt;&lt; &quot;Error  in init&quot; &lt;&lt; endl;
+-    return -17;
+-  }
+   for (unsigned j = 0; j &lt; 1000; ++j) {
+-    modelGroup-&gt;output();
+-    modelGroup-&gt;update(0.01);
++    system-&gt;simulate(j*0.01);
+ 
+     for (unsigned i = 0; i &lt; modelGroup-&gt;getNumModels(); ++i)
+       cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getOutputPort(&quot;output&quot;).getValue().toMatrix() &lt;&lt; &quot; &quot;;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000004.html">[Openfdm-svn] r11 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000006.html">[Openfdm-svn] r13 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#5">[ date ]</a>
+              <a href="thread.html#5">[ thread ]</a>
+              <a href="subject.html#5">[ subject ]</a>
+              <a href="author.html#5">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

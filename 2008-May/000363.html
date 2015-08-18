@@ -1,0 +1,131 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r390 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r390%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231220.m4NCK5Nc007932%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000362.html">
+   <LINK REL="Next"  HREF="000364.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r390 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r390%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231220.m4NCK5Nc007932%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r390 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri May 23 14:20:05 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000362.html">[OpenFDM-svn] r389 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000364.html">[OpenFDM-svn] r391 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#363">[ date ]</a>
+              <a href="thread.html#363">[ thread ]</a>
+              <a href="subject.html#363">[ subject ]</a>
+              <a href="author.html#363">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-05-23 14:20:04 +0200 (Fri, 23 May 2008)
+New Revision: 390
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+Log:
+Add a compare and swap method.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2008-05-23 08:08:49 UTC (rev 389)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2008-05-23 12:20:04 UTC (rev 390)
+@@ -37,6 +37,18 @@
+   return result + value;
+ }
+ 
++unsigned __sync_bool_compare_and_swap_4(volatile void *ptr,
++                                        unsigned oldValue, unsigned newValue)
++{
++  register volatile unsigned* mem = reinterpret_cast&lt;volatile unsigned*&gt;(ptr);
++  unsigned before;
++  __asm__ __volatile__(&quot;lock; cmpxchg{l} {%1,%2|%1,%2}&quot;
++                       : &quot;=a&quot;(before)
++                       : &quot;q&quot;(newValue), &quot;m&quot;(*mem), &quot;0&quot;(oldValue)
++                       : &quot;memory&quot;);
++  return before == oldValue;
++}
++
+ void __sync_synchronize()
+ {
+   __asm__ __volatile__(&quot;&quot;: : : &quot;memory&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-05-23 08:08:49 UTC (rev 389)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-05-23 12:20:04 UTC (rev 390)
+@@ -68,6 +68,29 @@
+ #endif
+  }
+ 
++  bool compareAndExchange(unsigned oldValue, unsigned newValue)
++  {
++#if defined(OpenFDM_USE_GCC4_BUILTINS)
++    return __sync_bool_compare_and_swap(&amp;mValue, oldValue, newValue);
++#elif defined(OpenFDM_USE_MIPOSPRO_BUILTINS)
++    return __compare_and_swap(&amp;mValue, oldValue, newValue);
++#elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
++    long volatile* lvPtr = reinterpret_cast&lt;long volatile*&gt;(&amp;mValue);
++    return oldValue == InterlockedCompareExchange(lvPtr, newValue, oldValue);
++#elif defined(OpenFDM_USE_MUTEX)
++    ScopeLock lock(mMutex);
++    if (mValue != oldValue)
++      return false;
++    mValue = newValue;
++    return true;
++#else
++    if (mValue != oldValue)
++      return false;
++    mValue = newValue;
++    return true;
++#endif
++  }
++
+ private:
+   Atomic(const Atomic&amp;);
+   Atomic&amp; operator=(const Atomic&amp;);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000362.html">[OpenFDM-svn] r389 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000364.html">[OpenFDM-svn] r391 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#363">[ date ]</a>
+              <a href="thread.html#363">[ thread ]</a>
+              <a href="subject.html#363">[ subject ]</a>
+              <a href="author.html#363">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

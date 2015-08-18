@@ -1,0 +1,160 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r441 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r441%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809061526.m86FQDCO016097%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000412.html">
+   <LINK REL="Next"  HREF="000414.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r441 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r441%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809061526.m86FQDCO016097%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r441 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep  6 17:26:13 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000412.html">[OpenFDM-svn] r440 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000414.html">[OpenFDM-svn] r442 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#413">[ date ]</a>
+              <a href="thread.html#413">[ thread ]</a>
+              <a href="subject.html#413">[ subject ]</a>
+              <a href="author.html#413">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-06 17:26:13 +0200 (Sat, 06 Sep 2008)
+New Revision: 441
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Remove intermediate data structure just containing a single pointer.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-06 15:24:36 UTC (rev 440)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-06 15:26:13 UTC (rev 441)
+@@ -316,7 +316,7 @@
+     PortId portId = leaf.getPortId(0);
+     LeafInstance::ProviderPortData* pd
+       = new LeafInstance::ProviderPortData(0, leaf._groupInternalPort);
+-    _leafPortDataMap[getCurrentNodeId()][portId].setPortData(pd);
++    _leafPortDataMap[getCurrentNodeId()][portId] = pd;
+   }
+   // Aussen provider, innen acceptor
+   virtual void apply(GroupProviderNode&amp; leaf)
+@@ -325,7 +325,7 @@
+     PortId portId = leaf.getPortId(0);
+     LeafInstance::AcceptorPortData* ad
+       = new LeafInstance::AcceptorPortData(0, leaf._groupInternalPort);
+-    _leafPortDataMap[getCurrentNodeId()][portId].setPortData(ad);
++    _leafPortDataMap[getCurrentNodeId()][portId] = ad;
+   }
+   virtual void apply(LeafNode&amp; leaf)
+   {
+@@ -337,7 +337,7 @@
+     for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+       PortId portId = leaf.getPortId(i);
+       LeafInstance::PortData* portData = leafInstance-&gt;getPortData(portId);
+-      _leafPortDataMap[getCurrentNodeId()][portId].setPortData(portData);
++      _leafPortDataMap[getCurrentNodeId()][portId] = portData;
+     }
+   }
+   virtual void apply(Group&amp; group)
+@@ -390,7 +390,7 @@
+         continue;
+       }
+ 
+-      if (!_leafPortDataMap[acceptorNodeId][acceptorPortId].
++      if (!_leafPortDataMap[acceptorNodeId][acceptorPortId]-&gt;
+           connect(_leafPortDataMap[providerNodeId][providerPortId]))
+         std::cerr &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
+     }
+@@ -407,12 +407,12 @@
+       if (group.getPort(i)-&gt;toAcceptorPortInfo()) {
+         LeafInstance::AcceptorPortData* ad;
+         ad = new LeafInstance::AcceptorPortData(0, group.getPort(i)-&gt;toAcceptorPortInfo());
+-        parentLeafPortDataMap[getCurrentNodeId()][portId].setPortData(ad);
++        parentLeafPortDataMap[getCurrentNodeId()][portId] = ad;
+       }
+       if (group.getPort(i)-&gt;toProviderPortInfo()) {
+         LeafInstance::ProviderPortData* pd;
+         pd = new LeafInstance::ProviderPortData(0, group.getPort(i)-&gt;toProviderPortInfo());
+-        parentLeafPortDataMap[getCurrentNodeId()][portId].setPortData(pd);
++        parentLeafPortDataMap[getCurrentNodeId()][portId] = pd;
+       }
+ 
+       if (_leafPortDataMap[nodeId].empty()) {
+@@ -422,7 +422,7 @@
+         continue;
+       }
+ 
+-      if (!parentLeafPortDataMap[getCurrentNodeId()][portId].
++      if (!parentLeafPortDataMap[getCurrentNodeId()][portId]-&gt;
+           merge(_leafPortDataMap[nodeId].begin()-&gt;second))
+         std::cerr &lt;&lt; &quot;Hmm, cannot merge port data&quot; &lt;&lt; std::endl;
+     }
+@@ -437,22 +437,7 @@
+ 
+   ////////////////////////////////////////////////////////////////////////////
+   // Used to map connections in groups ...
+-  struct PortDataRef {
+-    void setPortData(LeafInstance::PortData* portData)
+-    {
+-      _portData = portData;
+-    }
+-    bool connect(PortDataRef&amp; other)
+-    { return _portData-&gt;connect(other._portData); }
+-
+-    // Merge the argument from the child group into the current groups data
+-    bool merge(const PortDataRef&amp; portData)
+-    { return _portData-&gt;merge(portData._portData); }
+-  private:
+-    SharedPtr&lt;LeafInstance::PortData&gt; _portData;
+-  };
+-  typedef std::map&lt;PortId, PortDataRef&gt; NodePortDataMap;
+-//   typedef std::map&lt;PortId, SharedPtr&lt;LeafInstance::PortData&gt; &gt; NodePortDataMap;
++  typedef std::map&lt;PortId, SharedPtr&lt;LeafInstance::PortData&gt; &gt; NodePortDataMap;
+   typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; LeafPortDataMap;
+   LeafPortDataMap _leafPortDataMap;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000412.html">[OpenFDM-svn] r440 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000414.html">[OpenFDM-svn] r442 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#413">[ date ]</a>
+              <a href="thread.html#413">[ thread ]</a>
+              <a href="subject.html#413">[ subject ]</a>
+              <a href="author.html#413">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

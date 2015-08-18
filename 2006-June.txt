@@ -1,0 +1,570 @@
+From frohlich at berlios.de  Thu Jun  1 18:31:42 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Thu, 1 Jun 2006 18:31:42 +0200
+Subject: [OpenFDM-svn] r285 - in trunk/OpenFDM/src: JSBSim OpenFDM
+Message-ID: <200606011631.k51GVgXx026662@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-01 18:31:40 +0200 (Thu, 01 Jun 2006)
+New Revision: 285
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Assert.h
+   trunk/OpenFDM/src/OpenFDM/LogStream.h
+   trunk/OpenFDM/src/OpenFDM/TableData.h
+Log:
+Fix some warnings
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-06-01 16:31:40 UTC (rev 285)
+@@ -1489,8 +1489,6 @@
+     return error("Unknown FCS COMPONENT type: \"" + type
+                  + "\". Ignoring whole FCS component \"" + name + "\"" );
+ 
+-  OpenFDMAssert(out->isConnected());
+-
+   // Register all output property names.
+   std::string implicitOutname = normalizeComponentName(name);
+   registerJSBExpression(std::string("fcs/") + implicitOutname, out);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Assert.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Assert.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/Assert.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -23,7 +23,7 @@
+   }                                                 \
+ } while (0)
+ #else
+-# define OpenFDMAssert(a) do {} while (0)
++# define OpenFDMAssert(a) do { (void)(a); } while (0)
+ #endif
+ 
+ #ifdef OpenFDMLinAlgDebug
+@@ -34,7 +34,7 @@
+   }                                                 \
+ } while (0)
+ #else
+-# define OpenFDMLinAlgAssert(a) do {} while (0)
++# define OpenFDMLinAlgAssert(a) do { (void)(a); } while (0)
+ #endif
+ 
+ #define OpenFDMError(a) ::OpenFDM::Assertion(__FILE__, __LINE__, a );
+
+Modified: trunk/OpenFDM/src/OpenFDM/LogStream.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -124,7 +124,7 @@
+ 
+   std::basic_ostream<char>* mStream;
+   unsigned mCategory;
+-  unsigned mPriority;
++  int mPriority;
+ };
+ 
+ #if defined(NDEBUG)
+
+Modified: trunk/OpenFDM/src/OpenFDM/TableData.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TableData.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/TableData.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -139,7 +139,6 @@
+     unsigned loIdx = loBoundIt->second;
+     if (loBound == upBound)
+       return loIdx;
+-    unsigned upIdx = upBoundIt->second;
+     real_type theta = (input - loBound)/(upBound-loBound);
+     return loIdx + theta;
+   }
+@@ -172,14 +171,14 @@
+     mData(0)
+   {}
+   TableData(const SizeVector& size) :
+-    mSize(size), mData(new real_type[product(size)])
++    mData(new real_type[product(size)]), mSize(size)
+   {
+     unsigned totalLen = product(mSize);
+     for (unsigned i = 0; i < totalLen; ++i)
+       mData[i] = 0;
+   }
+   TableData(const TableData& ndarray) :
+-    mSize(ndarray.size()), mData(new real_type[product(ndarray.size())])
++    mData(new real_type[product(ndarray.size())]), mSize(ndarray.size())
+   {
+     unsigned totalLen = product(mSize);
+     for (unsigned i = 0; i < totalLen; ++i)
+
+
+
+From frohlich at berlios.de  Sat Jun  3 14:53:23 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sat, 3 Jun 2006 14:53:23 +0200
+Subject: [OpenFDM-svn] r286 - in trunk/OpenFDM: . src/builder
+Message-ID: <200606031253.k53CrNq7020904@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-03 14:53:21 +0200 (Sat, 03 Jun 2006)
+New Revision: 286
+
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/builder/FrameItem.h
+   trunk/OpenFDM/src/builder/ModelItem.h
+Log:
+Qt 4.1 updates
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-06-01 16:31:40 UTC (rev 285)
++++ trunk/OpenFDM/configure.ac	2006-06-03 12:53:21 UTC (rev 286)
+@@ -97,7 +97,7 @@
+ AC_SUBST(OpenFDM_HAVE_LIBXML2_XMLREADER)
+ 
+ dnl simple check for qt4
+-AC_CHECK_HEADERS([Qt/QtGlobal],[openfdm_have_qt4="yes"])
++AC_CHECK_HEADERS([Qt/QtCore],[openfdm_have_qt4="yes"])
+ dnl simple check for osg
+ AC_CHECK_HEADERS([osg/Object],[openfdm_have_osg="yes"])
+ dnl avoid trying to build the editor if qt4 or osg is missing
+
+Modified: trunk/OpenFDM/src/builder/FrameItem.h
+===================================================================
+--- trunk/OpenFDM/src/builder/FrameItem.h	2006-06-01 16:31:40 UTC (rev 285)
++++ trunk/OpenFDM/src/builder/FrameItem.h	2006-06-03 12:53:21 UTC (rev 286)
+@@ -5,7 +5,7 @@
+ #ifndef FrameItem_H
+ #define FrameItem_H
+ 
+-#include <Qt/QAbstractItemModel>
++#include <QtCore/QAbstractItemModel>
+ 
+ #include <OpenFDM/System.h>
+ 
+
+Modified: trunk/OpenFDM/src/builder/ModelItem.h
+===================================================================
+--- trunk/OpenFDM/src/builder/ModelItem.h	2006-06-01 16:31:40 UTC (rev 285)
++++ trunk/OpenFDM/src/builder/ModelItem.h	2006-06-03 12:53:21 UTC (rev 286)
+@@ -5,7 +5,7 @@
+ #ifndef ModelItem_H
+ #define ModelItem_H
+ 
+-#include <Qt/QAbstractItemModel>
++#include <QtCore/QAbstractItemModel>
+ 
+ #include <OpenFDM/System.h>
+ 
+
+
+
+From frohlich at berlios.de  Sun Jun  4 12:17:12 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 4 Jun 2006 12:17:12 +0200
+Subject: [OpenFDM-svn] r287 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200606041017.k54AHCoN007126@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-04 12:17:12 +0200 (Sun, 04 Jun 2006)
+New Revision: 287
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+   trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+Log:
+Fix return value
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-06-03 12:53:21 UTC (rev 286)
++++ trunk/OpenFDM/src/OpenFDM/PortAcceptor.cpp	2006-06-04 10:17:12 UTC (rev 287)
+@@ -31,7 +31,8 @@
+ {
+   if (!connection)
+     return false;
+-  return connection->setPortAcceptor(0);
++  connection->setPortAcceptor(0);
++  return true;
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PortProvider.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-06-03 12:53:21 UTC (rev 286)
++++ trunk/OpenFDM/src/OpenFDM/PortProvider.cpp	2006-06-04 10:17:12 UTC (rev 287)
+@@ -31,7 +31,8 @@
+ {
+   if (!connection)
+     return false;
+-  return connection->setPortProvider(0);
++  connection->setPortProvider(0);
++  return true;
+ }
+ 
+ } // namespace OpenFDM
+
+
+
+From frohlich at berlios.de  Sun Jun  4 12:17:36 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 4 Jun 2006 12:17:36 +0200
+Subject: [OpenFDM-svn] r288 - in trunk/OpenFDM: . src/builder
+Message-ID: <200606041017.k54AHanp007168@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-04 12:17:36 +0200 (Sun, 04 Jun 2006)
+New Revision: 288
+
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/builder/Makefile.am
+Log:
+Streamline the qt dependent build system a bit
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-06-04 10:17:12 UTC (rev 287)
++++ trunk/OpenFDM/configure.ac	2006-06-04 10:17:36 UTC (rev 288)
+@@ -1,26 +1,29 @@
++# -*- Autoconf -*-
++
++AC_PREREQ(2.59)
+ AC_INIT([OpenFDM], [0.5])
+-dnl AC_PREREQ(2.59)
+-dnl AC_COPYRIGHT(COPYRIGHT-NOTICE)
+-AM_INIT_AUTOMAKE
+-
++dnl AC_CONFIG_AUX_DIR(config)
+ AC_CONFIG_SRCDIR([src/OpenFDM/Object.h])
++dnl AC_CONFIG_HEADER([config.h])
++AM_INIT_AUTOMAKE()
+ 
+-dnl try to append the prefix path to the include and library paths if present
+-if test "x$prefix" != "xNONE" ; then
+-  CPPFLAGS="$CPPFLAGS -I$prefix/include"
+-  LDFLAGS="$LDFLAGS -L$prefix/lib"
+-fi
+-
+-AC_CANONICAL_HOST
+-
++dnl AC_CANONICAL_HOST
++AC_LANG(C++)
+ AC_PROG_CC
+ AC_PROG_CPP
+ AC_PROG_CXX
++AC_PROG_INSTALL
+ 
+ AC_DISABLE_SHARED
+ AC_PROG_LIBTOOL
+ AC_SUBST(LIBTOOL_DEPS)
+ 
++dnl try to append the prefix path to the include and library paths if present
++if test "x$prefix" != "xNONE" ; then
++  CPPFLAGS="$CPPFLAGS -I$prefix/include"
++  LDFLAGS="$LDFLAGS -L$prefix/lib"
++fi
++
+ dnl Configure debugging checks
+ AC_ARG_ENABLE(debug,
+ [  --enable-debug            Enable assertions [default=yes]],
+@@ -45,9 +48,6 @@
+ ]
+ AC_SUBST(enable_range_checking)
+ 
+-dnl Since OpenFDM is c++ ...
+-AC_LANG_PUSH(C++)
+-
+ dnl Check for headers and symbols required for better speaking backtraces ...
+ AC_CHECK_HEADERS([execinfo.h cxxabi.h])
+ AC_CHECK_FUNCS([backtrace backtrace_symbols])
+@@ -97,9 +97,23 @@
+ AC_SUBST(OpenFDM_HAVE_LIBXML2_XMLREADER)
+ 
+ dnl simple check for qt4
+-AC_CHECK_HEADERS([Qt/QtCore],[openfdm_have_qt4="yes"])
++if test "x$QTDIR" != "x" ; then
++  CPPFLAGS="$CPPFLAGS -I$QTDIR/include"
++  LDFLAGS="$LDFLAGS -L$QTDIR/lib"
++  AC_CHECK_HEADERS([Qt/QtCore],[openfdm_have_qt4="yes"])
++  QT_MOC=$QTDIR/bin/moc
++  QT_UIC=$QTDIR/bin/uic
++else
++  AC_MSG_WARN([You must have QTDIR set to the qt-4 directory for the builder])
++  QT_MOC=/bin/false
++  QT_UIC=/bin/false
++fi
++AC_SUBST(QT_MOC)
++AC_SUBST(QT_UIC)
++
+ dnl simple check for osg
+ AC_CHECK_HEADERS([osg/Object],[openfdm_have_osg="yes"])
++
+ dnl avoid trying to build the editor if qt4 or osg is missing
+ if test "x$openfdm_have_qt4" = "xyes" && test "x$openfdm_have_osg" = "xyes"
+ then
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-06-04 10:17:12 UTC (rev 287)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-06-04 10:17:36 UTC (rev 288)
+@@ -1,46 +1,55 @@
++INCLUDES = -I$(srcdir)/..
+ 
+-qtinclude=$(QTDIR)/include
+-othrinclude=$(HOME)/sw/include
+-osginclude=$(HOME)/sw/include
+-x11lib=/usr/X11R6/lib
+-
+-qtlib=$(QTDIR)/lib
+-othrlib=$(HOME)/sw/lib
+-osglib=$(HOME)/sw/lib
+-
+-MOC=$(QTDIR)/bin/moc
+-
+-SUFFIXES = _moc.cpp
+-.h_moc.cpp:
+-	$(MOC) $(CPPFLAGS) -o $@ $<
+-
+-INCLUDES = -I$(srcdir)/.. -I$(qtinclude) -I$(othrinclude) -I$(osginclude)
+-
+-BUILT_SOURCES = QOsgWidget_moc.cpp
+-
+ bin_PROGRAMS = openfdm
+ 
+-openfdm_SOURCES = \
++DISTSOURCES = \
+ 	main.cpp \
+-	Configuration.h \
+ 	Configuration.cpp \
+-	FrameItem.h \
+ 	FrameItem.cpp \
+-	Geometries.h \
+ 	Geometries.cpp \
+-	MainWindow.h \
+ 	MainWindow.cpp \
+-	ModelItem.h \
+ 	ModelItem.cpp \
+-	QOsgWidget.h \
+-	QOsgWidget.cpp \
+-	QOsgWidget_moc.cpp
++	QOsgWidget.cpp
+ 
++# Headers with QObjects
++DISTHEADERS_MOC = \
++	QOsgWidget.h
++
++# Headers without QObjects
++DISTHEADERS_NO_MOC = \
++	Configuration.h \
++	FrameItem.h \
++	Geometries.h \
++	MainWindow.h \
++	ModelItem.h
++
++# ui files
++FORMS = 
++
++# The derived files
++FORMHEADERS = $(FORMS:.ui=.h)
++MOC_CC = $(FORMS:.ui=.moc.cpp) $(DISTHEADERS_MOC:.h=.moc.cpp)
++UIC_CC = $(FORMS:.ui=.uic.cpp)
++
++BUILT_SOURCES = $(FORMHEADERS) $(UIC_CC) $(MOC_CC)
++CLEANFILES = $(BUILT_SOURCES)
++
++openfdm_SOURCES = $(DISTSOURCES) $(DISTHEADERS_MOC) $(DISTHEADERS_NO_MOC)
++nodist_openfdm_SOURCES = $(MOC_CC) $(UIC_CC)
++
+ openfdm_LDADD = ../JSBSim/libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+                 -lQtGui -lQtOpenGL -lQtCore \
+                 -lGL -lGLU
+ 
+-openfdm_LDFLAGS = -L$(qtlib) \
+-                -L$(osglib) -L$(othrlib) -Wl,-rpath,$(osglib) \
+-                -L$(qtlib)
++# Some suffix rules to make qt built sources
++.ui.h:
++	$(QT_UIC) -o $@ $<
++
++.h.moc.cpp:
++	$(QT_MOC) -o $@ $<
++
++.ui.uic.cpp:
++	$(QT_UIC) -o $@ -impl $*.h $<
++
++SUFFIXES = .h .ui .moc.cpp .uic.cpp
+
+
+
+From frohlich at berlios.de  Sun Jun  4 16:47:47 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 4 Jun 2006 16:47:47 +0200
+Subject: [OpenFDM-svn] r289 - trunk/OpenFDM/src/JSBSim
+Message-ID: <200606041447.k54Ell3s005997@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-04 16:47:47 +0200 (Sun, 04 Jun 2006)
+New Revision: 289
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/jsb2openfdm.cpp
+Log:
+Small cleanup
+
+
+Modified: trunk/OpenFDM/src/JSBSim/jsb2openfdm.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/jsb2openfdm.cpp	2006-06-04 10:17:36 UTC (rev 288)
++++ trunk/OpenFDM/src/JSBSim/jsb2openfdm.cpp	2006-06-04 14:47:47 UTC (rev 289)
+@@ -12,10 +12,11 @@
+ int
+ main(int argc, char *argv[])
+ {
+-  if (argc < 3)
++  if (argc < 3) {
++    std::cerr << "No aircraft given!" << std::endl;
+     return 1;
++  }
+ 
+-  SharedPtr<Vehicle> vehicle;
+   std::string aircraftDir = argv[1];
+   std::string engineDir = aircraftDir + "/Engines";
+   std::string aircraftFile = argv[2];
+@@ -31,13 +32,9 @@
+     for (it = errors.begin(); it != errors.end(); ++it)
+       std::cerr << (*it) << std::endl;
+     
+-    errors = reader.getErrors();
+-    for (it = errors.begin(); it != errors.end(); ++it)
+-      std::cerr << (*it) << std::endl;
+-    
+     return EXIT_FAILURE;
+   }
+-  vehicle = reader.getVehicle();
++  SharedPtr<Vehicle> vehicle = reader.getVehicle();
+ 
+   // Ok, now the Vehicle here contains the imported data
+   // When the reflection stuff is ready, we can dump that data to a
+
+
+
+From frohlich at berlios.de  Sun Jun  4 17:56:47 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 4 Jun 2006 17:56:47 +0200
+Subject: [OpenFDM-svn] r290 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200606041556.k54FuluS016971@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-04 17:56:46 +0200 (Sun, 04 Jun 2006)
+New Revision: 290
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Port.h
+Log:
+Fix typo
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Port.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Port.h	2006-06-04 14:47:47 UTC (rev 289)
++++ trunk/OpenFDM/src/OpenFDM/Port.h	2006-06-04 15:56:46 UTC (rev 290)
+@@ -22,7 +22,7 @@
+     Running, // The System is running, stop the System before manipulating it
+     IsolatedModel, // Model does not belong to a parent Group
+     DifferentGroups, // Model belong to different model groups
+-    StalePort, // Post still alive but originating model is dead
++    StalePort, // Port still alive but originating model is dead
+     AlreadyConnected, // This end of the connection is already connected
+     IncompatiblePort, // The port is not compatible with the other end
+     IncompatibelSize  // The port is not compatible with the other end
+
+
+
+From frohlich at berlios.de  Sun Jun  4 18:02:28 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sun, 4 Jun 2006 18:02:28 +0200
+Subject: [OpenFDM-svn] r291 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200606041602.k54G2S5Y017626@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-06-04 18:02:27 +0200 (Sun, 04 Jun 2006)
+New Revision: 291
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Evaluate enabled port in update method instead of output.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-06-04 15:56:46 UTC (rev 290)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-06-04 16:02:27 UTC (rev 291)
+@@ -20,6 +20,7 @@
+   mNumDiscreteStates(0l),
+   mDirectFeedThrough(false),
+   mEnabled(true),
++  mNextEnabled(true),
+   mEnablePort(new NumericPortAcceptor(this)),
+   mDisableMode(Hold)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-06-04 15:56:46 UTC (rev 290)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-06-04 16:02:27 UTC (rev 291)
+@@ -87,15 +87,22 @@
+   /// Convinience functions may make the virtuals protected ...
+   void outputIfEnabled(const TaskInfo& taskInfo)
+   {
++    /// FIXME: should that only be checked for discrete tasks???
++    /// May be with a special list in System to know which ones need to recheck
++    /// the enable ports ???
++    setEnabled(mNextEnabled);
++    if (mEnabled)
++      output(taskInfo);
++  }
++  void updateIfEnabled(const TaskInfo& taskInfo)
++  {
++    if (mEnabled)
++      update(taskInfo);
+     if (mEnablePortHandle.isConnected()) {
+       /// FIXME bool!!!!
+-      setEnabled(0.5 < fabs(mEnablePortHandle.getRealValue()));
++      mNextEnabled = 0.5 < fabs(mEnablePortHandle.getRealValue());
+     }
+-    if (mEnabled)
+-      output(taskInfo);
+   }
+-  void updateIfEnabled(const TaskInfo& taskInfo)
+-  { if (mEnabled) update(taskInfo); }
+ 
+   virtual void setState(const StateStream& state);
+   virtual void getState(StateStream& state) const;
+@@ -266,13 +273,12 @@
+   bool mDirectFeedThrough;
+   /// True if the Model is enabled
+   bool mEnabled;
+-  // the old obsolete one
++  bool mNextEnabled;
+   SharedPtr<NumericPortAcceptor> mEnablePort;
+   RealPortHandle mEnablePortHandle;
+   DisableMode mDisableMode;
+   SampleTimeSet mSampleTimeSet;
+ 
+-  /// New port system
+ protected:
+   typedef std::vector<SharedPtr<NumericPortAcceptor> > InputPortVector;
+   typedef std::vector<SharedPtr<NumericPortProvider> > OutputPortVector;
+
+
+

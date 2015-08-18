@@ -1,0 +1,711 @@
+From frohlich at mail.berlios.de  Fri Mar  6 17:39:43 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 6 Mar 2009 17:39:43 +0100
+Subject: [OpenFDM-svn] r992 - trunk/flightgear
+Message-ID: <200903061639.n26GdhfQ017811@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-06 17:39:42 +0100 (Fri, 06 Mar 2009)
+New Revision: 992
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Reflect api changes in flightgear.
+
+M    FGOpenFDM.cpp
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2009-02-25 06:15:06 UTC (rev 991)
++++ trunk/flightgear/FGOpenFDM.cpp	2009-03-06 16:39:42 UTC (rev 992)
+@@ -5,6 +5,7 @@
+ #include <simgear/misc/sg_path.hxx>
+ #include <simgear/math/sg_geodesy.hxx>
+ #include <simgear/props/props.hxx>
++#include <simgear/scene/material/mat.hxx>
+ 
+ #include <Aircraft/controls.hxx>
+ #include <Main/globals.hxx>
+@@ -30,8 +31,8 @@
+ class FGGround
+   : public Ground {
+ public:
+-  FGGround(FGInterface *ifce)
+-    : mIfce(ifce)
++  FGGround(FGInterface *ifce) :
++    mIfce(ifce)
+   { }
+   virtual ~FGGround(void)
+   { }
+@@ -40,18 +41,24 @@
+   getGroundPlane(real_type t, const Vector3& refPos) const
+   {
+     double loc_cart[3] = { refPos(0), refPos(1), refPos(2) };
+-    double contact[3], normal[3], vel[3], lc, ff, agl;
+-    int groundtype;
++    double contact[3], normal[3], vel[3], angvel[3];
++    const SGMaterial* material;
++    simgear::BVHNode::Id id;
+     // FIXME!!!!!!!
+     bool ok = false;
+     if (mIfce)
+-      ok = mIfce->get_agl_m(t, loc_cart, contact, normal, vel,
+-                            &groundtype, &lc, &ff, &agl);
++      ok = mIfce->get_agl_m(t, loc_cart, 0, contact, normal, vel, angvel,
++                            material, id);
+     Vector3 unitDown(-normal[0], -normal[1], -normal[2]);
+     Vector3 groundOff(contact[0], contact[1], contact[2]);
+     // FIXME: why is this not normalized?? ...
+     Plane p(normalize(unitDown), groundOff);
+-    Vector6 v(Vector3::zeros(), Vector3(vel[0], vel[1], vel[2]));
++    Vector3 linearVel(vel[0], vel[1], vel[2]);
++    Vector3 angularVel(angvel[0], angvel[1], angvel[2]);
++    Vector6 v(angularVel, linearVel + cross(angularVel, refPos - groundOff));
++    double ff = 1;
++    if (material)
++      ff = material->get_friction_factor();
+     return GroundValues(p, v, ff);
+   }
+ 
+
+
+
+From frohlich at mail.berlios.de  Sat Mar 14 10:31:01 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 14 Mar 2009 10:31:01 +0100
+Subject: [OpenFDM-svn] r993 - trunk/flightgear
+Message-ID: <200903140931.n2E9V11t004080@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-14 10:31:01 +0100 (Sat, 14 Mar 2009)
+New Revision: 993
+
+Modified:
+   trunk/flightgear/flightgear.diff
+Log:
+No longer need the -lrt only for OpenFDM.
+
+M    flightgear.diff
+
+
+Modified: trunk/flightgear/flightgear.diff
+===================================================================
+--- trunk/flightgear/flightgear.diff	2009-03-06 16:39:42 UTC (rev 992)
++++ trunk/flightgear/flightgear.diff	2009-03-14 09:31:01 UTC (rev 993)
+@@ -83,7 +83,7 @@
+  
+ +if ENABLE_OpenFDM_FDM
+ +OpenFDM_LIBS = $(top_builddir)/src/FDM/OpenFDM/libFGOpenFDM.a \
+-+               -lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM -lrt
+++               -lOpenFDMJSBReader -lOpenFDMeasyxmlXML -lOpenFDMXML -lOpenFDM
+ +else
+ +OpenFDM_LIBS = 
+ +endif
+
+
+
+From frohlich at mail.berlios.de  Sun Mar 15 12:28:49 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 15 Mar 2009 12:28:49 +0100
+Subject: [OpenFDM-svn] r994 - trunk/flightgear
+Message-ID: <200903151128.n2FBSn0q004730@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-15 12:28:49 +0100 (Sun, 15 Mar 2009)
+New Revision: 994
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Sync with past change from flightgear.
+
+M    FGOpenFDM.cpp
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2009-03-14 09:31:01 UTC (rev 993)
++++ trunk/flightgear/FGOpenFDM.cpp	2009-03-15 11:28:49 UTC (rev 994)
+@@ -569,7 +569,7 @@
+   Vector3 cart = vehicle->getCartPosition();
+   double cart_pos[3] = { cart(0), cart(1), cart(2) };
+   double t = vehicle->getTime();
+-  if (!prepare_ground_cache_m(t, cart_pos, groundCacheRadius))
++  if (!prepare_ground_cache_m(t, t+dt, cart_pos, groundCacheRadius))
+     SG_LOG(SG_FLIGHT, SG_WARN,
+            "FGInterface is beeing called without scenery below the aircraft!");
+ 
+
+
+
+From frohlich at mail.berlios.de  Sun Mar 15 18:47:01 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 15 Mar 2009 18:47:01 +0100
+Subject: [OpenFDM-svn] r995 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200903151747.n2FHl1O7020247@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-15 18:46:49 +0100 (Sun, 15 Mar 2009)
+New Revision: 995
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/System.h
+   trunk/OpenFDM/src/OpenFDM/Vehicle.h
+Log:
+Make the initial time settable.
+
+M    src/OpenFDM/System.h
+M    src/OpenFDM/Vehicle.h
+M    src/OpenFDM/System.cpp
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2009-03-15 11:28:49 UTC (rev 994)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2009-03-15 17:46:49 UTC (rev 995)
+@@ -249,8 +249,7 @@
+     return false;
+   }
+ 
+-  mTimestepper->setTime(0);
+-  mTime = 0;
++  mTimestepper->setTime(mTime);
+   mTimestepper->setStepsize(gcd);
+   return true;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.h	2009-03-15 11:28:49 UTC (rev 994)
++++ trunk/OpenFDM/src/OpenFDM/System.h	2009-03-15 17:46:49 UTC (rev 995)
+@@ -57,6 +57,8 @@
+   /// Return the current simulation time, convenience function
+   real_type getTime(void) const
+   { return mTime; }
++  void setTime(real_type time)
++  { mTime = time; }
+ 
+   /// Sets a timestepping algorithm for use with this system.
+   void setTimestepper(ODESolver* timestepper);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.h	2009-03-15 11:28:49 UTC (rev 994)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.h	2009-03-15 17:46:49 UTC (rev 995)
+@@ -107,6 +107,8 @@
+   { return 15; }
+   real_type getTime(void) const
+   { return mSystem->getTime(); }
++  void setTime(real_type time)
++  { mSystem->setTime(time); }
+   // FIXME:
+   const RigidBody* getTopBody(void) const
+   { return mTopBody; }
+
+
+
+From frohlich at mail.berlios.de  Thu Mar 19 18:06:41 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 19 Mar 2009 18:06:41 +0100
+Subject: [OpenFDM-svn] r996 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200903191706.n2JH6fxT006704@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-19 18:06:40 +0100 (Thu, 19 Mar 2009)
+New Revision: 996
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Blindly convert the old actuator code.
+
+M    OpenFDM/Makefile.am
+AM   OpenFDM/Actuator.cpp
+M    OpenFDM/Actuator.h
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp	2009-03-19 17:06:40 UTC (rev 996)
+@@ -0,0 +1,84 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include "Actuator.h"
++
++#include "Types.h"
++#include "Object.h"
++#include "Model.h"
++
++namespace OpenFDM {
++
++Actuator::Actuator(const std::string& name) :
++  Model(name),
++  mInputPort(newRealInputPort("input", false)),
++  mPositionPort(newRealOutputPort("position")),
++  mVelocityPort(newRealOutputPort("velocity")),
++  mPositionStateInfo(new Vector1StateInfo),
++  mVelocityStateInfo(new Vector1StateInfo),
++  mInitialPosition(0),
++  mInitialVelocity(0),
++  mMinDeflection(-Limits<real_type>::max()),
++  mMaxDeflection(Limits<real_type>::max()),
++  mMaxRate(Limits<real_type>::max()),
++  mEigenFreq(15),
++  mDampingRatio(0.7)
++{
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
++}
++
++Actuator::~Actuator()
++{
++}
++
++void
++Actuator::init(const Task&, DiscreteStateValueVector& discreteState,
++               ContinousStateValueVector& continousState,
++               const PortValueList& portValueList) const
++{
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
++}
++
++void
++Actuator::output(const Task&,const DiscreteStateValueVector&,
++                 const ContinousStateValueVector& states,
++                 PortValueList& portValues) const
++{
++  portValues[mPositionPort] = states[*mPositionStateInfo](0);
++  portValues[mVelocityPort] = states[*mVelocityStateInfo](0);
++}
++
++void
++Actuator::derivative(const DiscreteStateValueVector&,
++                     const ContinousStateValueVector& states,
++                     const PortValueList& portValues,
++                     ContinousStateValueVector& deriv) const
++{
++  // The desired position
++  real_type desiredPos = portValues[mInputPort];
++  // Apply the actuator limits.
++  desiredPos = min(desiredPos, mMaxDeflection);
++  desiredPos = max(desiredPos, mMinDeflection);
++
++  // Compute the position error
++  real_type positionError = desiredPos - states[*mPositionStateInfo](0);
++    
++  // The velocity at eigenfrequency
++  real_type omega = 1/mEigenFreq;
++  
++  // Apply the rate limits
++  positionError = min(positionError, 2*mDampingRatio*mMaxRate/omega);
++  positionError = max(positionError, -2*mDampingRatio*mMaxRate/omega);
++
++  // Compute acceleration
++  real_type accel = positionError*omega*omega - 2*omega*mDampingRatio;
++
++  // And return the state derivative
++  deriv[*mPositionStateInfo] = states[*mVelocityStateInfo];
++  deriv[*mVelocityStateInfo] = accel;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Actuator.h	2009-03-19 17:06:40 UTC (rev 996)
+@@ -9,6 +9,7 @@
+ #include "Types.h"
+ #include "Object.h"
+ #include "Model.h"
++#include "RealStateInfo.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -17,85 +18,59 @@
+ class Actuator :
+     public Model {
+ public:
+-  Actuator(const std::string& name) : Model(name)
+-  {
+-    mVel = 0;
++  Actuator(const std::string& name);
++  virtual ~Actuator();
+ 
+-    mMinDeflection = -Limits<real_type>::max();
+-    mMaxDeflection = Limits<real_type>::max();
+-    mMaxRate = Limits<real_type>::max();
+-    mOmega = 1.0/150;
+-    mDampingRatio = 0.7;
+-  }
+-  virtual ~Actuator() {}
++  virtual void init(const Task&, DiscreteStateValueVector& discreteState,
++                    ContinousStateValueVector& continousState,
++                    const PortValueList& portValueList) const;
++  virtual void output(const Task&,const DiscreteStateValueVector&,
++                      const ContinousStateValueVector& continousState,
++                      PortValueList& portValues) const;
++  virtual void derivative(const DiscreteStateValueVector&,
++                          const ContinousStateValueVector& state,
++                          const PortValueList& portValues,
++                          ContinousStateValueVector& deriv) const;
+ 
+-  virtual void update(real_type dt)
+-  {
+-    real_type input; /* FIXME = mInput->getValue();*/
+-
+-    // Apply the actuator limits.
+-    input = min(input, mMaxDeflection);
+-    input = max(input, mMinDeflection);
+-
+-    // Current output
+-    real_type output = mOutput->getValue();
+-
+-    // Build the error
+-    real_type error = input - output;
+-    
+-    // Apply some rate limit
+-    error = min(error, 2*mDampingRatio*mMaxRate/mOmega);
+-    error = max(error, -2*mDampingRatio*mMaxRate/mOmega);
+-
+-    // compute acceleration
+-    real_type accel = error*mOmega*mOmega - 2*mOmega*mDampingRatio;
+-
+-    // Compute the actuator velocity
+-    mVel += dt*accel;
+-
+-    // Compute the actuator position.
+-    output += dt*mVel;
+-
+-    // Apply the actuator limits.
+-    output = min(output, mMaxDeflection);
+-    output = max(output, mMinDeflection);
+-    
+-    // Set the output value
+-    mOutput->setValue(output);
+-  }
+-
+-  void setMinPos(real_type m)
++  void setMinPos(const real_type& m)
+   { mMinDeflection = m; }
+-  real_type getMinPos(void) const
++  const real_type& getMinPos(void) const
+   { return mMinDeflection; }
+ 
+-  void setMaxPos(real_type m)
++  void setMaxPos(const real_type& m)
+   { mMaxDeflection = m; }
+-  real_type getMaxPos(void) const
++  const real_type& getMaxPos(void) const
+   { return mMaxDeflection; }
+ 
+-  void setMaxRate(real_type rate)
++  void setMaxRate(const real_type& rate)
+   { mMaxRate = rate; }
+-  real_type getMaxRate(void) const
++  const real_type& getMaxRate(void) const
+   { return mMaxRate; }
+ 
+-  void setEigenFreq(real_type f)
+-  { mOmega = 1/f; }
++  void setEigenFreq(const real_type& f)
++  { mEigenFreq = f; }
+   real_type getEigenFreq(void) const
+-  { return 1/mOmega; }
++  { return mEigenFreq; }
+ 
+-  void setDampingRatio(real_type damp)
++  void setDampingRatio(const real_type& damp)
+   { mDampingRatio = damp; }
+-  real_type getDampingRatio(void) const
++  const real_type& getDampingRatio(void) const
+   { return mDampingRatio; }
+ 
+ private:
+-  real_type mVel;
++  RealInputPort mInputPort;
++  RealOutputPort mPositionPort;
++  RealOutputPort mVelocityPort;
+ 
++  SharedPtr<Vector1StateInfo> mPositionStateInfo;
++  SharedPtr<Vector1StateInfo> mVelocityStateInfo;
++
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
+   real_type mMinDeflection;
+   real_type mMaxDeflection;
+   real_type mMaxRate;
+-  real_type mOmega;
++  real_type mEigenFreq;
+   real_type mDampingRatio;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-15 17:46:49 UTC (rev 995)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-19 17:06:40 UTC (rev 996)
+@@ -194,6 +194,7 @@
+ 
+ 
+ OpenFDMModelsHEADERS = \
++  Actuator.h \
+   AirSpring.h \
+   AtmosphereSTD1976.h \
+   Bias.h \
+@@ -223,6 +224,7 @@
+   UnitConversion.h
+ 
+ OpenFDMModelsSOURCES = \
++  Actuator.cpp \
+   AirSpring.cpp \
+   Bias.cpp \
+   BinaryFunction.cpp \
+@@ -297,7 +299,6 @@
+   UniversalJoint.cpp \
+   WheelContact.cpp
+ 
+-#   Actuator.h
+ 
+ #   AeroForce.cpp \
+ #   Tank.cpp
+
+
+
+From frohlich at mail.berlios.de  Fri Mar 20 20:04:48 2009
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 20 Mar 2009 20:04:48 +0100
+Subject: [OpenFDM-svn] r997 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <200903201904.n2KJ4mvQ022506@sheep.berlios.de>
+
+Author: frohlich
+Date: 2009-03-20 20:04:48 +0100 (Fri, 20 Mar 2009)
+New Revision: 997
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add Simple Pacejka type shaped curves.
+
+M    OpenFDM/Makefile.am
+AM   OpenFDM/PacejkaSimple.cpp
+AM   OpenFDM/PacejkaSimple.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-19 17:06:40 UTC (rev 996)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-03-20 19:04:48 UTC (rev 997)
+@@ -264,6 +264,7 @@
+   MobileRootJoint.h \
+   Pacejka89.h \
+   Pacejka94.h \
++  PacejkaSimple.h \
+   PacejkaTire.h \
+   PrismaticActuator.h \
+   PrismaticJoint.h \
+@@ -287,6 +288,7 @@
+   MobileRootJoint.cpp \
+   Pacejka89.cpp \
+   Pacejka94.cpp \
++  PacejkaSimple.cpp \
+   PacejkaTire.cpp \
+   PrismaticActuator.cpp \
+   PrismaticJoint.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.cpp	2009-03-19 17:06:40 UTC (rev 996)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.cpp	2009-03-20 19:04:48 UTC (rev 997)
+@@ -0,0 +1,87 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include "PacejkaSimple.h"
++
++#include "TypeInfo.h"
++#include "Variant.h"
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(PacejkaSimple, PacejkaTire)
++  DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, DampingConstant, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Bx, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Cx, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Dx, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Ex, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, By, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Cy, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Dy, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Ey, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++PacejkaSimple::PacejkaSimple(const std::string& name) :
++  PacejkaTire(name),
++  mSpringConstant(0),
++  mDampingConstant(0),
++  mBx(1), mCx(0.01), mDx(1), mEx(0),
++  mBy(10), mCy(5), mDy(1), mEy(0)
++{
++}
++
++PacejkaSimple::~PacejkaSimple(void)
++{
++}
++
++Vector6
++PacejkaSimple::getForce(const real_type& rho, const real_type& rhoDot,
++                        const real_type& alpha, const real_type& kappa,
++                        const real_type& gamma, const real_type& phi) const
++{
++  // The normal force
++  real_type Fz = rho*mSpringConstant + mDampingConstant*rhoDot;
++  // The normal force cannot get negative here.
++  Fz = max(real_type(0), Fz);
++
++  //
++  // Longitudinal force (Pure longitudinal slip)
++  //
++  real_type Bxk = mBx*100*kappa;
++  real_type Fx = Fz*mDx*sin(mCx*atan(Bxk - mEx*(Bxk - atan(Bxk))));
++
++  //
++  // Lateral force (Pure side slip)
++  //
++  real_type Bya = mBy*rad2deg*alpha;
++  real_type Fy = Fz*mDy*sin(mCy*atan(Bya - mEy*(Bya - atan(Bya))));
++
++  return Vector6(Vector3(0, 0, 0), Vector3(Fx, Fy, Fz));
++}
++
++void
++PacejkaSimple::setSpringConstant(const real_type& springConstant)
++{
++  mSpringConstant = springConstant;
++}
++
++const real_type&
++PacejkaSimple::getSpringConstant(void) const
++{
++  return mSpringConstant;
++}
++
++void
++PacejkaSimple::setDampingConstant(const real_type& dampingConstant)
++{
++  mDampingConstant = dampingConstant;
++}
++
++const real_type&
++PacejkaSimple::getDampingConstant(void) const
++{
++  return mDampingConstant;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.h	2009-03-19 17:06:40 UTC (rev 996)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.h	2009-03-20 19:04:48 UTC (rev 997)
+@@ -0,0 +1,64 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_PacejkaSimple_H
++#define OpenFDM_PacejkaSimple_H
++
++#include "PacejkaTire.h"
++
++namespace OpenFDM {
++
++class PacejkaSimple : public PacejkaTire {
++  OPENFDM_OBJECT(PacejkaSimple, PacejkaTire);
++public:
++  PacejkaSimple(const std::string& name);
++  virtual ~PacejkaSimple(void);
++
++  // Helper function to compute the resulting force
++  virtual Vector6 getForce(const real_type& rho, const real_type& rhoDot,
++                           const real_type& alpha, const real_type& kappa,
++                           const real_type& gamma, const real_type& phi) const;
++
++  void setSpringConstant(const real_type& springConstant);
++  const real_type& getSpringConstant(void) const;
++
++  void setDampingConstant(const real_type& dampingConstant);
++  const real_type& getDampingConstant(void) const;
++
++  const real_type& getBx() const { return mBx; }
++  void setBx(const real_type& value) { mBx = value; }
++
++  const real_type& getCx() const { return mCx; }
++  void setCx(const real_type& value) { mCx = value; }
++
++  const real_type& getDx() const { return mDx; }
++  void setDx(const real_type& value) { mDx = value; }
++
++  const real_type& getEx() const { return mEx; }
++  void setEx(const real_type& value) { mEx = value; }
++
++
++  const real_type& getBy() const { return mBy; }
++  void setBy(const real_type& value) { mBy = value; }
++
++  const real_type& getCy() const { return mCy; }
++  void setCy(const real_type& value) { mCy = value; }
++
++  const real_type& getDy() const { return mDy; }
++  void setDy(const real_type& value) { mDy = value; }
++
++  const real_type& getEy() const { return mEy; }
++  void setEy(const real_type& value) { mEy = value; }
++
++private:
++  real_type mSpringConstant;
++  real_type mDampingConstant;
++
++  real_type mBx, mCx, mDx, mEx;
++  real_type mBy, mCy, mDy, mEy;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaSimple.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+

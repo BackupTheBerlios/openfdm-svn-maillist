@@ -1,0 +1,170 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r581 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r581%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810090507.m99571ot028871%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000550.html">
+   <LINK REL="Next"  HREF="000552.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r581 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r581%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810090507.m99571ot028871%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r581 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Oct  9 07:07:01 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000550.html">[OpenFDM-svn] r580 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000552.html">[OpenFDM-svn] r582 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#551">[ date ]</a>
+              <a href="thread.html#551">[ thread ]</a>
+              <a href="subject.html#551">[ subject ]</a>
+              <a href="author.html#551">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-09 07:06:59 +0200 (Thu, 09 Oct 2008)
+New Revision: 581
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Cleanup.
+
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-09 04:50:53 UTC (rev 580)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-09 05:06:59 UTC (rev 581)
+@@ -210,7 +210,6 @@
+ 
+ ////////////////////////////////////////////////////////////////////
+ 
+-// Just here so that I do not care for intationation order for now ...
+ class System::NodeInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+@@ -337,7 +336,6 @@
+     SharedPtr&lt;AbstractNodeInstance&gt; mNodeInstance;
+   };
+ 
+-
+   virtual void apply(const Node&amp; node)
+   { Log(Schedule, Error) &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+   virtual void apply(const LeafNode&amp; leaf)
+@@ -424,14 +422,18 @@
+     ExternalGroupPortDataMap parentGroupPortDataMap(group.getNumPorts());
+     parentGroupPortDataMap.swap(_groupPortDataMap);
+ 
+-    // Walk the children
++    // End pushing external connection data
++
++    // Now walk the children
+     for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
++      // Push the right per node port information struct
+       SharedPtr&lt;PortDataList&gt; parentNodePortDataList;
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+       mCurrentNodePortDataList = _portDataMap[i];
+ 
+       group.getChild(i)-&gt;accept(*this);
+ 
++      // Pop the per node port information struct
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+     }
+ 
+@@ -468,30 +470,31 @@
+       unsigned portInfoIndex1 = portInfo1-&gt;getIndex();
+       if (!_portDataMap[nodeIndex1]-&gt;mPortDataVector[portInfoIndex1]-&gt;
+           connect(_portDataMap[nodeIndex0]-&gt;mPortDataVector[portInfoIndex0]))
+-        Log(Schedule, Error) &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
++        Log(Schedule, Error) &lt;&lt; &quot;Internal Error: Cannot connect ports that&quot;
++          &quot; appeared to be compatible before.&quot; &lt;&lt; std::endl;
+     }
+ 
+     SharedPtr&lt;PortDataList&gt; portDataList = buildNodeContext(group);
+ 
+-    parentPortDataMap.swap(_portDataMap);
+-    // Ok, some nameing niceness
+-    PortDataMap childrenPortDataMap;
+-    childrenPortDataMap.swap(parentPortDataMap);
+-
+     // add group connect routings
+     // merge child list into the global list of instances
+     for (unsigned i = 0; i &lt; group.getNumPorts(); ++i) {
+       PortData* portData = _groupPortDataMap[i];
++      if (!portData) {
++        Log(Schedule, Error) &lt;&lt; &quot;Internal Error: Cannot find internal port &quot;
++          &quot;data for group external port!&quot; &lt;&lt; std::endl;
++        continue;
++      }
+ 
+-      PortData* parentPortData;
+-      parentPortData = portDataList-&gt;newPortData(group.getPort(i));
+-
++      // Allocate a new port data struct in the parent.
++      PortData* parentPortData = portDataList-&gt;newPortData(group.getPort(i));
+       parentPortData-&gt;setProxyPortData(portData);
+       portData-&gt;setProxyPortData(parentPortData);
+     }
+ 
+-    // Swap the PortDataList by external port index map back
++    // Pop the per group port connect info
+     parentGroupPortDataMap.swap(_groupPortDataMap);
++    parentPortDataMap.swap(_portDataMap);
+   }
+ 
+   ////////////////////////////////////////////////////////////////////////////
+@@ -515,9 +518,11 @@
+   // Holds the PortDataList pointer indexed by parent groups port index
+   typedef std::vector&lt;SharedPtr&lt;PortData&gt; &gt; ExternalGroupPortDataMap;
+   ExternalGroupPortDataMap _groupPortDataMap;
+-  // Just to hold references to all mort data lists we have in the
++  // Just to hold references to all port data lists we have in the
+   // simulation system. They are just needed during traversal for connect
+-  // information and to distribute port value pointers.
++  // information and to distribute port value pointers. If this list is not
++  // built up the PortData values are deleted befor the PortValues are
++  // distributed.
+   typedef std::list&lt;SharedPtr&lt;PortDataList&gt; &gt; PortDataListList;
+   PortDataListList _portDataListList;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000550.html">[OpenFDM-svn] r580 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000552.html">[OpenFDM-svn] r582 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#551">[ date ]</a>
+              <a href="thread.html#551">[ thread ]</a>
+              <a href="subject.html#551">[ subject ]</a>
+              <a href="author.html#551">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

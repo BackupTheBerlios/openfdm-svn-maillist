@@ -1,0 +1,617 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg	test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r346%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20OpenFDM/LinAlg%0A%09test&In-Reply-To=%3C200712090926.lB99QhOV022792%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000319.html">
+   <LINK REL="Next"  HREF="000321.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg	test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r346%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20OpenFDM/LinAlg%0A%09test&In-Reply-To=%3C200712090926.lB99QhOV022792%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r346 - in trunk/OpenFDM/src: OpenFDM OpenFDM/LinAlg	test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Dec  9 10:26:43 CET 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000319.html">[OpenFDM-svn] r345 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000321.html">[OpenFDM-svn] r347 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#320">[ date ]</a>
+              <a href="thread.html#320">[ thread ]</a>
+              <a href="subject.html#320">[ subject ]</a>
+              <a href="author.html#320">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-12-09 10:26:42 +0100 (Sun, 09 Dec 2007)
+New Revision: 346
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+   trunk/OpenFDM/src/OpenFDM/Math.h
+   trunk/OpenFDM/src/OpenFDM/Plane.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Quaternion.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/test/quattest.cpp
+Log:
+Improove Limit comparisons.
+Improove euler angle computation.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -273,7 +273,7 @@
+ {
+   if (mDirtyAlpha) {
+     Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(V(0)) &lt; Limits&lt;real_type&gt;::min())
++    if (fabs(V(0)) &lt;= Limits&lt;real_type&gt;::min())
+       mAlpha = 0;
+     else
+       mAlpha = atan2(V(2), V(0));
+@@ -307,7 +307,7 @@
+   if (mDirtyBeta) {
+     real_type Vuw = getTrueSpeedUW();
+     Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(Vuw) &lt; Limits&lt;real_type&gt;::min())
++    if (fabs(Vuw) &lt;= Limits&lt;real_type&gt;::min())
+       mBeta = 0;
+     else
+       mBeta = atan2(V(1), Vuw);
+@@ -410,7 +410,7 @@
+ {
+   if (mDirtyWingSpanOver2Speed) {
+     real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) &lt; Limits&lt;real_type&gt;::min())
++    if (fabs(Vt2) &lt;= Limits&lt;real_type&gt;::min())
+       mWingSpanOver2Speed = 0;
+     else
+       mWingSpanOver2Speed = getWingSpan()/Vt2;
+@@ -424,7 +424,7 @@
+ {
+   if (mDirtyCoordOver2Speed) {
+     real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) &lt; Limits&lt;real_type&gt;::min())
++    if (fabs(Vt2) &lt;= Limits&lt;real_type&gt;::min())
+       mCoordOver2Speed = 0;
+     else
+       mCoordOver2Speed = getCoord()/Vt2;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -185,7 +185,7 @@
+     // if we have really reached the zero position, we must have the full
+     // speed in exactly the relPos direction.
+     real_type nrmRelPos = norm(relPos);
+-    if (nrmRelPos &lt; Limits&lt;real_type&gt;::min()) {
++    if (nrmRelPos &lt;= Limits&lt;real_type&gt;::min()) {
+       Vector6 relVel6 = mMountFrame[0]-&gt;getRelVel(mMountFrame[1]);
+       dir = normalize(relVel6.getLinear());
+     } else
+@@ -212,7 +212,7 @@
+     // if we have really reached the zero position, we must have the full
+     // speed in exactly the relPos direction.
+     real_type nrmRelPos = norm(relPos);
+-    if (nrmRelPos &lt; Limits&lt;real_type&gt;::min())
++    if (nrmRelPos &lt;= Limits&lt;real_type&gt;::min())
+       mRelVel = norm(relVel6.getLinear());
+     else
+       mRelVel = dot(relPos, relVel6.getLinear())/nrmRelPos;
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -133,7 +133,7 @@
+ {
+   typedef typename Impl::value_type value_type;
+   value_type nrm = norm(v);
+-  if (fabs(nrm) &lt; Limits&lt;real_type&gt;::min())
++  if (fabs(nrm) &lt;= Limits&lt;real_type&gt;::min())
+     return Vector&lt;value_type,n&gt;(v);
+   else
+     return Vector&lt;value_type,n&gt;((1/nrm)*v);
+@@ -301,7 +301,7 @@
+     nrmd += d*d;
+   }
+ 
+-  return nrmd &lt; static_cast&lt;value_type&gt;(rows);
++  return nrmd &lt;= static_cast&lt;value_type&gt;(rows);
+ }
+ 
+ /**  Scaled difference of vectors.
+@@ -414,7 +414,7 @@
+     nrmd += d*d;
+   }
+ 
+-  return nrmd &lt; static_cast&lt;value_type&gt;(rows)*tol*tol*max(nrmv1, nrmv2);
++  return nrmd &lt;= static_cast&lt;value_type&gt;(rows)*tol*tol*max(nrmv1, nrmv2);
+ }
+ 
+ /** Comparison function.
+@@ -611,7 +611,7 @@
+       value_type Aii = A(i,i);
+       // If the matrix is exactly singular, compute the solution where the
+       // righthandside is projected into the image of the matrix.
+-      if (fabs(Aii) &lt; Limits&lt;value_type&gt;::min()) {
++      if (fabs(Aii) &lt;= Limits&lt;value_type&gt;::min()) {
+         v(i) = static_cast&lt;value_type&gt;(0);
+       } else {
+         v(i) /= Aii;
+@@ -638,7 +638,7 @@
+         value_type Aii = A(i,i);
+         // If the matrix is exactly singular, compute the solution where the
+         // righthandside is projected into the image of the matrix.
+-        if (fabs(Aii) &lt; Limits&lt;value_type&gt;::min()) {
++        if (fabs(Aii) &lt;= Limits&lt;value_type&gt;::min()) {
+           v(i,j) = static_cast&lt;value_type&gt;(0);
+         } else {
+           v(i,j) /= Aii;
+@@ -751,7 +751,7 @@
+   size_type n = A.cols();
+   for (size_type j = 0; j &lt; n; ++j) {
+     // The matrix is exactly singular.
+-    if (fabs(A(j,j)) &lt; Limits&lt;value_type&gt;::min())
++    if (fabs(A(j,j)) &lt;= Limits&lt;value_type&gt;::min())
+       nonsingular = false;
+     else {
+       if (j &lt; n-1) {
+@@ -785,7 +785,7 @@
+     perm(j) = jp;
+ 
+     // The matrix is exactly singular.
+-    if (fabs(A(jp,j)) &lt; Limits&lt;value_type&gt;::min())
++    if (fabs(A(jp,j)) &lt;= Limits&lt;value_type&gt;::min())
+       nonsingular = false;
+     else {
+       if (jp != j) {
+@@ -928,7 +928,7 @@
+ 
+     // Check if that thing is singular.
+     value_type Ajj = A(j, j);
+-    if (fabs(Ajj) &lt; Limits&lt;value_type&gt;::min())
++    if (fabs(Ajj) &lt;= Limits&lt;value_type&gt;::min())
+       nonsingular = false;
+ 
+     A(j, j) = 1;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Math.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Math.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Math.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -91,7 +91,7 @@
+ {
+   /// FIXME
+ #define PI static_cast&lt;T&gt;(3.1415926535897932384626433832795029L)
+-  if (saturation &lt; Limits&lt;T&gt;::min())
++  if (saturation &lt;= Limits&lt;T&gt;::min())
+     return 0;
+   else
+     return atan(val*0.5*PI/saturation)*2*saturation/PI;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Plane.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Plane.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Plane.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -24,17 +24,17 @@
+   {}
+   Plane(const Vector3&amp; normal, value_type dist)
+     : mNormal(normal), mDist(dist)
+-  { OpenFDMAssert((norm(mNormal)-1) &lt; 8*Limits&lt;value_type&gt;::epsilon()); }
++  { OpenFDMAssert((norm(mNormal)-1) &lt;= 8*Limits&lt;value_type&gt;::epsilon()); }
+   Plane(const Vector3&amp; normal, const Vector3&amp; off)
+     : mNormal(normal), mDist(-dot(normal, off))
+-  { OpenFDMAssert((norm(mNormal)-1) &lt; 8*Limits&lt;value_type&gt;::epsilon()); }
++  { OpenFDMAssert((norm(mNormal)-1) &lt;= 8*Limits&lt;value_type&gt;::epsilon()); }
+ 
+   const Vector3&amp; getNormal(void) const
+   { return mNormal; }
+   void setNormal(const Vector3&amp; normal)
+   {
+     mNormal = normal;
+-    OpenFDMAssert((norm(mNormal)-1) &lt; 8*Limits&lt;value_type&gt;::epsilon());
++    OpenFDMAssert((norm(mNormal)-1) &lt;= 8*Limits&lt;value_type&gt;::epsilon());
+   }
+ 
+   value_type getDist(void) const
+@@ -76,7 +76,7 @@
+     value_type tmp = dot(ndir, mNormal);
+ 
+     // Check if the line is parallel to the plane.
+-    if (fabs(tmp) &lt; Limits&lt;value_type&gt;::epsilon())
++    if (fabs(tmp) &lt;= Limits&lt;value_type&gt;::epsilon())
+       return false;
+ 
+     ip = base - (getDist(base)/tmp)*ndir;
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -83,7 +83,7 @@
+ PrismaticJoint::setJointAxis(const Vector3&amp; axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm &lt; Limits&lt;real_type&gt;::min()) {
++  if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/Quaternion.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/Quaternion.h	2007-12-09 09:26:42 UTC (rev 346)
+@@ -78,10 +78,10 @@
+   OpenFDM_FORCE_INLINE
+   bool isIdentity(void) const
+   {
+-    return fabs(fabs(w())-1) &lt; Limits&lt;T&gt;::epsilon() &amp;&amp;
+-      fabs(x()) &lt; Limits&lt;T&gt;::epsilon() &amp;&amp;
+-      fabs(y()) &lt; Limits&lt;T&gt;::epsilon() &amp;&amp;
+-      fabs(z()) &lt; Limits&lt;T&gt;::epsilon();
++    return fabs(fabs(w())-1) &lt;= Limits&lt;T&gt;::epsilon() &amp;&amp;
++      fabs(x()) &lt;= Limits&lt;T&gt;::epsilon() &amp;&amp;
++      fabs(y()) &lt;= Limits&lt;T&gt;::epsilon() &amp;&amp;
++      fabs(z()) &lt;= Limits&lt;T&gt;::epsilon();
+   }
+ 
+   OpenFDM_FORCE_INLINE
+@@ -96,7 +96,7 @@
+   {
+     value_type nrm = norm(*this);
+     // More or less emergency exit. Should not happen ...
+-    if (nrm &lt; Limits&lt;value_type&gt;::epsilon())
++    if (nrm &lt;= Limits&lt;value_type&gt;::epsilon())
+       return Vector3::zeros();
+ 
+     Vector4&lt;T&gt; nq = (*this)/nrm;
+@@ -132,34 +132,54 @@
+     value_type q2 = x();
+     value_type q3 = y();
+     value_type q4 = z();
+-    value_type sqrQ1 = q1*q1;
+-    value_type sqrQ2 = q2*q2;
+-    value_type sqrQ3 = q3*q3;
+-    value_type sqrQ4 = q4*q4;
+ 
+-    value_type den = sqrQ1 - sqrQ2 - sqrQ3 + sqrQ4;
+-    value_type num = 2*(q3*q4 + q1*q2);
+-    if (fabs(den) &lt; Limits&lt;value_type&gt;::min() &amp;&amp;
+-        fabs(num) &lt; Limits&lt;value_type&gt;::min())
+-      angles(0) = 0;
+-    else
+-      angles(0) = atan2(num, den);
++    value_type r = 1/dot(*this, *this);
++    value_type rq1 = r*q1;
++    value_type rq2 = r*q2;
++    value_type rq3 = r*q3;
++    value_type rq4 = r*q4;
++
++    value_type q1q1 = rq1*q1;
++    value_type q2q2 = rq2*q2;
++    value_type q3q3 = rq3*q3;
++    value_type q4q4 = rq4*q4;
++    value_type q1q2 = rq1*q2;
++    value_type q1q3 = rq1*q3;
++    value_type q1q4 = rq1*q4;
++    value_type q2q3 = rq2*q3;
++    value_type q2q4 = rq2*q4;
++    value_type q3q4 = rq3*q4;
+     
+-    value_type tmp = 2*(q2*q4 - q1*q3);
+-    if (tmp &lt; -1)
+-      angles(1) = pi05;
+-    else if (1.0 &lt; tmp)
++    value_type m11 = q1q1 + q2q2 - q3q3 - q4q4;
++    value_type m12 = 2*(q2q3 + q1q4);
++    value_type m13 = 2*(q2q4 - q1q3);
++    value_type m21 = 2*(q2q3 - q1q4);
++    value_type m22 = q1q1 - q2q2 + q3q3 - q4q4;
++    value_type m23 = 2*(q3q4 + q1q2);
++    // value_type m31 = 2*(q2q4 + q1q3);
++    // value_type m32 = 2*(q3q4 - q1q2);
++    value_type m33 = q1q1 - q2q2 - q3q3 + q4q4;
++
++    if (1 - 8*Limits&lt;T&gt;::epsilon() &lt;= m13) {
++      // take one of them for the first angle
++      // angles(0) = atan2(-m32, -m31);
++      angles(0) = atan2(-m21, m22);
++      // angles(0) = atan2(- m32 - m21, - m31 + m22);
+       angles(1) = -pi05;
+-    else
+-      angles(1) = -asin(tmp);
+-    
+-    den = sqrQ1 + sqrQ2 - sqrQ3 - sqrQ4;
+-    num = 2*(q2*q3 + q1*q4);
+-    if (fabs(den) &lt; Limits&lt;value_type&gt;::min() &amp;&amp;
+-        fabs(num) &lt; Limits&lt;value_type&gt;::min())
++      // angles(1) = -acos(sqrt(m11*m11 + m12*m12));
+       angles(2) = 0;
+-    else {
+-      value_type psi = atan2(num, den);
++    } else if (m13 &lt;= 8*Limits&lt;T&gt;::epsilon() - 1) {
++      // take one of them for the first angle
++      // angles(0) = -atan2(m32, m31);
++      angles(0) = -atan2(-m21, m22);
++      // angles(0) = -atan2(m32 - m21, m31 + m22);
++      angles(1) = pi05;
++      // angles(1) = acos(sqrt(m11*m11 + m12*m12));
++      angles(2) = 0;
++    } else {
++      angles(0) = atan2(m23, m33);
++      angles(1) = -asin(m13);
++      value_type psi = atan2(m12, m11);
+       if (psi &lt; 0)
+         psi += pi2;
+       angles(2) = psi;
+@@ -283,11 +303,12 @@
+     return q1*q2*q3;
+   }
+ 
+-  static Quaternion fromEuler(value_type z, value_type y, value_type x)
++  OpenFDM_FORCE_INLINE
++  static Quaternion fromEuler(const Vector3&amp; euler)
+   {
+-    value_type zd2 = 0.5*z;
+-    value_type yd2 = 0.5*y;
+-    value_type xd2 = 0.5*x;
++    value_type zd2 = value_type(0.5)*euler(2);
++    value_type yd2 = value_type(0.5)*euler(1);
++    value_type xd2 = value_type(0.5)*euler(0);
+     
+     value_type Szd2 = sin(zd2);
+     value_type Syd2 = sin(yd2);
+@@ -307,6 +328,9 @@
+                        Cxd2Czd2*Syd2 + Sxd2Szd2*Cyd2,
+                        Cxd2Szd2*Cyd2 - Sxd2Czd2*Syd2);
+   }
++  OpenFDM_FORCE_INLINE
++  static Quaternion fromEuler(value_type z, value_type y, value_type x)
++  { return fromEuler(Vector3(x, y, z)); }
+ 
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromYawPitchRoll(value_type y, value_type p, value_type r)
+@@ -319,8 +343,8 @@
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromLonLat(value_type lon, value_type lat)
+   {
+-    value_type zd2 = 0.5*lon;
+-    value_type yd2 = - pi025 - 0.5*lat;
++    value_type zd2 = value_type(0.5)*lon;
++    value_type yd2 = - pi025 - value_type(0.5)*lat;
+     
+     value_type Szd2 = sin(zd2);
+     value_type Syd2 = sin(yd2);
+@@ -334,7 +358,7 @@
+   OpenFDM_FORCE_INLINE
+   static Quaternion fromAngleAxis(value_type angle, const Vector3&amp; axis)
+   {
+-    value_type angle2 = 0.5*angle;
++    value_type angle2 = value_type(0.5)*angle;
+     return Quaternion::fromRealImag(cos(angle2), sin(angle2)*axis);
+   }
+ 
+@@ -351,7 +375,7 @@
+   {
+     value_type nfrom = norm(from);
+     value_type nto = norm(to);
+-    if (nfrom &lt; Limits&lt;T&gt;::min() || nto &lt; Limits&lt;T&gt;::min())
++    if (nfrom &lt;= Limits&lt;T&gt;::min() || nto &lt;= Limits&lt;T&gt;::min())
+       return Quaternion::unit();
+ 
+     return Quaternion::fromRotateToNorm((1/nfrom)*from, (1/nto)*to);
+@@ -363,13 +387,13 @@
+   {
+     value_type nrmv1 = norm(v1);
+     value_type nrmv2 = norm(v2);
+-    if (nrmv1 &lt; Limits&lt;T&gt;::min() || nrmv2 &lt; Limits&lt;T&gt;::min())
++    if (nrmv1 &lt;= Limits&lt;T&gt;::min() || nrmv2 &lt;= Limits&lt;T&gt;::min())
+       return Quaternion::unit();
+ 
+     Vector3 nv1 = (1/nrmv1)*v1;
+     Vector3 nv2 = (1/nrmv2)*v2;
+     value_type dv1v2 = dot(nv1, nv2);
+-    if (fabs(fabs(dv1v2)-1) &lt; Limits&lt;value_type&gt;::epsilon())
++    if (fabs(fabs(dv1v2)-1) &lt;= Limits&lt;value_type&gt;::epsilon())
+       return Quaternion::unit();
+ 
+     // The target vector for the first rotation
+@@ -449,7 +473,7 @@
+     // in the interval [-pi,pi]. That means that 0.5*angle is in the interval
+     // [-pi/2,pi/2]. But in that range the cosine is allways &gt;= 0.
+     // So we do not need to care for egative roots in the following equation:
+-    value_type cos05ang = sqrt(0.5+0.5*cosang);
++    value_type cos05ang = sqrt(value_type(0.5)+value_type(0.5)*cosang);
+ 
+ 
+     // Now our assumption of angles &lt;= 90 deg comes in play.
+@@ -559,7 +583,7 @@
+   T sqreps = eps*eps*16*16;
+   Vector4&lt;T&gt; t1 = q1 - q2;
+   Vector4&lt;T&gt; t2 = q1 + q2;
+-  return dot(t1, t1) &lt; sqreps || dot(t2, t2) &lt; sqreps;
++  return dot(t1, t1) &lt;= sqreps || dot(t2, t2) &lt;= sqreps;
+ }
+ 
+ template&lt;typename T&gt;
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -89,7 +89,7 @@
+ RevoluteActuator::setJointAxis(const Vector3&amp; axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm &lt; Limits&lt;real_type&gt;::min()) {
++  if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -80,7 +80,7 @@
+ RevoluteJoint::setJointAxis(const Vector3&amp; axis)
+ {
+   real_type nrm = norm(axis);
+-  if (nrm &lt; Limits&lt;real_type&gt;::min()) {
++  if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+
+Modified: trunk/OpenFDM/src/test/quattest.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/quattest.cpp	2007-12-08 10:15:22 UTC (rev 345)
++++ trunk/OpenFDM/src/test/quattest.cpp	2007-12-09 09:26:42 UTC (rev 346)
+@@ -22,7 +22,43 @@
+   return normalize(rVec());
+ }
+ 
++/// Return normalized random vector
++Quaternion
++rnQuat(void)
++{
++  Quaternion q(drand48()-0.5, drand48()-0.5, drand48()-0.5, drand48()-0.5);
++  return Quaternion(normalize(q));
++}
++
+ int
++eulerTest(const Quaternion&amp; q, real_type testEps)
++{
++  Vector3 euler = q.getEuler();
++  Quaternion q2 = Quaternion::fromEuler(euler);
++  Vector3 euler2 = q2.getEuler();
++  
++  if (!equal(q, q2, testEps) &amp;&amp; !equal(q, -q2, testEps)) {
++    std::cerr &lt;&lt; &quot;Failing on test Quaternion euler angles conversion:\n&quot;
++              &lt;&lt; &quot;q = &quot; &lt;&lt; q &lt;&lt; &quot;\n&quot;
++              &lt;&lt; &quot;q2 = &quot; &lt;&lt; q2
++              &lt;&lt; std::endl;
++    return -1;
++  }
++
++  
++  if (!equal(euler, euler2, testEps)) {
++    std::cerr &lt;&lt; &quot;Failing on test Quaternion euler angles conversion:\n&quot;
++              &lt;&lt; &quot;q = &quot; &lt;&lt; q &lt;&lt; &quot;\n&quot;
++              &lt;&lt; &quot;q2 = &quot; &lt;&lt; q2
++              &lt;&lt; std::endl;
++    return -1;
++  }
++
++
++  return 0;
++}
++
++int
+ quattest(void)
+ {
+   real_type eps = Limits&lt;real_type&gt;::epsilon();
+@@ -82,9 +118,56 @@
+                 &lt;&lt; std::endl;
+       return -1;
+     }
++  }
+ 
++  // Test euler angle to quaternion and back conversion.
++  // special fixed cases
++  int fail = 0;
++  fail += eulerTest(Quaternion::fromEuler(0, 0, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, 0, pi05), 100*eps);
++  // special fixed cases at the gimbal lock
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, 0), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, pi05), 100*eps);
++
++  real_type gimbalEps = 1e3*eps;
++  // special cases around the gimbal lock
++  for (unsigned i = 0; i &lt; nTests; ++i) {
++    for (unsigned k = 1; k &lt; 1024; k *= 2) {
++      Vector3 euler = rVec();
++      euler(1) = pi05;
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = pi05*(1 - k*Limits&lt;real_type&gt;::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = pi05*(1 + k*Limits&lt;real_type&gt;::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05;
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05*(1 - k*Limits&lt;real_type&gt;::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++
++      euler(1) = -pi05*(1 + k*Limits&lt;real_type&gt;::epsilon());
++      fail += eulerTest(Quaternion::fromEuler(euler), gimbalEps);
++    }
+   }
++  // arbitrary cases
++  for (unsigned i = 0; i &lt; nTests; ++i)
++    fail += eulerTest(rnQuat(), 100*eps);
+ 
++  if (fail)
++    return -1;
++
+   return 0;
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000319.html">[OpenFDM-svn] r345 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000321.html">[OpenFDM-svn] r347 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#320">[ date ]</a>
+              <a href="thread.html#320">[ thread ]</a>
+              <a href="subject.html#320">[ subject ]</a>
+              <a href="author.html#320">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

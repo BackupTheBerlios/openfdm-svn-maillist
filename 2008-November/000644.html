@@ -1,0 +1,181 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r675%20-%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg&In-Reply-To=%3C200811070947.mA79lYFx025998%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000643.html">
+   <LINK REL="Next"  HREF="000645.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r675%20-%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg&In-Reply-To=%3C200811070947.mA79lYFx025998%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov  7 10:47:34 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000643.html">[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000645.html">[OpenFDM-svn] r676 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#644">[ date ]</a>
+              <a href="thread.html#644">[ thread ]</a>
+              <a href="subject.html#644">[ subject ]</a>
+              <a href="author.html#644">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-07 10:47:34 +0100 (Fri, 07 Nov 2008)
+New Revision: 675
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Expressions.h
+Log:
+dead band and saturation for matrices.
+
+M    Expressions.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Expressions.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Expressions.h	2008-11-06 21:41:04 UTC (rev 674)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Expressions.h	2008-11-07 09:47:34 UTC (rev 675)
+@@ -748,6 +748,102 @@
+   return ret;
+ }
+ 
++template&lt;typename Impl1, size_type m1, size_type n1,
++         typename Impl2, size_type m2, size_type n2&gt;
++OpenFDM_FORCE_INLINE
++Matrix&lt;typename Impl1::value_type,m1,n1&gt;
++saturate(const MatrixRValue&lt;Impl1,m1,n1&gt;&amp; A1,
++         const MatrixRValue&lt;Impl2,m2,n2&gt;&amp; A2)
++{
++  const Impl1&amp; A1i = A1.asImpl();
++  const Impl2&amp; A2i = A2.asImpl();
++
++  size_type rows = A1i.rows();
++  size_type cols = A1i.cols();
++  SizeCheck&lt;m1,m2&gt;::Equal(rows, A2i.rows());
++  SizeCheck&lt;n1,n2&gt;::Equal(cols, A2i.cols());
++
++  Matrix&lt;typename Impl1::value_type,m1,n1&gt; ret(rows, cols);
++  size_type i, j;
++  for (j = 0; j &lt; cols; ++j)
++    for (i = 0; i &lt; rows; ++i)
++      ret(i, j) = ::OpenFDM::saturate(A1i(i, j), A2i(i, j));
++
++  return ret;
++}
++
++template&lt;typename Impl1, size_type m1, size_type n1,
++         typename Impl2, size_type m2, size_type n2&gt;
++OpenFDM_FORCE_INLINE
++Matrix&lt;typename Impl1::value_type,m1,n1&gt;
++smoothSaturate(const MatrixRValue&lt;Impl1,m1,n1&gt;&amp; A1,
++               const MatrixRValue&lt;Impl2,m2,n2&gt;&amp; A2)
++{
++  const Impl1&amp; A1i = A1.asImpl();
++  const Impl2&amp; A2i = A2.asImpl();
++
++  size_type rows = A1i.rows();
++  size_type cols = A1i.cols();
++  SizeCheck&lt;m1,m2&gt;::Equal(rows, A2i.rows());
++  SizeCheck&lt;n1,n2&gt;::Equal(cols, A2i.cols());
++
++  Matrix&lt;typename Impl1::value_type,m1,n1&gt; ret(rows, cols);
++  size_type i, j;
++  for (j = 0; j &lt; cols; ++j)
++    for (i = 0; i &lt; rows; ++i)
++      ret(i, j) = ::OpenFDM::smoothSaturate(A1i(i, j), A2i(i, j));
++
++  return ret;
++}
++
++template&lt;typename Impl1, size_type m1, size_type n1,
++         typename Impl2, size_type m2, size_type n2&gt;
++OpenFDM_FORCE_INLINE
++Matrix&lt;typename Impl1::value_type,m1,n1&gt;
++deadBand(const MatrixRValue&lt;Impl1,m1,n1&gt;&amp; A1,
++         const MatrixRValue&lt;Impl2,m2,n2&gt;&amp; A2)
++{
++  const Impl1&amp; A1i = A1.asImpl();
++  const Impl2&amp; A2i = A2.asImpl();
++
++  size_type rows = A1i.rows();
++  size_type cols = A1i.cols();
++  SizeCheck&lt;m1,m2&gt;::Equal(rows, A2i.rows());
++  SizeCheck&lt;n1,n2&gt;::Equal(cols, A2i.cols());
++
++  Matrix&lt;typename Impl1::value_type,m1,n1&gt; ret(rows, cols);
++  size_type i, j;
++  for (j = 0; j &lt; cols; ++j)
++    for (i = 0; i &lt; rows; ++i)
++      ret(i, j) = ::OpenFDM::deadBand(A1i(i, j), A2i(i, j));
++
++  return ret;
++}
++
++template&lt;typename Impl1, size_type m1, size_type n1,
++         typename Impl2, size_type m2, size_type n2&gt;
++OpenFDM_FORCE_INLINE
++Matrix&lt;typename Impl1::value_type,m1,n1&gt;
++smoothDeadBand(const MatrixRValue&lt;Impl1,m1,n1&gt;&amp; A1,
++         const MatrixRValue&lt;Impl2,m2,n2&gt;&amp; A2)
++{
++  const Impl1&amp; A1i = A1.asImpl();
++  const Impl2&amp; A2i = A2.asImpl();
++
++  size_type rows = A1i.rows();
++  size_type cols = A1i.cols();
++  SizeCheck&lt;m1,m2&gt;::Equal(rows, A2i.rows());
++  SizeCheck&lt;n1,n2&gt;::Equal(cols, A2i.cols());
++
++  Matrix&lt;typename Impl1::value_type,m1,n1&gt; ret(rows, cols);
++  size_type i, j;
++  for (j = 0; j &lt; cols; ++j)
++    for (i = 0; i &lt; rows; ++i)
++      ret(i, j) = ::OpenFDM::smoothDeadBand(A1i(i, j), A2i(i, j));
++
++  return ret;
++}
++
+ #endif
+ 
+ } // namespace LinAlg
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000643.html">[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000645.html">[OpenFDM-svn] r676 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#644">[ date ]</a>
+              <a href="thread.html#644">[ thread ]</a>
+              <a href="subject.html#644">[ subject ]</a>
+              <a href="author.html#644">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

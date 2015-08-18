@@ -1,0 +1,270 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r419 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r419%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808011424.m71EOGvH018782%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000390.html">
+   <LINK REL="Next"  HREF="000392.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r419 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r419%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808011424.m71EOGvH018782%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r419 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug  1 16:24:16 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000390.html">[OpenFDM-svn] r418 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000392.html">[OpenFDM-svn] r420 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#391">[ date ]</a>
+              <a href="thread.html#391">[ thread ]</a>
+              <a href="subject.html#391">[ subject ]</a>
+              <a href="author.html#391">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-01 16:24:16 +0200 (Fri, 01 Aug 2008)
+New Revision: 419
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+Log:
+Add LeafNode implementation.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateInfo.h	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ContinousStateInfo.h	2008-08-01 14:24:16 UTC (rev 419)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_ContinousStateInfo_H
+ #define OpenFDM_ContinousStateInfo_H
+ 
++#include &quot;ContinousStateValue.h&quot;
+ #include &quot;StateInfo.h&quot;
+ 
+ namespace OpenFDM {
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.cpp	2008-08-01 14:24:16 UTC (rev 419)
+@@ -0,0 +1,25 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;LeafNode.h&quot;
++#include &quot;NodeVisitor.h&quot;
++
++namespace OpenFDM {
++
++LeafNode::LeafNode(const std::string&amp; name) :
++  Node(name)
++{
++}
++
++LeafNode::~LeafNode()
++{
++}
++
++void
++LeafNode::accept(NodeVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-08-01 14:24:16 UTC (rev 419)
+@@ -0,0 +1,71 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LeafNode_H
++#define OpenFDM_LeafNode_H
++
++#include &lt;string&gt;
++#include &quot;Node.h&quot;
++#include &quot;ContinousStateInfoVector.h&quot;
++#include &quot;StateInfoVector.h&quot;
++
++namespace OpenFDM {
++
++class LeafContext;
++class NodeVisitor;
++class ContinousStateValueVector;
++class DiscreteStateValueVector;
++
++class LeafNode : public Node {
++public:
++  LeafNode(const std::string&amp; name);
++
++  virtual void accept(NodeVisitor&amp; visitor);
++
++  // Is done once before a model starts to live
++  // Should have connect information here, can setup memory allocations and
++  // sizes. Then the PortValueList does not need to have resizable stuff.
++  // The same goes for the states.
++  virtual bool alloc(LeafContext&amp;) const // = 0;
++  { return true; }
++
++  virtual void init(DiscreteStateValueVector&amp;, ContinousStateValueVector&amp;) const // = 0;
++  { }
++
++  // for dependency analysis
++  virtual bool dependsOn(const PortId&amp; in, const PortId&amp; out) const = 0;
++
++  unsigned getNumContinousStateValues() const
++  { return mContinousStateInfoVector.size(); }
++  const ContinousStateInfo* getContinousStateInfo(unsigned index) const
++  { return mContinousStateInfoVector.getStateInfo(index); }
++
++  unsigned getNumDiscreteStateValues() const
++  { return mDiscreteStateInfoVector.size(); }
++  const StateInfo* getDiscreteStateInfo(unsigned index) const
++  { return mDiscreteStateInfoVector.getStateInfo(index); }
++
++protected:
++  virtual ~LeafNode();
++
++  void addContinousStateInfo(ContinousStateInfo* stateInfo)
++  { mContinousStateInfoVector.addStateInfo(stateInfo); }
++  void removeContinousStateInfo(ContinousStateInfo* stateInfo)
++  { mContinousStateInfoVector.removeStateInfo(stateInfo); }
++
++  void addDiscreteStateInfo(StateInfo* stateInfo)
++  { mDiscreteStateInfoVector.addStateInfo(stateInfo); }
++  void removeDiscreteStateInfo(StateInfo* stateInfo)
++  { mDiscreteStateInfoVector.removeStateInfo(stateInfo); }
++
++private:
++  
++  // FIXME ???
++  ContinousStateInfoVector mContinousStateInfoVector;
++  StateInfoVector mDiscreteStateInfoVector;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-01 14:24:16 UTC (rev 419)
+@@ -31,6 +31,7 @@
+   GroupOutput.h \
+   ImplicitEuler.h \
+   Inertia.h \
++  LeafNode.h \
+   Limits.h \
+   LinAlg/Algorithm.h \
+   LinAlg/Array.h \
+@@ -109,6 +110,7 @@
+   Atomic.cpp \
+   ContinousStateValue.cpp \
+   Frame.cpp \
++  LeafNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
+   Node.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-01 14:24:16 UTC (rev 419)
+@@ -4,10 +4,23 @@
+ 
+ #include &quot;NodeVisitor.h&quot;
+ 
++#include &quot;LeafNode.h&quot;
++
+ namespace OpenFDM {
+ 
+ NodeVisitor::~NodeVisitor()
+ {
+ }
+ 
++void
++NodeVisitor::apply(Node&amp;)
++{
++}
++
++void
++NodeVisitor::apply(LeafNode&amp; leafNode)
++{
++  apply(static_cast&lt;Node&amp;&gt;(leafNode));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-01 14:03:17 UTC (rev 418)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-01 14:24:16 UTC (rev 419)
+@@ -19,14 +19,12 @@
+ public:
+   virtual ~NodeVisitor();
+ 
+-  virtual void apply(Node&amp; node)
+-  { }
++  virtual void apply(Node&amp; node);
+   virtual void apply(GroupAcceptorNode&amp; node)
+   { apply((Node&amp;)node); }
+   virtual void apply(GroupProviderNode&amp; node)
+   { apply((Node&amp;)node); }
+-  virtual void apply(LeafNode&amp; node)
+-  { apply((Node&amp;)node); }
++  virtual void apply(LeafNode&amp; node);
+   virtual void apply(Model&amp; node)
+   { apply((LeafNode&amp;)node); }
+   virtual void apply(Body&amp; node)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000390.html">[OpenFDM-svn] r418 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000392.html">[OpenFDM-svn] r420 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#391">[ date ]</a>
+              <a href="thread.html#391">[ thread ]</a>
+              <a href="subject.html#391">[ subject ]</a>
+              <a href="author.html#391">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

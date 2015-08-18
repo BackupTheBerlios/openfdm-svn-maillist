@@ -1,0 +1,483 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r671 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r671%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811052116.mA5LGBPH014746%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000639.html">
+   <LINK REL="Next"  HREF="000641.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r671 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r671%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811052116.mA5LGBPH014746%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r671 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov  5 22:16:11 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000639.html">[OpenFDM-svn] r670 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000641.html">[OpenFDM-svn] r672 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#640">[ date ]</a>
+              <a href="thread.html#640">[ thread ]</a>
+              <a href="subject.html#640">[ subject ]</a>
+              <a href="author.html#640">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-05 22:16:11 +0100 (Wed, 05 Nov 2008)
+New Revision: 671
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+Log:
+Reimplement PrismaticJoint
+
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/PrismaticJoint.cpp
+M    src/OpenFDM/RevoluteJoint.cpp
+M    src/OpenFDM/PrismaticJoint.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-05 19:44:26 UTC (rev 670)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-05 21:16:11 UTC (rev 671)
+@@ -243,6 +243,7 @@
+   Joint.cpp \
+   Mass.cpp \
+   MobileRootJoint.cpp \
++  PrismaticJoint.cpp \
+   RevoluteActuator.cpp \
+   RevoluteJoint.cpp
+ 
+@@ -270,7 +271,6 @@
+ #   MinModel.cpp \
+ #   Output.cpp \
+ #   Product.cpp \
+-#   PrismaticJoint.cpp \
+ #   RigidBody.cpp \
+ #   Saturation.cpp \
+ #   SimpleContact.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-05 19:44:26 UTC (rev 670)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-05 21:16:11 UTC (rev 671)
+@@ -3,167 +3,129 @@
+  */
+ 
+ #include &quot;PrismaticJoint.h&quot;
+-
+ #include &quot;Assert.h&quot;
+ #include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+ #include &quot;Limits.h&quot;
++#include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;PrismaticJointFrame.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;MechanicContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(PrismaticJoint, Joint)
++  DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(PrismaticJointFrame, Frame)
+-  END_OPENFDM_OBJECT_DEF
+-
+-PrismaticJoint::PrismaticJoint(const std::string&amp; name)
+-  : Joint(name)
++PrismaticJoint::PrismaticJoint(const std::string&amp; name) :
++  CartesianJoint&lt;1&gt;(name, Vector6(Vector3::zeros(), Vector3(1, 0, 0))),
++  mForcePort(this, &quot;force&quot;, Size(1, 1), true),
++  mPositionPort(this, &quot;position&quot;, Size(1, 1)),
++  mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
++  mPositionStateInfo(new Vector1StateInfo),
++  mVelocityStateInfo(new Vector1StateInfo),
++  mAxis(Vector3(1, 0, 0))
+ {
+-  setNumContinousStates(2);
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
+ 
+-  mPrismaticJointFrame = new PrismaticJointFrame(name);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;jointForce&quot;);
+-
+-  // Since these output ports are just fed by the current state of the
+-  // multibody system, we do not have a direct feedthrough model
+-  setNumOutputPorts(2);
+-  setOutputPort(0, &quot;jointPos&quot;, this, &amp;PrismaticJoint::getJointPos);
+-  setOutputPort(1, &quot;jointVel&quot;, this, &amp;PrismaticJoint::getJointVel);
++  // FIXME
++  setAxis(mAxis);
+ }
+ 
+ PrismaticJoint::~PrismaticJoint(void)
+ {
+ }
+ 
+-bool
+-PrismaticJoint::init(void)
++const Vector3&amp;
++PrismaticJoint::getAxis() const
+ {
+-  /// Check if we have an input port connected to the joint force ...
+-  if (getInputPort(0))
+-    mJointForcePort = getInputPort(0)-&gt;toRealPortHandle();
+-  else
+-    mJointForcePort = 0;
+-
+-  recheckTopology();
+-  return Joint::init();
++  return mAxis;
+ }
+ 
+ void
+-PrismaticJoint::recheckTopology(void)
++PrismaticJoint::setAxis(const Vector3&amp; axis)
+ {
+-  if (!getOutboardBody() || !getInboardBody())
+-    return;
+-  
+-  // check for the inboard frame
+-  Frame* inFrame = getInboardBody()-&gt;getFrame();
+-  if (!inFrame)
+-    return;
+-  
+-  Frame* outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame) {
+-    getOutboardBody()-&gt;setFrame(mPrismaticJointFrame);
+-  }
+-  outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame-&gt;isDirectChildFrameOf(inFrame)) {
+-    inFrame-&gt;addChildFrame(mPrismaticJointFrame);
+-  }
+-}
+-
+-void
+-PrismaticJoint::setJointAxis(const Vector3&amp; axis)
+-{
+   real_type nrm = norm(axis);
+   if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+-
+-  mPrismaticJointFrame-&gt;setJointAxis((1/nrm)*axis);
++  mAxis = (1/nrm)*axis;
++  setJointMatrix(Vector6(Vector3::zeros(), mAxis));
+ }
+ 
+-const real_type&amp;
+-PrismaticJoint::getJointPos(void) const
+-{
+-  return mPrismaticJointFrame-&gt;getJointPos();
+-}
+-
+ void
+-PrismaticJoint::setJointPos(real_type pos)
++PrismaticJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp;) const
+ {
+-  mPrismaticJointFrame-&gt;setJointPos(pos);
++  continousState[*mPositionStateInfo] = 0;
++  continousState[*mVelocityStateInfo] = 0;
+ }
+ 
+ void
+-PrismaticJoint::setJointVel(real_type vel)
++PrismaticJoint::velocity(const MechanicLinkValue&amp; parentLink,
++                        MechanicLinkValue&amp; childLink,
++                        const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const
+ {
+-  mPrismaticJointFrame-&gt;setJointVel(vel);
++  VectorN jointPos = states[*mPositionStateInfo];
++  if (!mPositionPort.empty())
++    portValues[mPositionPort] = jointPos;
++  
++  VectorN jointVel = states[*mVelocityStateInfo];
++  if (!mVelocityPort.empty())
++    portValues[mVelocityPort] = jointVel;
++  
++  velocity(parentLink, childLink, mAxis*jointPos, Quaternion::unit(),
++           getJointMatrix()*jointVel);
+ }
+ 
+-const real_type&amp;
+-PrismaticJoint::getJointVel(void) const
+-{
+-  return mPrismaticJointFrame-&gt;getJointVel();
+-}
+-
+ void
+-PrismaticJoint::setOrientation(const Quaternion&amp; orientation)
++PrismaticJoint::articulation(MechanicLinkValue&amp; parentLink,
++                            const MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            MatrixFactorsNN&amp; hIh) const
+ {
+-  mPrismaticJointFrame-&gt;setOrientation(orientation);
++  VectorN jointForce;
++  if (mForcePort.empty())
++    jointForce.clear();
++  else
++    jointForce = portValues[mForcePort];
++  
++  articulation(parentLink, childLink, jointForce, hIh);
+ }
+ 
+ void
+-PrismaticJoint::setPosition(const Vector3&amp; position)
++PrismaticJoint::acceleration(const MechanicLinkValue&amp; parentLink,
++                            MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
+ {
+-  mPrismaticJointFrame-&gt;setZeroPosition(position);
++  VectorN jointForce;
++  if (mForcePort.empty())
++    jointForce.clear();
++  else
++    jointForce = portValues[mForcePort];
++  
++  acceleration(parentLink, childLink, jointForce, hIh, velDot);
+ }
+ 
+ void
+-PrismaticJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF)
++PrismaticJoint::derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp; states,
++                          const PortValueList&amp;, const VectorN&amp; velDot,
++                          ContinousStateValueVector&amp; derivative) const
+ {
+-  // That projects away tha components where the degrees of freedom
+-  // of the joint are.
+-  CartesianJointFrame&lt;1&gt;::VectorN tau;
+-  if (mJointForcePort.isConnected()) {
+-    tau(0) = mJointForcePort.getRealValue();
+-  } else
+-    tau.clear();
+-  mPrismaticJointFrame-&gt;jointArticulation(artI, artF, outF, outI, tau);
++  derivative[*mPositionStateInfo] = states[*mVelocityStateInfo];
++  derivative[*mVelocityStateInfo] = velDot;
+ }
+ 
+-void
+-PrismaticJoint::setState(const StateStream&amp; state)
+-{
+-  CartesianJointFrame&lt;1&gt;::VectorN v;
+-  state.readSubState(v);
+-  mPrismaticJointFrame-&gt;setJointPos(v(0));
+-  state.readSubState(v);
+-  mPrismaticJointFrame-&gt;setJointVel(v(0));
+-}
+-
+-void
+-PrismaticJoint::getState(StateStream&amp; state) const
+-{
+-  state.writeSubState(mPrismaticJointFrame-&gt;getJointPos());
+-  state.writeSubState(mPrismaticJointFrame-&gt;getJointVel());
+-}
+-
+-void
+-PrismaticJoint::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-  stateDeriv.writeSubState(mPrismaticJointFrame-&gt;getJointVel());
+-  stateDeriv.writeSubState(mPrismaticJointFrame-&gt;getJointVelDot());
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-05 19:44:26 UTC (rev 670)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-05 21:16:11 UTC (rev 671)
+@@ -9,71 +9,70 @@
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
++#include &quot;MatrixStateInfo.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
++#include &quot;MatrixInputPort.h&quot;
++#include &quot;MatrixOutputPort.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;MechanicContext.h&quot;
++#include &quot;CartesianJoint.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class PrismaticJointFrame;
+-
+-class PrismaticJoint : public Joint {
++class PrismaticJoint : public CartesianJoint&lt;1&gt; {
+   OPENFDM_OBJECT(PrismaticJoint, Joint);
+ public:
+   PrismaticJoint(const std::string&amp; name);
+   virtual ~PrismaticJoint(void);
+ 
+-  virtual bool init(void);
+-
+-  virtual void recheckTopology(void);
+-
+   /** Sets the joint axis where this joint is allowed to rotate around.
+    */
+-  void setJointAxis(const Vector3&amp; axis);
++  const Vector3&amp; getAxis() const;
++  void setAxis(const Vector3&amp; axis);
+ 
+-  /** Returns the joint position.
+-   */
+-  const real_type&amp; getJointPos(void) const;
++protected:
+ 
+-  /** Sets the joint position.
+-   */
+-  void setJointPos(real_type pos);
++  virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp;) const;
+ 
+-  /** Returns the joint velocity.
+-   */
+-  const real_type&amp; getJointVel(void) const;
++  virtual void velocity(const MechanicLinkValue&amp; parentLink,
++                        MechanicLinkValue&amp; childLink,
++                        const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const;
++  virtual void articulation(MechanicLinkValue&amp; parentLink,
++                            const MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            MatrixFactorsNN&amp; hIh) const;
++  virtual void acceleration(const MechanicLinkValue&amp; parentLink,
++                            MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const;
+ 
+-  /** Sets the joint velocity.
+-   */
+-  void setJointVel(real_type vel);
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp; portValues,
++                          const VectorN&amp; velDot,
++                          ContinousStateValueVector&amp;) const;
+ 
+-  /** Set the orientation of the joint.
+-   */
+-  void setOrientation(const Quaternion&amp; orientation);
++  using CartesianJoint&lt;1&gt;::velocity;
++  using CartesianJoint&lt;1&gt;::articulation;
++  using CartesianJoint&lt;1&gt;::acceleration;
+ 
+-  /** Sets the zero position of the joint.
+-   */
+-  void setPosition(const Vector3&amp; position);
+-
+ private:
+-  /** Computes the inboard articulated inertia and force for
+-      this articulated body. It is part of the articulated body algorithm.
+-   */
+-  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF);
++  MatrixInputPort mForcePort;
++  MatrixOutputPort mPositionPort;
++  MatrixOutputPort mVelocityPort;
+ 
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; stateDeriv);
++  SharedPtr&lt;Vector1StateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+-  /// The intput port which might provide some joint internal force
+-  RealPortHandle mJointForcePort;
+-
+-  /// The frame of the mobile root
+-  SharedPtr&lt;PrismaticJointFrame&gt; mPrismaticJointFrame;
++  Vector3 mAxis;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-05 19:44:26 UTC (rev 670)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-05 21:16:11 UTC (rev 671)
+@@ -82,10 +82,9 @@
+   if (!mVelocityPort.empty())
+     portValues[mVelocityPort] = jointVel;
+   
+-  Vector3 position(0, 0, 0);
+-  Quaternion orientation(Quaternion::fromAngleAxis(jointPos(0), mAxis));
+-
+-  velocity(parentLink, childLink, position, orientation, getJointMatrix()*jointVel);
++  velocity(parentLink, childLink, Vector3(0, 0, 0),
++           Quaternion::fromAngleAxis(jointPos(0), mAxis),
++           getJointMatrix()*jointVel);
+ }
+ 
+ void
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000639.html">[OpenFDM-svn] r670 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000641.html">[OpenFDM-svn] r672 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#640">[ date ]</a>
+              <a href="thread.html#640">[ thread ]</a>
+              <a href="subject.html#640">[ subject ]</a>
+              <a href="author.html#640">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

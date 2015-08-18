@@ -1,0 +1,305 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r400 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r400%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231333.m4NDXvve014410%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000372.html">
+   <LINK REL="Next"  HREF="000374.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r400 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r400%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200805231333.m4NDXvve014410%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r400 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri May 23 15:33:57 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000372.html">[OpenFDM-svn] r399 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000374.html">[OpenFDM-svn] r401 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#373">[ date ]</a>
+              <a href="thread.html#373">[ thread ]</a>
+              <a href="subject.html#373">[ subject ]</a>
+              <a href="author.html#373">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-05-23 15:33:57 +0200 (Fri, 23 May 2008)
+New Revision: 400
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Fix a race condition in the weak pointer code.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_SharedPtr_H
+ #define OpenFDM_SharedPtr_H
+ 
++#include &quot;OpenFDMConfig.h&quot;
+ #include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+@@ -19,28 +20,22 @@
+   {}
+   SharedPtr(T* ptr) : _ptr(ptr)
+   { Referenced::get(_ptr); }
+-  SharedPtr(const SharedPtr&amp; p) : _ptr(p._ptr)
++  SharedPtr(const SharedPtr&amp; p) : _ptr(p.get())
+   { Referenced::get(_ptr); }
+   template&lt;typename U&gt;
+-  SharedPtr(const SharedPtr&lt;U&gt;&amp; p) : _ptr(p._ptr)
++  SharedPtr(const SharedPtr&lt;U&gt;&amp; p) : _ptr(p.get())
+   { Referenced::get(_ptr); }
+-  template&lt;typename U&gt;
+-  SharedPtr(const WeakPtr&lt;U&gt;&amp; p) : _ptr(p.ptr())
+-  { Referenced::get(_ptr); }
+   ~SharedPtr(void)
+   { put(); }
+   
+   SharedPtr&amp; operator=(const SharedPtr&amp; p)
+-  { assign(p._ptr); return *this; }
++  { assign(p.get()); return *this; }
+   template&lt;typename U&gt;
+   SharedPtr&amp; operator=(const SharedPtr&lt;U&gt;&amp; p)
+-  { assign(p._ptr); return *this; }
++  { assign(p.get()); return *this; }
+   template&lt;typename U&gt;
+   SharedPtr&amp; operator=(U* p)
+   { assign(p); return *this; }
+-  template&lt;typename U&gt;
+-  SharedPtr&amp; operator=(const WeakPtr&lt;U&gt;&amp; p)
+-  { assign(p.ptr()); return *this; }
+ 
+   T* operator-&gt;(void) const
+   { return _ptr; }
+@@ -51,6 +46,8 @@
+   operator T*(void) const
+   { return _ptr; }
+ 
++  T* get() const
++  { return _ptr; }
+   T* release()
+   { T* tmp = _ptr; _ptr = 0; Referenced::put(tmp); return tmp; }
+ 
+@@ -59,22 +56,24 @@
+   unsigned getNumRefs(void) const
+   { return Referenced::count(_ptr); }
+ 
+-private:
+-  T* ptr(void) const
+-  { return _ptr; }
++  void clear()
++  { put(); }
++  void swap(SharedPtr&amp; sharedPtr)
++  { T* tmp = _ptr; _ptr = sharedPtr._ptr; sharedPtr._ptr = tmp; }
+ 
++private:
+   void assign(T* p)
+   { Referenced::get(p); put(); _ptr = p; }
++  void assignNonRef(T* p)
++  { put(); _ptr = p; }
+ 
+   void put(void)
+-  { if (!Referenced::put(_ptr)) { T::destroy(_ptr); _ptr = 0; } }
++  { if (!Referenced::put(_ptr)) T::destroy(_ptr); _ptr = 0; }
+   
+   // The reference itself.
+   T* _ptr;
+ 
+   template&lt;typename U&gt;
+-  friend class SharedPtr;
+-  template&lt;typename U&gt;
+   friend class WeakPtr;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -10,61 +10,48 @@
+ 
+ namespace OpenFDM {
+ 
+-/// FIXME: remove the direct accessors, only copy to a SharedPtr
+-/// where you can access then, may be similar to the std::tr2::weak_ptr::lock()
+-/// function. That is to avoid deletion of a currently used object
+ template&lt;typename T&gt;
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+   { }
+-  WeakPtr(T* ptr) // OpenFDM_DEPRECATED
+-  { assign(ptr); }
+   WeakPtr(const WeakPtr&amp; p) : mWeakDataPtr(p.mWeakDataPtr)
+   { }
+   template&lt;typename U&gt;
+   WeakPtr(const SharedPtr&lt;U&gt;&amp; p)
+-  { assign(p.ptr()); }
++  { SharedPtr&lt;T&gt; sharedPtr = p; assign(sharedPtr.get()); }
+   template&lt;typename U&gt;
+   WeakPtr(const WeakPtr&lt;U&gt;&amp; p)
+-  { assign(p.ptr()); }
++  { SharedPtr&lt;T&gt; sharedPtr = p.lock(); assign(sharedPtr.get()); }
++  WeakPtr(T* ptr) // OpenFDM_DEPRECATED // Hmm, shall we??
++  { assign(ptr); }
+   ~WeakPtr(void)
+   { }
+   
+   template&lt;typename U&gt;
+   WeakPtr&amp; operator=(const SharedPtr&lt;U&gt;&amp; p)
+-  { assign(p.ptr()); return *this; }
++  { SharedPtr&lt;T&gt; sharedPtr = p; assign(sharedPtr.get()); return *this; }
+   template&lt;typename U&gt;
+   WeakPtr&amp; operator=(const WeakPtr&lt;U&gt;&amp; p)
+-  { assign(p.ptr()); return *this; }
+-  WeakPtr&amp; operator=(T* p) // OpenFDM_DEPRECATED
+-  { assign(p); return *this; }
++  { SharedPtr&lt;T&gt; sharedPtr = p.lock(); assign(sharedPtr.get()); return *this; }
+   WeakPtr&amp; operator=(const WeakPtr&amp; p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
+   SharedPtr&lt;T&gt; lock(void) const
+   {
++    if (!mWeakDataPtr)
++      return SharedPtr&lt;T&gt;();
+     SharedPtr&lt;T&gt; sharedPtr;
+-    if (mWeakDataPtr)
+-       mWeakDataPtr-&gt;get(sharedPtr);
++    sharedPtr.assignNonRef(mWeakDataPtr-&gt;get&lt;T&gt;());
+     return sharedPtr;
+   }
+ 
+-  T* operator-&gt;(void) const // OpenFDM_DEPRECATED
+-  { return ptr(); }
++  void clear()
++  { mWeakDataPtr = 0; }
++  void swap(WeakPtr&amp; weakPtr)
++  { mWeakDataPtr.swap(weakPtr.mWeakDataPtr); }
+ 
+-  T&amp; operator*(void) const // OpenFDM_DEPRECATED
+-  { return *ptr(); }
+-
+-  operator T*(void) const // OpenFDM_DEPRECATED
+-  { return ptr(); }
+-
+ private:
+-  T* ptr(void) const // OpenFDM_DEPRECATED
+-  {
+-    return lock().release();
+-  }
+-
+   void assign(T* p)
+   {
+     if (p)
+@@ -75,11 +62,6 @@
+   
+   // The indirect reference itself.
+   SharedPtr&lt;WeakReferenced::WeakData&gt; mWeakDataPtr;
+-
+-  template&lt;typename U&gt;
+-  friend class SharedPtr;
+-  template&lt;typename U&gt;
+-  friend class WeakPtr;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -22,14 +22,15 @@
+   WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
+   {}
+   // Do not copy the weak backward references ...
+-  WeakReferenced(const WeakReferenced&amp;) : mWeakDataPtr(new WeakData(this))
++  WeakReferenced(const WeakReferenced&amp; weakReferenced) :
++    Referenced(weakReferenced), mWeakDataPtr(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+   { mWeakDataPtr-&gt;clear(); }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced&amp; operator=(const WeakReferenced&amp;)
+-  { return *this; }
++  { Referenced::operator=(*this); return *this; }
+ 
+ private:
+   /// Support for weak references, not increasing the reference count
+@@ -39,14 +40,14 @@
+   public:
+     WeakData(WeakReferenced* object) : mObject(object) {}
+     template&lt;typename T&gt;
+-    void get(SharedPtr&lt;T&gt;&amp; sharedPtr)
++    T* get()
+     {
++      // This lock guarantees that the object is not deleted in between.
+       ScopeLock scopeLock(mMutex);
+-      if (Referenced::count(mObject)) {
+-        sharedPtr = static_cast&lt;T*&gt;(mObject);
+-      } else {
+-        sharedPtr = 0;
+-      }
++      if (WeakReferenced::getNonZero(mObject) == 0)
++        return 0;
++      else
++        return static_cast&lt;T*&gt;(mObject);
+     }
+     void clear()
+     {
+@@ -58,6 +59,9 @@
+     WeakData(const WeakData&amp;);
+     WeakData&amp; operator=(const WeakData&amp;);
+ 
++    // Mutex to protect the non atomic pointer assignment and that avoids
++    // access to an object that is not yet zeroed out but deletion is in
++    // progress.
+     Mutex mMutex;
+     WeakReferenced* mObject;
+   };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000372.html">[OpenFDM-svn] r399 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000374.html">[OpenFDM-svn] r401 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#373">[ date ]</a>
+              <a href="thread.html#373">[ thread ]</a>
+              <a href="subject.html#373">[ subject ]</a>
+              <a href="author.html#373">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

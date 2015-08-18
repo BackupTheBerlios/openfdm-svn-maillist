@@ -1,0 +1,197 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1027 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1027%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262121.n6QLLh3I008744%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000989.html">
+   <LINK REL="Next"  HREF="000991.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1027 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1027%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262121.n6QLLh3I008744%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1027 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jul 26 23:21:43 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000989.html">[OpenFDM-svn] r1026 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000991.html">[OpenFDM-svn] r1028 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#990">[ date ]</a>
+              <a href="thread.html#990">[ thread ]</a>
+              <a href="subject.html#990">[ subject ]</a>
+              <a href="author.html#990">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-26 23:21:43 +0200 (Sun, 26 Jul 2009)
+New Revision: 1027
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add a mach number model.
+
+AM   MachNumber.cpp
+AM   MachNumber.h
+M    Makefile.am
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.cpp	2009-07-26 21:13:09 UTC (rev 1026)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.cpp	2009-07-26 21:21:43 UTC (rev 1027)
+@@ -0,0 +1,38 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;MachNumber.h&quot;
++
++#include &quot;TypeInfo.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(MachNumber, Model)
++  END_OPENFDM_OBJECT_DEF
++
++MachNumber::MachNumber(const std::string&amp; name) :
++  Model(name),
++  mVelocityPort(this, &quot;velocity&quot;, Size(3, 1), true),
++  mSoundSpeedPort(this, &quot;soundSpeed&quot;, true),
++  mMachNumberPort(this, &quot;machNumber&quot;)
++{
++}
++
++MachNumber::~MachNumber(void)
++{
++}
++
++void
++MachNumber::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                   const ContinousStateValueVector&amp;,
++                   PortValueList&amp; portValues) const
++{
++  //     Vector3 v = Vector6(portValues[mVelocityPort]).getLinear();
++  Vector3 v = portValues[mVelocityPort];
++  real_type soundSpeed = portValues[mSoundSpeedPort];
++  real_type eps = Limits&lt;real_type&gt;::epsilon();
++  portValues[mMachNumberPort] = norm(v)/(soundSpeed + eps);
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.h	2009-07-26 21:13:09 UTC (rev 1026)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.h	2009-07-26 21:21:43 UTC (rev 1027)
+@@ -0,0 +1,36 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MachNumber_H
++#define OpenFDM_MachNumber_H
++
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++class MachNumber : public Model {
++  OPENFDM_OBJECT(MachNumber, Model);
++public:
++  MachNumber(const std::string&amp; name);
++  virtual ~MachNumber(void);
++
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++
++private:
++  /// The input port which must provide the fluid velocity vector
++  MatrixInputPort mVelocityPort;
++  /// The input port which must provide the sensed speed of sound
++  RealInputPort mSoundSpeedPort;
++  /// The resulting mach number
++  RealOutputPort mMachNumberPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/MachNumber.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 21:13:09 UTC (rev 1026)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 21:21:43 UTC (rev 1027)
+@@ -208,6 +208,7 @@
+   Input.h \
+   Integrator.h \
+   LinearSpringDamper.h \
++  MachNumber.h \
+   MatrixConcat.h \
+   MatrixSplit.h \
+   MaxModel.h \
+@@ -239,6 +240,7 @@
+   Input.cpp \
+   Integrator.cpp \
+   LinearSpringDamper.cpp \
++  MachNumber.cpp \
+   MatrixConcat.cpp \
+   MatrixSplit.cpp \
+   MaxModel.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000989.html">[OpenFDM-svn] r1026 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000991.html">[OpenFDM-svn] r1028 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#990">[ date ]</a>
+              <a href="thread.html#990">[ thread ]</a>
+              <a href="subject.html#990">[ subject ]</a>
+              <a href="author.html#990">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

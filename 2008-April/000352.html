@@ -1,0 +1,217 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r379 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-April/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r379%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200804060822.m368MvgV026658%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000351.html">
+   <LINK REL="Next"  HREF="000353.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r379 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r379%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200804060822.m368MvgV026658%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r379 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Apr  6 10:22:57 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000351.html">[OpenFDM-svn] r378 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000353.html">[OpenFDM-svn] r380 - in trunk/OpenFDM/src: OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#352">[ date ]</a>
+              <a href="thread.html#352">[ thread ]</a>
+              <a href="subject.html#352">[ subject ]</a>
+              <a href="author.html#352">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-04-06 10:22:56 +0200 (Sun, 06 Apr 2008)
+New Revision: 379
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Time.h
+Log:
+Improove Time utility for time accounting.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Time.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.h	2008-04-01 17:23:43 UTC (rev 378)
++++ trunk/OpenFDM/src/OpenFDM/Time.h	2008-04-06 08:22:56 UTC (rev 379)
+@@ -6,11 +6,9 @@
+ #define OpenFDM_Time_H
+ 
+ #include &lt;ctime&gt;
+-#include &lt;iosfwd&gt;
++#include &lt;istream&gt;
++#include &lt;ostream&gt;
+ #include &lt;iomanip&gt;
+-#include &lt;sstream&gt;
+-// FIXME
+-#include &lt;iostream&gt;
+ #include &quot;Math.h&quot;
+ 
+ // FIXME move into own tools library.
+@@ -55,9 +53,15 @@
+   }
+   void setTime(const sec_type&amp; sec, const nsec_type&amp; nsec)
+   {
+-    nsec_type carry = nsec/NanoSecondsPerSecond;
+-    _nsec = nsec - NanoSecondsPerSecond*carry;
+-    _sec = sec + carry;
++    if (nsec &lt; 0) {
++      nsec_type carry = nsec/NanoSecondsPerSecond - 1;
++      _nsec = nsec - NanoSecondsPerSecond*carry;
++      _sec = sec + carry;
++    } else {
++      nsec_type carry = nsec/NanoSecondsPerSecond;
++      _nsec = nsec - NanoSecondsPerSecond*carry;
++      _sec = sec + carry;
++    }
+   }
+   const sec_type&amp; getSeconds() const
+   { return _sec; }
+@@ -115,28 +119,98 @@
+ 
+ inline Time
+ operator-(const Time&amp; c1)
+-{ Time c(0, 0); c -= c1; return c; /*FIXME*/ }
++{ return Time(0, 0) -= c1; }
+ 
+ inline Time
+ operator+(const Time&amp; c1, const Time&amp; c2)
+-{ Time c = c1; c += c2; return c; }
++{ return Time(c1) += c2; }
+ 
+ inline Time
+ operator-(const Time&amp; c1, const Time&amp; c2)
+-{ Time c = c1; c -= c2; return c; }
++{ return Time(c1) -= c2; }
+ 
+-template&lt;typename char_type, typename traits_type&gt; 
++template&lt;typename char_type, typename traits_type&gt;
+ inline
+ std::basic_ostream&lt;char_type, traits_type&gt;&amp;
+ operator&lt;&lt;(std::basic_ostream&lt;char_type, traits_type&gt;&amp; os, const Time&amp; t)
+ {
+-  std::basic_stringstream&lt;char_type, traits_type&gt; stream;
+-  stream &lt;&lt; t.getSeconds() &lt;&lt; '.'
+-         &lt;&lt; std::setw(9) &lt;&lt; std::right &lt;&lt; std::setfill('0')
+-         &lt;&lt; t.getNanoSeconds();
+-  return os &lt;&lt; stream.str();
++  if (0 &lt;= t.getSeconds()) {
++    std::basic_stringstream&lt;char_type, traits_type&gt; stream;
++    stream &lt;&lt; t.getSeconds() &lt;&lt; stream.widen('.')
++           &lt;&lt; std::setw(9) &lt;&lt; std::right &lt;&lt; std::setfill('0')
++           &lt;&lt; t.getNanoSeconds();
++    return os &lt;&lt; stream.str();
++  } else {
++    return os &lt;&lt; os.widen('-') &lt;&lt; -t;
++  }
+ }
+ 
++class TimeCounter {
++public:
++  TimeCounter(Time::Type type = Time::CPUTime) :
++    mType(type),
++    mTime(real_type(0)),
++    mRunCounter(0)
++  { }
++  
++  Time getTime() const
++  {
++    if (0 &lt; mRunCounter)
++      return Time::now(mType) + mTime;
++    else
++      return mTime;
++  }
++  
++  void start()
++  {
++    if (1 != ++mRunCounter)
++      return;
++    mTime -= Time::now(mType);
++  }
++  
++  void stop()
++  {
++    if (--mRunCounter != 0)
++      return;
++    mTime += Time::now(mType);
++  }
++  
++private:
++  Time::Type mType;
++  Time mTime;
++  int mRunCounter;
++};
++
++class ScopeTimeCounter {
++public:
++  ScopeTimeCounter(TimeCounter&amp; timer) : mTimeCounter(timer)
++  { mTimeCounter.start(); }
++  ~ScopeTimeCounter(void)
++  { mTimeCounter.stop(); }
++
++private:
++  ScopeTimeCounter(void);
++  ScopeTimeCounter(const ScopeTimeCounter&amp;);
++  ScopeTimeCounter&amp; operator=(const ScopeTimeCounter&amp;);
++
++  TimeCounter&amp; mTimeCounter;
++};
++
++class ScopeUnTimeCounter {
++public:
++  ScopeUnTimeCounter(TimeCounter&amp; timer) : mTimeCounter(timer)
++  { mTimeCounter.stop(); }
++  ~ScopeUnTimeCounter(void)
++  { mTimeCounter.start(); }
++
++private:
++  ScopeUnTimeCounter(void);
++  ScopeUnTimeCounter(const ScopeUnTimeCounter&amp;);
++  ScopeUnTimeCounter&amp; operator=(const ScopeUnTimeCounter&amp;);
++
++  TimeCounter&amp; mTimeCounter;
++};
++
+ }
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000351.html">[OpenFDM-svn] r378 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000353.html">[OpenFDM-svn] r380 - in trunk/OpenFDM/src: OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#352">[ date ]</a>
+              <a href="thread.html#352">[ thread ]</a>
+              <a href="subject.html#352">[ subject ]</a>
+              <a href="author.html#352">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

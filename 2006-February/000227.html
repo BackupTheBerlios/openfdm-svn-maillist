@@ -1,0 +1,229 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r248 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r248%20-%20trunk/flightgear&In-Reply-To=%3C200602191454.k1JEsSRq020690%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000226.html">
+   <LINK REL="Next"  HREF="000228.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r248 - trunk/flightgear</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r248%20-%20trunk/flightgear&In-Reply-To=%3C200602191454.k1JEsSRq020690%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r248 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Feb 19 15:54:28 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000226.html">[OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000228.html">[OpenFDM-svn] r249 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#227">[ date ]</a>
+              <a href="thread.html#227">[ thread ]</a>
+              <a href="subject.html#227">[ subject ]</a>
+              <a href="author.html#227">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-19 15:54:23 +0100 (Sun, 19 Feb 2006)
+New Revision: 248
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Reflect the chages in the interface
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-19 14:53:22 UTC (rev 247)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-19 14:54:23 UTC (rev 248)
+@@ -467,37 +467,39 @@
+ 
+   // The usual, whole object reflection so that one can take a look into
+   // OpenFDM's internal modules ...
+-  std::list&lt;std::string&gt; propertyList = object-&gt;listProperties();
+-  std::list&lt;std::string&gt;::const_iterator it = propertyList.begin();
+-  while (it != propertyList.end()) {
++  std::vector&lt;PropertyInfo&gt; props;
++  object-&gt;getPropertyInfoList(props);
++  std::vector&lt;PropertyInfo&gt;::iterator it = props.begin();
++  while (it != props.end()) {
+     // ... well, FIXME cleanup ...
+-    std::string pName = toPropname(*it);
++    std::string pName = toPropname(it-&gt;getName());
+     SGPropertyNode* sgProp = base-&gt;getChild(pName.c_str(), 0, true);
+-    Variant value = object-&gt;getPropertyValue(*it);
++    Variant value;
++    object-&gt;getPropertyValue(it-&gt;getName(), value);
+ 
+     if (value.isString())
+-      sgProp-&gt;tie(FGStringPropertyAdapter(object, *it));
++      sgProp-&gt;tie(FGStringPropertyAdapter(object, it-&gt;getName()));
+     else if (value.isReal())
+-      sgProp-&gt;tie(FGRealPropertyAdapter(object, *it));
++      sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName()));
+     else if (value.isInteger())
+-      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, *it));
++      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, it-&gt;getName()));
+     else if (value.isUnsigned())
+-      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, *it));
++      sgProp-&gt;tie(FGIntegerPropertyAdapter(object, it-&gt;getName()));
+ 
+     else if (value.isMatrix()) {
+       Matrix m = value.toMatrix();
+       unsigned reshapeSize = rows(m) * cols(m);
+ 
+-      sgProp-&gt;tie(FGRealPropertyAdapter(object, *it));
++      sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName()));
+       for (unsigned i = 2; i &lt;= reshapeSize; ++i) {
+         sgProp = base-&gt;getChild(pName.c_str(), i-1, true);
+-        sgProp-&gt;tie(FGRealPropertyAdapter(object, *it, i));
++        sgProp-&gt;tie(FGRealPropertyAdapter(object, it-&gt;getName(), i));
+       }
+     }
+     else if (value.isValid()) {
+       SG_LOG(SG_FLIGHT, SG_WARN,
+              &quot;Found unexpected property type with property named \&quot;&quot;
+-             &lt;&lt; *it &lt;&lt; &quot;\&quot;&quot;);
++             &lt;&lt; it-&gt;getName() &lt;&lt; &quot;\&quot;&quot;);
+     }
+     ++it;
+   }
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2006-02-19 14:53:22 UTC (rev 247)
++++ trunk/flightgear/FGPropertyAdapter.h	2006-02-19 14:54:23 UTC (rev 248)
+@@ -7,7 +7,6 @@
+ 
+ #include &lt;string&gt;
+ #include &lt;simgear/props/props.hxx&gt;
+-#include &lt;OpenFDM/Property.h&gt;
+ #include &lt;OpenFDM/Model.h&gt;
+ 
+ namespace OpenFDM {
+@@ -21,21 +20,18 @@
+   {}
+ 
+ protected:
+-  Variant getPropertyValue(void) const
++  bool getPropertyValue(Variant&amp; value) const
+   {
+     if (!mObject)
+-      return Variant();
+-
+-    return mObject-&gt;getPropertyValue(mPropertyName);
++      return false;
++    return mObject-&gt;getPropertyValue(mPropertyName, value);
+   }
+   bool setPropertyValue(const Variant&amp; value)
+   {
+     if (!mObject)
+       return false;
+ 
+-    // FIXME: check if settable ...
+-    mObject-&gt;setPropertyValue(mPropertyName, value);
+-    return true;
++    return mObject-&gt;setPropertyValue(mPropertyName, value);
+   }
+ 
+ private:
+@@ -57,7 +53,12 @@
+   { return setPropertyValue(Variant(std::string(value))); }
+   /// Implements the SimGear property interface.
+   virtual const char* getValue(void) const
+-  { mValue = getPropertyValue().toString(); return mValue.c_str(); }
++  {
++    Variant variantValue;
++    if (getPropertyValue(variantValue))
++      mValue = variantValue.toString();
++    return mValue.c_str();
++  }
+   
+   virtual FGStringPropertyAdapter* clone(void) const
+   { return new FGStringPropertyAdapter(*this); }
+@@ -79,7 +80,10 @@
+   /// Implements the SimGear property interface.
+   virtual bool setValue(double value)
+   {
+-    Matrix m = getPropertyValue().toMatrix();
++    Variant variantValue;
++    if (getPropertyValue(variantValue))
++      return false;
++    Matrix m = variantValue.toMatrix();
+     unsigned r = mIndex % rows(m) + 1;
+     unsigned c = mIndex / rows(m) + 1;
+     if (r &lt; 1 || rows(m) &lt; r)
+@@ -93,10 +97,16 @@
+   /// Implements the SimGear property interface.
+   virtual double getValue(void) const
+   {
+-    if (mIndex == 1)
+-      return getPropertyValue().toReal();
+-    else {
+-      Matrix m = getPropertyValue().toMatrix();
++    if (mIndex == 1) {
++      Variant variantValue;
++      if (!getPropertyValue(variantValue))
++        return 0;
++      return variantValue.toReal();
++    } else {
++      Variant variantValue;
++      if (!getPropertyValue(variantValue))
++        return 0;
++      Matrix m = variantValue.toMatrix();
+       unsigned r = mIndex % rows(m) + 1;
+       unsigned c = mIndex / rows(m) + 1;
+       if (r &lt; 1 || rows(m) &lt; r)
+@@ -126,7 +136,12 @@
+   { return setPropertyValue(Variant(value)); }
+   /// Implements the SimGear property interface.
+   virtual int getValue(void) const
+-  { return getPropertyValue().toInteger(); }
++  {
++    Variant variantValue;
++    if (!getPropertyValue(variantValue))
++      return 0;
++    return variantValue.toInteger();
++  }
+ 
+   virtual FGIntegerPropertyAdapter* clone(void) const
+   { return new FGIntegerPropertyAdapter(*this); }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000226.html">[OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000228.html">[OpenFDM-svn] r249 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#227">[ date ]</a>
+              <a href="thread.html#227">[ thread ]</a>
+              <a href="subject.html#227">[ subject ]</a>
+              <a href="author.html#227">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

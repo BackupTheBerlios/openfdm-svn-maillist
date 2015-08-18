@@ -1,0 +1,890 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r743 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r743%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811172122.mAHLMOaA001390%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000711.html">
+   <LINK REL="Next"  HREF="000713.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r743 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r743%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811172122.mAHLMOaA001390%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r743 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 17 22:22:24 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000711.html">[OpenFDM-svn] r742 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000713.html">[OpenFDM-svn] r744 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#712">[ date ]</a>
+              <a href="thread.html#712">[ thread ]</a>
+              <a href="subject.html#712">[ subject ]</a>
+              <a href="author.html#712">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-17 22:22:22 +0100 (Mon, 17 Nov 2008)
+New Revision: 743
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.h
+Log:
+Reactivate some direct feedthrough models.
+
+M    src/OpenFDM/Saturation.h
+M    src/OpenFDM/Gain.cpp
+M    src/OpenFDM/DeadBand.cpp
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/DeadBand.h
+M    src/OpenFDM/Bias.h
+A    src/OpenFDM/UnaryModel.cpp
+M    src/OpenFDM/PortValueList.h
+M    src/OpenFDM/Bias.cpp
+M    src/OpenFDM/Gain.h
+M    src/OpenFDM/Saturation.cpp
+A    src/OpenFDM/UnaryModel.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.cpp	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.cpp	2008-11-17 21:22:22 UTC (rev 743)
+@@ -14,55 +14,39 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Bias, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Bias, UnaryModel)
+   DEF_OPENFDM_PROPERTY(Matrix, Bias, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Bias::Bias(const std::string&amp; name) : Model(name)
++Bias::Bias(const std::string&amp; name) :
++  UnaryModel(name),
++  mBias(Matrix::zeros(1, 1))
+ {
+-  setDirectFeedThrough(true);
+-  
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  addOutputPort(&quot;output&quot;, this, &amp;Bias::getOutput);
+ }
+ 
+ Bias::~Bias(void)
+ {
+ }
+   
+-bool
+-Bias::init(void)
++ModelContext*
++Bias::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  // Invalidate outputs
+-  mOutput.resize(0, 0);
++  return UnaryModel::newModelContext(this, portValueList);
++}
+ 
+-  mInputPort = getInputPort(0)-&gt;toMatrixPortHandle();
+-  if (!mInputPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of Bias model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++bool
++Bias::alloc(LeafContext&amp; context) const
++{
++  // FIXME: check that the mBias matches the size of the ports.
++  if (!UnaryModel::alloc(context))
+     return false;
+-  }
+-
+-  // Size compatibility check
+-  if (size(mInputPort.getMatrixValue()) != size(mBias)) {
+-    Log(Model, Error) &lt;&lt; &quot;Input port of \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;, does not &quot;
+-                      &lt;&lt; &quot;match the size of the bias property&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mOutput.resize(mInputPort.getMatrixValue());
+-
+-  return Model::init();
++  return true;
+ }
+ 
+ void
+-Bias::output(const TaskInfo&amp;)
++Bias::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
+ {
+-  OpenFDMAssert(mInputPort.isConnected());
+-  mOutput = mInputPort.getMatrixValue();
+-  mOutput += mBias;
++  outputValue = mBias + inputValue;
+ }
+ 
+ const Matrix&amp;
+@@ -77,10 +61,4 @@
+   mBias = bias;
+ }
+ 
+-const Matrix&amp;
+-Bias::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Bias.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -6,33 +6,27 @@
+ #define OpenFDM_Bias_H
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;UnaryModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Bias : public Model {
+-  OPENFDM_OBJECT(Bias, Model);
++class Bias : public UnaryModel {
++  OPENFDM_OBJECT(Bias, UnaryModel);
+ public:
+   Bias(const std::string&amp; name);
+   virtual ~Bias(void);
+-  
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+ 
++  ModelContext* newModelContext(PortValueList&amp;) const;
++
++  bool alloc(LeafContext&amp; context) const;
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
+   const Matrix&amp; getBias(void) const;
+   void setBias(const Matrix&amp; bias);
+ 
+-  const Matrix&amp; getOutput(void) const;
+-
+ private:
+   Matrix mBias;
+-  Matrix mOutput;
+-  MatrixPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.cpp	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.cpp	2008-11-17 21:22:22 UTC (rev 743)
+@@ -4,61 +4,36 @@
+ 
+ #include &quot;DeadBand.h&quot;
+ 
+-#include &lt;string&gt;
+-#include &lt;vector&gt;
++#include &quot;Matrix.h&quot;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Model.h&quot;
+-
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(DeadBand, Model)
++BEGIN_OPENFDM_OBJECT_DEF(DeadBand, UnaryModel)
+   DEF_OPENFDM_PROPERTY(Real, Width, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-DeadBand::DeadBand(const std::string&amp; name) : Model(name)
++DeadBand::DeadBand(const std::string&amp; name, const real_type&amp; width) :
++  UnaryModel(name),
++  mWidth(width)
+ {
+-  setDirectFeedThrough(true);
+-  
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;DeadBand::getOutput);
+ }
+ 
+ DeadBand::~DeadBand(void)
+ {
+ }
+   
+-bool
+-DeadBand::init(void)
++ModelContext*
++DeadBand::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  mInputPort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mInputPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of DeadBand model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  return Model::init();
++  return UnaryModel::newModelContext(this, portValueList);
+ }
+ 
+ void
+-DeadBand::output(const TaskInfo&amp;)
++DeadBand::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
+ {
+-  OpenFDMAssert(mInputPort.isConnected());
+-  
+-  mOutput = mInputPort.getRealValue();
+-  if (mOutput &lt; -mWidth)
+-    mOutput += mWidth;
+-  else if (mWidth &lt; mOutput)
+-    mOutput -= mWidth;
+-  else
+-    mOutput = 0;
++  for (unsigned i = 0; i &lt; rows(inputValue); ++i)
++    for (unsigned j = 0; j &lt; cols(inputValue); ++j)
++      outputValue(i, j) = deadBand(inputValue(i, j), mWidth);
+ }
+ 
+ const real_type&amp;
+@@ -73,10 +48,4 @@
+   mWidth = width;
+ }
+ 
+-const real_type&amp;
+-DeadBand::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DeadBand.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -6,32 +6,26 @@
+ #define OpenFDM_DeadBand_H
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;UnaryModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class DeadBand : public Model {
+-  OPENFDM_OBJECT(DeadBand, Model);
++class DeadBand : public UnaryModel {
++  OPENFDM_OBJECT(DeadBand, UnaryModel);
+ public:
+-  DeadBand(const std::string&amp; name);
++  DeadBand(const std::string&amp; name, const real_type&amp; width = real_type(0));
+   virtual ~DeadBand(void);
+-  
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+ 
++  ModelContext* newModelContext(PortValueList&amp;) const;
++
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
+   const real_type&amp; getWidth(void) const;
+   void setWidth(const real_type&amp; width);
+ 
+-  const real_type&amp; getOutput(void) const;
+-
+ private:
+   real_type mWidth;
+-  real_type mOutput;
+-  RealPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.cpp	2008-11-17 21:22:22 UTC (rev 743)
+@@ -5,24 +5,16 @@
+ #include &quot;Gain.h&quot;
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;LeafContext.h&quot;
+-#include &quot;Model.h&quot;
+ #include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Gain, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Gain, UnaryModel)
+   DEF_OPENFDM_PROPERTY(Real, Gain, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Gain::Gain(const std::string&amp; name, const real_type&amp; gain) :
+-  Model(name),
+-  mInputPort(newMatrixInputPort(&quot;input&quot;, true)),
+-  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
++  UnaryModel(name),
+   mGain(gain)
+ {
+ }
+@@ -31,27 +23,16 @@
+ {
+ }
+ 
+-bool
+-Gain::alloc(LeafContext&amp; leafContext) const
++ModelContext*
++Gain::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  Size sz = size(leafContext.mPortValueList[mInputPort]);
+-  Log(Initialization, Debug)
+-    &lt;&lt; &quot;Size for Gain is detemined by the input port with size: &quot;
+-    &lt;&lt; trans(sz) &lt;&lt; std::endl;
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
+-    Log(Initialization, Error)
+-      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
+-    return false;
+-  }
+-  return true;
++  return UnaryModel::newModelContext(this, portValueList);
+ }
+ 
+ void
+-Gain::output(const Task&amp;,const DiscreteStateValueVector&amp;,
+-             const ContinousStateValueVector&amp;,
+-             PortValueList&amp; portValues) const
++Gain::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
+ {
+-  portValues[mOutputPort] = mGain*portValues[mInputPort];
++  outputValue = mGain*inputValue;
+ }
+ 
+ const real_type&amp;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Gain.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -7,27 +7,25 @@
+ 
+ #include &lt;string&gt;
+ 
+-#include &quot;Model.h&quot;
++#include &quot;UnaryModel.h&quot;
++#include &quot;ModelContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Gain : public Model {
+-  OPENFDM_OBJECT(Gain, Model);
++class Gain : public UnaryModel {
++  OPENFDM_OBJECT(Gain, UnaryModel);
+ public:
+   Gain(const std::string&amp; name, const real_type&amp; gain = real_type(1));
+   virtual ~Gain(void);
+ 
+-  virtual bool alloc(LeafContext&amp; leafContext) const;
+-  virtual void output(const Task&amp;,const DiscreteStateValueVector&amp;,
+-                      const ContinousStateValueVector&amp;,
+-                      PortValueList&amp; portValues) const;
++  ModelContext* newModelContext(PortValueList&amp;) const;
+ 
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
+   const real_type&amp; getGain(void) const;
+   void setGain(const real_type&amp; gain);
+ 
+ private:
+-  MatrixInputPort mInputPort;
+-  MatrixOutputPort mOutputPort;
+   real_type mGain;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-17 21:22:22 UTC (rev 743)
+@@ -230,19 +230,23 @@
+   TransferFunction.h \
+   Turbulence.h \
+   UnaryFunctionModel.h \
++  UnaryModel.h \
+   UniversalJoint.h \
+   Vehicle.h \
+   WheelContact.h \
+   Wind.h
+ 
+ OpenFDMModelsSOURCES = \
++  Bias.cpp \
+   ConstModel.cpp \
++  DeadBand.cpp \
+   Delay.cpp \
+   DiscreteIntegrator.cpp \
+   Gain.cpp \
+   Input.cpp \
+   Integrator.cpp \
+   Output.cpp \
++  Saturation.cpp \
+   SimulationTime.cpp
+ 
+ OpenFDMMechanicSOURCES = \
+@@ -255,17 +259,15 @@
+   RevoluteJoint.cpp \
+   RotationalJoint.cpp \
+   Sensor.cpp \
++  UnaryModel.cpp \
+   UniversalJoint.cpp
+ 
+-
+ #   AeroForce.cpp \
+ #   AirSpring.cpp \
+ #   Atmosphere.cpp \
+ #   AtmosphereSTD1976.cpp \
+-#   Bias.cpp \
+ #   BinaryFunctionModel.cpp \
+ #   Contact.cpp \
+-#   DeadBand.cpp \
+ #   DefaultGravity.cpp \
+ #   DefaultGround.cpp \
+ #   DefaultPlanet.cpp \
+@@ -281,7 +283,6 @@
+ #   Output.cpp \
+ #   Product.cpp \
+ #   RigidBody.cpp \
+-#   Saturation.cpp \
+ #   SimpleContact.cpp \
+ #   SimpleGear.cpp \
+ #   Summer.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -83,6 +83,20 @@
+     else
+       return false;
+   }
++  bool setOrCheckPortSize(const OutputPortInfo* portInfo, const Size&amp; sz)
++  {
++    if (!portInfo)
++      return false;
++    Size oldSize = size(getPortValue(portInfo)-&gt;getValue());
++    // If the size is still 0x0, just set to the desired size
++    if (oldSize(0) == 0 || oldSize(1) == 0) {
++      getPortValue(portInfo)-&gt;getValue().resize(sz(0), sz(1));
++      return true;
++    } else if (oldSize == sz)
++      return true;
++    else
++      return false;
++  }
+   bool setOrCheckPortSize(const MatrixInputPort&amp; port, const Size&amp; sz)
+   {
+     Size oldSize = size(port.getPortValue(mPortValueVector)-&gt;getValue());
+@@ -95,6 +109,20 @@
+     else
+       return false;
+   }
++  bool setOrCheckPortSize(const InputPortInfo* portInfo, const Size&amp; sz)
++  {
++    if (!portInfo)
++      return false;
++    Size oldSize = size(getPortValue(portInfo)-&gt;getValue());
++    // If the size is still 0x0, just set to the desired size
++    if (oldSize(0) == 0 || oldSize(1) == 0) {
++      getPortValue(portInfo)-&gt;getValue().resize(sz(0), sz(1));
++      return true;
++    } else if (oldSize == sz)
++      return true;
++    else
++      return false;
++  }
+   const PortValue* getPortValue(unsigned idx) const
+   {
+     if (mPortValueVector.size() &lt;= idx)
+@@ -109,6 +137,19 @@
+   }
+ 
+   /// Save but partially expensive Accessor for numeric ports
++  NumericPortValue* getPortValue(const NumericPortInfo* portInfo)
++  {
++    if (!portInfo)
++      return 0;
++    return getPortValue(*portInfo);
++  }
++  NumericPortValue* getPortValue(const NumericPortInfo&amp; portInfo)
++  {
++    PortValue* portValue = getPortValue(portInfo.getIndex());
++    if (!portValue)
++      return 0;
++    return portValue-&gt;toNumericPortValue();
++  }
+   const NumericPortValue* getPortValue(const NumericPortInfo* portInfo) const
+   {
+     if (!portInfo)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.cpp	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.cpp	2008-11-17 21:22:22 UTC (rev 743)
+@@ -4,70 +4,38 @@
+ 
+ #include &quot;Saturation.h&quot;
+ 
+-#include &lt;string&gt;
+-#include &lt;vector&gt;
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+-#include &quot;Model.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Saturation, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Saturation, UnaryModel)
+   DEF_OPENFDM_PROPERTY(Matrix, MinSaturation, Serialized)
+   DEF_OPENFDM_PROPERTY(Matrix, MaxSaturation, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Saturation::Saturation(const std::string&amp; name) : Model(name)
++Saturation::Saturation(const std::string&amp; name) :
++  UnaryModel(name)
+ {
+-  setDirectFeedThrough(true);
+-  
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Saturation::getOutput);
+ }
+ 
+ Saturation::~Saturation(void)
+ {
+ }
+   
+-bool
+-Saturation::init(void)
++ModelContext*
++Saturation::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  mInputPort = getInputPort(0)-&gt;toMatrixPortHandle();
+-  if (!mInputPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of Saturation model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  Matrix inputMatrix = mInputPort.getMatrixValue();
+-  if (0 &lt; rows(mMaxSaturation) &amp;&amp; 0 &lt; cols(mMaxSaturation) &amp;&amp;
+-      size(mMaxSaturation) != size(inputMatrix))
+-    mOutput.resize(0, 0);
+-  if (0 &lt; rows(mMinSaturation) &amp;&amp; 0 &lt; cols(mMinSaturation) &amp;&amp;
+-      size(mMinSaturation) != size(inputMatrix))
+-    mOutput.resize(0, 0);
+-  
+-  mOutput.resize(inputMatrix);
+-
+-  return Model::init();
++  return UnaryModel::newModelContext(this, portValueList);
+ }
+ 
+ void
+-Saturation::output(const TaskInfo&amp;)
++Saturation::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
+ {
+-  mOutput = mInputPort.getMatrixValue();
++  outputValue = inputValue;
+   if (0 &lt; rows(mMaxSaturation) &amp;&amp; 0 &lt; cols(mMaxSaturation))
+-    mOutput = LinAlg::min(mOutput, mMaxSaturation);
++    outputValue = LinAlg::min(outputValue, mMaxSaturation);
+   if (0 &lt; rows(mMinSaturation) &amp;&amp; 0 &lt; cols(mMinSaturation))
+-    mOutput = LinAlg::max(mOutput, mMinSaturation);
++    outputValue = LinAlg::max(outputValue, mMinSaturation);
+ }
+ 
+ const Matrix&amp;
+@@ -94,10 +62,4 @@
+   mMaxSaturation = maxSaturation;
+ }
+ 
+-const Matrix&amp;
+-Saturation::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Saturation.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -6,38 +6,30 @@
+ #define OpenFDM_Saturation_H
+ 
+ #include &lt;string&gt;
+-#include &lt;vector&gt;
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;UnaryModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Saturation : public Model {
+-  OPENFDM_OBJECT(Saturation, Model);
++class Saturation : public UnaryModel {
++  OPENFDM_OBJECT(Saturation, UnaryModel);
+ public:
+   Saturation(const std::string&amp; name);
+   virtual ~Saturation(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  ModelContext* newModelContext(PortValueList&amp;) const;
+ 
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
+   const Matrix&amp; getMinSaturation(void) const;
+   void setMinSaturation(const Matrix&amp; minSaturation);
+   const Matrix&amp; getMaxSaturation(void) const;
+   void setMaxSaturation(const Matrix&amp; maxSaturation);
+ 
+-  const Matrix&amp; getOutput(void) const;
+-
+ private:
+   Matrix mMaxSaturation;
+   Matrix mMinSaturation;
+-  Matrix mOutput;
+-
+-  MatrixPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp	2008-11-17 21:22:22 UTC (rev 743)
+@@ -0,0 +1,41 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;UnaryModel.h&quot;
++
++#include &quot;LogStream.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(UnaryModel, AbstractModel)
++  END_OPENFDM_OBJECT_DEF
++
++UnaryModel::UnaryModel(const std::string&amp; name) :
++  AbstractModel(name),
++  mInputPort(new InputPortInfo(this, &quot;input&quot;, Size(0, 0), true)),
++  mOutputPort(new OutputPortInfo(this, &quot;output&quot;, Size(0, 0), false))
++{
++}
++
++UnaryModel::~UnaryModel()
++{
++}
++
++bool
++UnaryModel::alloc(LeafContext&amp; leafContext) const
++{
++  Size sz;
++  sz = size(leafContext.mPortValueList.getPortValue(mInputPort)-&gt;getValue());
++  Log(Initialization, Debug)
++    &lt;&lt; &quot;Size for Gain is detemined by the input port with size: &quot;
++    &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.h	2008-11-17 19:24:20 UTC (rev 742)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.h	2008-11-17 21:22:22 UTC (rev 743)
+@@ -0,0 +1,95 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_UnaryModel_H
++#define OpenFDM_UnaryModel_H
++
++#include &lt;string&gt;
++
++#include &quot;AbstractModel.h&quot;
++#include &quot;ModelContext.h&quot;
++
++namespace OpenFDM {
++
++class UnaryModel : public AbstractModel {
++  OPENFDM_OBJECT(UnaryModel, AbstractModel);
++public:
++  UnaryModel(const std::string&amp; name);
++  virtual ~UnaryModel();
++
++  virtual bool alloc(LeafContext&amp; leafContext) const;
++
++protected:
++  template&lt;typename UM&gt;
++  ModelContext* newModelContext(UM* um, PortValueList&amp; portValueList) const
++  {
++    SharedPtr&lt;Context&lt;UM&gt; &gt; context;
++    context = new Context&lt;UM&gt;(um, portValueList.getPortValue(mInputPort),
++                              portValueList.getPortValue(mOutputPort));
++    for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
++      PortValue* portValue = portValueList.getPortValue(i);
++      if (!portValue) {
++        Log(Model, Error) &lt;&lt; &quot;No port value given for model \&quot;&quot; &lt;&lt; getName()
++                          &lt;&lt; &quot;\&quot; and port \&quot;&quot; &lt;&lt; getPort(i)-&gt;getName()
++                          &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        return false;
++      }
++      context-&gt;setPortValue(*getPort(i), portValue);
++    }
++    if (!context-&gt;alloc()) {
++      Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                          &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return false;
++    }
++    return context.release();
++  }
++
++  template&lt;typename UM&gt;
++  class Context : public ModelContext {
++  public:
++    Context(const UM* unaryModel, const NumericPortValue* inputValue,
++            NumericPortValue* outputValue) :
++      mUnaryModel(unaryModel),
++      mInputValue(inputValue),
++      mOutputValue(outputValue)
++    { }
++    virtual ~Context()
++    { }
++    
++    virtual const UM&amp; getNode() const
++    { return *mUnaryModel; }
++    
++    bool alloc()
++    {
++      if (!allocStates())
++        return false;
++      return mUnaryModel-&gt;alloc(*this);
++    }
++    virtual void initOutput(const /*Init*/Task&amp;)
++    { mUnaryModel-&gt;output(mInputValue-&gt;getValue(), mOutputValue-&gt;getValue()); }
++    virtual void output(const Task&amp;)
++    { mUnaryModel-&gt;output(mInputValue-&gt;getValue(), mOutputValue-&gt;getValue()); }
++    virtual void update(const DiscreteTask&amp;)
++    { }
++    virtual void derivative(const Task&amp;)
++    { }
++    
++  private:
++    Context();
++    Context(const Context&amp;);
++    Context&amp; operator=(const Context&amp;);
++    
++    SharedPtr&lt;const UM&gt; mUnaryModel;
++    SharedPtr&lt;const NumericPortValue&gt; mInputValue;
++    SharedPtr&lt;NumericPortValue&gt; mOutputValue;
++  };
++
++private:
++  SharedPtr&lt;InputPortInfo&gt; mInputPort;
++  SharedPtr&lt;OutputPortInfo&gt; mOutputPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000711.html">[OpenFDM-svn] r742 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000713.html">[OpenFDM-svn] r744 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#712">[ date ]</a>
+              <a href="thread.html#712">[ thread ]</a>
+              <a href="subject.html#712">[ subject ]</a>
+              <a href="author.html#712">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

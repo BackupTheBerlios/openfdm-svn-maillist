@@ -1,0 +1,410 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r756 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r756%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200811191753.mAJHrNH2027393%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000724.html">
+   <LINK REL="Next"  HREF="000726.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r756 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r756%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200811191753.mAJHrNH2027393%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r756 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 19 18:53:23 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000724.html">[OpenFDM-svn] r755 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000726.html">[OpenFDM-svn] r757 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#725">[ date ]</a>
+              <a href="thread.html#725">[ thread ]</a>
+              <a href="subject.html#725">[ subject ]</a>
+              <a href="author.html#725">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-19 18:53:21 +0100 (Wed, 19 Nov 2008)
+New Revision: 756
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h
+Log:
+Again have UnitConversion
+
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimReader.cpp
+M    src/OpenFDM/UnaryFunctionModel.h
+M    src/OpenFDM/Makefile.am
+A    src/OpenFDM/UnitConversion.h
+M    src/OpenFDM/UnaryFunctionModel.cpp
+A    src/OpenFDM/UnitConversion.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2008-11-19 17:53:21 UTC (rev 756)
+@@ -657,10 +657,10 @@
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Steering Output&quot;,
+                          &quot;gear/gear[&quot; + numStr + &quot;]/steering-norm&quot;);
+ 
+-          UnitConversionModel* unitConv
+-            = new UnitConversionModel(name + &quot; Degree Conversion&quot;,
+-                                      UnitConversionModel::UnitToSi,
+-                                      Unit::degree());
++          UnitConversion* unitConv
++            = new UnitConversion(name + &quot; Degree Conversion&quot;,
++                                 UnitConversion::UnitToBaseUnit,
++                                 Unit::degree());
+           addFCSModel(unitConv);
+           Connection::connect(gain-&gt;getOutputPort(0),
+                               unitConv-&gt;getInputPort(0));
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-19 17:53:21 UTC (rev 756)
+@@ -757,8 +757,8 @@
+     std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     return 0;
+   }
+-  UnitConversionModel* unitConv
+-    = new UnitConversionModel(name, UnitConversionModel::SiToUnit, u);
++  UnitConversion* unitConv
++    = new UnitConversion(name, UnitConversion::BaseUnitToUnit, u);
+   modelGroup-&gt;addModel(unitConv, true);
+   if (Port::Success != Connection::connect(in, unitConv-&gt;getInputPort(0)))
+     return 0;
+@@ -773,8 +773,8 @@
+     std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     return 0;
+   }
+-  UnitConversionModel* unitConv
+-    = new UnitConversionModel(name, UnitConversionModel::UnitToSi, u);
++  UnitConversion* unitConv
++    = new UnitConversion(name, UnitConversion::UnitToBaseUnit, u);
+   modelGroup-&gt;addModel(unitConv, true);
+   if (Port::Success != Connection::connect(in, unitConv-&gt;getInputPort(0)))
+     return 0;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 17:53:21 UTC (rev 756)
+@@ -231,6 +231,7 @@
+   Turbulence.h \
+   UnaryFunctionModel.h \
+   UnaryModel.h \
++  UnitConversion.h \
+   UniversalJoint.h \
+   Vehicle.h \
+   WheelContact.h \
+@@ -260,6 +261,7 @@
+   RotationalJoint.cpp \
+   Sensor.cpp \
+   UnaryModel.cpp \
++  UnitConversion.cpp \
+   UniversalJoint.cpp
+ 
+ #   AeroForce.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp	2008-11-19 17:53:21 UTC (rev 756)
+@@ -244,83 +244,4 @@
+   return mType;
+ }
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(UnitConversionModel, Model)
+-  END_OPENFDM_OBJECT_DEF
+-
+-UnitConversionModel::UnitConversionModel(const std::string&amp; name,
+-                                         Type type, const Unit&amp; unit) :
+-  Model(name),
+-  mType(type),
+-  mUnit(unit)
+-{
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;UnitConversionModel::getFunctionValue);
+-}
+-
+-UnitConversionModel::~UnitConversionModel(void)
+-{
+-}
+-
+-bool
+-UnitConversionModel::init(void)
+-{
+-  mInputPort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mInputPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of UnitConversion model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  return Model::init();
+-}
+-
+-void
+-UnitConversionModel::output(const TaskInfo&amp;)
+-{
+-  OpenFDMAssert(mInputPort.isConnected());
+-  real_type value = mInputPort.getRealValue();
+-  if (mType == UnitToSi) {
+-    mValue = mUnit.convertFrom(value);
+-  } else {
+-    mValue = mUnit.convertTo(value);
+-  }
+-}
+-
+-const real_type&amp;
+-UnitConversionModel::getFunctionValue(void) const
+-{
+-  return mValue;
+-}
+-
+-void
+-UnitConversionModel::setType(UnitConversionModel::Type type)
+-{
+-  mType = type;
+-}
+-
+-UnitConversionModel::Type
+-UnitConversionModel::getType(void) const
+-{
+-  return mType;
+-}
+-
+-void
+-UnitConversionModel::setUnit(const Unit&amp; unit)
+-{
+-  mUnit = unit;
+-}
+-
+-const Unit&amp;
+-UnitConversionModel::getUnit(void) const
+-{
+-  return mUnit;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h	2008-11-19 17:53:21 UTC (rev 756)
+@@ -8,7 +8,6 @@
+ #include &lt;string&gt;
+ 
+ #include &quot;Types.h&quot;
+-#include &quot;Unit.h&quot;
+ #include &quot;Model.h&quot;
+ 
+ namespace OpenFDM {
+@@ -54,35 +53,6 @@
+   real_type mFunctionValue;
+ };
+ 
+-class UnitConversionModel : public Model {
+-  OPENFDM_OBJECT(UnitConversionModel, Model);
+-public:
+-  enum Type {
+-    UnitToSi,
+-    SiToUnit
+-  };
+-
+-  UnitConversionModel(const std::string&amp; name, Type type, const Unit&amp; unit);
+-  virtual ~UnitConversionModel(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+-  const real_type&amp; getFunctionValue(void) const;
+-
+-  void setType(Type type);
+-  Type getType(void) const;
+-
+-  void setUnit(const Unit&amp; unit);
+-  const Unit&amp; getUnit(void) const;
+-
+-private:
+-  Type mType;
+-  Unit mUnit;
+-  real_type mValue;
+-  RealPortHandle mInputPort;
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.cpp	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.cpp	2008-11-19 17:53:21 UTC (rev 756)
+@@ -0,0 +1,64 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;UnitConversion.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(UnitConversion, UnaryModel)
++  END_OPENFDM_OBJECT_DEF
++
++UnitConversion::UnitConversion(const std::string&amp; name, const Type&amp; type,
++                               const Unit&amp; unit) :
++  UnaryModel(name),
++  mType(type),
++  mUnit(unit)
++{
++}
++
++UnitConversion::~UnitConversion(void)
++{
++}
++
++ModelContext*
++UnitConversion::newModelContext(PortValueList&amp; portValueList) const
++{
++  return UnaryModel::newModelContext(this, portValueList);
++}
++
++void
++UnitConversion::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
++{
++  if (mType == UnitToBaseUnit) {
++    outputValue = mUnit.convertFrom(inputValue);
++  } else {
++    outputValue = mUnit.convertTo(inputValue);
++  }
++}
++
++void
++UnitConversion::setType(const UnitConversion::Type&amp; type)
++{
++  mType = type;
++}
++
++const UnitConversion::Type&amp;
++UnitConversion::getType(void) const
++{
++  return mType;
++}
++
++void
++UnitConversion::setUnit(const Unit&amp; unit)
++{
++  mUnit = unit;
++}
++
++const Unit&amp;
++UnitConversion::getUnit(void) const
++{
++  return mUnit;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.h	2008-11-19 17:52:32 UTC (rev 755)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnitConversion.h	2008-11-19 17:53:21 UTC (rev 756)
+@@ -0,0 +1,42 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_UnitConversion_H
++#define OpenFDM_UnitConversion_H
++
++#include &lt;string&gt;
++
++#include &quot;Unit.h&quot;
++#include &quot;UnaryModel.h&quot;
++
++namespace OpenFDM {
++
++class UnitConversion : public UnaryModel {
++  OPENFDM_OBJECT(UnitConversion, UnaryModel);
++public:
++  enum Type {
++    UnitToBaseUnit,
++    BaseUnitToUnit
++  };
++
++  UnitConversion(const std::string&amp; name, const Type&amp; type, const Unit&amp; unit);
++  virtual ~UnitConversion(void);
++
++  ModelContext* newModelContext(PortValueList&amp;) const;
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
++  void setType(const Type&amp; type);
++  const Type&amp; getType(void) const;
++
++  void setUnit(const Unit&amp; unit);
++  const Unit&amp; getUnit(void) const;
++
++private:
++  Type mType;
++  Unit mUnit;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000724.html">[OpenFDM-svn] r755 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000726.html">[OpenFDM-svn] r757 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#725">[ date ]</a>
+              <a href="thread.html#725">[ thread ]</a>
+              <a href="subject.html#725">[ subject ]</a>
+              <a href="author.html#725">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

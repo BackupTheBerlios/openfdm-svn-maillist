@@ -1,0 +1,562 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r182 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r182%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601042322.k04NM7OH014303%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000165.html">
+   <LINK REL="Next"  HREF="000167.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r182 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r182%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601042322.k04NM7OH014303%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r182 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 00:22:07 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000165.html">[OpenFDM-svn] r181 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000167.html">[OpenFDM-svn] r183 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#166">[ date ]</a>
+              <a href="thread.html#166">[ thread ]</a>
+              <a href="subject.html#166">[ subject ]</a>
+              <a href="author.html#166">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 00:21:57 +0100 (Thu, 05 Jan 2006)
+New Revision: 182
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+Log:
+Updates for support of internal forces.
+Fixes of the frame codes and model scheduling.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -1153,7 +1153,7 @@
+       // This is the movable part of the strut, doing the compression
+       RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+-      arm-&gt;addInteract(new Mass(name + &quot; Strut Mass&quot;, inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(100))));
++      arm-&gt;addInteract(new Mass(name + &quot; Strut Mass&quot;, inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(80))));
+ 
+       // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -281,7 +281,7 @@
+         Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(pos);
+         windVel = frame-&gt;rotFromRef(windVel);
+         Vector6 sAirSpeed = Vector6(Vector3::zeros(), windVel)
+-          - frame-&gt;motionFromRef(Vector6::zeros());
++          + frame-&gt;getRefVel();
+         mAirSpeed = motionTo(getPosition(), getOrientation(), sAirSpeed);
+         
+         mDirtyAirSpeed = false;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -92,7 +92,9 @@
+   }
+   
+   // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel = frame-&gt;motionFromRef(mGroundVal.vel);
++  Vector6 groundVel(frame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
++                    frame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
++  groundVel -= frame-&gt;getRefVel();
+   // Now get the relative velocity of the ground wrt the contact point
+   Vector3 relVel = - motionTo(getPosition(), groundVel).getLinear();
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-04 23:21:57 UTC (rev 182)
+@@ -22,24 +22,53 @@
+ 
+ };
+ 
+-class ExternalForce
+-  : public Force {
++class ExternalForce :
++    public Force {
+ public:
+-  ExternalForce(const std::string&amp; name)
+-    : Force(name, 1), mForce(0, 0, 0, 0, 0, 0)
+-  {}
++  ExternalForce(const std::string&amp; name) :
++    Force(name, 1),
++    mForce(0, 0, 0, 0, 0, 0)
++  {
++    mMountFrame = new FreeFrame(name);
++
++    addProperty(&quot;position&quot;, Property(this, &amp;ExternalForce::getPosition, &amp;ExternalForce::setPosition));
++    addProperty(&quot;orientation&quot;, Property(this, &amp;ExternalForce::getOrientation, &amp;ExternalForce::setOrientation));
++  }
+   virtual ~ExternalForce(void) {}
+ 
++  virtual void recheckTopology(void)
++  {
++    if (!getParentRigidBody(0))
++      return;
++  
++    // check for the frames
++    Frame* frame = getParentRigidBody(0)-&gt;getFrame();
++    if (!frame)
++      return;
++    if (!mMountFrame-&gt;isDirectChildFrameOf(frame))
++      frame-&gt;addChildFrame(mMountFrame);
++  }
++
+   // Needs to call applyForce once ...
+   virtual void interactWith(RigidBody* rigidBody)
+   {
+     computeForce();
+-    rigidBody-&gt;contributeForce(-mForce);
++    rigidBody-&gt;applyForce(mForce);
+   }
+ 
+   /// FIXME here for compatibility
+   virtual void computeForce(void) = 0;
+ 
++  const Vector3&amp; getPosition(void) const
++  { return mMountFrame-&gt;getPosition(); }
++  void setPosition(const Vector3&amp; pos)
++  { mMountFrame-&gt;setPosition(pos); }
++
++  const Quaternion&amp; getOrientation(void) const
++  { return mMountFrame-&gt;getOrientation(); }
++  void setOrientation(const Quaternion&amp; pos)
++  { mMountFrame-&gt;setOrientation(pos); }
++
+ protected:
+   /** Sets the force contribution of this force element.
+    * Sets the force contribution of this current force element to
+@@ -51,9 +80,190 @@
+   }
+ 
+ private:
++  SharedPtr&lt;FreeFrame&gt; mMountFrame;
+   Vector6 mForce;
+ };
+ 
++class InternalForce :
++    public Force {
++public:
++  InternalForce(const std::string&amp; name) :
++    Force(name, 2),
++    mForce(0, 0, 0, 0, 0, 0)
++  {
++    mMountFrame[0] = new FreeFrame(name  + &quot;&lt;0&gt;&quot;);
++    mMountFrame[1] = new FreeFrame(name  + &quot;&lt;1&gt;&quot;);
++
++    addProperty(&quot;position0&quot;, Property(this, &amp;InternalForce::getPosition0, &amp;InternalForce::setPosition0));
++    addProperty(&quot;orientation0&quot;, Property(this, &amp;InternalForce::getOrientation0, &amp;InternalForce::setOrientation0));
++    addProperty(&quot;position1&quot;, Property(this, &amp;InternalForce::getPosition1, &amp;InternalForce::setPosition1));
++    addProperty(&quot;orientation1&quot;, Property(this, &amp;InternalForce::getOrientation1, &amp;InternalForce::setOrientation1));
++
++  }
++  virtual ~InternalForce(void) {}
++
++  virtual void recheckTopology(void)
++  {
++    if (!getParentRigidBody(0) || !getParentRigidBody(1))
++      return;
++  
++    // check for the frames
++    Frame* frame0 = getParentRigidBody(0)-&gt;getFrame();
++    if (!frame0)
++      return;
++    if (!mMountFrame[0]-&gt;isDirectChildFrameOf(frame0))
++      frame0-&gt;addChildFrame(mMountFrame[0]);
++    Frame* frame1 = getParentRigidBody(1)-&gt;getFrame();
++    if (!frame1)
++      return;
++    if (!mMountFrame[1]-&gt;isDirectChildFrameOf(frame1))
++      frame1-&gt;addChildFrame(mMountFrame[1]);
++  }
++
++  // Needs to call applyForce once ...
++  virtual void interactWith(RigidBody* rigidBody)
++  {
++#if 1
++    /// ORIG
++//     Log(Model,Error) &lt;&lt; &quot;InternalForce \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot;
++//                      &lt;&lt; &quot; interacting with RigidBody \&quot;&quot;
++//                      &lt;&lt; rigidBody-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++//     Log(Model,Error) &lt;&lt; trans(mForce) &lt;&lt; endl;
++
++    if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[0])) {
++      Vector6 parentForce = mMountFrame[0]-&gt;forceToParent(mForce);
++      //       Log(Model,Error) &lt;&lt; trans(parentForce) &lt;&lt; endl;
++      rigidBody-&gt;applyForce(parentForce);
++    } else if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[1])) {
++      Rotation relOr = mMountFrame[0]-&gt;getRelOrientation(mMountFrame[1]);
++//       Log(Model,Error) &lt;&lt; relOr &lt;&lt; rigidBody-&gt;getFrame()-&gt;getOrientation() &lt;&lt; endl;
++      Vector6 force2(relOr.transform(mForce.getAngular()),
++                     relOr.transform(mForce.getLinear()));
++      Vector6 parentForce = mMountFrame[1]-&gt;forceToParent(force2);
++      //      Log(Model,Error) &lt;&lt; trans(parentForce) &lt;&lt; endl;
++      rigidBody-&gt;applyForce(-parentForce);
++    }
++#else
++    if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[1])) {
++      Vector6 parentForce = mMountFrame[1]-&gt;forceToParent(mForce);
++      rigidBody-&gt;applyForce(parentForce);
++    } else if (rigidBody-&gt;getFrame()-&gt;isDirectParentFrameOf(mMountFrame[0])) {
++      Rotation relOr = mMountFrame[1]-&gt;getRelOrientation(mMountFrame[0]);
++      Vector6 force2(relOr.backTransform(mForce.getAngular()),
++                     relOr.backTransform(mForce.getLinear()));
++      Vector6 parentForce = mMountFrame[0]-&gt;forceToParent(mForce);
++      rigidBody-&gt;applyForce(parentForce);
++    }
++#endif
++  }
++
++  const Vector3&amp; getPosition0(void) const
++  { return mMountFrame[0]-&gt;getPosition(); }
++  void setPosition0(const Vector3&amp; pos)
++  { mMountFrame[0]-&gt;setPosition(pos); }
++
++  const Quaternion&amp; getOrientation0(void) const
++  { return mMountFrame[0]-&gt;getOrientation(); }
++  void setOrientation0(const Quaternion&amp; pos)
++  { mMountFrame[0]-&gt;setOrientation(pos); }
++
++  const Vector3&amp; getPosition1(void) const
++  { return mMountFrame[1]-&gt;getPosition(); }
++  void setPosition1(const Vector3&amp; pos)
++  { mMountFrame[1]-&gt;setPosition(pos); }
++
++  const Quaternion&amp; getOrientation1(void) const
++  { return mMountFrame[1]-&gt;getOrientation(); }
++  void setOrientation1(const Quaternion&amp; pos)
++  { mMountFrame[1]-&gt;setOrientation(pos); }
++
++protected:
++  SharedPtr&lt;FreeFrame&gt; mMountFrame[2];
++  Vector6 mForce;
++};
++
++class LineForce :
++    public InternalForce {
++public:
++  LineForce(const std::string&amp; name) :
++    InternalForce(name)
++  {
++    addProperty(&quot;relPos&quot;, Property(this, &amp;LineForce::getRelPos));
++    addProperty(&quot;relVel&quot;, Property(this, &amp;LineForce::getRelVel));
++
++    addOutputPort(&quot;relPos&quot;, this, &amp;LineForce::getRelPos);
++    addOutputPort(&quot;relVel&quot;, this, &amp;LineForce::getRelVel);
++
++    setNumInputPorts(1);
++    setInputPortName(0, &quot;force&quot;);
++  }
++  virtual ~LineForce(void) {}
++
++  virtual bool init(void)
++  {
++    mForcePort = getInputPort(&quot;force&quot;)-&gt;toRealPortHandle();
++    if (!mForcePort.isConnected()) {
++      Log(Model, Error) &lt;&lt; &quot;Initialization of LineForce model \&quot;&quot; &lt;&lt; getName()
++                        &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                        &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++      return false;
++    }
++    return InternalForce::init();
++  }
++  virtual void output(const TaskInfo&amp; taskInfo)
++  {
++    Vector3 dir;
++    // FIXME: this is costly, must do something aprioriate with
++    // models/ports
++    Vector3 relPos = mMountFrame[0]-&gt;getRelPosition(mMountFrame[1]);
++    // if we have really reached the zero position, we must have the full
++    // speed in exactly the relPos direction.
++    real_type nrmRelPos = norm(relPos);
++    if (nrmRelPos &lt; Limits&lt;real_type&gt;::min()) {
++      Vector6 relVel6 = mMountFrame[0]-&gt;getRelVel(mMountFrame[1]);
++      dir = normalize(relVel6.getLinear());
++    } else
++      dir = (1/nrmRelPos)*relPos;
++    mForce = Vector6(Vector3::zeros(), dir*mForcePort.getRealValue());
++//     Log(Model,Error)
++//       &lt;&lt; trans(relPos)
++//       &lt;&lt; trans(mMountFrame[0]-&gt;getRelVel(mMountFrame[1])) &lt;&lt; &quot; &quot;
++//       &lt;&lt; mRelPos &lt;&lt; &quot; &quot;
++//       &lt;&lt; mRelVel
++//       &lt;&lt; endl;
++  }
++
++  const real_type&amp; getRelPos(void) const
++  {
++    // FIXME: this is costly, must do something aprioriate with
++    // models/ports
++    mRelPos = norm(mMountFrame[0]-&gt;getRelPosition(mMountFrame[1]));
++    return mRelPos;
++  }
++  const real_type&amp; getRelVel(void) const
++  {
++    // FIXME: this is costly, must do something aprioriate with
++    // models/ports
++    Vector3 relPos = mMountFrame[0]-&gt;getRelPosition(mMountFrame[1]);
++    Vector6 relVel6 = mMountFrame[0]-&gt;getRelVel(mMountFrame[1]);
++    // if we have really reached the zero position, we must have the full
++    // speed in exactly the relPos direction.
++    real_type nrmRelPos = norm(relPos);
++    if (nrmRelPos &lt; Limits&lt;real_type&gt;::min())
++      mRelVel = norm(relVel6.getLinear());
++    else
++      mRelVel = dot(relPos, relVel6.getLinear())/nrmRelPos;
++    return mRelVel;
++  }
++
++private:
++  mutable real_type mRelPos;
++  mutable real_type mRelVel;
++
++  /// The intput port which must provide the position
++  RealPortHandle mForcePort;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-04 23:21:57 UTC (rev 182)
+@@ -401,7 +401,7 @@
+       @return  The motion vector transformed to the current frame.
+    */
+   Vector6 motionFromRef(const Vector6&amp; v) const
+-  { return motionTo(getRefPosition(), getRefOrientation(), v) - getRefVel(); }
++  { return motionTo(getRefPosition(), getRefOrientation(), v); }
+ 
+   /** Spatial motion vector transform.
+       Transforms a spatial motion vector from the current frame to the parent
+@@ -410,7 +410,7 @@
+       @return  The motion vector transformed to the parent frame.
+    */
+   Vector6 motionToRef(const Vector6&amp; v) const
+-  { return motionFrom(getRefPosition(), getRefOrientation(), v + getRefVel()); }
++  { return motionFrom(getRefPosition(), getRefOrientation(), v); }
+ 
+   Plane planeFromRef(const Plane&amp; plane) const
+   { return planeTo(getRefPosition(), getRefOrientation(), plane); }
+@@ -463,7 +463,7 @@
+   Quaternion getRelOrientation(const Frame* frame) const
+   {
+     OpenFDMAssert(frame-&gt;getRefFrameId() == getRefFrameId());
+-    return conjugate(getRefOrientation())*frame-&gt;getRefOrientation();
++    return inverse(getRefOrientation())*frame-&gt;getRefOrientation();
+   }
+   Vector3 getRelPosition(const Frame* frame) const
+   {
+@@ -473,7 +473,7 @@
+   Vector6 getRelVel(const Frame* frame) const
+   {
+     OpenFDMAssert(frame-&gt;getRefFrameId() == getRefFrameId());
+-    return motionFromRef(frame-&gt;motionToRef(frame-&gt;getRefVel()));
++    return motionFromRef(frame-&gt;motionToRef(frame-&gt;getRefVel())) - getRefVel();
+   }
+ 
+ protected:
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -16,6 +16,10 @@
+ {
+   setDirectFeedThrough(true);
+ 
++  addProperty(&quot;springReference&quot;, Property(this, &amp;LinearSpringDamper::getSpringReference, &amp;LinearSpringDamper::setSpringReference));
++  addProperty(&quot;springConstant&quot;, Property(this, &amp;LinearSpringDamper::getSpringConstant, &amp;LinearSpringDamper::setSpringConstant));
++  addProperty(&quot;damperConstant&quot;, Property(this, &amp;LinearSpringDamper::getDamperConstant, &amp;LinearSpringDamper::setDamperConstant));
++
+   setNumInputPorts(2);
+   setInputPortName(0, &quot;position&quot;);
+   setInputPortName(1, &quot;velocity&quot;);
+@@ -65,38 +69,38 @@
+   return mForce;
+ }
+ 
+-real_type
++const real_type&amp;
+ LinearSpringDamper::getSpringReference(void) const
+ {
+   return mSpringReference;
+ }
+ 
+ void
+-LinearSpringDamper::setSpringReference(real_type springReference)
++LinearSpringDamper::setSpringReference(const real_type&amp; springReference)
+ {
+   mSpringReference = springReference;
+ }
+ 
+-real_type
++const real_type&amp;
+ LinearSpringDamper::getSpringConstant(void) const
+ {
+   return mSpringConstant;
+ }
+ 
+ void
+-LinearSpringDamper::setSpringConstant(real_type springConstant)
++LinearSpringDamper::setSpringConstant(const real_type&amp; springConstant)
+ {
+   mSpringConstant = springConstant;
+ }
+ 
+-real_type
++const real_type&amp;
+ LinearSpringDamper::getDamperConstant(void) const
+ {
+   return mDamperConstant;
+ }
+ 
+ void
+-LinearSpringDamper::setDamperConstant(real_type damperConstant)
++LinearSpringDamper::setDamperConstant(const real_type&amp; damperConstant)
+ {
+   mDamperConstant = damperConstant;
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h	2006-01-04 23:21:57 UTC (rev 182)
+@@ -24,14 +24,14 @@
+ 
+   const real_type&amp; getForce(void) const;
+ 
+-  real_type getSpringReference(void) const;
+-  void setSpringReference(real_type springReference);
++  const real_type&amp; getSpringReference(void) const;
++  void setSpringReference(const real_type&amp; springReference);
+ 
+-  real_type getSpringConstant(void) const;
+-  void setSpringConstant(real_type springConstant);
++  const real_type&amp; getSpringConstant(void) const;
++  void setSpringConstant(const real_type&amp; springConstant);
+ 
+-  real_type getDamperConstant(void) const;
+-  void setDamperConstant(real_type damperConstant);
++  const real_type&amp; getDamperConstant(void) const;
++  void setDamperConstant(const real_type&amp; damperConstant);
+ 
+ private:
+   real_type mSpringReference;
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -109,7 +109,7 @@
+     Environment* environment = getEnvironment();
+     if (environment) {
+       Frame* rootFrame = environment-&gt;getRootFrame();
+-      if (rootFrame)
++      if (rootFrame &amp;&amp; !rootFrame-&gt;isDirectParentFrameOf(mFrame))
+         rootFrame-&gt;addChildFrame(mFrame);
+     }
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2006-01-04 23:21:57 UTC (rev 182)
+@@ -58,11 +58,15 @@
+   const Vector6&amp; getArtForce(void) const
+   { return mArtForce; }
+ 
+-  /// Contribute articulated force
++  /// Apply a force to that rigid body
++  void applyForce(const Vector6&amp; force)
++  { mArtForce -= force; }
++
++  /// Contribute articulated force as used in the articulated body algorithm
+   void contributeForce(const Vector6&amp; force)
+   { mArtForce += force; }
+ 
+-  /// Contribute articulated inertia
++  /// Contribute articulated inertia as used in the articulated body algorithm
+   void contributeInertia(const SpatialInertia&amp; inertia)
+   { mArtInertia += inertia; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-04 13:38:48 UTC (rev 181)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-04 23:21:57 UTC (rev 182)
+@@ -84,7 +84,9 @@
+   Vector3 contactPoint = distHubGround*lp.getNormal();
+   
+   // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel = frame-&gt;motionFromRef(mGroundVal.vel);
++  Vector6 groundVel(frame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
++                    frame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
++  groundVel -= frame-&gt;getRefVel();
+   // Now get the relative velocity of the ground wrt the hub
+   Vector6 relVel = - groundVel;
+ //   Log(Model,Error) &lt;&lt; trans(frame-&gt;getRelVel()) &lt;&lt; &quot; &quot;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000165.html">[OpenFDM-svn] r181 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000167.html">[OpenFDM-svn] r183 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#166">[ date ]</a>
+              <a href="thread.html#166">[ thread ]</a>
+              <a href="subject.html#166">[ subject ]</a>
+              <a href="author.html#166">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

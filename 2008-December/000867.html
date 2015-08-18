@@ -1,0 +1,222 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r899 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r899%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812301019.mBUAJkpi018977%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000866.html">
+   <LINK REL="Next"  HREF="000868.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r899 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r899%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812301019.mBUAJkpi018977%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r899 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Dec 30 11:19:46 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000866.html">[OpenFDM-svn] r898 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000868.html">[OpenFDM-svn] r900 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#867">[ date ]</a>
+              <a href="thread.html#867">[ thread ]</a>
+              <a href="subject.html#867">[ subject ]</a>
+              <a href="author.html#867">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-30 11:19:45 +0100 (Tue, 30 Dec 2008)
+New Revision: 899
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+Log:
+Applying forces to a link has a different sign.
+
+M    src/OpenFDM/WheelContact.cpp
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/InternalSensor.cpp
+M    src/OpenFDM/Mass.cpp
+M    src/OpenFDM/ExternalForce.cpp
+M    src/OpenFDM/MechanicLinkValue.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-12-30 10:19:45 UTC (rev 899)
+@@ -183,8 +183,8 @@
+       // Transform to parent link's coordinates and apply to the parent link
+       force = mRelativeCoordinateSystem.forceToReference(force);
+       I = mRelativeCoordinateSystem.inertiaToReference(I);
+-      mParentLink-&gt;applyForce(force);
+-      mParentLink-&gt;applyInertia(I);
++      mParentLink-&gt;addForce(force);
++      mParentLink-&gt;addInertia(I);
+     }
+ 
+     /** Compute the acceleration step for a given joint force.
+@@ -219,8 +219,8 @@
+       // Transform to parent link's coordinates and apply to the parent link
+       force = mRelativeCoordinateSystem.forceToReference(force);
+       I = mRelativeCoordinateSystem.inertiaToReference(I);
+-      mParentLink-&gt;applyForce(force);
+-      mParentLink-&gt;applyInertia(I);
++      mParentLink-&gt;addForce(force);
++      mParentLink-&gt;addInertia(I);
+     }
+     
+     /** Compute the acceleration step for a given velocity derivative.
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp	2008-12-30 10:19:45 UTC (rev 899)
+@@ -34,15 +34,13 @@
+   // FIXME, for now relative position
+   Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+   if (mLocalCoordinates) {
+-    Vector6 force = -portValues[mForcePort];
+-    force = forceFrom(position, force);
+-    portValues[mMechanicLink].applyForce(force);
++    Vector6 force = portValues[mForcePort];
++    portValues[mMechanicLink].applyForce(position, force);
+   } else {
+     const Frame&amp; frame = portValues[mMechanicLink].getFrame();
+-    Vector6 force = -portValues[mForcePort];
++    Vector6 force = portValues[mForcePort];
+     force = forceTo(Vector3::zeros(), frame.getRefOrientation(), force);
+-    force = forceFrom(position, force);
+-    portValues[mMechanicLink].applyForce(force);
++    portValues[mMechanicLink].applyForce(position, force);
+   }
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-30 10:19:45 UTC (rev 899)
+@@ -98,15 +98,15 @@
+ 
+     // If we have reached the zero position, the force vector is undefined.
+     if (Limits&lt;real_type&gt;::min() &lt; nrmRelPos) {
+-      Vector3 dir = (1/nrmRelPos)*relPos;
++      Vector3 dir = (-1/nrmRelPos)*relPos;
+       // Since we assume positive input forces to push the two attached
+       // RigidBodies, we need that minus sign to negate the current position
+       // offset
+       Vector3 force0 = portValues[mForcePort]*dir;
+-      portValues[mMechanicLink0].applyForce(forceFrom(position0, force0));
++      portValues[mMechanicLink0].applyForce(position0, force0);
+       
+       Vector3 force1 = -relSys.rotToLocal(force0);
+-      portValues[mMechanicLink1].applyForce(forceFrom(position1, force1));
++      portValues[mMechanicLink1].applyForce(position1, force1);
+     }
+   }
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-12-30 10:19:45 UTC (rev 899)
+@@ -61,8 +61,8 @@
+                         cross(v.getLinear(), Iv.getLinear()),
+                         cross(v.getAngular(), Iv.getLinear()));
+ 
+-  portValues[mMechanicLink].applyInertia(I);
+-  portValues[mMechanicLink].applyForce(Vector6(vIv - force));
++  portValues[mMechanicLink].addInertia(I);
++  portValues[mMechanicLink].addForce(Vector6(vIv - force));
+ }
+ 
+ const InertiaMatrix&amp;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-12-30 10:19:45 UTC (rev 899)
+@@ -46,13 +46,19 @@
+   { mArticulatedForce = force; }
+ 
+   void applyForce(const Vector6&amp; force)
+-  { mArticulatedForce += force; }
++  { mArticulatedForce -= force; }
++  void applyForce(const Vector3&amp; position, const Vector6&amp; force)
++  { applyForce(forceFrom(position, force)); }
+   void applyForce(const Vector3&amp; force)
+   { applyForce(Vector6(Vector3::zeros(), force)); }
++  void applyForce(const Vector3&amp; position, const Vector3&amp; force)
++  { applyForce(forceFrom(position, force)); }
+   void applyTorque(const Vector3&amp; torque)
+   { applyForce(Vector6(torque, Vector3::zeros())); }
+ 
+-  void applyInertia(const SpatialInertia&amp; inertia)
++  void addForce(const Vector6&amp; force)
++  { mArticulatedForce += force; }
++  void addInertia(const SpatialInertia&amp; inertia)
+   { mArticulatedInertia += inertia; }
+ 
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2008-12-30 08:23:29 UTC (rev 898)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2008-12-30 10:19:45 UTC (rev 899)
+@@ -111,11 +111,11 @@
+   
+   // The resulting force is the sum of both.
+   // The minus sign is because of the direction of the surface normal.
+-  Vector3 force = - fricForce(0)*forward - fricForce(1)*side
+-    - normForce*lp.getNormal();
++  Vector3 force = fricForce(0)*forward + fricForce(1)*side
++    + normForce*lp.getNormal();
+   
+   // We don't have an angular moment.
+-  portValues[mMechanicLink].applyForce(forceFrom(contactPoint, force));
++  portValues[mMechanicLink].applyForce(contactPoint, force);
+ }
+ 
+ real_type
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000866.html">[OpenFDM-svn] r898 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000868.html">[OpenFDM-svn] r900 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#867">[ date ]</a>
+              <a href="thread.html#867">[ thread ]</a>
+              <a href="subject.html#867">[ subject ]</a>
+              <a href="author.html#867">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

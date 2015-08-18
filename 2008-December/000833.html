@@ -1,0 +1,196 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r865 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r865%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812071626.mB7GQ7nP026086%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000832.html">
+   <LINK REL="Next"  HREF="000834.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r865 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r865%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812071626.mB7GQ7nP026086%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r865 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Dec  7 17:26:07 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000832.html">[OpenFDM-svn] r864 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000834.html">[OpenFDM-svn] r866 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#833">[ date ]</a>
+              <a href="thread.html#833">[ thread ]</a>
+              <a href="subject.html#833">[ subject ]</a>
+              <a href="author.html#833">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-07 17:26:07 +0100 (Sun, 07 Dec 2008)
+New Revision: 865
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Enforce to avoid cycles in the parent chain.
+
+M    src/test/structure.cpp
+M    src/OpenFDM/Node.h
+M    src/OpenFDM/Node.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-12-07 08:22:12 UTC (rev 864)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-12-07 16:26:07 UTC (rev 865)
+@@ -169,6 +169,22 @@
+   return i != mPortList.end();
+ }
+ 
++class Node::CycleCheckVisitor : public ConstNodeVisitor {
++public:
++  CycleCheckVisitor(const Node* node) :
++    mNode(node), mDetectedCycle(false)
++  { }
++  virtual void apply(const Node&amp; node)
++  {
++    if (mNode == &amp;node)
++      mDetectedCycle = true;
++    else
++      node.ascend(*this);
++  }
++  const Node* mNode;
++  bool mDetectedCycle;
++};
++
+ bool
+ Node::addParent(Node* parent)
+ {
+@@ -177,9 +193,23 @@
+   ParentList::const_iterator i;
+   for (i = mParentList.begin(); i != mParentList.end(); ++i) {
+     SharedPtr&lt;const Node&gt; lockedParent = i-&gt;lock();
+-    if (parent == lockedParent)
++    if (parent == lockedParent) {
++      Log(Model, Info) &lt;&lt; &quot;Cannot add model \&quot;&quot; &lt;&lt; getName()
++                       &lt;&lt; &quot;\&quot; a second time to the parent \&quot;&quot;
++                       &lt;&lt; lockedParent-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+       return false;
++    }
+   }
++
++  CycleCheckVisitor visitor(this);
++  visitor.apply(*parent);
++  if (visitor.mDetectedCycle) {
++    Log(Model, Info) &lt;&lt; &quot;Cannot add model \&quot;&quot; &lt;&lt; getName()
++                     &lt;&lt; &quot;\&quot; to parent \&quot;&quot; &lt;&lt; parent-&gt;getName()
++                     &lt;&lt; &quot;\&quot;. Node cannot be parent of itself.&quot; &lt;&lt; std::endl;
++    return false;
++  }
++
+   mParentList.push_back(parent);
+   return true;
+ }
+@@ -215,6 +245,7 @@
+ Node::getNodePathList() const
+ {
+   NodePathListCollectVisitor visitor;
++  visitor.apply(*this);
+   return visitor.mNodePathList;
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-12-07 08:22:12 UTC (rev 864)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-12-07 16:26:07 UTC (rev 865)
+@@ -99,6 +99,7 @@
+   typedef std::vector&lt;WeakPtr&lt;Node&gt; &gt; ParentList;
+   ParentList mParentList;
+ 
++  class CycleCheckVisitor;
+   class NodePathListCollectVisitor;
+ 
+   /// Sample time handling.
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-12-07 08:22:12 UTC (rev 864)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-12-07 16:26:07 UTC (rev 865)
+@@ -118,6 +118,29 @@
+   return true;
+ }
+ 
++bool testCyclicParents()
++{
++  SharedPtr&lt;Group&gt; group1 = new Group(&quot;Group 1&quot;);
++  if (group1-&gt;addChild(group1) != ~0u) {
++    std::cerr &lt;&lt; &quot;Detection of cyclic parent loops failed! &quot;
++      &quot;Could add group as child of itself.&quot; &lt;&lt; std::endl;
++    return false;
++  }
++
++  SharedPtr&lt;Group&gt; group2 = new Group(&quot;Group 2&quot;);
++  if (group1-&gt;addChild(group2) == ~0u) {
++    std::cerr &lt;&lt; &quot;Could not add unrelated group as child of an other one.&quot;
++              &lt;&lt; std::endl;
++    return false;
++  }
++  if (group2-&gt;addChild(group1) != ~0u) {
++    std::cerr &lt;&lt; &quot;Detection of cyclic parent loops failed! &quot;
++      &quot;Could add group as child of a child group.&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
+ int main()
+ {
+   // Check a self referencing gain model, to see if cyclic loops
+@@ -136,6 +159,9 @@
+   if (!testCyclicDependencyWithGroup2())
+     return EXIT_FAILURE;
+ 
++  if (!testCyclicParents())
++    return EXIT_FAILURE;
++
+   std::cout &lt;&lt; &quot;PASSED&quot; &lt;&lt; std::endl;
+ 
+   return 0;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000832.html">[OpenFDM-svn] r864 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000834.html">[OpenFDM-svn] r866 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#833">[ date ]</a>
+              <a href="thread.html#833">[ thread ]</a>
+              <a href="subject.html#833">[ subject ]</a>
+              <a href="author.html#833">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,372 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r809 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r809%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811281454.mASEsnrr009406%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000776.html">
+   <LINK REL="Next"  HREF="000778.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r809 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r809%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811281454.mASEsnrr009406%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r809 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov 28 15:54:49 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000776.html">[OpenFDM-svn] r808 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000778.html">[OpenFDM-svn] r810 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#777">[ date ]</a>
+              <a href="thread.html#777">[ thread ]</a>
+              <a href="subject.html#777">[ subject ]</a>
+              <a href="author.html#777">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-28 15:54:49 +0100 (Fri, 28 Nov 2008)
+New Revision: 809
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/constintegral.cpp
+   branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Reactivate some old test programs.
+
+M    src/test/harmonic.cpp
+M    src/test/structure.cpp
+M    src/test/Makefile.am
+M    src/test/constintegral.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-28 14:43:54 UTC (rev 808)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-28 14:54:49 UTC (rev 809)
+@@ -5,8 +5,7 @@
+ bin_PROGRAMS = structure mechanic foucault
+ 
+ # define some unit tests
+-#check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+-check_PROGRAMS = quattest unitstest simulationtime limit linalg
++check_PROGRAMS = constintegral harmonic limit linalg quattest simulationtime unitstest
+ TESTS          = $(check_PROGRAMS)
+ 
+ # tiretestrig_SOURCES = tiretestrig.cpp
+@@ -33,11 +32,11 @@
+ simulationtime_SOURCES = simulationtime.cpp
+ simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+-# constintegral_SOURCES = constintegral.cpp
+-# constintegral_LDADD = ../OpenFDM/libOpenFDM.la
++constintegral_SOURCES = constintegral.cpp
++constintegral_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+-# harmonic_SOURCES = harmonic.cpp
+-# harmonic_LDADD = ../OpenFDM/libOpenFDM.la
++harmonic_SOURCES = harmonic.cpp
++harmonic_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+ limit_SOURCES = limit.cpp
+ limit_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: branches/OpenFDM-StateSeparation/src/test/constintegral.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/constintegral.cpp	2008-11-28 14:43:54 UTC (rev 808)
++++ branches/OpenFDM-StateSeparation/src/test/constintegral.cpp	2008-11-28 14:54:49 UTC (rev 809)
+@@ -5,6 +5,7 @@
+ #include &lt;cstdlib&gt;
+ #include &lt;iostream&gt;
+ #include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+@@ -17,49 +18,43 @@
+ int
+ main(int argc, char *argv[])
+ {
+-  real_type rate = 0.1;
++  real_type rate = 0.01;
+ 
+-  SharedPtr&lt;System&gt; system = new System(&quot;Constant Integration&quot;);
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+ 
+-  Matrix m(1, 1);
+-  m(0, 0) = 1;
++  ConstModel* constModel = new ConstModel(&quot;Constant&quot;, 1);
++  Group::NodeId constModelId = group-&gt;addChild(constModel);
+ 
+-  ConstModel* constModel = new ConstModel(&quot;Constant&quot;, m);
+-  system-&gt;addModel(constModel);
+-
+   Integrator* integrator = new Integrator(&quot;Integrator&quot;);
+-  system-&gt;addModel(integrator);
+-  m(0, 0) = 0;
+-  integrator-&gt;setInitialValue(m);
++  integrator-&gt;setInitialValue(0);
++  Group::NodeId integratorId = group-&gt;addChild(integrator);
++  group-&gt;connect(constModelId, &quot;output&quot;, integratorId, &quot;input&quot;);
+ 
+-  Connection::connect(integrator-&gt;getInputPort(0),
+-                      constModel-&gt;getOutputPort(0));
+-
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  system-&gt;addModel(simulationTime);
++  Group::NodeId simulationTimeId = group-&gt;addChild(simulationTime);
+ 
+   Summer* summer = new Summer(&quot;Error to exact Solution&quot;);
+-  system-&gt;addModel(summer);
++  Group::NodeId summerId = group-&gt;addChild(summer);
+   summer-&gt;setNumSummands(2);
+   summer-&gt;setInputSign(0, Summer::Plus);
+-  Connection::connect(simulationTime-&gt;getOutputPort(0),
+-                      summer-&gt;getInputPort(0));
++  group-&gt;connect(simulationTimeId, &quot;output&quot;, summerId, &quot;input0&quot;);
+   summer-&gt;setInputSign(1, Summer::Minus);
+-  Connection::connect(integrator-&gt;getOutputPort(0),
+-                      summer-&gt;getInputPort(1));
++  group-&gt;connect(integratorId, &quot;output&quot;, summerId, &quot;input1&quot;);
+ 
++
+   Output* output = new Output(&quot;Error Output&quot;);
+   SharedPtr&lt;ErrorCollectorCallback&gt; errors;
+   errors = new ErrorCollectorCallback;
+   output-&gt;setCallback(errors);
+-  output-&gt;addSampleTime(rate);
+-  system-&gt;addModel(output);
+-  Connection::connect(output-&gt;getInputPort(0), summer-&gt;getOutputPort(0));
++//   output-&gt;addSampleTime(rate);
++  Group::NodeId outputId = group-&gt;addChild(output);
++  group-&gt;connect(summerId, &quot;output&quot;, outputId, &quot;input&quot;);
+ 
+-  if (!system-&gt;init()) {
+-    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
++  SharedPtr&lt;System&gt; system = new System(&quot;Constant Integration&quot;);
++  system-&gt;setNode(group);
++
++  if (!system-&gt;init())
+     return EXIT_FAILURE;
+-  }
+ 
+   system-&gt;simulate(10);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-11-28 14:43:54 UTC (rev 808)
++++ branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-11-28 14:54:49 UTC (rev 809)
+@@ -6,6 +6,7 @@
+ #include &lt;iostream&gt;
+ #include &lt;OpenFDM/DoPri5.h&gt;
+ #include &lt;OpenFDM/Gain.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/Integrator.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+@@ -21,97 +22,80 @@
+ {
+   real_type omega = 2;
+ 
+-  SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
+-  system-&gt;addSampleTime(real_type(1)/real_type(100));
+-  system-&gt;setTimestepper(new DoPri5);
+-  
+-  Integrator* integrator0 = new Integrator(&quot;Acceleration Integrator&quot;);
+-  Matrix initialValue(1, 1);
+-  initialValue(0, 0) = 0;
+-  integrator0-&gt;setInitialValue(initialValue);
+-  system-&gt;addModel(integrator0);
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+ 
+-  Integrator* integrator1 = new Integrator(&quot;Velocity Integrator&quot;);
+-  initialValue(0, 0) = 1;
+-  integrator1-&gt;setInitialValue(initialValue);
+-  system-&gt;addModel(integrator1);
++  // Build up a harmonic oszilator
++  Group::NodeId gainId = group-&gt;addChild(new Gain(&quot;gain&quot;, -omega*omega));
++  Integrator* integrator0 = new Integrator(&quot;Velocity Integrator&quot;);
++  integrator0-&gt;setInitialValue(omega);
++  Group::NodeId integrator0Id = group-&gt;addChild(integrator0);
++  Integrator* integrator1 = new Integrator(&quot;Position Integrator&quot;);
++  integrator1-&gt;setInitialValue(0);
++  Group::NodeId integrator1Id = group-&gt;addChild(integrator1);
+ 
+-  Gain* gain = new Gain(&quot;Gain&quot;);
+-  gain-&gt;setGain(-omega*omega);
+-  system-&gt;addModel(gain);
++  group-&gt;connect(gainId, &quot;output&quot;, integrator0Id, &quot;input&quot;);
++  group-&gt;connect(integrator0Id, &quot;output&quot;, integrator1Id, &quot;input&quot;);
++  group-&gt;connect(integrator1Id, &quot;output&quot;, gainId, &quot;input&quot;);
+ 
+-  Connection::connect(gain-&gt;getInputPort(0),
+-                      integrator1-&gt;getOutputPort(0));
+-  Connection::connect(integrator1-&gt;getInputPort(0),
+-                      integrator0-&gt;getOutputPort(0));
+-  Connection::connect(integrator0-&gt;getInputPort(0),
+-                      gain-&gt;getOutputPort(0));
+-
++  // Build up the exact solution
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  system-&gt;addModel(simulationTime);
++  Group::NodeId simulationTimeId = group-&gt;addChild(simulationTime);
+ 
+-  gain = new Gain(&quot;Cosinus Input Gain&quot;);
+-  system-&gt;addModel(gain);
+-  gain-&gt;setGain(omega);
+-  Connection::connect(gain-&gt;getInputPort(0),
+-                      simulationTime-&gt;getOutputPort(0));
++  Gain* cosInputGain = new Gain(&quot;Cosinus Input Gain&quot;, omega);
++  Group::NodeId cosInputGainId = group-&gt;addChild(cosInputGain);
++  group-&gt;connect(simulationTimeId, &quot;output&quot;, cosInputGainId, &quot;input&quot;);
+ 
+-  UnaryFunction* cosFunction
+-    = new UnaryFunction(&quot;Exact Pos Solution&quot;, UnaryFunction::Cos);
+-  system-&gt;addModel(cosFunction);
+-  Connection::connect(cosFunction-&gt;getInputPort(0),
+-                      gain-&gt;getOutputPort(0));
++  UnaryFunction* cosFunction;
++  cosFunction = new UnaryFunction(&quot;Exact Vel Solution&quot;, UnaryFunction::Cos);
++  Group::NodeId cosFunctionId = group-&gt;addChild(cosFunction);
++  group-&gt;connect(cosInputGainId, &quot;output&quot;, cosFunctionId, &quot;input&quot;);
+ 
+-  UnaryFunction* sinFunction
+-    = new UnaryFunction(&quot;Exact Vel Solution&quot;, UnaryFunction::Sin);
+-  system-&gt;addModel(sinFunction);
+-  Connection::connect(sinFunction-&gt;getInputPort(0),
+-                      gain-&gt;getOutputPort(0));
++  Gain* velOutputGain = new Gain(&quot;Velocity Output Gain&quot;, omega);
++  Group::NodeId velOutputGainId = group-&gt;addChild(velOutputGain);
++  group-&gt;connect(cosFunctionId, &quot;output&quot;, velOutputGainId, &quot;input&quot;);
+ 
+-  gain = new Gain(&quot;Cosinus Output Gain&quot;);
+-  system-&gt;addModel(gain);
+-  gain-&gt;setGain(-omega);
+-  Connection::connect(gain-&gt;getInputPort(0),
+-                      sinFunction-&gt;getOutputPort(0));
++  UnaryFunction* sinFunction;
++  sinFunction = new UnaryFunction(&quot;Exact Pos Solution&quot;, UnaryFunction::Sin);
++  Group::NodeId sinFunctionId = group-&gt;addChild(sinFunction);
++  group-&gt;connect(cosInputGainId, &quot;output&quot;, sinFunctionId, &quot;input&quot;);
+ 
+ 
+-  Summer* summer0 = new Summer(&quot;Position Error to exact Solution&quot;);
+-  system-&gt;addModel(summer0);
++  // Now build the differences
++
++  Summer* summer0 = new Summer(&quot;Velocity Error to exact Solution&quot;);
++  Group::NodeId summer0Id = group-&gt;addChild(summer0);
+   summer0-&gt;setNumSummands(2);
+   summer0-&gt;setInputSign(0, Summer::Plus);
+-  Connection::connect(cosFunction-&gt;getOutputPort(0),
+-                      summer0-&gt;getInputPort(0));
++  group-&gt;connect(velOutputGainId, &quot;output&quot;, summer0Id, &quot;input0&quot;);
+   summer0-&gt;setInputSign(1, Summer::Minus);
+-  Connection::connect(integrator1-&gt;getOutputPort(0),
+-                      summer0-&gt;getInputPort(1));
++  group-&gt;connect(integrator0Id, &quot;output&quot;, summer0Id, &quot;input1&quot;);
+ 
+-  Output* output = new Output(&quot;Position Error Output&quot;);
+-  SharedPtr&lt;ErrorCollectorCallback&gt; posErrorCallback;
+-  posErrorCallback = new ErrorCollectorCallback;
+-  output-&gt;setCallback(posErrorCallback);
+-  output-&gt;addSampleTime(real_type(1)/real_type(10));
+-  system-&gt;addModel(output);
+-  Connection::connect(output-&gt;getInputPort(0), summer0-&gt;getOutputPort(0));
++  Output* output0 = new Output(&quot;Velocity Error Output&quot;);
++  SharedPtr&lt;ErrorCollectorCallback&gt; velErrorCallback;
++  velErrorCallback = new ErrorCollectorCallback;
++  output0-&gt;setCallback(velErrorCallback);
++  Group::NodeId output0Id = group-&gt;addChild(output0);
++  group-&gt;connect(summer0Id, &quot;output&quot;, output0Id, &quot;input&quot;);
+ 
+ 
+-  Summer* summer1 = new Summer(&quot;Velocity Error to exact Solution&quot;);
+-  system-&gt;addModel(summer1);
++  Summer* summer1 = new Summer(&quot;Position Error to exact Solution&quot;);
++  Group::NodeId summer1Id = group-&gt;addChild(summer1);
+   summer1-&gt;setNumSummands(2);
+   summer1-&gt;setInputSign(0, Summer::Plus);
+-  Connection::connect(gain-&gt;getOutputPort(0),
+-                      summer1-&gt;getInputPort(0));
++  group-&gt;connect(sinFunctionId, &quot;output&quot;, summer1Id, &quot;input0&quot;);
+   summer1-&gt;setInputSign(1, Summer::Minus);
+-  Connection::connect(integrator0-&gt;getOutputPort(0),
+-                      summer1-&gt;getInputPort(1));
++  group-&gt;connect(integrator1Id, &quot;output&quot;, summer1Id, &quot;input1&quot;);
+ 
+-  output = new Output(&quot;Velocity Error Output&quot;);
+-  SharedPtr&lt;ErrorCollectorCallback&gt; velErrorCallback;
+-  velErrorCallback = new ErrorCollectorCallback;
+-  output-&gt;setCallback(velErrorCallback);
+-  output-&gt;addSampleTime(real_type(1)/real_type(10));
+-  system-&gt;addModel(output);
+-  Connection::connect(output-&gt;getInputPort(0), summer1-&gt;getOutputPort(0));
++  Output* output1 = new Output(&quot;Position Error Output&quot;);
++  SharedPtr&lt;ErrorCollectorCallback&gt; posErrorCallback;
++  posErrorCallback = new ErrorCollectorCallback;
++  output1-&gt;setCallback(posErrorCallback);
++  Group::NodeId output1Id = group-&gt;addChild(output1);
++  group-&gt;connect(summer1Id, &quot;output&quot;, output1Id, &quot;input&quot;);
+ 
++  SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
++  system-&gt;setNode(group);
++
+   if (!system-&gt;init()) {
+     std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-11-28 14:43:54 UTC (rev 808)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-11-28 14:54:49 UTC (rev 809)
+@@ -113,9 +113,7 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+   Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;, -1));
+   Integrator* i1 = new Integrator(&quot;I1&quot;);
+-  Matrix v(1, 1);
+-  v(0, 0) = 1;
+-  i1-&gt;setInitialValue(v);
++  i1-&gt;setInitialValue(1);
+   Group::NodeId integrator1 = group-&gt;addChild(i1);
+   Group::NodeId integrator2 = group-&gt;addChild(new Integrator(&quot;I2&quot;));
+   Group::NodeId output = group-&gt;addChild(new Output(&quot;O&quot;));
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000776.html">[OpenFDM-svn] r808 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000778.html">[OpenFDM-svn] r810 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#777">[ date ]</a>
+              <a href="thread.html#777">[ thread ]</a>
+              <a href="subject.html#777">[ subject ]</a>
+              <a href="author.html#777">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

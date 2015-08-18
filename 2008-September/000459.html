@@ -1,0 +1,272 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r487 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r487%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809190458.m8J4w8RZ022135%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000458.html">
+   <LINK REL="Next"  HREF="000460.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r487 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r487%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809190458.m8J4w8RZ022135%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r487 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Sep 19 06:58:08 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000458.html">[OpenFDM-svn] r486 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000460.html">[OpenFDM-svn] r488 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#459">[ date ]</a>
+              <a href="thread.html#459">[ thread ]</a>
+              <a href="subject.html#459">[ subject ]</a>
+              <a href="author.html#459">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-19 06:58:06 +0200 (Fri, 19 Sep 2008)
+New Revision: 487
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add a NodePath definition, use it.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-18 19:49:52 UTC (rev 486)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-19 04:58:06 UTC (rev 487)
+@@ -103,26 +103,25 @@
+ /// there must be a PortData like structure that is only built during simulation
+ /// model initialization.
+ 
++typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
++
+ /// A NodeInstance represents an effective model node in a ready to run
+ /// System. You can access the Nodes Ports values for example.
+ /// This class is meant to show up in the user interface of this simulation.
+ class NodeInstance : public WeakReferenced {
+ public:
+-  virtual ~NodeInstance() {}
++  NodeInstance(const NodePath&amp; nodePath) :
++    mNodePath(nodePath)
++  { }
++  virtual ~NodeInstance()
++  { }
+ 
+   /// The actual Node this NodeInstance stems from
+   const Node&amp; getNode() const
+   { return getNodeContext().getNode(); }
+ 
+-  /// FIXME: is te wrong value, but sufficient for now to debug ...
+-  const std::string&amp; getPathString() const
+-  { return getNodeContext().getNode().getName(); }
++  const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+-  /// FIXME: put this to some global place
+-//   typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
+-//   const NodePath&amp; getNodePath() const { return mNodePath; }
+-//   NodePath mNodePath;
+-
+ //   /// Set the sample times this node will run on
+ //   void setSampleTimeSet(const SampleTimeSet&amp; sampleTimeSet)
+ //   { mSampleTimeSet = sampleTimeSet; }
+@@ -135,6 +134,21 @@
+   const PortValueList&amp; getPortValueList() const
+   { return getNodeContext().getPortValueList(); }
+ 
++  std::string getNodeNamePath() const
++  {
++    if (mNodePath.empty())
++      return std::string();
++    std::string path = mNodePath.front()-&gt;getName();
++    NodePath::const_iterator i = mNodePath.begin();
++    if (i != mNodePath.end()) {
++      for (++i; i != mNodePath.end(); ++i) {
++        path += '/';
++        path += (*i)-&gt;getName();
++      }
++    }
++    return path;
++  }
++
+ protected:
+   NodeInstance() {}
+ 
+@@ -148,6 +162,8 @@
+ 
+ //   /// The sample times this node will run on
+ //   SampleTimeSet mSampleTimeSet;
++
++  NodePath mNodePath;
+ };
+ 
+ typedef std::list&lt;SharedPtr&lt;NodeInstance&gt; &gt; NodeInstanceList;
+@@ -178,8 +194,9 @@
+ 
+ class GenericNodeInstance : public NodeInstance {
+ public:
+-  GenericNodeInstance(NodeContext* nodeContext) :
+-    mNodeContext(nodeContext)
++  GenericNodeInstance(const NodePath&amp; nodePath, const Node* node) :
++    NodeInstance(nodePath),
++    mNodeContext(new GenericNodeContext(node))
+   { }
+ 
+ protected:
+@@ -290,7 +307,8 @@
+ 
+ class ModelInstance : public NodeInstance {
+ public:
+-  ModelInstance(const Model* model) :
++  ModelInstance(const NodePath&amp; nodePath, const Model* model) :
++    NodeInstance(nodePath),
+     mModelContext(new ModelContext(model))
+   { }
+ 
+@@ -389,7 +407,9 @@
+ 
+ class MechanicInstance : public NodeInstance {
+ public:
+-  MechanicInstance(const MechanicNode* mechanicNode) :
++  MechanicInstance(const NodePath&amp; nodePath,
++                   const MechanicNode* mechanicNode) :
++    NodeInstance(nodePath),
+     mMechanicContext(new MechanicContext(mechanicNode))
+   { }
+ 
+@@ -645,9 +665,8 @@
+ 
+   PortDataHelper::PortDataList* buildGenericNodeContext(const Node&amp; node)
+   {
+-    GenericNodeContext* genericNodeContext = new GenericNodeContext(&amp;node);
+     GenericNodeInstance* genericNodeInstance;
+-    genericNodeInstance = new GenericNodeInstance(genericNodeContext);
++    genericNodeInstance = new GenericNodeInstance(mNodePath, &amp;node);
+     _nodeInstanceList.push_back(genericNodeInstance);
+     PortDataHelper::PortDataList* portDataList = new PortDataHelper::PortDataList(genericNodeInstance);
+     _portDataListMap[_nodeInstanceList.back()] = portDataList;
+@@ -711,7 +730,7 @@
+   {
+     // Need to stor the root nodes to build up the spanning tree for the
+     // mechanical system here.
+-    MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(mNodePath, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+ //     _mechanicInstanceList.push_back(mechanicInstance);
+     _rootJointInstanceList.push_back(mechanicInstance);
+@@ -719,14 +738,14 @@
+   }
+   virtual void apply(const MechanicNode&amp; node)
+   {
+-    MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(mNodePath, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(const Model&amp; node)
+   {
+-    ModelInstance* modelInstance = new ModelInstance(&amp;node);
++    ModelInstance* modelInstance = new ModelInstance(mNodePath, &amp;node);
+     _nodeInstanceList.push_back(modelInstance);
+     _modelInstanceList.push_back(modelInstance);
+     allocPortData(modelInstance, node);
+@@ -744,7 +763,9 @@
+ #else
+     for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
+       pushNodeId(group.getNodeId(i));
++      mNodePath.push_back(group.getChild(i));
+       group.getChild(i)-&gt;accept(*this);
++      mNodePath.pop_back();
+       popNodeId();
+     }
+ #endif
+@@ -885,8 +906,9 @@
+         // Something already sorted in depends on modelInstance,
+         // so schedule that new thing just before.
+         Log(Schedule, Info)
+-          &lt;&lt; &quot;Inserting Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getPathString()
+-          &lt;&lt; &quot;\&quot; before Model \&quot;&quot; &lt;&lt; (*i)-&gt;getPathString() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++          &lt;&lt; &quot;Inserting Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getNodeNamePath()
++          &lt;&lt; &quot;\&quot; before Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNodeNamePath()
++          &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+         i = sortedModelInstanceList.insert(i, modelInstance);
+         break;
+       }
+@@ -894,7 +916,7 @@
+         // nothing found so far that depends on model instance.
+         // So put it at the end.
+         Log(Schedule, Info)
+-          &lt;&lt; &quot;Appending Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getPathString()
++          &lt;&lt; &quot;Appending Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getNodeNamePath()
+           &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+ 
+         sortedModelInstanceList.push_back(modelInstance);
+@@ -906,8 +928,8 @@
+             continue;
+           Log(Schedule,Error)
+             &lt;&lt; &quot;Detected cyclic loop: Model \&quot;&quot;
+-            &lt;&lt; modelInstance-&gt;getPathString() &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
+-            &lt;&lt; (*i)-&gt;getPathString() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++            &lt;&lt; modelInstance-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
++            &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+           return false;
+         }
+       }
+@@ -974,6 +996,8 @@
+ private:
+   typedef std::list&lt;Group::NodeId&gt; NodeIdStack;
+   NodeIdStack _nodeIdStack;
++
++  NodePath mNodePath;
+ };
+ 
+ 
+@@ -1180,7 +1204,7 @@
+   NodeInstanceList::const_iterator i;
+   for (i = system-&gt;getNodeInstanceList().begin();
+        i != system-&gt;getNodeInstanceList().end(); ++i) {
+-    std::cout &lt;&lt; (*i)-&gt;getNode().getName() &lt;&lt; std::endl;
++    std::cout &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; std::endl;
+     for (unsigned k = 0; k &lt; (*i)-&gt;getNode().getNumPorts(); ++k) {
+       std::cout &lt;&lt; &quot;  &quot; &lt;&lt; (*i)-&gt;getNode().getPort(k)-&gt;getName() &lt;&lt; &quot; &quot;
+                 &lt;&lt; (*i)-&gt;getPortValueList().getPortValue(k);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000458.html">[OpenFDM-svn] r486 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000460.html">[OpenFDM-svn] r488 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#459">[ date ]</a>
+              <a href="thread.html#459">[ thread ]</a>
+              <a href="subject.html#459">[ subject ]</a>
+              <a href="author.html#459">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

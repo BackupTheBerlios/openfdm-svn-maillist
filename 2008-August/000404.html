@@ -1,0 +1,551 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r432 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r432%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200808311001.m7VA1VHA021739%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000403.html">
+   <LINK REL="Next"  HREF="000405.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r432 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r432%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200808311001.m7VA1VHA021739%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r432 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 31 12:01:31 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000403.html">[OpenFDM-svn] r431 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000405.html">[OpenFDM-svn] r433 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#404">[ date ]</a>
+              <a href="thread.html#404">[ thread ]</a>
+              <a href="subject.html#404">[ subject ]</a>
+              <a href="author.html#404">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-31 12:01:31 +0200 (Sun, 31 Aug 2008)
+New Revision: 432
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Dump remaining test program into svn.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-08-31 09:47:40 UTC (rev 431)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-08-31 10:01:31 UTC (rev 432)
+@@ -2,9 +2,10 @@
+ 
+ # define some util programs
+ # bin_PROGRAMS = tiretestrig
++bin_PROGRAMS = structure
+ 
+ # define some unit tests
+-#check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic limit
++#check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+ check_PROGRAMS = quattest unitstest limit
+ TESTS          = $(check_PROGRAMS)
+ 
+@@ -17,6 +18,9 @@
+ quattest_SOURCES = quattest.cpp
+ quattest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++structure_SOURCES = structure.cpp
++structure_LDADD = ../OpenFDM/libOpenFDM.la
++
+ # simulationtime_SOURCES = simulationtime.cpp
+ # simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-08-31 09:47:40 UTC (rev 431)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-08-31 10:01:31 UTC (rev 432)
+@@ -0,0 +1,445 @@
++#include &lt;OpenFDM/Matrix.h&gt;
++#include &lt;OpenFDM/Object.h&gt;
++#include &lt;OpenFDM/SharedPtr.h&gt;
++#include &lt;OpenFDM/WeakPtr.h&gt;
++#include &lt;OpenFDM/Rotation.h&gt;
++#include &lt;OpenFDM/Inertia.h&gt;
++#include &lt;OpenFDM/PortValue.h&gt;
++#include &lt;OpenFDM/PortValueList.h&gt;
++#include &lt;OpenFDM/PortId.h&gt;
++#include &lt;OpenFDM/PortInfo.h&gt;
++#include &lt;OpenFDM/AcceptorPortInfo.h&gt;
++#include &lt;OpenFDM/ProviderPortInfo.h&gt;
++#include &lt;OpenFDM/NumericPortValue.h&gt;
++#include &lt;OpenFDM/Node.h&gt;
++#include &lt;OpenFDM/NodeVisitor.h&gt;
++#include &lt;OpenFDM/NumericAcceptorPortInfo.h&gt;
++#include &lt;OpenFDM/NumericProviderPortInfo.h&gt;
++#include &lt;OpenFDM/MatrixInputPort.h&gt;
++#include &lt;OpenFDM/MatrixOutputPort.h&gt;
++#include &lt;OpenFDM/RealInputPort.h&gt;
++#include &lt;OpenFDM/RealOutputPort.h&gt;
++
++#include &lt;OpenFDM/StateInfo.h&gt;
++#include &lt;OpenFDM/StateValue.h&gt;
++#include &lt;OpenFDM/ContinousStateValue.h&gt;
++#include &lt;OpenFDM/MatrixStateValue.h&gt;
++
++#include &lt;OpenFDM/StateInfoVector.h&gt;
++#include &lt;OpenFDM/ContinousStateInfoVector.h&gt;
++
++#include &lt;OpenFDM/ContinousStateValueVector.h&gt;
++#include &lt;OpenFDM/DiscreteStateValueVector.h&gt;
++
++#include &lt;OpenFDM/BoolStateInfo.h&gt;
++#include &lt;OpenFDM/RealStateInfo.h&gt;
++#include &lt;OpenFDM/MatrixStateInfo.h&gt;
++
++#include &lt;OpenFDM/LeafContext.h&gt;
++
++#include &lt;OpenFDM/Gain.h&gt;
++#include &lt;OpenFDM/Integrator.h&gt;
++#include &lt;OpenFDM/Delay.h&gt;
++
++#include &lt;OpenFDM/Group.h&gt;
++
++#include &lt;iterator&gt;
++#include &lt;algorithm&gt;
++#include &lt;sstream&gt;
++
++namespace OpenFDM {
++
++/// Evaluation orders:
++///
++/// Initialization:
++///  init
++///  output(t = t0)
++/// Now the values in the ports belong to t = t0
++///
++/// Loop
++///  while (t0 &lt; tEnd)
++///   output(t0) // Only if port values are not already at t0
++///   update // prepare model's state for time interval [t0, t0+h]
++///   Continous // do time integration
++///    output(t0+s)
++///    derivative(t0+s)
++///
++///  output(tEnd)
++/// Now the values in the ports belong to t = tEnd
++///  
++/// Update discrete states based on ports at time t to discrete states for
++/// the next timestep, that may just set state for t = t+h so that output can
++/// now return values for the next timestep.
++/// Then evaluate ports for time t = t+h.
++///
++/// Note that we can also outputs for the desired simulation time at the end.
++/// Then we just reevaluate outputs when we get asked for a time within the
++/// current integration timestep. If we need to start a new timestep,
++/// reevaluate outputs for that particular timesteps start time.
++/// In the best case this time matches the alread present output time.
++/// FIXME: IMO THIS MUST WORK THIS WAY
++///
++
++class Print : public Model {
++public:
++  Print(const std::string&amp; name = std::string()) :
++    Model(name),
++    mInputPort(newRealInputPort(&quot;input&quot;))
++  { }
++  virtual void output(const DiscreteStateValueVector&amp;, const ContinousStateValueVector&amp;, PortValueList&amp; portValues) const
++  { std::cout &lt;&lt; portValues[mInputPort] &lt;&lt; std::endl; }
++  virtual bool dependsOn(const PortId&amp;, const PortId&amp;) const
++  { return false; }
++private:
++  RealInputPort mInputPort;
++};
++
++class LeafInstance : public WeakReferenced {
++public:
++  struct AcceptorPortData;
++  struct ProviderPortData;
++
++  LeafInstance(const LeafNode* leaf) :
++    _leaf(leaf)
++  { allocPorts(leaf); }
++
++  void allocPorts(const Node* node)
++  {
++    for (unsigned i = 0; i &lt; node-&gt;getNumPorts(); ++i) {
++      SharedPtr&lt;const PortInfo&gt; port = node-&gt;getPort(i);
++      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
++      if (providerPort) {
++        _providerPortData.push_back(new ProviderPortData(this, providerPort));
++      }
++      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
++      if (acceptorPort) {
++        _acceptorPortData.push_back(new AcceptorPortData(this, acceptorPort));
++      }
++    }
++  }
++
++  // The subsystem leaf node
++  SharedPtr&lt;const LeafNode&gt; _leaf;
++
++  struct ProviderPortData : public WeakReferenced {
++    ProviderPortData(LeafInstance* leafInstance,
++                     const ProviderPortInfo* providerPort) :
++      _leafInstance(leafInstance),
++      _providerPort(providerPort)
++    {}
++    WeakPtr&lt;LeafInstance&gt; _leafInstance;
++    SharedPtr&lt;const ProviderPortInfo&gt; _providerPort;
++    std::vector&lt;WeakPtr&lt;const AcceptorPortData&gt; &gt; _acceptorPortDataList;
++  };
++  struct AcceptorPortData : public WeakReferenced {
++    AcceptorPortData(LeafInstance* leafInstance,
++                     const AcceptorPortInfo* acceptorPort) :
++      _leafInstance(leafInstance)
++    { _acceptorPortList.push_back(acceptorPort); }
++    WeakPtr&lt;LeafInstance&gt; _leafInstance;
++    std::vector&lt;SharedPtr&lt;const AcceptorPortInfo&gt; &gt; _acceptorPortList;
++    WeakPtr&lt;const ProviderPortData&gt; _providerPortData;
++  };
++  typedef std::vector&lt;SharedPtr&lt;AcceptorPortData&gt; &gt; AcceptorPortDataList;
++  AcceptorPortDataList _acceptorPortData;
++  typedef std::vector&lt;SharedPtr&lt;ProviderPortData&gt; &gt; ProviderPortDataList;
++  ProviderPortDataList _providerPortData;
++
++  AcceptorPortData* getAcceptorPortData(const AcceptorPortInfo* acceptorPort)
++  {
++    AcceptorPortDataList::const_iterator i;
++    for (i = _acceptorPortData.begin(); i != _acceptorPortData.end(); ++i) {
++      for (unsigned j = 0; j &lt; (*i)-&gt;_acceptorPortList.size(); ++j) {
++        if ((*i)-&gt;_acceptorPortList[j] == acceptorPort)
++          return *i;
++      }
++    }
++    return 0;
++  }
++  ProviderPortData* getProviderPortData(const ProviderPortInfo* providerPort)
++  {
++    ProviderPortDataList::const_iterator i;
++    for (i = _providerPortData.begin(); i != _providerPortData.end(); ++i) {
++      if ((*i)-&gt;_providerPort == providerPort)
++        return *i;
++    }
++    return 0;
++  }
++
++  AcceptorPortData* getAcceptorPortData(const PortId&amp; portId)
++  {
++    AcceptorPortDataList::const_iterator i;
++    for (i = _acceptorPortData.begin(); i != _acceptorPortData.end(); ++i) {
++      for (unsigned j = 0; j &lt; (*i)-&gt;_acceptorPortList.size(); ++j) {
++        if (PortId(SharedPtr&lt;const PortInfo&gt;((*i)-&gt;_acceptorPortList[j])) == portId)
++          return *i;
++      }
++    }
++    return 0;
++  }
++  ProviderPortData* getProviderPortData(const PortId&amp; portId)
++  {
++    ProviderPortDataList::const_iterator i;
++    for (i = _providerPortData.begin(); i != _providerPortData.end(); ++i) {
++      if (PortId(SharedPtr&lt;const PortInfo&gt;((*i)-&gt;_providerPort)) == portId)
++        return *i;
++    }
++    return 0;
++  }
++};
++
++class LeafInstanceCollector : public NodeVisitor {
++public:
++
++  virtual void apply(Node&amp; node)
++  {
++    std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl;
++  }
++
++  // Aussen acceptor, innen provider
++  virtual void apply(GroupAcceptorNode&amp; leaf)
++  {
++    OpenFDMAssert(leaf.getPort(0));
++    PortId portId = leaf.getPortId(0);
++    _leafPortDataMap[getCurrentNodeId()][portId]._acceptorPortData = 0;
++    LeafInstance::ProviderPortData* pd
++      = new LeafInstance::ProviderPortData(0, leaf._groupInternalPort);
++    _leafPortDataMap[getCurrentNodeId()][portId]._providerPortData = pd;
++  }
++  // Aussen provider, innen acceptor
++  virtual void apply(GroupProviderNode&amp; leaf)
++  {
++    OpenFDMAssert(leaf.getPort(0));
++    PortId portId = leaf.getPortId(0);
++    LeafInstance::AcceptorPortData* ad
++      = new LeafInstance::AcceptorPortData(0, leaf._groupInternalPort);
++    _leafPortDataMap[getCurrentNodeId()][portId]._acceptorPortData = ad;
++    _leafPortDataMap[getCurrentNodeId()][portId]._providerPortData = 0;
++  }
++  virtual void apply(LeafNode&amp; leaf)
++  {
++    // FIXME: assert that the current node id is something valid ...
++
++    LeafInstance* leafInstance = new LeafInstance(&amp;leaf);
++    _leafInstanceList.push_back(leafInstance);
++
++    for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
++      PortId portId = leaf.getPortId(i);
++      _leafPortDataMap[getCurrentNodeId()][portId]._acceptorPortData
++        = leafInstance-&gt;getAcceptorPortData(portId);
++      _leafPortDataMap[getCurrentNodeId()][portId]._providerPortData
++        = leafInstance-&gt;getProviderPortData(portId);
++    }
++  }
++  virtual void apply(Group&amp; group)
++  {
++    // Prepare a new leaf map for the child group
++    LeafPortDataMap parentLeafPortDataMap;
++    parentLeafPortDataMap.swap(_leafPortDataMap);
++
++    // Walk the children
++#if 0
++    group.traverse(*this);
++#else
++    for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
++      pushNodeId(group.getNodeId(i));
++      group.getChild(i)-&gt;accept(*this);
++      popNodeId();
++    }
++#endif
++
++    // Apply the group internal connections to the instances
++    unsigned numConnects = group.getNumConnects();
++    for (unsigned i = 0; i &lt; numConnects; ++i) {
++      Group::NodeId acceptorNodeId = group.getConnectAcceptorNodeId(i);
++      Group::NodeId providerNodeId = group.getConnectProviderNodeId(i);
++
++      if (!group.getChild(acceptorNodeId)) {
++        std::cerr &lt;&lt; &quot;Cannot find acceptor node from nodeId&quot; &lt;&lt; std::endl;
++        continue;
++      }
++      if (!group.getChild(acceptorNodeId)) {
++        std::cerr &lt;&lt; &quot;Cannot find provider node from nodeId&quot; &lt;&lt; std::endl;
++        continue;
++      }
++
++      SharedPtr&lt;const AcceptorPortInfo&gt; acceptorPort;
++      acceptorPort = group.getConnectAcceptorPortInfo(i);
++      PortId acceptorPortId = SharedPtr&lt;const PortInfo&gt;(acceptorPort);
++      SharedPtr&lt;const ProviderPortInfo&gt; providerPort;
++      providerPort = group.getConnectProviderPortInfo(i);
++      PortId providerPortId = SharedPtr&lt;const PortInfo&gt;(providerPort);
++
++      if (!acceptorPort) {
++        std::cerr &lt;&lt; &quot;Cannot find acceptor Port data node &quot;
++                  &lt;&lt; group.getChild(acceptorNodeId)-&gt;getName() &lt;&lt; std::endl;
++        continue;
++      }
++      if (!providerPort) {
++        std::cerr &lt;&lt; &quot;Cannot find provider Port data node &quot;
++                  &lt;&lt; group.getChild(providerNodeId)-&gt;getName() &lt;&lt; std::endl;
++        continue;
++      }
++
++      LeafInstance::AcceptorPortData* acceptorPortData =
++        _leafPortDataMap[acceptorNodeId][acceptorPortId]._acceptorPortData;
++      LeafInstance::ProviderPortData* providerPortData =
++        _leafPortDataMap[providerNodeId][providerPortId]._providerPortData;
++
++      if (!acceptorPortData) {
++        std::cout &lt;&lt; &quot;Cannot find acceptor Port data&quot; &lt;&lt; std::endl;
++        continue;
++      }
++      if (!providerPortData) {
++        std::cout &lt;&lt; &quot;Cannot find provider Port data&quot; &lt;&lt; std::endl;
++        continue;
++      }
++
++      // FIXME Error message ??? and abort visiting???
++      if (acceptorPortData-&gt;_providerPortData.lock())
++        std::cerr &lt;&lt; &quot;??? already have a provider port????&quot; &lt;&lt; std::endl;
++      acceptorPortData-&gt;_providerPortData = providerPortData;
++      providerPortData-&gt;_acceptorPortDataList.push_back(acceptorPortData);
++    }
++
++    // Add a proxy LeafInstance that holds this groups ports, will be removed
++    // when merged into the parent
++    // FIXME: how to tell the parent group which connections need to be done??
++    // FIXME:
++    // add group connect routings
++    // merge child list into the global list of instances
++    for (unsigned i = 0; i &lt; group.getNumPorts(); ++i) {
++      PortId portId = group.getPortId(i);
++      Group::NodeId nodeId = group.getGroupPortNode(portId);
++      if (group.getPort(i)-&gt;toAcceptorPortInfo())
++        parentLeafPortDataMap[getCurrentNodeId()][portId]._acceptorPortData
++          = new LeafInstance::AcceptorPortData(0, group.getPort(i)-&gt;toAcceptorPortInfo());
++      if (group.getPort(i)-&gt;toProviderPortInfo())
++        parentLeafPortDataMap[getCurrentNodeId()][portId]._providerPortData
++          = new LeafInstance::ProviderPortData(0, group.getPort(i)-&gt;toProviderPortInfo());
++
++      if (_leafPortDataMap[nodeId].empty()) {
++        // FIXME, is this an internal error ???
++        std::cerr &lt;&lt; &quot;Hmm, cannot find GroupPortNode for external port &quot;
++                  &lt;&lt; i &lt;&lt; std::endl;
++        continue;
++      }
++      parentLeafPortDataMap[getCurrentNodeId()][portId].
++        merge(_leafPortDataMap[nodeId].begin()-&gt;second);
++    }
++
++    parentLeafPortDataMap.swap(_leafPortDataMap);
++  }
++
++  ////////////////////////////////////////////////////////////////////////////
++  // The final list of leafs we have in the system
++  typedef std::list&lt;SharedPtr&lt;LeafInstance&gt; &gt; LeafInstanceList;
++  LeafInstanceList _leafInstanceList;
++
++  ////////////////////////////////////////////////////////////////////////////
++  // Used to map connections in groups ...
++  struct PortData {
++    SharedPtr&lt;LeafInstance::ProviderPortData&gt; _providerPortData;
++    SharedPtr&lt;LeafInstance::AcceptorPortData&gt; _acceptorPortData;
++
++    // Merge the argument from the child group into the current groups data
++    void merge(const PortData&amp; portData)
++    {
++      if (_providerPortData) {
++        OpenFDMAssert(portData._acceptorPortData);
++        SharedPtr&lt;const LeafInstance::ProviderPortData&gt; providerPortData =
++          portData._acceptorPortData-&gt;_providerPortData.lock();
++        OpenFDMAssert(providerPortData);
++        _providerPortData-&gt;_providerPort = providerPortData-&gt;_providerPort;
++      }
++
++      if (_acceptorPortData) {
++        OpenFDMAssert(portData._providerPortData);
++        for (unsigned i = 0;
++             i &lt; portData._providerPortData-&gt;_acceptorPortDataList.size();
++             ++i) {
++          SharedPtr&lt;const LeafInstance::AcceptorPortData&gt; acceptorPortData =
++            portData._providerPortData-&gt;_acceptorPortDataList[i].lock();
++          
++          OpenFDMAssert(acceptorPortData);
++          for (unsigned j = 0;
++               j &lt; acceptorPortData-&gt;_acceptorPortList.size(); ++j) {
++            _acceptorPortData-&gt;_acceptorPortList.
++              push_back(acceptorPortData-&gt;_acceptorPortList[j]);
++          }
++        }
++      }
++    }
++  };
++  typedef std::map&lt;PortId, PortData&gt; NodePortDataMap;
++  typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; LeafPortDataMap;
++  LeafPortDataMap _leafPortDataMap;
++
++
++  void pushNodeId(const Group::NodeId&amp; nodeId)
++  { _nodeIdStack.push_back(nodeId); }
++  void popNodeId()
++  { _nodeIdStack.pop_back(); }
++  Group::NodeId getCurrentNodeId() const
++  {
++    if (_nodeIdStack.empty())
++      return Group::NodeId();
++    return _nodeIdStack.back();
++  }
++
++private:
++  typedef std::list&lt;Group::NodeId&gt; NodeIdStack;
++  NodeIdStack _nodeIdStack;
++};
++
++} // namespace OpenFDM
++
++using namespace OpenFDM;
++
++int main()
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
++  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;));
++  Group::NodeId integrator1 = group-&gt;addChild(new Integrator(&quot;I1&quot;));
++  Group::NodeId integrator2 = group-&gt;addChild(new Integrator(&quot;I2&quot;));
++  Group::NodeId print = group-&gt;addChild(new Print(&quot;P&quot;));
++  Group::NodeId delay = group-&gt;addChild(new Delay(&quot;D&quot;));
++  Group::NodeId printDelay = group-&gt;addChild(new Print(&quot;PD&quot;));
++
++  group-&gt;connect(integrator1, &quot;output&quot;, integrator2, &quot;input&quot;);
++  group-&gt;connect(integrator2, &quot;output&quot;, gain, &quot;input&quot;);
++  group-&gt;connect(gain, &quot;output&quot;, integrator1, &quot;input&quot;);
++  group-&gt;connect(integrator2, &quot;output&quot;, print, &quot;input&quot;);
++  group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
++  group-&gt;connect(delay, &quot;output&quot;, printDelay, &quot;input&quot;);
++
++  //FIXME: broken naming
++//   Group::NodeId groupOutputNode = group-&gt;addAcceptorPort();
++  Group::NodeId groupOutputNode = group-&gt;addProviderPort();
++  group-&gt;connect(integrator2, &quot;output&quot;, groupOutputNode, &quot;input&quot;);
++
++  SharedPtr&lt;Group&gt; topGroup = new Group(&quot;G1&quot;);
++  Group::NodeId child0 = topGroup-&gt;addChild(group);
++  Group::NodeId child1 = topGroup-&gt;addChild(group);
++
++  Group::NodeId print0 = topGroup-&gt;addChild(new Print(&quot;P2&quot;));
++  topGroup-&gt;connect(child0, 0, print0, 0);
++  Group::NodeId print1 = topGroup-&gt;addChild(new Print(&quot;P3&quot;));
++  topGroup-&gt;connect(child1, 0, print1, 0);
++
++  /////////////////////////////////////////////////
++
++  LeafInstanceCollector nodeInstanceCollector;
++  topGroup-&gt;accept(nodeInstanceCollector);
++  
++  std::cout &lt;&lt; nodeInstanceCollector._leafInstanceList.size() &lt;&lt; std::endl;
++
++  LeafInstanceCollector::LeafInstanceList::const_iterator i;
++  for (i = nodeInstanceCollector._leafInstanceList.begin();
++       i != nodeInstanceCollector._leafInstanceList.end();
++       ++i) {
++    std::cout &lt;&lt; &quot;Node: &quot; &lt;&lt; (*i)-&gt;_leaf-&gt;getName() &lt;&lt; std::endl;
++  }
++
++  return 0;
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000403.html">[OpenFDM-svn] r431 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000405.html">[OpenFDM-svn] r433 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#404">[ date ]</a>
+              <a href="thread.html#404">[ thread ]</a>
+              <a href="subject.html#404">[ subject ]</a>
+              <a href="author.html#404">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,139 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r657 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r657%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810281158.m9SBwYKt021106%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000625.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r657 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r657%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810281158.m9SBwYKt021106%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r657 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct 28 12:58:34 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000625.html">[OpenFDM-svn] r656 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#626">[ date ]</a>
+              <a href="thread.html#626">[ thread ]</a>
+              <a href="subject.html#626">[ subject ]</a>
+              <a href="author.html#626">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-28 12:58:32 +0100 (Tue, 28 Oct 2008)
+New Revision: 657
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Hide port value setting behind an interface.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-10-28 11:39:09 UTC (rev 656)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-10-28 11:58:32 UTC (rev 657)
+@@ -20,4 +20,10 @@
+   return mPortValueList.getPortValue(portInfo.getIndex());
+ }
+ 
++void
++AbstractNodeContext::setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++{
++  mPortValueList.setPortValue(portInfo.getIndex(), portValue);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-10-28 11:39:09 UTC (rev 656)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-10-28 11:58:32 UTC (rev 657)
+@@ -21,6 +21,9 @@
+   /// Port value accessors for System external usage.
+   virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const;
+ 
++  /// Set port value for the given port.
++  virtual void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue);
++
+   /// might vanish???
+   PortValueList&amp; getPortValueList()
+   { return mPortValueList; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-28 11:39:09 UTC (rev 656)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-28 11:58:32 UTC (rev 657)
+@@ -39,11 +39,13 @@
+   const SampleTime&amp; getSampleTime() const
+   { return mSampleTime; }
+ 
+-  PortValueList&amp; getPortValueList()
+-  { return getNodeContext().getPortValueList(); }
+   const PortValueList&amp; getPortValueList() const
+   { return getNodeContext().getPortValueList(); }
+ 
++  /// Set port value for the given port.
++  void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++  { getNodeContext().setPortValue(portInfo, portValue); }
++
+ protected:
+   /// The node context that belongs to this instance.
+   virtual AbstractNodeContext&amp; getNodeContext() = 0;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-28 11:39:09 UTC (rev 656)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-28 11:58:32 UTC (rev 657)
+@@ -277,8 +277,7 @@
+       // FIXME: move the set port value and accept port value into one call
+       if (!getPortInfo()-&gt;acceptPortValue(portValue))
+         return false;
+-      unsigned index = getPortInfo()-&gt;getIndex();
+-      mNodeInstance-&gt;getPortValueList().setPortValue(index, portValue);
++      mNodeInstance-&gt;setPortValue(*getPortInfo(), portValue);
+       return true;
+     }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000625.html">[OpenFDM-svn] r656 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#626">[ date ]</a>
+              <a href="thread.html#626">[ thread ]</a>
+              <a href="subject.html#626">[ subject ]</a>
+              <a href="author.html#626">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

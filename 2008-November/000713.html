@@ -1,0 +1,450 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r744 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r744%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811181642.mAIGgNbX028556%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000712.html">
+   <LINK REL="Next"  HREF="000714.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r744 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r744%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811181642.mAIGgNbX028556%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r744 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 18 17:42:23 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000712.html">[OpenFDM-svn] r743 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000714.html">[OpenFDM-svn] r745 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#713">[ date ]</a>
+              <a href="thread.html#713">[ thread ]</a>
+              <a href="subject.html#713">[ subject ]</a>
+              <a href="author.html#713">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-18 17:42:21 +0100 (Tue, 18 Nov 2008)
+New Revision: 744
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp
+Log:
+Move alloc and init methods upwards.
+More interfaces in the PortValues.
+
+M    src/OpenFDM/LeafNode.h
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/Model.h
+M    src/OpenFDM/Interact.cpp
+M    src/OpenFDM/RootJoint.cpp
+M    src/OpenFDM/Interact.h
+M    src/OpenFDM/AbstractNodeContext.cpp
+M    src/OpenFDM/UnaryModel.cpp
+M    src/OpenFDM/Integrator.cpp
+M    src/OpenFDM/LeafContext.h
+M    src/OpenFDM/RootJoint.h
+M    src/OpenFDM/DiscreteIntegrator.cpp
+M    src/OpenFDM/AbstractNodeInstance.h
+M    src/OpenFDM/Delay.cpp
+M    src/OpenFDM/AbstractNodeContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -17,11 +17,24 @@
+ const PortValue*
+ AbstractNodeContext::getPortValue(const PortInfo&amp; portInfo) const
+ {
+-  return mPortValueList.getPortValue(portInfo.getIndex());
++  return mPortValueList.getPortValue(portInfo);
+ }
+ 
++const NumericPortValue*
++AbstractNodeContext::getPortValue(const NumericPortInfo&amp; portInfo) const
++{
++  return mPortValueList.getPortValue(portInfo);
++}
++
++const MechanicLinkValue*
++AbstractNodeContext::getPortValue(const MechanicLinkInfo&amp; portInfo) const
++{
++  return mPortValueList.getPortValue(portInfo);
++}
++
+ void
+-AbstractNodeContext::setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
++AbstractNodeContext::setPortValue(const PortInfo&amp; portInfo,
++                                  PortValue* portValue)
+ {
+   mPortValueList.setPortValue(portInfo.getIndex(), portValue);
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeContext.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -19,17 +19,14 @@
+   virtual const Node&amp; getNode() const = 0;
+ 
+   /// Port value accessors for System external usage.
+-  virtual const PortValue* getPortValue(const PortInfo&amp; portInfo) const;
++  virtual const PortValue* getPortValue(const PortInfo&amp;) const;
++  virtual const NumericPortValue* getPortValue(const NumericPortInfo&amp;) const;
++  virtual const MechanicLinkValue* getPortValue(const MechanicLinkInfo&amp;) const;
+ 
+   /// Set port value for the given port.
+-  virtual void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue);
++  virtual void setPortValue(const PortInfo&amp;, PortValue*);
+ 
+-  /// might vanish???
+-  PortValueList&amp; getPortValueList()
+-  { return mPortValueList; }
+-  const PortValueList&amp; getPortValueList() const
+-  { return mPortValueList; }
+-
++protected:
+   // PortValues
+   PortValueList mPortValueList;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -67,13 +67,13 @@
+   /// Access port values by the PortInfo values
+   virtual const PortValue*
+   getPortValue(const PortInfo&amp; portInfo) const
+-  { return mNodeContext-&gt;getPortValueList().getPortValue(portInfo); }
++  { return mNodeContext-&gt;getPortValue(portInfo); }
+   virtual const NumericPortValue*
+   getPortValue(const NumericPortInfo&amp; portInfo) const
+-  { return mNodeContext-&gt;getPortValueList().getPortValue(portInfo); }
++  { return mNodeContext-&gt;getPortValue(portInfo); }
+   virtual const MechanicLinkValue*
+   getPortValue(const MechanicLinkInfo&amp; portInfo) const
+-  { return mNodeContext-&gt;getPortValueList().getPortValue(portInfo); }
++  { return mNodeContext-&gt;getPortValue(portInfo); }
+ 
+   /// Set port value for the given port.
+   virtual void setPortValue(const PortInfo&amp; portInfo, PortValue* portValue)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -176,6 +176,9 @@
+     childLink.setAccel(parentLink, mJointMatrix*velDot);
+   }
+ 
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
++  { }
+   virtual void initDesignPosition(const MechanicLinkValue&amp; parentLink,
+                                   MechanicLinkValue&amp; childLink) const = 0;
+   virtual void velocity(const MechanicLinkValue&amp; parentLink,
+@@ -219,9 +222,7 @@
+ 
+     bool alloc()
+     {
+-      if (!allocStates())
+-        return false;
+-      return mCartesianJoint-&gt;alloc(*this);
++      return allocStates();
+     }
+     virtual void initVelocities(const /*Init*/Task&amp; task)
+     {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -41,12 +41,12 @@
+   Log(Initialization, Debug)
+     &lt;&lt; &quot;Size for Delay is detemined by the static initial value &quot;
+     &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+-  if (!context.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++  if (!context.getPortValueList().setOrCheckPortSize(mInputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  if (!context.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++  if (!context.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -34,7 +34,7 @@
+ {
+   Size sz;
+   if (getEnableInitialValuePort()) {
+-    sz = size(leafContext.mPortValueList[mInitialValuePort]);
++    sz = size(leafContext.getPortValueList()[mInitialValuePort]);
+     Log(Initialization, Debug)
+       &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
+       &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+@@ -44,12 +44,12 @@
+       &lt;&lt; &quot;Size for Integrator is detemined by the static initial value &quot;
+       &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+   }
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mInputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -33,7 +33,7 @@
+ {
+   Size sz;
+   if (getEnableInitialValuePort()) {
+-    sz = size(leafContext.mPortValueList[mInitialValuePort]);
++    sz = size(leafContext.getPortValueList()[mInitialValuePort]);
+     Log(Initialization, Debug)
+       &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
+       &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+@@ -43,12 +43,12 @@
+       &lt;&lt; &quot;Size for Integrator is detemined by the static initial value &quot;
+       &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+   }
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mInputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -18,13 +18,14 @@
+   virtual const Interact&amp; getNode() const
+   { return *mInteract; }
+ 
++  virtual bool alloc()
++  { return allocStates(); }
++
+   virtual void initDesignPosition()
+   {
+     mInteract-&gt;initDesignPosition(mPortValueList);
+   }
+ 
+-  virtual bool alloc()
+-  { if (!allocStates()) return false; return mInteract-&gt;alloc(*this); }
+   virtual void initVelocities(const /*Init*/Task&amp; task)
+   {
+     mInteract-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -21,6 +21,9 @@
+ 
+   virtual MechanicContext* newMechanicContext(PortValueList&amp; portValues) const;
+ 
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
++  { }
+   virtual void initDesignPosition(PortValueList&amp;) const = 0;
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+                         PortValueList&amp;) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -42,15 +42,19 @@
+     }
+     return true;
+   }
++
++  /// might vanish???
++  PortValueList&amp; getPortValueList()
++  { return mPortValueList; }
++  const PortValueList&amp; getPortValueList() const
++  { return mPortValueList; }
++
+ // protected:
+   // Continous States
+   ContinousStateValueVector mContinousState;
+   ContinousStateValueVector mContinousStateDerivative;
+   // Discrete States
+   DiscreteStateValueVector mDiscreteState;
+-
+-  // functors to the operations to do??
+-
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafNode.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -27,17 +27,6 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  // Is done once before a model starts to live
+-  // Should have connect information here, can setup memory allocations and
+-  // sizes. Then the PortValueList does not need to have resizable stuff.
+-  // The same goes for the states.
+-  virtual bool alloc(LeafContext&amp;) const // = 0;
+-  { return true; }
+-
+-  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
+-                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
+-  { }
+-
+   unsigned getNumContinousStateValues() const
+   { return mContinousStateInfoVector.size(); }
+   const ContinousStateInfo* getContinousStateInfo(unsigned index) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -38,6 +38,12 @@
+   // argument? May be it is sufficient to have a const and non const version??
+   // FIXME???
+   // const TaskInfo&amp; taskInfo
++  virtual bool alloc(LeafContext&amp;) const // = 0;
++  { return true; }
++
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
++  { }
+   virtual void update(const DiscreteTask&amp;, DiscreteStateValueVector&amp;,
+                       const ContinousStateValueVector&amp;,
+                       const PortValueList&amp;) const { }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -18,13 +18,14 @@
+   virtual const RootJoint&amp; getNode() const
+   { return *mRootJoint; }
+   
++  bool alloc()
++  { return allocStates(); }
++
+   virtual void initDesignPosition()
+   {
+     mRootJoint-&gt;initDesignPosition(mPortValueList);
+   }
+ 
+-  bool alloc()
+-  { if (!allocStates()) return false; return mRootJoint-&gt;alloc(*this); }
+   virtual void initVelocities(const /*Init*/Task&amp; task)
+   {
+     mRootJoint-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.h	2008-11-18 16:42:21 UTC (rev 744)
+@@ -29,6 +29,9 @@
+   void setAngularBaseVelocity(const Vector3&amp; angularBaseVelocity)
+   { mAngularBaseVelocity = angularBaseVelocity; }
+ 
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
++  { }
+   virtual void initDesignPosition(PortValueList&amp;) const = 0;
+ 
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp	2008-11-17 21:22:22 UTC (rev 743)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryModel.cpp	2008-11-18 16:42:21 UTC (rev 744)
+@@ -26,11 +26,11 @@
+ UnaryModel::alloc(LeafContext&amp; leafContext) const
+ {
+   Size sz;
+-  sz = size(leafContext.mPortValueList.getPortValue(mInputPort)-&gt;getValue());
++  sz = size(leafContext.getPortValue(*mInputPort)-&gt;getValue());
+   Log(Initialization, Debug)
+     &lt;&lt; &quot;Size for Gain is detemined by the input port with size: &quot;
+     &lt;&lt; trans(sz) &lt;&lt; std::endl;
+-  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++  if (!leafContext.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000712.html">[OpenFDM-svn] r743 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000714.html">[OpenFDM-svn] r745 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#713">[ date ]</a>
+              <a href="thread.html#713">[ thread ]</a>
+              <a href="subject.html#713">[ subject ]</a>
+              <a href="author.html#713">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

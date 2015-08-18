@@ -1,0 +1,135 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r687 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r687%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811090925.mA99P5sc015064%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000655.html">
+   <LINK REL="Next"  HREF="000657.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r687 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r687%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811090925.mA99P5sc015064%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r687 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov  9 10:25:05 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000655.html">[OpenFDM-svn] r686 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000657.html">[OpenFDM-svn] r688 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#656">[ date ]</a>
+              <a href="thread.html#656">[ thread ]</a>
+              <a href="subject.html#656">[ subject ]</a>
+              <a href="author.html#656">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-09 10:25:05 +0100 (Sun, 09 Nov 2008)
+New Revision: 687
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+Log:
+Small updates for the pendulum example. Does not work yet ...
+
+M    src/test/foucault.cpp
+M    src/test/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-09 09:16:33 UTC (rev 686)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-09 09:25:05 UTC (rev 687)
+@@ -2,7 +2,7 @@
+ 
+ # define some util programs
+ # bin_PROGRAMS = tiretestrig
+-bin_PROGRAMS = structure mechanic
++bin_PROGRAMS = structure mechanic foucault
+ 
+ # define some unit tests
+ #check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+@@ -21,8 +21,8 @@
+ mechanic_SOURCES = mechanic.cpp
+ mechanic_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+-# foucault_SOURCES = foucault.cpp
+-# foucault_LDADD = ../OpenFDM/libOpenFDM.la
++foucault_SOURCES = foucault.cpp
++foucault_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+ structure_SOURCES = structure.cpp
+ structure_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-09 09:16:33 UTC (rev 686)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-09 09:25:05 UTC (rev 687)
+@@ -12,12 +12,16 @@
+ {
+   // Model of the paris pendulum or foucault pendulum to test coriolis effects.
+ 
++  // FIXME, need usable positioning algorithm first ...
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Foucault&quot;);
+   Group::NodeId root = group-&gt;addChild(new FixedRootJoint(&quot;Root&quot;));
+-  Group::NodeId universal = group-&gt;addChild(new UniversalJoint(&quot;Universal&quot;));
++  UniversalJoint* universalJoint = new UniversalJoint(&quot;Universal&quot;);
++  universalJoint-&gt;setAxis(Vector3(0, 0, 1));
++  Group::NodeId universal = group-&gt;addChild(universalJoint);
+   Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
+-  InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
+-  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, inertia));
++  Mass* massModel = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  massModel-&gt;setPosition(Vector3(1, 1, 1));
++  Group::NodeId mass = group-&gt;addChild(massModel);
+ 
+   group-&gt;connect(root, 0, universal, 0);
+   group-&gt;connect(universal, 1, rigidBody, 0);
+@@ -30,7 +34,8 @@
+   if (!system-&gt;init())
+     return 1;
+ 
+-  system-&gt;simulate(24*60*60);
++//   system-&gt;simulate(24*60*60);
++  system-&gt;simulate(60);
+ 
+   return 0;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000655.html">[OpenFDM-svn] r686 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000657.html">[OpenFDM-svn] r688 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#656">[ date ]</a>
+              <a href="thread.html#656">[ thread ]</a>
+              <a href="subject.html#656">[ subject ]</a>
+              <a href="author.html#656">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

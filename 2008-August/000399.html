@@ -1,0 +1,1198 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r427 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r427%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808310838.m7V8cGX5012398%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000398.html">
+   <LINK REL="Next"  HREF="000400.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r427 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r427%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808310838.m7V8cGX5012398%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r427 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 31 10:38:16 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000398.html">[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000400.html">[OpenFDM-svn] r428 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#399">[ date ]</a>
+              <a href="thread.html#399">[ thread ]</a>
+              <a href="subject.html#399">[ subject ]</a>
+              <a href="author.html#399">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-31 10:38:15 +0200 (Sun, 31 Aug 2008)
+New Revision: 427
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+Log:
+Hackish Group implementation - now in svn.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-08-31 08:38:15 UTC (rev 427)
+@@ -0,0 +1,23 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Group.h&quot;
++#include &quot;NodeVisitor.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Group, Node)
++  END_OPENFDM_OBJECT_DEF
++
++GroupAcceptorNode::GroupAcceptorNode() :
++  _groupInternalPort(new ProxyProviderPortInfo(this, &quot;output&quot;))
++{
++}
++
++GroupProviderNode::GroupProviderNode() :
++  _groupInternalPort(new ProxyAcceptorPortInfo(this, &quot;input&quot;))
++{
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-08-31 08:38:15 UTC (rev 427)
+@@ -0,0 +1,449 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Group_H
++#define OpenFDM_Group_H
++
++#include &lt;string&gt;
++#include &lt;vector&gt;
++#include &lt;sstream&gt;
++#include &quot;AcceptorPortInfo.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;NodeVisitor.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;PortId.h&quot;
++#include &quot;PortInfo.h&quot;
++#include &quot;ProviderPortInfo.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++class ProxyAcceptorPortInfo;
++class ProxyProviderPortInfo;
++
++class GroupAcceptorNode : public Node {
++public:
++  GroupAcceptorNode();
++  virtual void accept(NodeVisitor&amp; visitor)
++  { visitor.apply(*this); }
++// private:
++  SharedPtr&lt;ProxyProviderPortInfo&gt; _groupInternalPort;
++//   WeakPtr&lt;ProxyAcceptorPortInfo&gt; _groupExternalPort;
++};
++
++class GroupProviderNode : public Node {
++public:
++  GroupProviderNode();
++  virtual void accept(NodeVisitor&amp; visitor)
++  { visitor.apply(*this); }
++// private:
++  SharedPtr&lt;ProxyAcceptorPortInfo&gt; _groupInternalPort;
++//   WeakPtr&lt;ProxyProviderPortInfo&gt; _groupExternalPort;
++//   MatrixInputPort mInputPort;
++};
++
++class ProxyAcceptorPortInfo : public AcceptorPortInfo {
++public:
++  ProxyAcceptorPortInfo(Node* node, const std::string&amp; name = std::string()) :
++    AcceptorPortInfo(node, name) {}
++  SharedPtr&lt;GroupAcceptorNode&gt; mGroupPort;
++  virtual ProxyAcceptorPortInfo* toProxyAcceptorPortInfo()
++  { return this; }
++  virtual const ProxyAcceptorPortInfo* toProxyAcceptorPortInfo() const
++  { return this; }
++};
++
++class ProxyProviderPortInfo : public ProviderPortInfo {
++public:
++  ProxyProviderPortInfo(Node* node, const std::string&amp; name = std::string()) :
++    ProviderPortInfo(node, name) {}
++  virtual PortValue* newValueImplementation() const
++  { return 0; } //FIXME
++  virtual ProxyProviderPortInfo* toProxyProviderPortInfo()
++  { return this; }
++  virtual const ProxyProviderPortInfo* toProxyProviderPortInfo() const
++  { return this; }
++  SharedPtr&lt;GroupProviderNode&gt; mGroupPort;
++};
++
++class Group : public Node {
++  OPENFDM_OBJECT(Group, Node);
++public:
++  Group(const std::string&amp; name) : Node(name) {}
++  virtual ~Group() {}
++
++  virtual void accept(NodeVisitor&amp; visitor)
++  { visitor.apply(*this); }
++
++  class NodeId;
++
++  NodeId addChild(const SharedPtr&lt;Node&gt;&amp; node)
++  {
++    std::string identifier = getUniqueIdentifier(node-&gt;getName());
++    _childList.push_back(new Child(this, node, identifier));
++    return NodeId(_childList.back());
++  }
++  unsigned getNumChildren() const
++  { return _childList.size(); }
++  NodeId getNodeId(unsigned i) const
++  {
++    if (_childList.size() &lt;= i)
++      return NodeId();
++    return NodeId(_childList[i]);
++  }
++  unsigned getChildNumber(const NodeId&amp; nodeId) const
++  {
++    SharedPtr&lt;Child&gt; child = nodeId._child.lock();
++    if (!child)
++      return ~0u;
++    if (child-&gt;group.lock() != this)
++      return ~0u;
++    ChildList::const_iterator i;
++    i = std::find(_childList.begin(), _childList.end(), child);
++    if (i == _childList.end())
++      return ~0u;
++    return std::distance(_childList.begin(), i);
++  }
++
++  SharedPtr&lt;Node&gt; getChild(unsigned i)
++  {
++    if (_childList.size() &lt;= i)
++      return 0;
++    return _childList[i]-&gt;node;
++  }
++  SharedPtr&lt;const Node&gt; getChild(unsigned i) const
++  {
++    if (_childList.size() &lt;= i)
++      return 0;
++    return _childList[i]-&gt;node;
++  }
++  SharedPtr&lt;Node&gt; getChild(const NodeId&amp; nodeId)
++  {
++    SharedPtr&lt;Child&gt; child = nodeId._child.lock();
++    if (!child)
++      return 0;
++    /// Check if it belongs to this current group
++    if (child-&gt;group.lock() != this)
++      return 0;
++    return child-&gt;node;
++  }
++  SharedPtr&lt;const Node&gt; getChild(const NodeId&amp; nodeId) const
++  {
++    SharedPtr&lt;Child&gt; child = nodeId._child.lock();
++    if (!child)
++      return 0;
++    /// Check if it belongs to this current group
++    SharedPtr&lt;Group&gt; group = child-&gt;group.lock();
++    if (group != this)
++      return 0;
++    return child-&gt;node;
++  }
++
++  NodeId getGroupAcceptorNode(const PortId&amp; portId) const
++  {
++    SharedPtr&lt;const PortInfo&gt; port = getPort(portId);
++    if (!port)
++      return NodeId();
++    const ProxyAcceptorPortInfo* proxyAcceptorPort = port-&gt;toProxyAcceptorPortInfo();
++    if (!proxyAcceptorPort)
++      return NodeId();
++
++    SharedPtr&lt;GroupAcceptorNode&gt; groupPort = proxyAcceptorPort-&gt;mGroupPort;
++    ChildList::const_iterator i;
++    for (i = _childList.begin(); i != _childList.end(); ++i) {
++      if ((*i)-&gt;node == groupPort)
++        return NodeId(*i);
++    }
++    return NodeId();
++  }
++  NodeId getGroupProviderNode(const PortId&amp; portId) const
++  {
++    SharedPtr&lt;const PortInfo&gt; port = getPort(portId);
++    if (!port)
++      return NodeId();
++    const ProxyProviderPortInfo* proxyProviderPort = port-&gt;toProxyProviderPortInfo();
++    if (!proxyProviderPort)
++      return NodeId();
++
++    SharedPtr&lt;GroupProviderNode&gt; groupPort = proxyProviderPort-&gt;mGroupPort;
++    ChildList::const_iterator i;
++    for (i = _childList.begin(); i != _childList.end(); ++i) {
++      if ((*i)-&gt;node == groupPort)
++        return NodeId(*i);
++    }
++    return NodeId();
++  }
++  NodeId getGroupPortNode(const PortId&amp; portId) const
++  {
++    NodeId nodeId = getGroupProviderNode(portId);
++    if (getChild(nodeId)) // FIXME!!
++      return nodeId;
++    return getGroupAcceptorNode(portId);
++  }
++
++  PortId getGroupPort(const NodeId&amp; nodeId) const
++  {
++    // FIXME horrible algorithm
++    unsigned numPorts = getNumPorts();
++    for (unsigned i = 0; i &lt; numPorts; ++i) {
++      NodeId thisId = getGroupPortNode(getPortId(i));
++      if (getChildNumber(nodeId) == getChildNumber(thisId))
++        return getPortId(i);
++    }
++    return PortId();
++  }
++
++  // add a new group port to the group
++  NodeId addAcceptorPort()
++  {
++    GroupAcceptorNode *groupAcceptorNode = new GroupAcceptorNode;
++    NodeId nodeId = addChild(groupAcceptorNode);
++    ProxyAcceptorPortInfo* proxyPort = new ProxyAcceptorPortInfo(this, &quot;ProxyPort&quot;);
++    proxyPort-&gt;mGroupPort = groupAcceptorNode;
++    return nodeId;
++  }
++  NodeId addProviderPort()
++  {
++    GroupProviderNode *groupProviderNode = new GroupProviderNode;
++    NodeId nodeId = addChild(groupProviderNode);
++    ProxyProviderPortInfo* proxyPort = new ProxyProviderPortInfo(this, &quot;ProxyPort&quot;);
++    proxyPort-&gt;mGroupPort = groupProviderNode;
++    return nodeId;
++  }
++
++  bool connect(const NodeId&amp; nodeId0, const std::string&amp; portName0,
++               const NodeId&amp; nodeId1, const std::string&amp; portName1)
++  { return connect(nodeId0, nodeId0.getPortId(portName0),
++                   nodeId1, nodeId1.getPortId(portName1)); }
++  bool connect(const NodeId&amp; nodeId0, unsigned portNum0,
++               const NodeId&amp; nodeId1, unsigned portNum1)
++  { return connect(nodeId0, nodeId0.getPortId(portNum0),
++                   nodeId1, nodeId1.getPortId(portNum1)); }
++
++  bool connect(const NodeId&amp; nodeId0, const PortId&amp; portId0,
++               const NodeId&amp; nodeId1, const PortId&amp; portId1)
++  {
++    // Make sure the models belong to this group
++    if (!getChild(nodeId0))
++      return false;
++    if (!getChild(nodeId1))
++      return false;
++
++    SharedPtr&lt;const PortInfo&gt; port0 = nodeId0.getPortPtr(portId0);
++    if (!port0)
++      return false;
++    SharedPtr&lt;const PortInfo&gt; port1 = nodeId1.getPortPtr(portId1);
++    if (!port1)
++      return false;
++
++    if (port0-&gt;toProviderPortInfo() &amp;&amp; port1-&gt;toAcceptorPortInfo()) {
++      SharedPtr&lt;Connect&gt; connect = new Connect;
++      if (!connect-&gt;setProvider(nodeId0, portId0))
++        return false;
++      if (!connect-&gt;addAcceptor(nodeId1, portId1))
++        return false;
++      _connectList.push_back(connect);
++      return true;
++    } else if (port1-&gt;toProviderPortInfo() &amp;&amp; port0-&gt;toAcceptorPortInfo()) {
++      SharedPtr&lt;Connect&gt; connect = new Connect;
++      if (!connect-&gt;setProvider(nodeId1, portId1))
++        return false;
++      if (!connect-&gt;addAcceptor(nodeId0, portId0))
++        return false;
++      _connectList.push_back(connect);
++      return true;
++    } else {
++      return false;
++    }
++  }
++
++
++  unsigned getNumConnects() const
++  { return _connectList.size(); }
++  
++  NodeId getConnectAcceptorNodeId(unsigned i) const
++  {
++    if (getNumConnects() &lt;= i)
++      return NodeId();
++    return _connectList[i]-&gt;_acceptorNodeId;
++  }
++  NodeId getConnectProviderNodeId(unsigned i) const
++  {
++    if (getNumConnects() &lt;= i)
++      return NodeId();
++    return _connectList[i]-&gt;_providerNodeId;
++  }
++
++  SharedPtr&lt;const AcceptorPortInfo&gt;
++  getConnectAcceptorPortInfo(unsigned i) const
++  {
++    if (getNumConnects() &lt;= i)
++      return 0;
++    return _connectList[i]-&gt;_acceptorPort.lock();
++  }
++  SharedPtr&lt;const ProviderPortInfo&gt;
++  getConnectProviderPortInfo(unsigned i) const
++  {
++    if (getNumConnects() &lt;= i)
++      return 0;
++    return _connectList[i]-&gt;_providerPort.lock();
++  }
++
++  PortId getConnectAcceptorPortId(unsigned i) const
++  { return PortId(SharedPtr&lt;const PortInfo&gt;(getConnectAcceptorPortInfo(i))); }
++  PortId getConnectProviderPortId(unsigned i) const
++  { return PortId(SharedPtr&lt;const PortInfo&gt;(getConnectProviderPortInfo(i))); }
++
++private:
++  class Child;
++public:
++  class NodeId {
++    // FIXME a node ID has an associated name and that is unique. That should
++    // be the blocks name where it can be referenced. May be the NodeId should
++    // just contain that string??
++    // A serialized group can refere these names.
++    // May be the same should happen with portid's???
++    //
++    // Remove the name from the Object.
++    // Store Connects as seperate objects
++  public:
++    NodeId() {}
++    PortId getPortId(unsigned i) const
++    {
++      SharedPtr&lt;Child&gt; child = _child.lock();
++      if (!child)
++        return PortId();
++      SharedPtr&lt;Node&gt; node = child-&gt;node;
++      if (!node)
++        return PortId();
++      return node-&gt;getPortId(i);
++    }
++    PortId getPortId(const std::string&amp; name) const
++    {
++      SharedPtr&lt;Child&gt; child = _child.lock();
++      if (!child)
++        return PortId();
++      SharedPtr&lt;Node&gt; node = child-&gt;node;
++      if (!node)
++        return PortId();
++      return node-&gt;getPortId(name);
++    }
++
++    const PortInfo* getPortPtr(const PortId&amp; portId) const // FIXME??
++    {
++      SharedPtr&lt;Child&gt; child = _child.lock();
++      if (!child)
++        return 0;
++      SharedPtr&lt;Node&gt; node = child-&gt;node;
++      if (!node)
++        return 0;
++      return node-&gt;getPort(portId);
++    }
++
++    std::string getId() const
++    {
++      SharedPtr&lt;Child&gt; child = _child.lock();
++      if (!child)
++        return std::string();
++      return _child.lock()-&gt;identifier;
++    }
++
++    // FIXME, do I need ???
++    bool operator&lt;(const NodeId&amp; nodeId) const
++    { return _child &lt; nodeId._child; }
++
++  private:
++    friend class Group;
++    NodeId(const SharedPtr&lt;Child&gt;&amp; child) : _child(child) {}
++    WeakPtr&lt;Child&gt; _child;
++  };
++
++private:
++
++  struct Child : public WeakReferenced {
++    Child(Group* _group, Node* _node, std::string&amp; id) :
++      group(_group), node(_node), identifier(id)
++    { }
++    WeakPtr&lt;Group&gt; group;
++    SharedPtr&lt;Node&gt; node;
++    // what happens if the nodes name changes ?? FIXME
++    std::string identifier;
++  };
++
++  std::string getUniqueIdentifier(const std::string&amp; name) const
++  {
++    if (isUniqueIdentifier(name))
++      return name;
++    unsigned counter = 0;
++    std::string identifier;
++    do {
++      std::stringstream ss;
++      ss &lt;&lt; name &lt;&lt; '(' &lt;&lt; ++counter &lt;&lt; ')';
++      identifier = ss.str();
++    } while (!isUniqueIdentifier(identifier));
++    OpenFDMAssert(!identifier.empty());
++    return identifier;
++  }
++
++  // Tells true if the identifier is not yet used
++  bool isUniqueIdentifier(const std::string&amp; identifier) const
++  {
++    for (ChildList::const_iterator i = _childList.begin();
++         i != _childList.end(); ++i) {
++      if ((*i)-&gt;identifier == identifier)
++        return false;
++    }
++    return true;
++  }
++
++  struct Connect : public WeakReferenced {
++    bool setProvider(const NodeId&amp; node, const PortId&amp; portId)
++    {
++      SharedPtr&lt;const PortInfo&gt; port = node.getPortPtr(portId);
++      if (!port)
++        return false;
++      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
++      if (!providerPort)
++        return false;
++      _providerNodeId = node;
++      _providerPortId = portId;
++      _providerPort = providerPort;
++      return true;
++    }
++    bool addAcceptor(const NodeId&amp; node, const PortId&amp; portId)
++    {
++      SharedPtr&lt;const PortInfo&gt; port = node.getPortPtr(portId);
++      if (!port)
++        return false;
++      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
++      if (!acceptorPort)
++        return false;
++      _acceptorNodeId = node;
++      _acceptorPortId = portId;
++      _acceptorPort = acceptorPort;
++      return true;
++    }
++
++    NodeId _providerNodeId;
++    PortId _providerPortId;
++    WeakPtr&lt;const ProviderPortInfo&gt; _providerPort;
++
++    NodeId _acceptorNodeId;
++    PortId _acceptorPortId;
++    WeakPtr&lt;const AcceptorPortInfo&gt; _acceptorPort;
++
++    // Where the line in the gui will be ...??
++    // std::list&lt;Vector2&gt; _positions;
++  };
++
++  typedef std::vector&lt;SharedPtr&lt;Connect&gt; &gt; ConnectList;
++  ConnectList _connectList;
++
++  typedef std::vector&lt;SharedPtr&lt;Child&gt; &gt; ChildList;
++  ChildList _childList;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.cpp	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.cpp	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,50 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;GroupInput.h&quot;
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(GroupInput, Model)
+-  END_OPENFDM_OBJECT_DEF
+-
+-GroupInput::GroupInput(const std::string&amp; name) :
+-  Model(name)
+-{
+-  setNumOutputPorts(1);
+-  getOutputPort(0)-&gt;setName(&quot;output&quot;);
+-}
+-
+-GroupInput::~GroupInput()
+-{
+-}
+-
+-unsigned
+-GroupInput::addParent(ModelGroup* group)
+-{
+-  unsigned parentIndex = Model::addParent(group);
+-  if (parentIndex == ~0u)
+-    return parentIndex;
+-    
+-  mPortProxy = new NumericPortProxy(group, getOutputPort(0));
+-  mPortProxy-&gt;setName(getName());
+-  group-&gt;addInputPort(mPortProxy);
+-
+-  return parentIndex;
+-}
+-
+-void
+-GroupInput::removeParent(unsigned idx)
+-{
+-  SharedPtr&lt;ModelGroup&gt; oldParent = getParent(idx).lock();
+-  if (oldParent) {
+-    // detach from a ModelGroup
+-    oldParent-&gt;removeInputPort(mPortProxy);
+-    mPortProxy = 0;
+-  }
+-  
+-  Model::removeParent(idx);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.h	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInput.h	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,32 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_GroupInput_H
+-#define OpenFDM_GroupInput_H
+-
+-#include &quot;Model.h&quot;
+-#include &quot;ModelGroup.h&quot;
+-#include &quot;NumericPortProxy.h&quot;
+-
+-namespace OpenFDM {
+-
+-class GroupInput : public Model {
+-  OPENFDM_OBJECT(GroupInput, Model);
+-public:
+-  GroupInput(const std::string&amp; name);
+-  virtual ~GroupInput();
+-  
+-  virtual unsigned addParent(ModelGroup* model);
+-  virtual void removeParent(unsigned idx);
+-
+-  NumericPortAcceptor* getGroupInput()
+-  { return mPortProxy; }
+-
+-private:
+-  SharedPtr&lt;NumericPortProxy&gt; mPortProxy;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.cpp	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.cpp	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,51 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;GroupOutput.h&quot;
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(GroupOutput, Model)
+-  END_OPENFDM_OBJECT_DEF
+-
+-GroupOutput::GroupOutput(const std::string&amp; name) :
+-  Model(name)
+-{
+-  mPortProxy = new NumericPortProxy(this, 0);
+-  mPortProxy-&gt;setName(&quot;input&quot;);
+-  addInputPort(mPortProxy);
+-}
+-
+-GroupOutput::~GroupOutput()
+-{
+-}
+-
+-unsigned
+-GroupOutput::addParent(ModelGroup* group)
+-{
+-  unsigned parentIndex = Model::addParent(group);
+-  if (parentIndex == ~0u)
+-    return parentIndex;
+-
+-  // attach to a ModelGroup
+-  mPortProxy-&gt;setPortProvider(new NumericPortProvider(group));
+-  mPortProxy-&gt;getPortProvider()-&gt;setName(getName());
+-  group-&gt;addOutputPort(mPortProxy-&gt;getPortProvider());
+-
+-  return parentIndex;
+-}
+-
+-void
+-GroupOutput::removeParent(unsigned idx)
+-{
+-  SharedPtr&lt;ModelGroup&gt; oldParent = getParent(idx).lock();
+-  if (oldParent) {
+-    // detach from a ModelGroup
+-    oldParent-&gt;removeOutputPort(mPortProxy-&gt;getPortProvider());
+-  }
+-
+-  Model::removeParent(idx);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.h	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupOutput.h	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,32 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_GroupOutput_H
+-#define OpenFDM_GroupOutput_H
+-
+-#include &quot;Model.h&quot;
+-#include &quot;ModelGroup.h&quot;
+-#include &quot;NumericPortProxy.h&quot;
+-
+-namespace OpenFDM {
+-
+-class GroupOutput : public Model {
+-  OPENFDM_OBJECT(GroupOutput, Model);
+-public:
+-  GroupOutput(const std::string&amp; name);
+-  virtual ~GroupOutput();
+-
+-  virtual unsigned addParent(ModelGroup* model);
+-  virtual void removeParent(unsigned idx);
+-
+-  PortProvider* getGroupOutput()
+-  { return mPortProxy-&gt;getPortProvider(); }
+-
+-private:
+-  SharedPtr&lt;NumericPortProxy&gt; mPortProxy;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-31 08:38:15 UTC (rev 427)
+@@ -27,8 +27,7 @@
+   Frame.h \
+   FrameVisitor.h \
+   Function.h \
+-  GroupInput.h \
+-  GroupOutput.h \
++  Group.h \
+   ImplicitEuler.h \
+   Inertia.h \
+   LeafContext.h \
+@@ -51,7 +50,6 @@
+   MatrixStateInfo.h \
+   MidpointRule.h \
+   Model.h \
+-  ModelGroup.h \
+   Mutex.h \
+   MPFRFloat.h \
+   Newton.h \
+@@ -110,6 +108,7 @@
+   Atomic.cpp \
+   ContinousStateValue.cpp \
+   Frame.cpp \
++  Group.cpp \
+   LeafNode.cpp \
+   Logger.cpp \
+   MatrixStateValue.cpp \
+@@ -133,12 +132,9 @@
+ #   ExplicitAdams.cpp \
+ #   ExplicitEuler.cpp \
+ #   Function.cpp \
+-#   GroupInput.cpp \
+-#   GroupOutput.cpp \
+ #   ImplicitEuler.cpp \
+ #   Newton.cpp \
+ #   MidpointRule.cpp \
+-#   ModelGroup.cpp \
+ #   ReaderWriter.cpp \
+ #   ODESolver.cpp \
+ #   System.cpp \
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.cpp	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.cpp	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,249 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;ModelGroup.h&quot;
+-
+-#include &quot;Object.h&quot;
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;LogStream.h&quot;
+-#include &quot;ModelVisitor.h&quot;
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(ModelGroup, Node)
+-  END_OPENFDM_OBJECT_DEF
+-
+-ModelGroup::ModelGroup(const std::string&amp; name) :
+-  Node(name)
+-{
+-}
+-
+-ModelGroup::~ModelGroup(void)
+-{
+-  // Remove all references to this group.
+-  while (!mModels.empty())
+-    removeModel(mModels.front());
+-}
+-
+-void
+-ModelGroup::accept(ModelVisitor&amp; visitor)
+-{
+-  visitor.apply(*this);
+-}
+-
+-const ModelGroup*
+-ModelGroup::toModelGroup(void) const
+-{
+-  return this;
+-}
+-
+-ModelGroup*
+-ModelGroup::toModelGroup(void)
+-{
+-  return this;
+-}
+-
+-const Node*
+-ModelGroup::getModel(unsigned idx) const
+-{
+-  if (idx &lt; mModels.size())
+-    return mModels[idx];
+-  else
+-    return 0;
+-}
+-
+-Node*
+-ModelGroup::getModel(unsigned idx)
+-{
+-  if (idx &lt; mModels.size())
+-    return mModels[idx];
+-  else
+-    return 0;
+-}
+-
+-const Node*
+-ModelGroup::getModel(const std::string&amp; name) const
+-{
+-  return getModel(getModelIndex(name));
+-}
+-
+-Node*
+-ModelGroup::getModel(const std::string&amp; name)
+-{
+-  return getModel(getModelIndex(name));
+-}
+-
+-unsigned
+-ModelGroup::getModelIndex(const std::string&amp; name) const
+-{
+-  unsigned idx = 0u;
+-  ModelList::const_iterator it = mModels.begin();
+-  while (it != mModels.end()) {
+-    if ((*it)-&gt;getName() == name)
+-      return idx;
+-    ++it;
+-    ++idx;
+-  }
+-  return idx;
+-}
+-
+-unsigned
+-ModelGroup::getModelIndex(const Node* const model) const
+-{
+-  unsigned idx = 0u;
+-  ModelList::const_iterator it = mModels.begin();
+-  while (it != mModels.end()) {
+-    if ((*it) == model)
+-      return idx;
+-    ++it;
+-    ++idx;
+-  }
+-  return idx;
+-}
+-
+-unsigned
+-ModelGroup::addModel(Node* model, bool allowRename)
+-{
+-  // cannot add no model ...
+-  if (!model) {
+-    Log(Model, Warning)
+-      &lt;&lt; &quot;Trying to add zero OpenFDM::Model pointer &quot;
+-      &quot;to OpenFDM::ModelGroup \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-    return ~0u;
+-  }
+-
+-  // cannot add a model to two groups. FIXME, will not be true in the future
+-  if (0 &lt; model-&gt;getNumParents()) {
+-    Log(Model, Warning)
+-      &lt;&lt; &quot;While adding the OpenFDM::Model \&quot;&quot; &lt;&lt; model-&gt;getName()
+-      &lt;&lt; &quot;\&quot; to OpenFDM::ModelGroup \&quot;&quot; &lt;&lt; getName()
+-      &lt;&lt; &quot;\&quot;: Model is already attached!&quot; &lt;&lt; endl;
+-    return ~0u;
+-  }
+-
+-  // Check if we already have a model with the same name
+-  /// FIXME: we need to make sure that duplicate names cannot occure
+-  /// by attaching and than setting the duplicate name!
+-  for (unsigned i = 0; i &lt; mModels.size(); ++i) {
+-    if (model-&gt;getName() == mModels[i]-&gt;getName()) {
+-      if (allowRename) {
+-        model-&gt;setName(model-&gt;getName() + &quot;r&quot;);
+-        return addModel(model, allowRename);
+-      } else {
+-        Log(Model, Warning)
+-          &lt;&lt; &quot;While adding the OpenFDM::Model \&quot;&quot; &lt;&lt; model-&gt;getName()
+-          &lt;&lt; &quot;\&quot; to OpenFDM::ModelGroup \&quot;&quot; &lt;&lt; getName()
+-          &lt;&lt; &quot;\&quot;: Model with the same name is already attached!&quot; &lt;&lt; endl;
+-        return ~0u;
+-      }
+-    }
+-  }
+-
+-  // Update the number of states.
+-  model-&gt;addParent(this);
+-
+-  // add to the model list.
+-  mModels.push_back(model);
+-
+-  return mModels.size()-1;
+-}
+-
+-void
+-ModelGroup::removeModel(Node* model)
+-{
+-  // cannot remove no model ...
+-  if (!model) {
+-    Log(Model, Warning)
+-      &lt;&lt; &quot;Trying to remove zero OpenFDM::Model pointer &quot;
+-      &quot;from OpenFDM::ModelGroup \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-    return;
+-  }
+-
+-  for (;;) {
+-    ModelList::iterator it = mModels.begin();
+-    while (it != mModels.end()) {
+-      if ((*it) == model)
+-        break;
+-      ++it;
+-    }
+-    // Termination condition ...
+-    if (it == mModels.end())
+-      return;
+-
+-    // cannot remove if we are not its parent.
+-    unsigned parentIdx = 0;
+-    for (; parentIdx &lt; model-&gt;getNumParents(); ++parentIdx) {
+-      SharedPtr&lt;Node&gt; parentNode = model-&gt;getParent(parentIdx).lock();
+-      if (parentNode == this)
+-        break;
+-    }
+-    OpenFDMAssert(parentIdx &lt; model-&gt;getNumParents());
+-
+-    // remove the backreference to this group
+-    // this also updates the number of states
+-    model-&gt;removeParent(parentIdx);
+-  
+-    // remove from the model list.
+-    // note that erasing might delete the model object, thus delete it past
+-    // correction of the number of states.
+-    mModels.erase(it);
+-  }
+-}
+-
+-void
+-ModelGroup::addConnection(Connection* connection)
+-{
+-  ConnectionList::iterator i;
+-  i = std::find(mConnections.begin(), mConnections.end(), connection);
+-  if (i != mConnections.end())
+-    return;
+-  mConnections.push_back(connection);
+-}
+-
+-void
+-ModelGroup::removeConnection(Connection* connection)
+-{
+-  ConnectionList::iterator i;
+-  i = std::find(mConnections.begin(), mConnections.end(), connection);
+-  if (i == mConnections.end())
+-    return;
+-  mConnections.erase(i);
+-}
+-
+-unsigned
+-ModelGroup::getConnectionIndex(const Connection* const connection) const
+-{
+-  for (unsigned i = 0; i &lt; mConnections.size(); ++i) {
+-    if (mConnections[i] == connection)
+-      return i;
+-  }
+-  return ~0u;
+-}
+-
+-Connection*
+-ModelGroup::getConnection(unsigned i)
+-{
+-  if (mConnections.size() &lt;= i)
+-    return 0;
+-  return mConnections[i];
+-}
+-
+-const Connection*
+-ModelGroup::getConnection(unsigned i) const
+-{
+-  if (mConnections.size() &lt;= i)
+-    return 0;
+-  return mConnections[i];
+-}
+-
+-Model::GroupPath
+-ModelGroup::getGroupPath()
+-{
+-  GroupPath path = getPath();
+-  path.push_back(this);
+-  return path;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.h	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelGroup.h	2008-08-31 08:38:15 UTC (rev 427)
+@@ -1,76 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ModelGroup_H
+-#define OpenFDM_ModelGroup_H
+-
+-#include &lt;vector&gt;
+-
+-#include &quot;Object.h&quot;
+-#include &quot;Model.h&quot;
+-#include &quot;NumericPortProxy.h&quot;
+-
+-namespace OpenFDM {
+-
+-class Joint;
+-
+-class ModelGroup : public Node {
+-  OPENFDM_OBJECT(ModelGroup, Node);
+-public:
+-  ModelGroup(const std::string&amp; name);
+-  virtual ~ModelGroup(void);
+-
+-  /// Double dispatch helper for the ModelVisitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the multibody system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
+-
+-  virtual const ModelGroup* toModelGroup(void) const;
+-  virtual ModelGroup* toModelGroup(void);
+-
+-  /// Interfaces to gain access to the Models contained in this ModelGroup
+-  unsigned getNumModels(void) const { return mModels.size(); }
+-  const Node* getModel(unsigned idx) const;
+-  Node* getModel(unsigned idx);
+-  const Node* getModel(const std::string&amp; name) const;
+-  Node* getModel(const std::string&amp; name);
+-  unsigned getModelIndex(const std::string&amp; name) const;
+-  unsigned getModelIndex(const Node* const model) const;
+-  unsigned addModel(Node* model, bool allowRename = false);
+-  void removeModel(Node* model);
+-
+-  /// Interfaces to gain access to the Connections contained in this ModelGroup
+-  void addConnection(Connection* connection);
+-  void removeConnection(Connection* connection);
+-  unsigned getConnectionIndex(const Connection* const connection) const;
+-  unsigned getNumConnections(void) const { return mConnections.size(); }
+-  Connection* getConnection(unsigned i);
+-  const Connection* getConnection(unsigned i) const;
+-
+-  /// Returns the path of this ModelGroup. In contrast to getPath this returns
+-  /// the path including the current ModelGroup.
+-  GroupPath getGroupPath() OpenFDM_DEPRECATED;
+-
+-  bool addSampleTime(const SampleTime&amp; sampleTime)
+-  { return mSampleTimeSet.addSampleTime(sampleTime); }
+-  bool removeSampleTime(const SampleTime&amp; sampleTime)
+-  { return mSampleTimeSet.removeSampleTime(sampleTime); }
+-  const SampleTimeSet&amp; getSampleTimeSet(void) const
+-  { return mSampleTimeSet; }
+-
+-private:
+-
+-  typedef std::vector&lt;SharedPtr&lt;Node&gt; &gt; ModelList;
+-  typedef std::vector&lt;SharedPtr&lt;Connection&gt; &gt; ConnectionList;
+-
+-  /// The List of models contained in this group.
+-  ModelList mModels;
+-  SampleTimeSet mSampleTimeSet;
+-  /// The list of connections lines within this model group
+-  ConnectionList mConnections;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-08-31 08:38:15 UTC (rev 427)
+@@ -6,6 +6,7 @@
+ 
+ #include &quot;LeafNode.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;Group.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -30,4 +31,22 @@
+   apply(static_cast&lt;LeafNode&amp;&gt;(node));
+ }
+ 
++void
++NodeVisitor::apply(Group&amp; node)
++{
++  apply(static_cast&lt;Node&amp;&gt;(node));
++}
++
++void
++NodeVisitor::apply(GroupAcceptorNode&amp; node)
++{
++  apply(static_cast&lt;Node&amp;&gt;(node));
++}
++
++void
++NodeVisitor::apply(GroupProviderNode&amp; node)
++{
++  apply(static_cast&lt;Node&amp;&gt;(node));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-31 06:43:16 UTC (rev 426)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-08-31 08:38:15 UTC (rev 427)
+@@ -20,16 +20,13 @@
+   virtual ~NodeVisitor();
+ 
+   virtual void apply(Node&amp;);
+-  virtual void apply(GroupAcceptorNode&amp; node)
+-  { apply((Node&amp;)node); }
+-  virtual void apply(GroupProviderNode&amp; node)
+-  { apply((Node&amp;)node); }
++  virtual void apply(GroupAcceptorNode&amp; node);
++  virtual void apply(GroupProviderNode&amp; node);
+   virtual void apply(LeafNode&amp;);
+   virtual void apply(Model&amp;);
+   virtual void apply(Body&amp; node)
+   { apply((LeafNode&amp;)node); }
+-  virtual void apply(Group&amp; node)
+-  { apply((Node&amp;)node); }
++  virtual void apply(Group&amp; node);
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000398.html">[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000400.html">[OpenFDM-svn] r428 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#399">[ date ]</a>
+              <a href="thread.html#399">[ thread ]</a>
+              <a href="subject.html#399">[ subject ]</a>
+              <a href="author.html#399">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,406 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r51 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r51%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511011131.jA1BVrdg003477%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000037.html">
+   <LINK REL="Next"  HREF="000040.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r51 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r51%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511011131.jA1BVrdg003477%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r51 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Nov  1 12:31:53 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000037.html">[OpenFDM-svn] r50 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000040.html">[OpenFDM-svn] r52 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#38">[ date ]</a>
+              <a href="thread.html#38">[ thread ]</a>
+              <a href="subject.html#38">[ subject ]</a>
+              <a href="author.html#38">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-01 12:31:30 +0100 (Tue, 01 Nov 2005)
+New Revision: 51
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/JointT.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+Log:
+Make the ABA work (still very ugly).
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-11-01 11:31:30 UTC (rev 51)
+@@ -107,7 +107,8 @@
+     if (!outboardBody)
+       return false;
+ 
+-    Log(ArtBody, Debug) &lt;&lt; &quot;Contributing articulation through joint \&quot;&quot;
++    Log(ArtBody, Debug) &lt;&lt; &quot;Contributing articulation from \&quot;&quot;
++                        &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
+                         &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+ 
+     // We need the articulated inertia and force from the outboard body.
+@@ -115,7 +116,7 @@
+     Vector6 F = outboardBody-&gt;getArtForce();
+ 
+     Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values: Force:\n&quot;
+-                         &lt;&lt; F &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
++                         &lt;&lt; trans(F) &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
+ 
+     // Apply the joint degrees of freedom to that.
+     // If there was an error, (something was singular ???)
+@@ -124,7 +125,7 @@
+       return false;
+ 
+     Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values past joint &quot;
+-                         &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; F
++                         &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; trans(F)
+                          &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
+ 
+     // Contribute the transformed values to the parent.
+
+Modified: trunk/OpenFDM/src/OpenFDM/JointT.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/JointT.h	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/JointT.h	2005-11-01 11:31:30 UTC (rev 51)
+@@ -24,40 +24,58 @@
+ 
+   bool jointArticulation(SpatialInertia&amp; artI,
+                          Vector6&amp; artF,
++                         const Vector6&amp; pAlpha,
+                          const Vector6&amp; jointForce,
+-                         const Vector6&amp; frameDotQ,
+                          const Matrix6N&amp; jointAxis)
+   {
++    Log(ArtBody, Debug1) &lt;&lt; artI &lt;&lt; endl;
++
++    mJointForce = jointForce;
++
+     Matrix6N Ih = artI*jointAxis;
+     hIh = trans(jointAxis)*Ih;
+-    
++
+     if (hIh.singular())
+       return false;
+ 
+-    artF += artI*frameDotQ;
+-    Vector6 pAlpha = artF;
++    artF = pAlpha;
+     
+-    mForcePAlpha = jointForce - pAlpha;
+-    artF += Ih*hIh.solve(trans(jointAxis)*mForcePAlpha);
++    Vector6 mForcePAlpha = pAlpha - jointForce;
++
++    Log(ArtBody, Debug1) &lt;&lt; trans(jointAxis)*Ih
++                         &lt;&lt; endl
++                         &lt;&lt; trans(jointForce)
++                         &lt;&lt; endl
++                         &lt;&lt; trans(pAlpha)
++                         &lt;&lt; endl
++                         &lt;&lt; trans(Ih*hIh.solve(trans(jointAxis)*mForcePAlpha))
++                         &lt;&lt; endl
++                         &lt;&lt; SpatialInertia(Ih*hIh.solve(trans(Ih)))
++                         &lt;&lt; endl;
++
++
++    artF -= Ih*hIh.solve(trans(jointAxis)*mForcePAlpha);
+     artI -= SpatialInertia(Ih*hIh.solve(trans(Ih)));
++
+     return true;
+   }
+   
+   void computeRelAccel(const SpatialInertia&amp; outBoardArtInertia,
+                        const Vector6&amp; parentSpAccel,
++                       const Vector6&amp; pAlpha,
+                        const Matrix6N&amp; jointAxis,
+                        VectorN&amp; jointAccel) const
+   {
+     if (hIh.singular()) {
+       jointAccel.clear();
+     } else {
+-      Vector6 tmp = mForcePAlpha - outBoardArtInertia*parentSpAccel;
++      Vector6 tmp = mJointForce - outBoardArtInertia*parentSpAccel - pAlpha;
+       jointAccel = hIh.solve(trans(jointAxis)*tmp);
+     }
+   }
+ 
+ private:
+-  Vector6 mForcePAlpha;
++  Vector6 mJointForce;
+   MatrixFactorsNN hIh;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-01 11:31:30 UTC (rev 51)
+@@ -25,6 +25,12 @@
+   mJointAcceleration = 0;
+   mJointAxis = Vector3::unit(1);
+   mPosition = Vector3::zeros();
++  mSpringCoef = 0;
++  mDampCoef = 0;
++
++  setNumOutputPorts(2);
++  setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;PrismaticJoint::getJointPos));
++  setOutputPort(1, &quot;jointVel&quot;, Property(this, &amp;PrismaticJoint::getJointVel));
+ }
+ 
+ PrismaticJoint::~PrismaticJoint(void)
+@@ -75,19 +81,28 @@
+ {
+   // That projects away tha components where the degrees of freedom
+   // of the joint are.
++  RigidBody* out = getOutboardGroup()-&gt;toRigidBody();
+   real_type tau = getJointForce();
+-  return JointT&lt;1&gt;::jointArticulation(artI, artF, tau*getJointAxis(),
+-                                      getHdot(), getJointAxis());
++  return JointT&lt;1&gt;::jointArticulation(artI, artF, out-&gt;getPAlpha(),
++                                      tau*getJointAxis(),
++                                      getJointAxis());
+ }
+ 
+-
+ Vector6
+-PrismaticJoint::computeRelAccel(const SpatialInertia&amp; artI,
+-                                const Vector6&amp; artF)
++PrismaticJoint::computeRelAccel(const SpatialInertia&amp;,
++                                const Vector6&amp;)
+ {
++  RigidBody* out = getOutboardGroup()-&gt;toRigidBody();
++  Vector6 parentAccel = out-&gt;getParentSpAccel();
++
++  SpatialInertia artI = out-&gt;getArtInertia();
++  Vector6 pAlpha = out-&gt;getPAlpha();
++
+   JointT&lt;1&gt;::VectorN acc;
+-  JointT&lt;1&gt;::computeRelAccel(artI, artF, getJointAxis(), acc);
++  JointT&lt;1&gt;::computeRelAccel(artI, parentAccel, pAlpha, getJointAxis(), acc);
+   mJointAcceleration = acc(1);
++  Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; is &quot; &lt;&lt; trans(acc) &lt;&lt; endl;
+   return getJointAxis()*acc;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-01 11:31:30 UTC (rev 51)
+@@ -59,9 +59,24 @@
+    */
+   void setPosition(const Vector3&amp; position);
+ 
++  void setSpringConstant(real_type springConstant)
++  { mSpringCoef = springConstant; }
++  real_type getSpringConstant(void) const
++  { return mSpringCoef; }
++  void setDampConstant(real_type dampConstant)
++  { mDampCoef = dampConstant; }
++  real_type getDampConstant(void) const
++  { return mDampCoef; }
++
+   virtual real_type getJointForce(void) const
+-//   { return 0; }
+-  { return -1e1*mJointPosition - 1e2*mJointVelocity; }
++  {
++    Log(ArtBody, Debug) &lt;&lt; &quot;RevoluteJoint &quot; &lt;&lt; getName()
++                        &lt;&lt; &quot; pos &quot; &lt;&lt; convertTo(uDegree, mJointPosition)
++                        &lt;&lt; &quot; vel &quot; &lt;&lt; mJointVelocity
++                        &lt;&lt; &quot; torque &quot; &lt;&lt; mSpringCoef*mJointPosition + mDampCoef*mJointVelocity
++                        &lt;&lt; endl;
++    return mSpringCoef*mJointPosition + mDampCoef*mJointVelocity;
++  }
+ 
+ private:
+   /** Computes the inboard articulated inertia and force for
+@@ -100,6 +115,11 @@
+   /** The zero orientation with respect to the parent frame.
+    */
+   Vector3 mPosition;
++
++  /** Well, for now, just to test. Include these here
++   */
++  real_type mSpringCoef;
++  real_type mDampCoef;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-01 11:31:30 UTC (rev 51)
+@@ -26,6 +26,12 @@
+   mJointAcceleration = 0;
+   mJointAxis = Vector3::unit(1);
+   mOrientation = Quaternion::unit();
++  mSpringCoef = 0;
++  mDampCoef = 0;
++
++  setNumOutputPorts(2);
++  setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;RevoluteJoint::getJointPos));
++  setOutputPort(1, &quot;jointVel&quot;, Property(this, &amp;RevoluteJoint::getJointVel));
+ }
+ 
+ RevoluteJoint::~RevoluteJoint(void)
+@@ -80,18 +86,28 @@
+ {
+   // That projects away tha components where the degrees of freedom
+   // of the joint are.
++  RigidBody* out = getOutboardGroup()-&gt;toRigidBody();
+   real_type tau = getJointForce();
+-  return JointT&lt;1&gt;::jointArticulation(artI, artF, tau*getJointAxis(),
+-                                      getHdot(), getJointAxis());
++  return JointT&lt;1&gt;::jointArticulation(artI, artF, out-&gt;getPAlpha(),
++                                      tau*getJointAxis(),
++                                      getJointAxis());
+ }
+ 
+ Vector6
+-RevoluteJoint::computeRelAccel(const SpatialInertia&amp; artI,
+-                               const Vector6&amp; artF)
++RevoluteJoint::computeRelAccel(const SpatialInertia&amp;,
++                               const Vector6&amp;)
+ {
++  RigidBody* out = getOutboardGroup()-&gt;toRigidBody();
++  Vector6 parentAccel = out-&gt;getParentSpAccel();
++
++  SpatialInertia artI = out-&gt;getArtInertia();
++  Vector6 pAlpha = out-&gt;getPAlpha();
++
+   JointT&lt;1&gt;::VectorN acc;
+-  JointT&lt;1&gt;::computeRelAccel(artI, artF, getJointAxis(), acc);
++  JointT&lt;1&gt;::computeRelAccel(artI, parentAccel, pAlpha, getJointAxis(), acc);
+   mJointAcceleration = acc(1);
++  Log(ArtBody, Debug) &lt;&lt; &quot;Relative acceleration for Joint \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; is &quot; &lt;&lt; trans(acc) &lt;&lt; endl;
+   return getJointAxis()*acc;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-01 11:31:30 UTC (rev 51)
+@@ -59,9 +59,24 @@
+    */
+   void setOrientation(const Quaternion&amp; orientation);
+ 
++  void setSpringConstant(real_type springConstant)
++  { mSpringCoef = springConstant; }
++  real_type getSpringConstant(void) const
++  { return mSpringCoef; }
++  void setDampConstant(real_type dampConstant)
++  { mDampCoef = dampConstant; }
++  real_type getDampConstant(void) const
++  { return mDampCoef; }
++
+   virtual real_type getJointForce(void) const
+-//   { return 0; }
+-  { return -1e1*mJointPosition - 1e2*mJointVelocity; }
++  {
++    Log(ArtBody, Debug) &lt;&lt; &quot;RevoluteJoint &quot; &lt;&lt; getName()
++                        &lt;&lt; &quot; pos &quot; &lt;&lt; convertTo(uDegree, mJointPosition)
++                        &lt;&lt; &quot; vel &quot; &lt;&lt; mJointVelocity
++                        &lt;&lt; &quot; torque &quot; &lt;&lt; mSpringCoef*mJointPosition + mDampCoef*mJointVelocity
++                        &lt;&lt; endl;
++    return mSpringCoef*mJointPosition + mDampCoef*mJointVelocity;
++  }
+ 
+ private:
+   /** Computes the inboard articulated inertia and force for
+@@ -107,6 +122,11 @@
+       only used for animations and thus could be postprocessed.
+    */
+   bool mTrackPosition;
++
++  /** Well, for now, just to test. Include these here
++   */
++  real_type mSpringCoef;
++  real_type mDampCoef;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-11-01 11:31:30 UTC (rev 51)
+@@ -73,6 +73,7 @@
+   // 
+   Vector6 iv = getSpVel();
+   Vector6 Jiv = mArtInertia*iv;
++  Log(ArtBody, Debug3) &lt;&lt; &quot;Spatial velocity is &quot; &lt;&lt; trans(iv) &lt;&lt; endl;
+   mArtForce = Vector6(cross(iv.getAngular(), Jiv.getAngular()) +
+                       cross(iv.getLinear(), Jiv.getLinear()),
+                       cross(iv.getAngular(), Jiv.getLinear()));
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-11-01 08:39:47 UTC (rev 50)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-11-01 11:31:30 UTC (rev 51)
+@@ -70,6 +70,11 @@
+   const Vector6&amp; getArtForce(void) const
+   { return mArtForce; }
+ 
++  /** HMM
++   */
++  Vector6 getPAlpha(void) const
++  { return mArtForce + mArtInertia*getHdot(); }
++
+   /**
+    */
+   void contributeForce(const Vector6&amp; force)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000037.html">[OpenFDM-svn] r50 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000040.html">[OpenFDM-svn] r52 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#38">[ date ]</a>
+              <a href="thread.html#38">[ thread ]</a>
+              <a href="subject.html#38">[ subject ]</a>
+              <a href="author.html#38">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

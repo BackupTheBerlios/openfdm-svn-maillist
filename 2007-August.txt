@@ -1,0 +1,559 @@
+From frohlich at mail.berlios.de  Sat Aug 11 07:55:27 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 11 Aug 2007 07:55:27 +0200
+Subject: [OpenFDM-svn] r317 - trunk/OpenFDM
+Message-ID: <200708110555.l7B5tRvY014258@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-11 07:55:26 +0200 (Sat, 11 Aug 2007)
+New Revision: 317
+
+Modified:
+   trunk/OpenFDM/autogen.sh
+Log:
+Use autoreconf ...
+
+
+Modified: trunk/OpenFDM/autogen.sh
+===================================================================
+--- trunk/OpenFDM/autogen.sh	2007-07-28 06:21:33 UTC (rev 316)
++++ trunk/OpenFDM/autogen.sh	2007-08-11 05:55:26 UTC (rev 317)
+@@ -12,7 +12,5 @@
+ # aclocal
+ # autoconf
+ # automake --add-missing
+-autoreconf -v --install || exit 1
+-cd $ORIGDIR || exit $?
++autoreconf -v --install --symlink || exit $?
+ 
+-$srcdir/configure --enable-maintainer-mode "$@"
+
+
+
+From frohlich at mail.berlios.de  Sat Aug 11 08:15:46 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 11 Aug 2007 08:15:46 +0200
+Subject: [OpenFDM-svn] r318 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200708110615.l7B6FkIc015509@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-11 08:15:45 +0200 (Sat, 11 Aug 2007)
+New Revision: 318
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Change number of state values handling.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-11 06:15:45 UTC (rev 318)
+@@ -319,15 +319,8 @@
+ void
+ Model::setParent(ModelGroup* model)
+ {
+-  if (mParentModel) {
+-    mParentModel->adjustNumDiscreteStates(0, getNumDiscreteStates());
+-    mParentModel->adjustNumContinousStates(0, getNumContinousStates());
+-  }
+   mParentModel = model;
+-  if (mParentModel) {
+-    mParentModel->adjustNumDiscreteStates(getNumDiscreteStates(), 0);
+-    mParentModel->adjustNumContinousStates(getNumContinousStates(), 0);
+-  } else {
++  if (!mParentModel) {
+     unsigned num = getNumInputPorts();
+     for (unsigned i = 0; i < num; ++i)
+       mInputPorts[i]->removeAllConnections();
+@@ -340,18 +333,12 @@
+ void
+ Model::setNumContinousStates(unsigned numContinousStates)
+ {
+-  if (mParentModel)
+-    mParentModel->adjustNumContinousStates(numContinousStates,
+-                                           mNumContinousStates);
+   mNumContinousStates = numContinousStates;
+ }
+ 
+ void
+ Model::setNumDiscreteStates(unsigned numDiscreteStates)
+ {
+-  if (mParentModel)
+-    mParentModel->adjustNumDiscreteStates(numDiscreteStates,
+-                                          mNumDiscreteStates);
+   mNumDiscreteStates = numDiscreteStates;
+ }
+ 
+@@ -388,24 +375,4 @@
+   mEnabled = enabled;
+ }
+ 
+-void
+-Model::adjustNumContinousStates(unsigned newCount, unsigned oldCount)
+-{
+-  unsigned numContinousStates = getNumContinousStates();
+-  OpenFDMAssert(oldCount <= numContinousStates);
+-  numContinousStates -= oldCount;
+-  numContinousStates += newCount;
+-  setNumContinousStates(numContinousStates);
+-}
+-
+-void
+-Model::adjustNumDiscreteStates(unsigned newCount, unsigned oldCount)
+-{
+-  unsigned numDiscreteStates = getNumDiscreteStates();
+-  OpenFDMAssert(oldCount <= numDiscreteStates);
+-  numDiscreteStates -= oldCount;
+-  numDiscreteStates += newCount;
+-  setNumDiscreteStates(numDiscreteStates);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-11 06:15:45 UTC (rev 318)
+@@ -57,9 +57,9 @@
+   Model(const std::string& name);
+   virtual ~Model(void);
+ 
+-  /// Double dispatch helper for the multibody system visitor
++  /// Double dispatch helper for the system visitor
+   virtual void accept(ModelVisitor& visitor);
+-  /// Double dispatch helper for the multibody system visitor
++  /// Double dispatch helper for the system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+   /// Hmm ...
+@@ -264,10 +264,6 @@
+ private:
+   void setEnabledUnconditional(bool enabled);
+ 
+-  /// FIXME: use visitor for that
+-  void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+-  void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+-
+   WeakPtr<ModelGroup> mParentModel;
+   unsigned mNumContinousStates;
+   unsigned mNumDiscreteStates;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-11 05:55:26 UTC (rev 317)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-11 06:15:45 UTC (rev 318)
+@@ -112,16 +112,24 @@
+ 
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+-  // build up the lists of stateful models
++  // build up the lists of stateful models and count the number of states
++  unsigned numContinousStates = 0;
++  unsigned numDiscreteStates = 0;
+   ModelList2::const_iterator mit;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit->model->getNumContinousStates())
++    if (mit->model->getNumContinousStates()) {
+       mContinousModelList.push_back(mit->model);
+-    if (mit->model->getNumDiscreteStates())
++      numContinousStates += mit->model->getNumContinousStates();
++    }
++    if (mit->model->getNumDiscreteStates()) {
+       mDiscreteModelList.push_back(mit->model);
++      numDiscreteStates += mit->model->getNumDiscreteStates();
++    }
+     ++mit;
+   }
++  setNumContinousStates(numContinousStates);
++  setNumDiscreteStates(numDiscreteStates);
+ 
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+
+
+
+From frohlich at mail.berlios.de  Sat Aug 11 08:41:21 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 11 Aug 2007 08:41:21 +0200
+Subject: [OpenFDM-svn] r319 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200708110641.l7B6fL0E016609@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-11 08:41:21 +0200 (Sat, 11 Aug 2007)
+New Revision: 319
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+Log:
+Use static casts instead of C-Casts.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-11 06:15:45 UTC (rev 318)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-11 06:41:21 UTC (rev 319)
+@@ -19,15 +19,15 @@
+   virtual void apply(Model& model)
+   { }
+   virtual void apply(ModelGroup& modelGroup)
+-  { apply((Model&)modelGroup); }
++  { apply(static_cast<Model&>(modelGroup)); }
+   virtual void apply(System& system)
+-  { apply((ModelGroup&)system); }
++  { apply(static_cast<ModelGroup&>(system)); }
+   virtual void apply(Interact& interact)
+-  { apply((Model&)interact); }
++  { apply(static_cast<Model&>(interact)); }
+   virtual void apply(Joint& joint)
+-  { apply((Interact&)joint); }
++  { apply(static_cast<Interact&>(joint)); }
+   virtual void apply(MobileRootJoint& mobileRootJoint)
+-  { apply((Joint&)mobileRootJoint); }
++  { apply(static_cast<Joint&>(mobileRootJoint)); }
+ protected:
+   /// Call this in the apply(ModelGroup&) method if you want to
+   /// traverse downward
+
+
+
+From frohlich at mail.berlios.de  Sat Aug 11 08:58:08 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 11 Aug 2007 08:58:08 +0200
+Subject: [OpenFDM-svn] r320 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200708110658.l7B6w8Jt017518@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-11 08:58:08 +0200 (Sat, 11 Aug 2007)
+New Revision: 320
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+Log:
+Include MobileRootJoint.h
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-11 06:41:21 UTC (rev 319)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-11 06:58:08 UTC (rev 320)
+@@ -8,6 +8,7 @@
+ #include "Model.h"
+ #include "ModelGroup.h"
+ #include "RigidBody.h"
++#include "MobileRootJoint.h"
+ #include "System.h"
+ 
+ namespace OpenFDM {
+
+
+
+From frohlich at mail.berlios.de  Sat Aug 11 09:03:23 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 11 Aug 2007 09:03:23 +0200
+Subject: [OpenFDM-svn] r321 - trunk/OpenFDM
+Message-ID: <200708110703.l7B73Nrg017958@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-11 09:03:22 +0200 (Sat, 11 Aug 2007)
+New Revision: 321
+
+Modified:
+   trunk/OpenFDM/configure.ac
+Log:
+Disable osgbuilder
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2007-08-11 06:58:08 UTC (rev 320)
++++ trunk/OpenFDM/configure.ac	2007-08-11 07:03:22 UTC (rev 321)
+@@ -112,7 +112,8 @@
+ AC_SUBST(QT_UIC)
+ 
+ dnl simple check for osg
+-AC_CHECK_HEADERS([osg/Object],[openfdm_have_osg="yes"])
++dnl AC_CHECK_HEADERS([osg/Version],[openfdm_have_osg="yes"])
++openfdm_have_osg="no"
+ 
+ dnl avoid trying to build the editor if qt4 or osg is missing
+ if test "x$openfdm_have_qt4" = "xyes" && test "x$openfdm_have_osg" = "xyes"
+
+
+
+From frohlich at mail.berlios.de  Sun Aug 12 10:28:31 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 12 Aug 2007 10:28:31 +0200
+Subject: [OpenFDM-svn] r322 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200708120828.l7C8SVZj027129@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-08-12 10:28:31 +0200 (Sun, 12 Aug 2007)
+New Revision: 322
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+Log:
+Add a Node class between Model and Object.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-11 07:03:22 UTC (rev 321)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-08-12 08:28:31 UTC (rev 322)
+@@ -4,19 +4,116 @@
+ 
+ #include "Model.h"
+ 
++#include <algorithm>
++
+ #include "LogStream.h"
+ #include "ModelVisitor.h"
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Model, Object)
++BEGIN_OPENFDM_OBJECT_DEF(Node, Object)
++  END_OPENFDM_OBJECT_DEF
++
++Node::Node(const std::string& name) :
++  Object(name)
++{
++}
++
++Node::~Node(void)
++{
++}
++
++void
++Node::accept(ModelVisitor& visitor)
++{
++  visitor.apply(*this);
++}
++
++void
++Node::ascend(ModelVisitor& visitor)
++{
++  for (ParentList::iterator i = mParents.begin(); i != mParents.end(); ++i) {
++    SharedPtr<Group> group = i->lock();
++    if (!group)
++      continue;
++    group->accept(visitor);
++  }
++}
++
++const Model*
++Node::toModel(void) const
++{
++  return 0;
++}
++
++Model*
++Node::toModel(void)
++{
++  return 0;
++}
++
++const Group*
++Node::toGroup(void) const
++{
++  return 0;
++}
++
++Group*
++Node::toGroup(void)
++{
++  return 0;
++}
++
++unsigned
++Node::getNumParents(void) const
++{
++  return mParents.size();
++}
++
++WeakPtr<const Group>
++Node::getParent(unsigned idx) const
++{
++  if (mParents.size() <= idx)
++    return WeakPtr<const Group>(0);
++  return mParents[idx];
++}
++
++WeakPtr<Group>
++Node::getParent(unsigned idx)
++{
++  if (mParents.size() <= idx)
++    return WeakPtr<Group>(0);
++  return mParents[idx];
++}
++
++unsigned
++Node::addParent(Group* model)
++{
++  if (!model)
++    return ~0u;
++  mParents.push_back(WeakPtr<Group>(model));
++  return mParents.size() - 1;
++}
++
++void
++Node::removeParent(unsigned idx)
++{
++  if (idx <= mParents.size())
++    return;
++  ParentList::iterator i = mParents.begin();
++  std::advance(i, idx);
++  mParents.erase(i);
++}
++
++
++BEGIN_OPENFDM_OBJECT_DEF(Model, Node)
+   DEF_OPENFDM_ROPROP(Unsigned, NumContinousStates)
+   DEF_OPENFDM_ROPROP(Unsigned, NumDiscreteStates)
+   DEF_OPENFDM_ROPROP(Bool, DirectFeedThrough)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Model::Model(const std::string& name) :
+-  Object(name),
++  Node(name),
+   mNumContinousStates(0l),
+   mNumDiscreteStates(0l),
+   mDirectFeedThrough(false),
+@@ -40,7 +137,7 @@
+ void
+ Model::ascend(ModelVisitor& visitor)
+ {
+-  SharedPtr<ModelGroup> parentGroup = mParentModel.lock();
++  SharedPtr<ModelGroup> parentGroup = Node::getParent(0).lock();
+   if (!parentGroup)
+     return;
+   parentGroup->accept(visitor);
+@@ -266,13 +363,13 @@
+ const ModelGroup*
+ Model::getParent(void) const
+ {
+-  return mParentModel;
++  return Node::getParent(0);
+ }
+ 
+ ModelGroup*
+ Model::getParent(void)
+ {
+-  return mParentModel;
++  return Node::getParent(0);
+ }
+ 
+ void
+@@ -319,8 +416,10 @@
+ void
+ Model::setParent(ModelGroup* model)
+ {
+-  mParentModel = model;
+-  if (!mParentModel) {
++  removeParent(0);
++  if (model) {
++    addParent(model);
++  } else {
+     unsigned num = getNumInputPorts();
+     for (unsigned i = 0; i < num; ++i)
+       mInputPorts[i]->removeAllConnections();
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-11 07:03:22 UTC (rev 321)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-12 08:28:31 UTC (rev 322)
+@@ -38,9 +38,51 @@
+ class ModelVisitor;
+ class TaskInfo;
+ 
+-class Model : public Object {
+-  OPENFDM_OBJECT(Model, Object);
++
++
++typedef ModelGroup Group;
++
++class Node : public Object {
++  OPENFDM_OBJECT(Node, Object);
+ public:
++  typedef std::vector<SharedPtr<Group> > Path;
++
++  Node(const std::string& name);
++  virtual ~Node(void);
++
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor& visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor& visitor) const;
++
++  /// Double dispatch helper for the system visitor
++  void ascend(ModelVisitor& visitor);
++  /// Double dispatch helper for the system visitor
++//   void ascend(ConstModelVisitor& visitor) const;
++
++  virtual const Model* toModel(void) const;
++  virtual Model* toModel(void);
++
++  virtual const Group* toGroup(void) const;
++  virtual Group* toGroup(void);
++
++protected:
++  // Sets the parent model.
++  unsigned getNumParents(void) const;
++  WeakPtr<const Group> getParent(unsigned idx) const;
++  WeakPtr<Group> getParent(unsigned idx);
++  unsigned addParent(Group* model);
++  void removeParent(unsigned idx);
++
++private:
++  typedef std::vector<WeakPtr<Group> > ParentList;
++  ParentList mParents;
++};
++
++
++class Model : public Node {
++  OPENFDM_OBJECT(Model, Node);
++public:
+   enum DisableMode {
+     /// If disabled, the models output/state is just held.
+     /// On reenable, the model just continues to work
+@@ -264,7 +306,6 @@
+ private:
+   void setEnabledUnconditional(bool enabled);
+ 
+-  WeakPtr<ModelGroup> mParentModel;
+   unsigned mNumContinousStates;
+   unsigned mNumDiscreteStates;
+   bool mDirectFeedThrough;
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-11 07:03:22 UTC (rev 321)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-08-12 08:28:31 UTC (rev 322)
+@@ -17,6 +17,8 @@
+ public:
+   virtual ~ModelVisitor(void)
+   { }
++  virtual void apply(Node& node)
++  { }
+   virtual void apply(Model& model)
+   { }
+   virtual void apply(ModelGroup& modelGroup)
+@@ -38,6 +40,8 @@
+   /// traverse upward
+   inline void ascend(Model& model)
+   { model.ascend(*this); }
++  inline void ascend(Node& node)
++  { node.ascend(*this); }
+ };
+ 
+ } // namespace OpenFDM
+
+
+

@@ -1,0 +1,125 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r992 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r992%20-%20trunk/flightgear&In-Reply-To=%3C200903061639.n26GdhfQ017811%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000956.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r992 - trunk/flightgear</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r992%20-%20trunk/flightgear&In-Reply-To=%3C200903061639.n26GdhfQ017811%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r992 - trunk/flightgear">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Mar  6 17:39:43 CET 2009</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000956.html">[OpenFDM-svn] r993 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#955">[ date ]</a>
+              <a href="thread.html#955">[ thread ]</a>
+              <a href="subject.html#955">[ subject ]</a>
+              <a href="author.html#955">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-03-06 17:39:42 +0100 (Fri, 06 Mar 2009)
+New Revision: 992
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Reflect api changes in flightgear.
+
+M    FGOpenFDM.cpp
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2009-02-25 06:15:06 UTC (rev 991)
++++ trunk/flightgear/FGOpenFDM.cpp	2009-03-06 16:39:42 UTC (rev 992)
+@@ -5,6 +5,7 @@
+ #include &lt;simgear/misc/sg_path.hxx&gt;
+ #include &lt;simgear/math/sg_geodesy.hxx&gt;
+ #include &lt;simgear/props/props.hxx&gt;
++#include &lt;simgear/scene/material/mat.hxx&gt;
+ 
+ #include &lt;Aircraft/controls.hxx&gt;
+ #include &lt;Main/globals.hxx&gt;
+@@ -30,8 +31,8 @@
+ class FGGround
+   : public Ground {
+ public:
+-  FGGround(FGInterface *ifce)
+-    : mIfce(ifce)
++  FGGround(FGInterface *ifce) :
++    mIfce(ifce)
+   { }
+   virtual ~FGGround(void)
+   { }
+@@ -40,18 +41,24 @@
+   getGroundPlane(real_type t, const Vector3&amp; refPos) const
+   {
+     double loc_cart[3] = { refPos(0), refPos(1), refPos(2) };
+-    double contact[3], normal[3], vel[3], lc, ff, agl;
+-    int groundtype;
++    double contact[3], normal[3], vel[3], angvel[3];
++    const SGMaterial* material;
++    simgear::BVHNode::Id id;
+     // FIXME!!!!!!!
+     bool ok = false;
+     if (mIfce)
+-      ok = mIfce-&gt;get_agl_m(t, loc_cart, contact, normal, vel,
+-                            &amp;groundtype, &amp;lc, &amp;ff, &amp;agl);
++      ok = mIfce-&gt;get_agl_m(t, loc_cart, 0, contact, normal, vel, angvel,
++                            material, id);
+     Vector3 unitDown(-normal[0], -normal[1], -normal[2]);
+     Vector3 groundOff(contact[0], contact[1], contact[2]);
+     // FIXME: why is this not normalized?? ...
+     Plane p(normalize(unitDown), groundOff);
+-    Vector6 v(Vector3::zeros(), Vector3(vel[0], vel[1], vel[2]));
++    Vector3 linearVel(vel[0], vel[1], vel[2]);
++    Vector3 angularVel(angvel[0], angvel[1], angvel[2]);
++    Vector6 v(angularVel, linearVel + cross(angularVel, refPos - groundOff));
++    double ff = 1;
++    if (material)
++      ff = material-&gt;get_friction_factor();
+     return GroundValues(p, v, ff);
+   }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000956.html">[OpenFDM-svn] r993 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#955">[ date ]</a>
+              <a href="thread.html#955">[ thread ]</a>
+              <a href="subject.html#955">[ subject ]</a>
+              <a href="author.html#955">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

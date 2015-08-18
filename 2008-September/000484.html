@@ -1,0 +1,255 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r512 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r512%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809271159.m8RBxXnq017034%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000483.html">
+   <LINK REL="Next"  HREF="000485.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r512 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r512%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809271159.m8RBxXnq017034%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r512 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 13:59:33 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000483.html">[OpenFDM-svn] r511 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000485.html">[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#484">[ date ]</a>
+              <a href="thread.html#484">[ thread ]</a>
+              <a href="subject.html#484">[ subject ]</a>
+              <a href="author.html#484">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 13:59:32 +0200 (Sat, 27 Sep 2008)
+New Revision: 512
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h
+Log:
+Allow ports to be enabled and disabled.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-09-27 11:59:32 UTC (rev 512)
+@@ -11,13 +11,13 @@
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Integrator, Model)
+   DEF_OPENFDM_PROPERTY(Matrix, InitialValue, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableInitialValuePort, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Integrator::Integrator(const std::string&amp; name = std::string()) :
+   Model(name),
+   mInputPort(newMatrixInputPort(&quot;input&quot;, false)),
+-  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
+-  mInitialValuePort(newMatrixInputPort(&quot;initialValue&quot;, true))
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;))
+ {
+   mMatrixStateInfo = new MatrixStateInfo;
+   addContinousStateInfo(mMatrixStateInfo);
+@@ -81,4 +81,19 @@
+   return mInitialValue;
+ }
+ 
++void
++Integrator::setEnableInitialValuePort(bool enable)
++{
++  if (enable &amp;&amp; !mInitialValuePort.empty())
++    mInitialValuePort = newMatrixInputPort(&quot;initialValue&quot;, true);
++  else if (!enable &amp;&amp; mInitialValuePort.empty())
++    mInitialValuePort.clear();
++}
++
++bool
++Integrator::getEnableInitialValuePort() const
++{
++  return mInitialValuePort.empty();
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.h	2008-09-27 11:59:32 UTC (rev 512)
+@@ -27,6 +27,9 @@
+   void setInitialValue(const Matrix&amp; initialValue);
+   const Matrix&amp; getInitialValue() const;
+ 
++  void setEnableInitialValuePort(bool enable);
++  bool getEnableInitialValuePort() const;
++
+ private:
+   MatrixInputPort mInputPort;
+   MatrixOutputPort mOutputPort;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixInputPort.h	2008-09-27 11:59:32 UTC (rev 512)
+@@ -13,23 +13,30 @@
+ 
+ class MatrixInputPort {
+ public:
++  MatrixInputPort()
++  { }
+   MatrixInputPort(Node* node, const std::string&amp; name,
+                   const Size&amp; size, bool directInput) :
+     mPort(new NumericAcceptorPortInfo(node, name, size, directInput))
+-  {}
++  { }
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
++    OpenFDMAssert(mPort);
+     PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
+     OpenFDMAssert(portValue);
+     OpenFDMAssert(dynamic_cast&lt;NumericPortValue*&gt;(portValue));
+     return static_cast&lt;NumericPortValue*&gt;(portValue);
+   }
++  bool empty() const
++  { return mPort; }
++  void clear()
++  { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+   unsigned getPortIndex() const
+-  { return mPort-&gt;getIndex(); }
++  { OpenFDMAssert(mPort); return mPort-&gt;getIndex(); }
+   bool getDirectInput() const
+-  { return mPort-&gt;getDirectInput(); }
++  { OpenFDMAssert(mPort); return mPort-&gt;getDirectInput(); }
+   void setDirectInput(bool directInput) const
+-  { mPort-&gt;setDirectInput(directInput); }
++  { OpenFDMAssert(mPort); mPort-&gt;setDirectInput(directInput); }
+ private:
+   SharedPtr&lt;NumericAcceptorPortInfo&gt; mPort;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp	2008-09-27 11:59:32 UTC (rev 512)
+@@ -18,9 +18,7 @@
+ 
+ PortInfo::~PortInfo()
+ {
+-  SharedPtr&lt;Node&gt; node = mNode.lock();
+-  if (node)
+-    node-&gt;removePort(this);
++  clear();
+ }
+ 
+ void
+@@ -29,4 +27,13 @@
+   mName = name;
+ }
+ 
++void
++PortInfo::clear()
++{
++  SharedPtr&lt;Node&gt; node = mNode.lock();
++  if (!node)
++    return;
++  node-&gt;removePort(this);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-09-27 11:59:32 UTC (rev 512)
+@@ -61,6 +61,8 @@
+     return portValueVector[index];
+   }
+ 
++  void clear();
++
+ private:
+   PortInfo(const PortInfo&amp;);
+   PortInfo&amp; operator=(const PortInfo&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h	2008-09-27 10:58:26 UTC (rev 511)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RealInputPort.h	2008-09-27 11:59:32 UTC (rev 512)
+@@ -13,22 +13,29 @@
+ 
+ class RealInputPort {
+ public:
++  RealInputPort()
++  { }
+   RealInputPort(Node* node, const std::string&amp; name, bool directInput) :
+     mPort(new NumericAcceptorPortInfo(node, name, Size(1, 1), directInput))
+-  {}
++  { }
+   NumericPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
++    OpenFDMAssert(mPort);
+     PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
+     OpenFDMAssert(portValue);
+     OpenFDMAssert(dynamic_cast&lt;NumericPortValue*&gt;(portValue));
+     return static_cast&lt;NumericPortValue*&gt;(portValue);
+   }
++  bool empty() const
++  { return mPort; }
++  void clear()
++  { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+   unsigned getPortIndex() const
+-  { return mPort-&gt;getIndex(); }
++  { OpenFDMAssert(mPort); return mPort-&gt;getIndex(); }
+   bool getDirectInput() const
+-  { return mPort-&gt;getDirectInput(); }
++  { OpenFDMAssert(mPort); return mPort-&gt;getDirectInput(); }
+   void setDirectInput(bool directInput) const
+-  { mPort-&gt;setDirectInput(directInput); }
++  { OpenFDMAssert(mPort); mPort-&gt;setDirectInput(directInput); }
+ private:
+   SharedPtr&lt;NumericAcceptorPortInfo&gt; mPort;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000483.html">[OpenFDM-svn] r511 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000485.html">[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#484">[ date ]</a>
+              <a href="thread.html#484">[ thread ]</a>
+              <a href="subject.html#484">[ subject ]</a>
+              <a href="author.html#484">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

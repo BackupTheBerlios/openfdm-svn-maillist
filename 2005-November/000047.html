@@ -1,0 +1,504 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r60 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r60%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511131046.jADAkRta030796%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000046.html">
+   <LINK REL="Next"  HREF="000048.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r60 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r60%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511131046.jADAkRta030796%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r60 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Nov 13 11:46:27 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000046.html">[OpenFDM-svn] r59 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000048.html">[OpenFDM-svn] r61 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#47">[ date ]</a>
+              <a href="thread.html#47">[ thread ]</a>
+              <a href="subject.html#47">[ subject ]</a>
+              <a href="author.html#47">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-13 11:45:59 +0100 (Sun, 13 Nov 2005)
+New Revision: 60
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+   trunk/OpenFDM/src/OpenFDM/RootFrame.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Move function evaluation time into TaskInfo
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -19,7 +19,7 @@
+   mEnvironment = env;
+ 
+   // Initialize all the expression nodes we will need.
+-  for (int i = 0; i &lt; 6; ++i) {
++  for (unsigned i = 0; i &lt; 6; ++i) {
+     mStabilityAxisSummers[i] = new SumExpressionImpl;
+     mBodyAxisSummers[i] = new SumExpressionImpl;
+   }
+@@ -118,6 +118,18 @@
+ }
+ 
+ void
++AeroForce::output(const TaskInfo&amp; taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) &lt;&lt; &quot;AeroForce::output(): \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
++    real_type t = taskInfo.getTime();
++    mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, getRefPosition());
++  }
++}
++
++void
+ AeroForce::setPosition(const Vector3&amp; p)
+ {
+   mPosition = p;
+@@ -560,11 +572,8 @@
+ }
+ 
+ void
+-AeroForce::setState(real_type t, const Vector&amp; state, unsigned offset)
++AeroForce::setState(const Vector&amp; state, unsigned offset)
+ {
+-  // First determine the intersection depth with the ground.
+-  mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, getRefPosition());
+-
+   // Dirty everything.
+   mDirtyRefPosition = true;
+   mDirtyUnitDown = true;
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -33,6 +33,8 @@
+   AeroForce(Environment* env, const std::string&amp;);
+   virtual ~AeroForce(void);
+ 
++  virtual void output(const TaskInfo&amp;);
++
+   void setPosition(const Vector3&amp; p);
+   const Vector3&amp; getPosition(void) const;
+ 
+@@ -113,7 +115,7 @@
+   }
+ 
+   virtual void
+-  setState(real_type t, const Vector&amp; state, unsigned offset);
++  setState(const Vector&amp; state, unsigned offset);
+ 
+   // The interface to the mechanical system.
+   virtual void computeForce(void);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -40,7 +40,7 @@
+                           SampleTime::PerTimestep)) {
+     Log(Model, Debug) &lt;&lt; &quot;Contact::output(): \&quot;&quot; &lt;&lt; getName()
+                       &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+-    getGround(0 /*FIXME*/);
++    getGround(taskInfo.getTime());
+ 
+     // FIXME
+     if (getInputPort(&quot;enabled&quot;).isValid())
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -64,7 +64,7 @@
+ }
+ 
+ void
+-FreeJoint::setState(real_type t, const Vector&amp; state, unsigned offset)
++FreeJoint::setState(const Vector&amp; state, unsigned offset)
+ {
+   setOutboardOrientation(Vector4(state(offset+1), state(offset+2),
+                          state(offset+3), state(offset+4)));
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -66,9 +66,6 @@
+     topBody-&gt;setRefOrientation(o);
+   }
+ 
+-  /** Sets the state of this multibody system from the state vector state.
+-   */
+-  void setEvalState(real_type t, const Vector&amp; state);
+   /** Sets the state of this multibody system from the state vector state
+       and returns the time derivative in deriv.
+    */
+@@ -86,7 +83,7 @@
+ 
+   /** Plugin function for the state propagation.
+    */
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   /** Plugin function for the state propagation.
+    */
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -55,7 +55,7 @@
+ }
+ 
+ void
+-Integrator::setState(real_type, const Vector&amp; state, unsigned offset)
++Integrator::setState(const Vector&amp; state, unsigned offset)
+ {
+   // FIXME reshape ...
+   for (unsigned j = 1; j &lt;= cols(mIntegralState); ++j) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -19,7 +19,7 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp;);
+ 
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -85,7 +85,7 @@
+ }
+ 
+ void
+-Model::setState(real_type t, const Vector&amp; state, unsigned offset)
++Model::setState(const Vector&amp; state, unsigned offset)
+ {
+ }
+ 
+@@ -113,8 +113,9 @@
+ Model::evalFunction(real_type t, const Vector&amp; v, Vector&amp; out)
+ {
+   /// FIXME Hmm, may be different ...
+-  setState(t, v, 0);
++  setState(v, 0);
+   TaskInfo taskInfo;
++  taskInfo.setTime(t);
+   taskInfo.addSampleTime(SampleTime::Continous);
+   output(taskInfo);
+   out.resize(getNumContinousStates());
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -184,8 +184,14 @@
+ public:
+   TaskInfo(void) :
+     mSliceSize(0),
++    mTime(0),
+     mNumBasicSteps(0)
+   {}
++
++  void setTime(real_type t)
++  { mTime = t; }
++  real_type getTime(void) const
++  { return mTime; }
+   
+   void addSampleTime(const SampleTime&amp; sampleTime)
+   { mSampleTimeSet.addSampleTime(sampleTime); }
+@@ -209,6 +215,7 @@
+ private:
+   SampleTimeSet mSampleTimeSet;
+   real_type mSliceSize;
++  real_type mTime;
+   unsigned mNumBasicSteps;
+ };
+ 
+@@ -235,7 +242,7 @@
+   /// Called whenever discrete states need to be updated.
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -221,7 +221,7 @@
+ }
+ 
+ void
+-ModelGroup::setState(real_type t, const Vector&amp; state, unsigned offset)
++ModelGroup::setState(const Vector&amp; state, unsigned offset)
+ {
+   OpenFDMAssert(offset + getNumContinousStates() &lt;= rows(state));
+ 
+@@ -230,7 +230,7 @@
+     unsigned nStates = (*it)-&gt;getNumContinousStates();
+     if (0 &lt; nStates) {
+       OpenFDMAssert(offset + nStates &lt;= rows(state));
+-      (*it)-&gt;setState(t, state, offset);
++      (*it)-&gt;setState(state, offset);
+       offset += nStates;
+     }
+   }
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -42,7 +42,7 @@
+   /// Called whenever discrete states need to be updated.
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -105,7 +105,7 @@
+ }
+ 
+ void
+-PrismaticJoint::setState(real_type t, const Vector&amp; state, unsigned offset)
++PrismaticJoint::setState(const Vector&amp; state, unsigned offset)
+ {
+   setJointPos(state(offset+1));
+   setJointVel(state(offset+2));
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -90,7 +90,7 @@
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; state, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -110,7 +110,7 @@
+ }
+ 
+ void
+-RevoluteJoint::setState(real_type t, const Vector&amp; state, unsigned offset)
++RevoluteJoint::setState(const Vector&amp; state, unsigned offset)
+ {
+   if (mTrackPosition) {
+     setJointPos(state(offset+1));
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -90,7 +90,7 @@
+ 
+   /** Methods for the OpenFDM::Part.
+    */
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; state, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -53,13 +53,13 @@
+ class SetStateVisitor
+   : public Visitor {
+ public:
+-  SetStateVisitor(const Vector&amp; state, real_type t)
+-    : mState(state), mTime(t), mOffset(0u)
++  SetStateVisitor(const Vector&amp; state)
++    : mState(state), mOffset(0u)
+   { }
+   virtual void apply(MultiBodyModel&amp; abNode)
+   {
+     OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.setState(mTime, mState, mOffset);
++    abNode.setState(mState, mOffset);
+     mOffset += abNode.getNumContinousStates();
+   }
+ private:
+@@ -172,10 +172,10 @@
+ }
+ 
+ void
+-MultiBodySystem::setEvalState(real_type t, const Vector&amp; state)
++MultiBodySystem::setEvalState(const Vector&amp; state)
+ {
+   // First we need to inject the current state into the tree of parts.
+-  setState(t, state, 0);
++  setState(state, 0);
+ 
+   // Compute the external and interaction forces.
+   ForceComputationVisitor forceVisitor;
+@@ -193,7 +193,7 @@
+ void
+ MultiBodySystem::computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv)
+ {
+-  setEvalState(t, state);
++  setEvalState(state);
+ 
+   // And finally extract the derivative vector from the tree.
+   GetStateDerivVisitor gsdv(getNumContinousStates());
+@@ -202,9 +202,9 @@
+ }
+ 
+ void
+-MultiBodySystem::setState(real_type t, const Vector&amp; state, unsigned offset)
++MultiBodySystem::setState(const Vector&amp; state, unsigned offset)
+ {
+-  SetStateVisitor ssv(state(Range(offset+1, offset+getNumContinousStates())), t);
++  SetStateVisitor ssv(state(Range(offset+1, offset+getNumContinousStates())));
+   mRootFrame-&gt;accept(ssv);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RootFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RootFrame.h	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/RootFrame.h	2005-11-13 10:45:59 UTC (rev 60)
+@@ -32,13 +32,13 @@
+ 
+   /** Sets the state of this multibody system from the state vector state.
+    */
+-  void setEvalState(real_type t, const Vector&amp; state);
++  void setEvalState(const Vector&amp; state);
+   /** Sets the state of this multibody system from the state vector state
+       and returns the time derivative in deriv.
+    */
+   void computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv);
+   
+-  virtual void setState(real_type t, const Vector&amp; state, unsigned offset);
++  virtual void setState(const Vector&amp; state, unsigned offset);
+   virtual void getState(Vector&amp; state, unsigned offset) const;
+   virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2005-11-12 17:48:06 UTC (rev 59)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2005-11-13 10:45:59 UTC (rev 60)
+@@ -162,7 +162,8 @@
+       loopTEnd = tEnd;
+     } else {
+       // need that  ...
+-      const TaskInfo&amp; taskInfo = mDiscreteTaskList[mCurrentTaskNum];
++      TaskInfo taskInfo = mDiscreteTaskList[mCurrentTaskNum];
++      taskInfo.setTime(getTime());
+       
+       if (mCurrentSliceTime == 0) {
+         Log(Model, Info) &lt;&lt; &quot;Computing discrete output for Task # &quot;
+@@ -198,6 +199,7 @@
+       TaskInfo taskInfo;
+       taskInfo.addSampleTime(SampleTime::Continous);
+       taskInfo.addSampleTime(SampleTime::PerTimestep);
++      taskInfo.setTime(getTime());
+       output(taskInfo);
+ 
+       Log(Model, Info) &lt;&lt; &quot;Integration: from time &quot; &lt;&lt; mTimestepper-&gt;getTime()
+@@ -272,9 +274,9 @@
+   real_type rtol = 1e-8;
+   bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
+   if (ret) {
+-    setState(getTime(), trimState, 0);
++    setState(trimState, 0);
+   } else {
+-    setState(getTime(), state, 0);
++    setState(state, 0);
+   }
+ 
+   return ret;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000046.html">[OpenFDM-svn] r59 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000048.html">[OpenFDM-svn] r61 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#47">[ date ]</a>
+              <a href="thread.html#47">[ thread ]</a>
+              <a href="subject.html#47">[ subject ]</a>
+              <a href="author.html#47">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

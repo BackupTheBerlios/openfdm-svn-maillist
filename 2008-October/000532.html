@@ -1,0 +1,224 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r561%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810051313.m95DDhWj020328%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000531.html">
+   <LINK REL="Next"  HREF="000533.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r561%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810051313.m95DDhWj020328%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct  5 15:13:43 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000531.html">[OpenFDM-svn] r560 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000533.html">[OpenFDM-svn] r562 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#532">[ date ]</a>
+              <a href="thread.html#532">[ thread ]</a>
+              <a href="subject.html#532">[ subject ]</a>
+              <a href="author.html#532">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-05 15:13:43 +0200 (Sun, 05 Oct 2008)
+New Revision: 561
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+   branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+Log:
+Hve that poer node path map in the system.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-05 13:13:43 UTC (rev 561)
+@@ -6,6 +6,8 @@
+ #define OpenFDM_AbstractNodeInstance_H
+ 
+ #include &lt;string&gt;
++#include &lt;list&gt;
++#include &lt;map&gt;
+ #include &quot;AbstractNodeContext.h&quot;
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
+@@ -58,6 +60,8 @@
+ };
+ 
+ typedef std::list&lt;SharedPtr&lt;AbstractNodeInstance&gt; &gt; NodeInstanceList;
++typedef std::list&lt;SharedPtr&lt;const AbstractNodeInstance&gt; &gt; ConstNodeInstanceList;
++typedef std::map&lt;NodePath, SharedPtr&lt;AbstractNodeInstance&gt; &gt; NodeInstanceMap;
+ 
+ } // namespace OpenFDM
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-05 13:13:43 UTC (rev 561)
+@@ -7,6 +7,7 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
++#include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,7 +24,7 @@
+ class RootJoint;
+ class Interact;
+ 
+-class ConstNodeVisitor {
++class ConstNodeVisitor : public Referenced {
+ public:
+   virtual ~ConstNodeVisitor();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-05 13:13:43 UTC (rev 561)
+@@ -7,6 +7,7 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
++#include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,7 +24,7 @@
+ class RootJoint;
+ class Interact;
+ 
+-class NodeVisitor {
++class NodeVisitor : public Referenced {
+ public:
+   virtual ~NodeVisitor();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-05 13:13:43 UTC (rev 561)
+@@ -638,7 +638,12 @@
+   
+   // Have something to run in our hands.
+   // Not get the information required to reflect the system to the user.
+-  mNodeInstanceList.swap(nodeInstanceCollector._nodeInstanceList);
++  NodeInstanceList::iterator i;
++  for (i = nodeInstanceCollector._nodeInstanceList.begin();
++       i != nodeInstanceCollector._nodeInstanceList.end(); ++i) {
++    mNodeInstanceMap[(*i)-&gt;getNodePath()] = *i;
++    mNodeInstanceList.push_back(*i);
++  }
+   
+   return true;
+ }
+@@ -648,6 +653,7 @@
+ {
+   mAbstractSystem = 0;
+   mNodeInstanceList.clear();
++  mNodeInstanceMap.clear();
+ }
+ 
+ /// Simulate the system until the time tEnd
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-05 13:13:43 UTC (rev 561)
+@@ -40,16 +40,32 @@
+   /// Return the current simulation time, convenience function
+   real_type getTime(void) const;
+ 
+-  const NodeInstanceList&amp; getNodeInstanceList() const
++  const ConstNodeInstanceList&amp; getNodeInstanceList() const
+   { return mNodeInstanceList; }
+ 
++  const AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath) const
++  {
++    NodeInstanceMap::const_iterator i = mNodeInstanceMap.find(nodePath);
++    if (i == mNodeInstanceMap.end())
++      return 0;
++    return i-&gt;second;
++  }
++  AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath)
++  {
++    NodeInstanceMap::const_iterator i = mNodeInstanceMap.find(nodePath);
++    if (i == mNodeInstanceMap.end())
++      return 0;
++    return i-&gt;second;
++  }
++
+ private:
+   class NodeInstanceCollector;
+ 
+   SharedPtr&lt;Node&gt; mNode;
+ 
+   SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
+-  NodeInstanceList mNodeInstanceList;
++  ConstNodeInstanceList mNodeInstanceList;
++  NodeInstanceMap mNodeInstanceMap;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-05 12:51:50 UTC (rev 560)
++++ branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-05 13:13:43 UTC (rev 561)
+@@ -216,7 +216,7 @@
+     if (!system)
+       return;
+     // Build an index to the system nodes
+-    NodeInstanceList::const_iterator i;
++    ConstNodeInstanceList::const_iterator i;
+     for (i = system-&gt;getNodeInstanceList().begin();
+          i != system-&gt;getNodeInstanceList().end(); ++i) {
+       mNodeInstanceMap[(*i)-&gt;getNodePath()] = *i;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000531.html">[OpenFDM-svn] r560 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000533.html">[OpenFDM-svn] r562 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#532">[ date ]</a>
+              <a href="thread.html#532">[ thread ]</a>
+              <a href="subject.html#532">[ subject ]</a>
+              <a href="author.html#532">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

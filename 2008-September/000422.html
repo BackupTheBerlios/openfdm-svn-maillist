@@ -1,0 +1,205 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r450 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r450%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809091719.m89HJ8HZ025821%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000421.html">
+   <LINK REL="Next"  HREF="000423.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r450 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r450%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809091719.m89HJ8HZ025821%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r450 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep  9 19:19:08 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000421.html">[OpenFDM-svn] r449 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000423.html">[OpenFDM-svn] r451 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#422">[ date ]</a>
+              <a href="thread.html#422">[ thread ]</a>
+              <a href="subject.html#422">[ subject ]</a>
+              <a href="author.html#422">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-09 19:19:08 +0200 (Tue, 09 Sep 2008)
+New Revision: 450
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicBodyPort.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInteractPort.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+Log:
+More on mechanic ports.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-09 16:59:05 UTC (rev 449)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-09 17:19:08 UTC (rev 450)
+@@ -49,6 +49,8 @@
+   MatrixStateValue.h \
+   MatrixStateInfo.h \
+   MidpointRule.h \
++  MechanicBodyPort.h \
++  MechanicInteractPort.h \
+   MechanicPortValue.h \
+   MechanicAcceptorPortInfo.h \
+   MechanicProviderPortInfo.h \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicBodyPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicBodyPort.h	2008-09-09 16:59:05 UTC (rev 449)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicBodyPort.h	2008-09-09 17:19:08 UTC (rev 450)
+@@ -0,0 +1,34 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MechanicBodyPort_H
++#define OpenFDM_MechanicBodyPort_H
++
++#include &quot;MechanicProviderPortInfo.h&quot;
++#include &quot;MechanicPortValue.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++class MechanicBodyPort {
++public:
++  MechanicBodyPort(Node* node, const std::string&amp; name) :
++    mPort(new MechanicProviderPortInfo(node, name))
++  {}
++  MechanicPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
++  {
++    PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
++    OpenFDMAssert(portValue);
++    OpenFDMAssert(dynamic_cast&lt;MechanicPortValue*&gt;(portValue));
++    return static_cast&lt;MechanicPortValue*&gt;(portValue);
++  }
++  unsigned getPortIndex() const
++  { return mPort-&gt;getIndex(); }
++private:
++  SharedPtr&lt;MechanicProviderPortInfo&gt; mPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInteractPort.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInteractPort.h	2008-09-09 16:59:05 UTC (rev 449)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInteractPort.h	2008-09-09 17:19:08 UTC (rev 450)
+@@ -0,0 +1,34 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MechanicInteractPort_H
++#define OpenFDM_MechanicInteractPort_H
++
++#include &quot;MechanicAcceptorPortInfo.h&quot;
++#include &quot;MechanicPortValue.h&quot;
++#include &quot;SharedPtr.h&quot;
++
++namespace OpenFDM {
++
++class MechanicInteractPort {
++public:
++  MechanicInteractPort(Node* node, const std::string&amp; name) :
++    mPort(new MechanicAcceptorPortInfo(node, name))
++  {}
++  MechanicPortValue* getPortValue(const PortValueVector&amp; portValueVector) const
++  {
++    PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
++    OpenFDMAssert(portValue);
++    OpenFDMAssert(dynamic_cast&lt;MechanicPortValue*&gt;(portValue));
++    return static_cast&lt;MechanicPortValue*&gt;(portValue);
++  }
++  unsigned getPortIndex() const
++  { return mPort-&gt;getIndex(); }
++private:
++  SharedPtr&lt;MechanicAcceptorPortInfo&gt; mPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-09 16:59:05 UTC (rev 449)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-09-09 17:19:08 UTC (rev 450)
+@@ -8,6 +8,8 @@
+ #include &quot;PortValue.h&quot;
+ #include &quot;MatrixInputPort.h&quot;
+ #include &quot;MatrixOutputPort.h&quot;
++#include &quot;MechanicBodyPort.h&quot;
++#include &quot;MechanicInteractPort.h&quot;
+ #include &quot;RealInputPort.h&quot;
+ #include &quot;RealOutputPort.h&quot;
+ 
+@@ -50,6 +52,21 @@
+   { return port.getPortValue(mPortValueVector)-&gt;getValue(); }
+ 
+ 
++  // Accessors for matrix valued ports
++  bool isConnected(const MechanicBodyPort&amp; port) const
++  { return port.getPortValue(mPortValueVector); }
++  bool isConnected(const MechanicInteractPort&amp; port) const
++  { return port.getPortValue(mPortValueVector); }
++
++  // FIXME Implement access control for the port value
++  MechanicPortValue&amp; operator[](const MechanicBodyPort&amp; port) const
++  { return *port.getPortValue(mPortValueVector); }
++  MechanicPortValue&amp; operator[](const MechanicInteractPort&amp; port)
++  { return *port.getPortValue(mPortValueVector); }
++
++
++
++
+   // FIXME, avoid this method here. With this method the output stage of a model
+   // can change the port values, this should not be available in a model.
+   // may be this must be a derived class that provides some more access??
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000421.html">[OpenFDM-svn] r449 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000423.html">[OpenFDM-svn] r451 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#422">[ date ]</a>
+              <a href="thread.html#422">[ thread ]</a>
+              <a href="subject.html#422">[ subject ]</a>
+              <a href="author.html#422">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

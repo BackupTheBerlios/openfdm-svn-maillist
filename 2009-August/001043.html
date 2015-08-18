@@ -1,0 +1,138 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1084 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1084%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091116.n79BGWjs002757%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001042.html">
+   <LINK REL="Next"  HREF="001044.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1084 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1084%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091116.n79BGWjs002757%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1084 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug  9 13:16:32 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001042.html">[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001044.html">[OpenFDM-svn] r1085 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1043">[ date ]</a>
+              <a href="thread.html#1043">[ thread ]</a>
+              <a href="subject.html#1043">[ subject ]</a>
+              <a href="author.html#1043">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-09 13:16:31 +0200 (Sun, 09 Aug 2009)
+New Revision: 1084
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+Log:
+Reenable brakepoint lookup reuse.
+
+M    JSBSimReaderBase.cpp
+M    JSBSimReaderBase.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-09 10:58:43 UTC (rev 1083)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-09 11:16:31 UTC (rev 1084)
+@@ -852,13 +852,11 @@
+ 
+   // First check if we already have a table lookup for this port/brakepoint
+   // combination. If so return that output port
+-  // FIXME: cannot share the brakepoint lookups ???
+-//   std::vector&lt;SharedPtr&lt;BreakPointLookup&gt; &gt;::iterator it;
+-//   for (it = mBreakPointVectors.begin(); it != mBreakPointVectors.end(); ++it) {
+-//     if (tl == (*it)-&gt;getBreakPointVector() &amp;&amp;
+-//         in-&gt;getPortInterface() == (*it)-&gt;getPort(&quot;input&quot;)-&gt;getPortInterface())
+-//       return (*it)-&gt;getPort(&quot;output&quot;);
+-//   }
++  std::vector&lt;BreakPointLookupEntry&gt;::iterator it;
++  for (it = mBreakPointVectors.begin(); it != mBreakPointVectors.end(); ++it) {
++    if (tl == it-&gt;lookup-&gt;getBreakPointVector() &amp;&amp; in == it-&gt;inputConnection)
++      return it-&gt;lookup-&gt;getPort(&quot;output&quot;);
++  }
+ 
+   // No sharable table lookup found, we need to create a new one
+   BreakPointLookup* tablePreLookup
+@@ -866,7 +864,7 @@
+   addMultiBodyModel(tablePreLookup);
+   tablePreLookup-&gt;setBreakPointVector(tl);
+   mTopLevelGroup-&gt;connect(in, tablePreLookup-&gt;getInputPort(0));
+-  mBreakPointVectors.push_back(tablePreLookup);
++  mBreakPointVectors.push_back(BreakPointLookupEntry(in, tablePreLookup));
+   return tablePreLookup-&gt;getOutputPort();
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-09 10:58:43 UTC (rev 1083)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-09 11:16:31 UTC (rev 1084)
+@@ -265,7 +265,8 @@
+   const Port* addMultiBodyConstModel(const std::string&amp; name, real_type value);
+   void addMultiBodyModel(Node* model);
+   /// &lt;/FIXME&gt; document and rethink
+-  const Port* getTablePrelookup(const std::string&amp; name, const Port* in, const BreakPointVector&amp; tl);
++  const Port* getTablePrelookup(const std::string&amp; name, const Port* in,
++                                const BreakPointVector&amp; tl);
+   /// List for the aircraft search path.
+   std::list&lt;std::string&gt; mAircraftPath;
+   /// List for the engine search path.
+@@ -275,7 +276,13 @@
+   PropertyMap mExpressionTable;
+   SharedPtr&lt;JSBSimAerodynamic&gt; mAeroForce;
+   SharedPtr&lt;RigidBody&gt; mTopLevelBody;
+-  std::vector&lt;SharedPtr&lt;BreakPointLookup&gt; &gt; mBreakPointVectors;
++  struct BreakPointLookupEntry {
++    BreakPointLookupEntry(const Port* in = 0, BreakPointLookup* tl = 0) :
++      inputConnection(in), lookup(tl) {}
++    SharedPtr&lt;const Port&gt; inputConnection;
++    SharedPtr&lt;BreakPointLookup&gt; lookup;
++  };
++  std::vector&lt;BreakPointLookupEntry&gt; mBreakPointVectors;
+ 
+   // For now just copies from the prevous try ...
+   Vector3 structToBody(const Vector3&amp; v)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001042.html">[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001044.html">[OpenFDM-svn] r1085 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1043">[ date ]</a>
+              <a href="thread.html#1043">[ thread ]</a>
+              <a href="subject.html#1043">[ subject ]</a>
+              <a href="author.html#1043">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

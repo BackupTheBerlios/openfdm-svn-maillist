@@ -1,0 +1,201 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r815 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r815%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300821.mAU8LgHR017064%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000782.html">
+   <LINK REL="Next"  HREF="000784.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r815 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r815%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811300821.mAU8LgHR017064%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r815 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 30 09:21:42 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000782.html">[OpenFDM-svn] r814 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000784.html">[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#783">[ date ]</a>
+              <a href="thread.html#783">[ thread ]</a>
+              <a href="subject.html#783">[ subject ]</a>
+              <a href="author.html#783">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-30 09:21:41 +0100 (Sun, 30 Nov 2008)
+New Revision: 815
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Remove some Joint leftovers from Interact.
+
+M    src/OpenFDM/Mass.h
+M    src/OpenFDM/Interact.cpp
+M    src/OpenFDM/Mass.cpp
+M    src/OpenFDM/Interact.h
+M    src/OpenFDM/Sensor.cpp
+M    src/OpenFDM/Sensor.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-30 08:21:41 UTC (rev 815)
+@@ -38,27 +38,23 @@
+   }
+   virtual void articulation(const Task&amp; task)
+   {
+-    mInteract-&gt;articulation(task, mContinousState, mPortValueList, hIh);
++    mInteract-&gt;articulation(task, mContinousState, mPortValueList);
+   }
+   virtual void accelerations(const Task&amp; task)
+   {
+-    mInteract-&gt;acceleration(task, mContinousState, mPortValueList, hIh, velDot);
++    mInteract-&gt;acceleration(task, mContinousState, mPortValueList);
+   }
+ 
+-  virtual void derivative(const Task&amp;)
++  virtual void derivative(const Task&amp; task)
+   {
+-    mInteract-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+-                              velDot, mContinousStateDerivative);
++    mInteract-&gt;derivative(task, mDiscreteState, mContinousState, mPortValueList,
++                          mContinousStateDerivative);
+   }
+  
+   virtual void update(const DiscreteTask&amp;)
+   { }
+ 
+ private:
+-  // Stores some values persistent accross velocity/articulation/acceleration
+-  Matrix hIh;
+-  Vector velDot;
+-
+   SharedPtr&lt;const Interact&gt; mInteract;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.h	2008-11-30 08:21:41 UTC (rev 815)
+@@ -36,14 +36,14 @@
+                         PortValueList&amp;) const
+   { }
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, Matrix&amp;) const
++                            PortValueList&amp;) const
+   { }
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, const Matrix&amp;, Vector&amp;) const
++                            PortValueList&amp;) const
+   { }
+-  virtual void derivative(const DiscreteStateValueVector&amp;,
++  virtual void derivative(const Task&amp;, const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+-                          const PortValueList&amp;, const Vector&amp;,
++                          const PortValueList&amp;,
+                           ContinousStateValueVector&amp;) const
+   { }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-11-30 08:21:41 UTC (rev 815)
+@@ -36,7 +36,7 @@
+ 
+ void
+ Mass::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                   PortValueList&amp; portValues, Matrix&amp;) const
++                   PortValueList&amp; portValues) const
+ {
+   const Environment* environment;
+   environment = portValues[mMechanicLink].getEnvironment();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2008-11-30 08:21:41 UTC (rev 815)
+@@ -20,7 +20,7 @@
+ 
+   virtual void initDesignPosition(PortValueList&amp;) const;
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, Matrix&amp;) const;
++                            PortValueList&amp;) const;
+ 
+   const InertiaMatrix&amp; getInertia(void) const;
+   void setInertia(const InertiaMatrix&amp; inertia);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-30 08:21:41 UTC (rev 815)
+@@ -95,7 +95,7 @@
+ 
+ void
+ Sensor::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                     PortValueList&amp; portValues, const Matrix&amp;, Vector&amp;) const
++                     PortValueList&amp; portValues) const
+ {
+   const Environment* environment;
+   environment = portValues[mMechanicLink].getEnvironment();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-30 07:56:15 UTC (rev 814)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-30 08:21:41 UTC (rev 815)
+@@ -23,7 +23,7 @@
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+                         PortValueList&amp;) const;
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;, const Matrix&amp;, Vector&amp;) const;
++                            PortValueList&amp;) const;
+ 
+   /// Set the position of the sensor in design coordinates
+   void setPosition(const Vector3&amp; position);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000782.html">[OpenFDM-svn] r814 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000784.html">[OpenFDM-svn] r816 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#783">[ date ]</a>
+              <a href="thread.html#783">[ thread ]</a>
+              <a href="subject.html#783">[ subject ]</a>
+              <a href="author.html#783">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

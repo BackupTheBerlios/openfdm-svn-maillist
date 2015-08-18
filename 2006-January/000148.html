@@ -1,0 +1,217 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r164 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r164%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021749.k02HneVv026601%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000147.html">
+   <LINK REL="Next"  HREF="000149.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r164 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r164%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601021749.k02HneVv026601%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r164 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan  2 18:49:40 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000147.html">[OpenFDM-svn] r163 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000149.html">[OpenFDM-svn] r165 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#148">[ date ]</a>
+              <a href="thread.html#148">[ thread ]</a>
+              <a href="subject.html#148">[ subject ]</a>
+              <a href="author.html#148">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-02 18:49:35 +0100 (Mon, 02 Jan 2006)
+New Revision: 164
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+Log:
+Fix name handling with tables
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 17:47:24 UTC (rev 163)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 17:49:35 UTC (rev 164)
+@@ -979,7 +979,7 @@
+     brakeF-&gt;getInputPort(1)-&gt;connect(wj-&gt;getOutputPort(1));
+     // ... and provides an output force
+     wj-&gt;getInputPort(0)-&gt;connect(brakeF-&gt;getOutputPort(0));
+-    mVehicle-&gt;getMultiBodySystem()-&gt;addModel(brakeF);
++    addMultiBodyModel(brakeF);
+   } else {
+     // Just some 'rolloing friction' FIXME: does this belong here?
+     Gain* rollingFric = new Gain(name + &quot; Rolling Friction Force&quot;);
+@@ -987,7 +987,7 @@
+     rollingFric-&gt;getInputPort(0)-&gt;connect(wj-&gt;getOutputPort(1));
+     // ... and provides an output force
+     wj-&gt;getInputPort(0)-&gt;connect(rollingFric-&gt;getOutputPort(0));
+-    mVehicle-&gt;getMultiBodySystem()-&gt;addModel(rollingFric);
++    addMultiBodyModel(rollingFric);
+   }
+   
+   WheelContact* wc = new WheelContact(name + &quot; Wheel Contact&quot;);
+@@ -1180,7 +1180,7 @@
+       aoDamp-&gt;getInputPort(1)-&gt;connect(rj-&gt;getOutputPort(1));
+       // ... and provides an output force
+       rj-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
+-      mVehicle-&gt;getMultiBodySystem()-&gt;addModel(aoDamp);
++      addMultiBodyModel(aoDamp);
+ 
+       // Attach a wheel to that strut part.
+       attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
+@@ -1294,7 +1294,7 @@
+       pj-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
+       aoDamp-&gt;getInputPort(0)-&gt;connect(pj-&gt;getOutputPort(0));
+       aoDamp-&gt;getInputPort(1)-&gt;connect(pj-&gt;getOutputPort(1));
+-      mVehicle-&gt;getMultiBodySystem()-&gt;addModel(aoDamp);
++      addMultiBodyModel(aoDamp);
+ 
+       // Attach a wheel to that strut part.
+       attachWheel(name, Vector3::zeros(), brake, numStr, wheelDiam,
+@@ -2163,14 +2163,16 @@
+         return error(&quot;Error parsing aerodynamic tables, FACTOR without GROUP&quot;);
+ 
+       std::string type = (*it)-&gt;getAttribute(&quot;TYPE&quot;);
+-      Port* port = convertCoefficient((*it)-&gt;getData(), type);
++      std::string name = (*it)-&gt;getAttribute(&quot;NAME&quot;);
++      Port* port = convertCoefficient((*it)-&gt;getData(), type, name);
+       unsigned nf = prod-&gt;getNumFactors();
+       prod-&gt;setNumFactors(nf+1);
+       prod-&gt;getInputPort(nf)-&gt;connect(port);
+     }
+     else if ((*it)-&gt;getName() == &quot;COEFFICIENT&quot;) {
+       std::string type = (*it)-&gt;getAttribute(&quot;TYPE&quot;);
+-      Port* port = convertCoefficient((*it)-&gt;getData(), type);
++      std::string name = (*it)-&gt;getAttribute(&quot;NAME&quot;);
++      Port* port = convertCoefficient((*it)-&gt;getData(), type, name);
+       unsigned ns = sum-&gt;getNumSummands();
+       sum-&gt;setNumSummands(ns+1);
+       sum-&gt;getInputPort(ns)-&gt;connect(port);
+@@ -2182,8 +2184,13 @@
+ 
+ Port*
+ LegacyJSBSimReader::convertCoefficient(const std::string&amp; data,
+-                                       const std::string&amp; type)
++                                       const std::string&amp; type,
++                                       const std::string&amp; name)
+ {
++  SharedPtr&lt;Product&gt; prod = new Product(name);
++  prod-&gt;setNumFactors(0);
++  addMultiBodyModel(prod);
++
+   unsigned ndims;
+   if (type == &quot;VALUE&quot;) {
+     ndims = 0;
+@@ -2205,10 +2212,6 @@
+   // The fist token is some name string ...
+   datastr &gt;&gt; token;
+ 
+-  SharedPtr&lt;Product&gt; prod = new Product(token);
+-  prod-&gt;setNumFactors(0);
+-  addMultiBodyModel(prod);
+-
+   // The number of table entries 
+   unsigned n[3] = { 0 };
+   for (unsigned i = 0; i &lt; ndims; ++i)
+@@ -2263,7 +2266,8 @@
+       = new Table1D(prod-&gt;getName() + &quot; Table&quot;);
+     addMultiBodyModel(table1D);
+     table1D-&gt;setTableData(table);
+-    Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[0], lookup);
++    Port* lPort = getTablePrelookup(prod-&gt;getName() + &quot; PreLookup&quot;,
++                                    inVal[0], lookup);
+     table1D-&gt;getInputPort(0)-&gt;connect(lPort);
+ 
+     unsigned nf = prod-&gt;getNumFactors();
+@@ -2285,7 +2289,8 @@
+     addMultiBodyModel(table2D);
+     table2D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 2; ++i) {
+-      Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[i], lookup[i]);
++      Port* lPort = getTablePrelookup(prod-&gt;getName() + &quot; PreLookup&quot;,
++                                      inVal[i], lookup[i]);
+       table2D-&gt;getInputPort(i)-&gt;connect(lPort);
+     }
+ 
+@@ -2309,7 +2314,8 @@
+     addMultiBodyModel(table3D);
+     table3D-&gt;setTableData(table);
+     for (unsigned i = 0; i &lt; 3; ++i) {
+-      Port* lPort = getTablePrelookup(prod-&gt;getName(), inVal[i], lookup[i]);
++      Port* lPort = getTablePrelookup(prod-&gt;getName() + &quot; PreLookup&quot;,
++                                      inVal[i], lookup[i]);
+       table3D-&gt;getInputPort(i)-&gt;connect(lPort);
+     }
+ 
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 17:47:24 UTC (rev 163)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-02 17:49:35 UTC (rev 164)
+@@ -206,7 +206,8 @@
+   bool convertAEROSummands(const XMLElement* aeroSummands,
+                            Summer* sum, Product* prod);
+ 
+-  Port* convertCoefficient(const std::string&amp; data, const std::string&amp; type);
++  Port* convertCoefficient(const std::string&amp; data, const std::string&amp; type,
++                           const std::string&amp; name);
+ 
+   Port* getTablePrelookup(const std::string&amp; name, Port* in, const TableLookup&amp; tl);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-01-02 17:47:24 UTC (rev 163)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-01-02 17:49:35 UTC (rev 164)
+@@ -118,7 +118,6 @@
+         &lt;&lt; &quot;While adding the OpenFDM::Model \&quot;&quot; &lt;&lt; model-&gt;getName()
+         &lt;&lt; &quot;\&quot; to OpenFDM::ModelGroup \&quot;&quot; &lt;&lt; getName()
+         &lt;&lt; &quot;\&quot;: Model with the same name is already attached!&quot; &lt;&lt; endl;
+-      return ~0u;
+     }
+   }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000147.html">[OpenFDM-svn] r163 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000149.html">[OpenFDM-svn] r165 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#148">[ date ]</a>
+              <a href="thread.html#148">[ thread ]</a>
+              <a href="subject.html#148">[ subject ]</a>
+              <a href="author.html#148">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

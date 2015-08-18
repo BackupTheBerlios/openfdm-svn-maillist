@@ -1,0 +1,468 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r784 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r784%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240608.mAO68m18026758%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000752.html">
+   <LINK REL="Next"  HREF="000754.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r784 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r784%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811240608.mAO68m18026758%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r784 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 24 07:08:48 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000752.html">[OpenFDM-svn] r783 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000754.html">[OpenFDM-svn] r785 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#753">[ date ]</a>
+              <a href="thread.html#753">[ thread ]</a>
+              <a href="subject.html#753">[ subject ]</a>
+              <a href="author.html#753">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-24 07:08:47 +0100 (Mon, 24 Nov 2008)
+New Revision: 784
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.h
+Log:
+Add some missing files.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.cpp	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,31 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;AbstractAtmosphere.h&quot;
++
++namespace OpenFDM {
++
++AbstractAtmosphere::AbstractAtmosphere(const real_type&amp; gasConstant) :
++  mGasConstant(gasConstant)
++{
++}
++
++AbstractAtmosphere::~AbstractAtmosphere(void)
++{
++}
++
++AtmosphereData
++AbstractAtmosphere::getData(const real_type&amp; alt) const
++{
++  AtmosphereData data;
++  // Sea level pressure = 101325 N/m2
++  data.pressure = 101325;
++  // Sea level temperature = 288.15 K
++  data.temperature = 288.15;
++  // Sea leve density of 1.225 kg/m3.
++  data.density = 1.225;
++  return data;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractAtmosphere.h	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,76 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_AbstractAtmosphere_H
++#define OpenFDM_AbstractAtmosphere_H
++
++#include &quot;Types.h&quot;
++#include &quot;Math.h&quot;
++#include &quot;Referenced.h&quot;
++
++namespace OpenFDM {
++
++struct AtmosphereData {
++  real_type pressure;
++  real_type density;
++  real_type temperature;
++};
++
++class AbstractAtmosphere : public Referenced {
++public:
++  virtual ~AbstractAtmosphere(void);
++
++  /// Returns the gas constant for that current atmosphere gas often refered
++  /// as R. The unit is as usual in the SI system m^2/(s^2 K)
++  real_type getGasConstant(void) const
++  { return mGasConstant; }
++  real_type getR(void) const
++  { return mGasConstant; }
++
++  /// Returns the specific heat ratio
++  real_type getSpecificHeatRatio(real_type temperature) const
++  { return getGamma(temperature); }
++  real_type getGamma(real_type temperature) const
++  {
++    // Taken from SimTurbine, converted to kelvin
++    real_type a = -4.48729540632e-12;
++    real_type b =  4.459750164e-08;
++    real_type c = -1.407342762e-04;
++    real_type d =  1.436914;
++    return ((a*temperature + b)*temperature + c)*temperature + d;
++  }
++  /// Return standard temperature gamma, sufficient for most needs
++  real_type getGamma(void) const
++  { return real_type(1.4); }
++
++  /// Returns the specific heat constant
++  real_type getCp(real_type temperature) const
++  {
++    real_type gamma = getGamma(temperature);
++    return getGasConstant()*gamma/(gamma-1);
++  }
++  /// Returns the specific heat constant for the stdandard temperature
++  real_type getCp(void) const
++  {
++    real_type gamma = getGamma();
++    return getGasConstant()*gamma/(gamma-1);
++  }
++
++  /// Returns the soundspeed for the given temperature
++  real_type getSoundSpeed(real_type temperature) const
++  { return sqrt(getGamma(temperature)*temperature*getGasConstant()); }
++
++  // Get the atmosphere data for a given altitude alt.
++  virtual AtmosphereData getData(const real_type&amp; alt) const;
++
++protected:
++  AbstractAtmosphere(const real_type&amp; gasConstant);
++
++private:
++  real_type mGasConstant;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.cpp	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.cpp	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,53 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;AbstractGround.h&quot;
++
++#include &quot;Types.h&quot;
++#include &quot;Plane.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++AbstractGround::AbstractGround(void)
++{
++}
++
++AbstractGround::~AbstractGround(void)
++{
++}
++
++GroundValues
++AbstractGround::getGroundPlane(const Environment&amp; environment,
++                               const real_type&amp; t, const Vector3&amp; refPos) const
++{
++  return GroundValues(environment.getHorizontalLocalPlane(refPos));
++}
++
++bool
++AbstractGround::getCatapultValues(real_type t, const Vector3&amp; refPos,
++                                  CatapultValues&amp; catVal) const
++{
++  return false;
++}
++
++bool
++AbstractGround::caughtWire(const HookPosition&amp; old,
++                           const HookPosition&amp; current) const
++{
++  return false;
++}
++
++bool
++AbstractGround::getWireEnds(real_type t, WireValues&amp; wireVal) const
++{
++  return false;
++}
++
++void
++AbstractGround::releaseWire(void) const
++{
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.h	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractGround.h	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,103 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Ground_H
++#define OpenFDM_Ground_H
++
++#include &quot;Types.h&quot;
++#include &quot;Plane.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Referenced.h&quot;
++
++namespace OpenFDM {
++
++class Environment;
++
++struct GroundValues {
++  GroundValues(const Plane&amp; p = Plane(), const Vector6&amp; v = Vector6::zeros(),
++               real_type fr = 1) :
++    plane(p), vel(v), friction(fr) {}
++  Plane plane;
++  Vector6 vel;
++  real_type friction;
++};
++
++struct CatapultValues {
++  /// The position of the catapult start in reference coordinates
++  Vector3 position;
++  /// The orientation of the catapult frame
++  Quaternion orientation;
++  /// The spatial velocity of the catapult frame
++  Vector6 velocity;
++  /// The catapult length
++  real_type length;
++};
++
++struct HookPosition {
++  /// The time it is meant for
++  real_type t;
++  /// The hooks base position in reference frames coordinates
++  Vector3 basePosition;
++  /// The hooks direction and length in reference frames coordinates
++  /// That is basePosition + hookVector = hookTip
++  Vector3 hookVector;
++};
++
++struct WireValues {
++  /// The position of the wire midpoint in reference coordinates
++  Vector3 position;
++  /// The orientation of the wire frame
++  Quaternion orientation;
++  /// The spatial velocity of the wire frame
++  Vector6 velocity;
++  /// The wire mounts width, they are assumed to be mounted along the y axis
++  real_type width;
++};
++
++/**
++ * The AbstractGround class.
++ */
++class AbstractGround : public Referenced {
++public:
++  /** Default constructor.
++   */
++  AbstractGround(void);
++
++  /** Default destructor.
++   */
++  virtual ~AbstractGround(void);
++
++  virtual GroundValues
++  getGroundPlane(const Environment&amp;, const real_type&amp; t,
++                 const Vector3&amp; refPos) const;
++
++  /** Returns true if a catapult is within some reasonable range to
++      the reference position. The reference position is usually the
++      position of the launchbar.
++   */
++  virtual bool
++  getCatapultValues(real_type t, const Vector3&amp; refPos,
++                    CatapultValues&amp; catVal) const;
++
++  /** Returns true if we caught a wire while traversing the given rectangle
++      given in reference cordinates.
++   */
++  virtual bool
++  caughtWire(const HookPosition&amp; old, const HookPosition&amp; current) const;
++
++  /** Writes the motions values for the wires we have caught.
++      Returns false if the wires are lost somehow.
++   */
++  virtual bool
++  getWireEnds(real_type t, WireValues&amp; wireVal) const;
++
++  /** Called if the wire values are no longer used.
++   */
++  virtual void
++  releaseWire(void) const;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.cpp	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.cpp	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,45 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;CentralMassGravity.h&quot;
++
++#include &quot;Types.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Unit.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Gravity.h&quot;
++
++namespace OpenFDM {
++
++CentralMassGravity::CentralMassGravity(void)
++{
++  setPlanetMass(5.9742e24);
++}
++
++CentralMassGravity::~CentralMassGravity(void)
++{
++}
++
++real_type
++CentralMassGravity::getPlanetMass(void) const
++{
++  return mMass;
++}
++
++void
++CentralMassGravity::setPlanetMass(real_type mass)
++{
++  mMass = mass;
++}
++
++Vector3
++CentralMassGravity::getGravityAcceleration(const Environment&amp;,
++                                       const Vector3&amp; cart) const
++{
++  real_type dist = norm(cart);
++  return (-mMass*gravity_constant/(dist*dist*dist))*cart;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.h	2008-11-23 20:41:05 UTC (rev 783)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CentralMassGravity.h	2008-11-24 06:08:47 UTC (rev 784)
+@@ -0,0 +1,48 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_CentralMassGravity_H
++#define OpenFDM_CentralMassGravity_H
++
++#include &quot;Types.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;AbstractGravity.h&quot;
++
++namespace OpenFDM {
++
++/**
++ * The CentralMassGravity class.
++ *
++ * It holds some information about the gravity the simulation is running on.
++ */
++class CentralMassGravity : public AbstractGravity {
++public:
++  /** CentralMass constructor.
++   */
++  CentralMassGravity(void);
++
++  /** CentralMass destructor.
++   */
++  virtual ~CentralMassGravity(void);
++
++  /** Get planet mass.
++   */
++  real_type getPlanetMass(void) const;
++
++  /** Set planet mass.
++   */
++  void setPlanetMass(real_type mass);
++
++  /** Gravity acceleration at the cartesion position cart.
++   */
++  virtual Vector3 getGravityAcceleration(const Environment&amp;,
++                                         const Vector3&amp;) const;
++
++private:
++  real_type mMass;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000752.html">[OpenFDM-svn] r783 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000754.html">[OpenFDM-svn] r785 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#753">[ date ]</a>
+              <a href="thread.html#753">[ thread ]</a>
+              <a href="subject.html#753">[ subject ]</a>
+              <a href="author.html#753">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

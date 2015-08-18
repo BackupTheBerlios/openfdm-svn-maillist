@@ -1,0 +1,194 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r500 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r500%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809270554.m8R5sKYR009327%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000471.html">
+   <LINK REL="Next"  HREF="000473.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r500 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r500%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809270554.m8R5sKYR009327%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r500 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 07:54:20 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000471.html">[OpenFDM-svn] r499 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000473.html">[OpenFDM-svn] r501 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#472">[ date ]</a>
+              <a href="thread.html#472">[ thread ]</a>
+              <a href="subject.html#472">[ subject ]</a>
+              <a href="author.html#472">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 07:54:20 +0200 (Sat, 27 Sep 2008)
+New Revision: 500
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Provide some isConnectedTo implementation for mechanic models.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 05:29:27 UTC (rev 499)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-27 05:54:20 UTC (rev 500)
+@@ -239,8 +239,8 @@
+ //                        mPortValueList,
+ //                        mContinousStateDerivative); }
+ 
+-  // Return true if this leaf directly depends on one of leafInstance outputs
+-  bool dependsOn(const ModelContext* modelContext) const
++  // Return true if this model directly depends on one of models outputs
++  bool dependsOn(const ModelContext&amp; modelContext) const
+   {
+     unsigned numPorts = mModel-&gt;getNumPorts();
+     for (unsigned i = 0; i &lt; numPorts; ++i) {
+@@ -253,13 +253,13 @@
+       const PortValue* portValue = getPortValueList().getPortValue(i);
+       if (!portValue)
+         continue;
+-      unsigned otherNumPorts = modelContext-&gt;mModel-&gt;getNumPorts();
++      unsigned otherNumPorts = modelContext.mModel-&gt;getNumPorts();
+       for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
+-        if (!modelContext-&gt;mModel-&gt;getPort(j)-&gt;toProviderPortInfo())
++        if (!modelContext.mModel-&gt;getPort(j)-&gt;toProviderPortInfo())
+           continue;
+ 
+         const PortValue* otherPortValue;
+-        otherPortValue = modelContext-&gt;getPortValueList().getPortValue(j);
++        otherPortValue = modelContext.getPortValueList().getPortValue(j);
+         if (portValue != otherPortValue)
+           continue;
+ 
+@@ -313,8 +313,8 @@
+   { }
+ 
+   // Return true if this leaf directly depends on one of leafInstance outputs
+-  bool dependsOn(const ModelInstance* modelInstance) const
+-  { return mModelContext-&gt;dependsOn(modelInstance-&gt;mModelContext); }
++  bool dependsOn(const ModelInstance&amp; modelInstance) const
++  { return mModelContext-&gt;dependsOn(*modelInstance.mModelContext); }
+ 
+ // protected: // FIXME
+   virtual ModelContext&amp; getNodeContext()
+@@ -363,6 +363,32 @@
+ //   void update()
+ //   { }
+ 
++  bool isConnectedTo(const MechanicContext&amp; mechanicContext) const
++  {
++    unsigned numPorts = mMechanicNode-&gt;getNumPorts();
++    for (unsigned i = 0; i &lt; numPorts; ++i) {
++      SharedPtr&lt;const PortInfo&gt; portInfo = mMechanicNode-&gt;getPort(i);
++      OpenFDMAssert(portInfo);
++      const PortValue* portValue = getPortValueList().getPortValue(i);
++      if (!portValue)
++        continue;
++      unsigned otherNumPorts = mechanicContext.mMechanicNode-&gt;getNumPorts();
++      for (unsigned j = 0; j &lt; otherNumPorts; ++j) {
++        if (!mechanicContext.mMechanicNode-&gt;getPort(j)-&gt;toProviderPortInfo())
++          continue;
++
++        const PortValue* otherPortValue;
++        otherPortValue = mechanicContext.getPortValueList().getPortValue(j);
++        if (portValue != otherPortValue)
++          continue;
++
++        return true;
++      }
++    }
++    return false;
++  }
++
++private:
+   SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
+ 
+ private:
+@@ -413,6 +439,9 @@
+     mMechanicContext(new MechanicContext(mechanicNode))
+   { }
+ 
++  bool isConnectedTo(const MechanicInstance&amp; mechanicInstance) const
++  { return mMechanicContext-&gt;isConnectedTo(*mechanicInstance.mMechanicContext); }
++
+ protected:
+   virtual MechanicContext&amp; getNodeContext()
+   { return *mMechanicContext; }
+@@ -646,7 +675,7 @@
+   };
+ };
+ 
+-class LeafInstanceCollector : public ConstNodeVisitor {
++class NodeInstanceCollector : public ConstNodeVisitor {
+ public:
+ 
+   virtual void apply(const Node&amp; node)
+@@ -892,7 +921,7 @@
+       for (i = sortedModelInstanceList.begin();
+            i != sortedModelInstanceList.end();
+            ++i) {
+-        if (!(*i)-&gt;dependsOn(modelInstance))
++        if (!(*i)-&gt;dependsOn(*modelInstance))
+           continue;
+ 
+         // Something already sorted in depends on modelInstance,
+@@ -916,7 +945,7 @@
+         // If it cannot be put at the end, check if modelInstance depends
+         // on any model that is already scheduled behind to detect cyclic loops.
+         for (; i != sortedModelInstanceList.end(); ++i) {
+-          if (!modelInstance-&gt;dependsOn(*i))
++          if (!modelInstance-&gt;dependsOn(*(*i)))
+             continue;
+           Log(Schedule,Error)
+             &lt;&lt; &quot;Detected cyclic loop: Model \&quot;&quot;
+@@ -1090,7 +1119,7 @@
+       return true;
+ 
+     // Build up the lists required to run the model.
+-    LeafInstanceCollector nodeInstanceCollector;
++    NodeInstanceCollector nodeInstanceCollector;
+     mNode-&gt;accept(nodeInstanceCollector);
+     
+     // Allocates and distributes the PortValues, is required for the sort
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000471.html">[OpenFDM-svn] r499 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000473.html">[OpenFDM-svn] r501 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#472">[ date ]</a>
+              <a href="thread.html#472">[ thread ]</a>
+              <a href="subject.html#472">[ subject ]</a>
+              <a href="author.html#472">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

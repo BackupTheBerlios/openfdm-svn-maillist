@@ -1,0 +1,229 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r591 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r591%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810101652.m9AGqe9X010319%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000560.html">
+   <LINK REL="Next"  HREF="000562.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r591 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r591%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810101652.m9AGqe9X010319%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r591 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct 10 18:52:40 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000560.html">[OpenFDM-svn] r590 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000562.html">[OpenFDM-svn] r592 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#561">[ date ]</a>
+              <a href="thread.html#561">[ thread ]</a>
+              <a href="subject.html#561">[ subject ]</a>
+              <a href="author.html#561">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-10 18:52:39 +0200 (Fri, 10 Oct 2008)
+New Revision: 591
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp
+Log:
+Reactivate the simulation time block.
+
+M    src/test/simulationtime.cpp
+M    src/test/Makefile.am
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-10 16:52:01 UTC (rev 590)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-10 16:52:39 UTC (rev 591)
+@@ -249,6 +249,9 @@
+         return false;
+       if (!mNodeInstance)
+         return false;
++      Log(Schedule, Debug3)
++        &lt;&lt; &quot;setLocalPortValue for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
++        &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+       // FIXME: move the set port value and accept port value into one call
+       if (!getPortInfo()-&gt;acceptPortValue(portValue))
+         return false;
+@@ -259,6 +262,9 @@
+ 
+     bool setConnectedPortValues(PortValue* portValue)
+     {
++      Log(Schedule, Debug3)
++        &lt;&lt; &quot;setConnectedPortValues for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
++        &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+       for (unsigned i = 0; i &lt; mConnectedPorts.size(); ++i) {
+         SharedPtr&lt;PortData&gt; portData = mConnectedPorts[i].lock();
+         if (!portData)
+@@ -271,6 +277,9 @@
+ 
+     bool setProxyPortValue(PortValue* portValue)
+     {
++      Log(Schedule, Debug3)
++        &lt;&lt; &quot;setProxyPortValues for port \&quot;&quot; &lt;&lt; getPortInfo()-&gt;getName()
++        &lt;&lt; &quot;\&quot; is at: &quot; &lt;&lt; portValue &lt;&lt; endl;
+       SharedPtr&lt;PortData&gt; portData = mProxyPortData.lock();
+       if (portData) {
+         if (!portData-&gt;setConnectedPortValues(portValue))
+@@ -321,8 +330,18 @@
+     bool allocAndConnectProviderPortValues()
+     {
+       for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
+-        if (!mPortDataVector[i]-&gt;createPortValue())
++        Log(Schedule, Debug3) &lt;&lt; &quot;Try to to allocate port value \&quot;&quot;
++                               &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
++                               &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; mNodeInstance-&gt;getNodeNamePath()
++                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        if (!mPortDataVector[i]-&gt;createPortValue()) {
++          Log(Schedule, Error) &lt;&lt; &quot;Failed to allocate port value \&quot;&quot;
++                               &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
++                               &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; mNodeInstance-&gt;getNodeNamePath()
++                               &lt;&lt; &quot;\&quot;.\nAborting!&quot; &lt;&lt; endl;
++
+           return false;
++        }
+       }
+       return true;
+     }
+@@ -605,10 +624,8 @@
+   {
+     PortDataListList::const_iterator i;
+     for (i = _portDataListList.begin(); i != _portDataListList.end(); ++i) {
+-      if (!(*i)-&gt;allocAndConnectProviderPortValues()) {
+-        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
++      if (!(*i)-&gt;allocAndConnectProviderPortValues())
+         return false;
+-      }
+     }
+     return true;
+   }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-10-10 16:52:01 UTC (rev 590)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-10-10 16:52:39 UTC (rev 591)
+@@ -6,7 +6,7 @@
+ 
+ # define some unit tests
+ #check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+-check_PROGRAMS = quattest unitstest limit
++check_PROGRAMS = quattest unitstest simulationtime limit
+ TESTS          = $(check_PROGRAMS)
+ 
+ # tiretestrig_SOURCES = tiretestrig.cpp
+@@ -21,8 +21,8 @@
+ structure_SOURCES = structure.cpp
+ structure_LDADD = ../OpenFDM/libOpenFDM.la -lhdf5
+ 
+-# simulationtime_SOURCES = simulationtime.cpp
+-# simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
++simulationtime_SOURCES = simulationtime.cpp
++simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+ # constintegral_SOURCES = constintegral.cpp
+ # constintegral_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp	2008-10-10 16:52:01 UTC (rev 590)
++++ branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp	2008-10-10 16:52:39 UTC (rev 591)
+@@ -6,6 +6,7 @@
+ #include &lt;vector&gt;
+ #include &lt;iostream&gt;
+ #include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ 
+@@ -27,21 +28,25 @@
+ int
+ main(int argc, char *argv[])
+ {
+-  real_type rate = 0.1;
++  Fraction rate(1, 10);
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Simulation Time System&quot;);
++  Group* group = new Group(&quot;Simulation Time Group&quot;);
++  system-&gt;setNode(group);
+   
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  system-&gt;addModel(simulationTime);
++  Group::NodeId simTimeId = group-&gt;addChild(simulationTime);
+ 
+   Output* output = new Output(&quot;Simulation Time Output&quot;);
+-  system-&gt;addModel(output);
++  Group::NodeId outputId = group-&gt;addChild(output);
+   SharedPtr&lt;CollectOutputCallback&gt; simTimeCallback = new CollectOutputCallback;
+   output-&gt;setCallback(simTimeCallback);
+-  output-&gt;addSampleTime(rate);
+-  Connection::connect(output-&gt;getInputPort(0),
+-                      simulationTime-&gt;getOutputPort(0));
+-
++  output-&gt;setSampleTime(rate);
++  if (!group-&gt;connect(simTimeId, &quot;output&quot;, outputId, &quot;input&quot;)) {
++    std::cout &lt;&lt; &quot;Could not connect ports&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++  
+   if (!system-&gt;init()) {
+     std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+@@ -51,11 +56,11 @@
+ 
+   Vector errors(simTimeCallback-&gt;values.size());
+   for (unsigned i = 0; i &lt; simTimeCallback-&gt;values.size(); ++i) {
+-    errors(i) = simTimeCallback-&gt;values[i] - i*rate;
++    errors(i) = simTimeCallback-&gt;values[i] - i*rate.getRealValue();
+   }
+ 
+   real_type expectedRoundoff;
+-  expectedRoundoff = Limits&lt;real_type&gt;::epsilon()*system-&gt;getTime()/rate;
++  expectedRoundoff = Limits&lt;real_type&gt;::epsilon()/rate.getRealValue();
+   real_type error = normInf(errors);
+   if (expectedRoundoff &lt; error) {
+     std::cerr &lt;&lt; &quot;Maximum simulation time error &quot; &lt;&lt; error
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000560.html">[OpenFDM-svn] r590 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000562.html">[OpenFDM-svn] r592 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#561">[ date ]</a>
+              <a href="thread.html#561">[ thread ]</a>
+              <a href="subject.html#561">[ subject ]</a>
+              <a href="author.html#561">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

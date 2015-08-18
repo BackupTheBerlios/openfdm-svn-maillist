@@ -1,0 +1,462 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r768 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r768%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811211248.mALCmjuT011956%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000736.html">
+   <LINK REL="Next"  HREF="000738.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r768 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r768%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811211248.mALCmjuT011956%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r768 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov 21 13:48:45 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000736.html">[OpenFDM-svn] r767 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000738.html">[OpenFDM-svn] r769 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#737">[ date ]</a>
+              <a href="thread.html#737">[ thread ]</a>
+              <a href="subject.html#737">[ subject ]</a>
+              <a href="author.html#737">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-21 13:48:44 +0100 (Fri, 21 Nov 2008)
+New Revision: 768
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+Log:
+Fix a problem with AB joints.
+
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/RotationalJoint.cpp
+M    src/OpenFDM/PrismaticJoint.cpp
+M    src/OpenFDM/RevoluteJoint.cpp
+M    src/OpenFDM/RotationalJoint.h
+M    src/OpenFDM/UniversalJoint.h
+M    src/OpenFDM/PrismaticJoint.h
+M    src/OpenFDM/RevoluteJoint.h
+M    src/OpenFDM/UniversalJoint.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-21 12:48:44 UTC (rev 768)
+@@ -100,7 +100,7 @@
+   void articulation(MechanicLinkValue&amp; parentLink,
+                     const MechanicLinkValue&amp; childLink,
+                     const VectorN&amp; jointForce,
+-                    MatrixFactorsNN&amp; hIh) const
++                    MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const
+   {
+     // The formulas conform to Roy Featherstones book eqn (6.37), (6.38)
+     
+@@ -110,12 +110,11 @@
+     
+     // Compute the projection to the joint coordinate space
+     Matrix6N Ih = I*mJointMatrix;
+-    hIh = MatrixNN(trans(mJointMatrix)*Ih);
+-    
++    hIh = trans(mJointMatrix)*Ih;
++
+     // Note that the momentum of the local mass is already included in the
+     // child links force due the the mass model ...
+-    Vector6 pAlpha = childLink.getForce() + I*childLink.getFrame().getHdot();
+-    Vector6 force = pAlpha;
++    pAlpha = childLink.getForce() + I*childLink.getFrame().getHdot();
+     
+     if (hIh.singular()) {
+       Log(ArtBody,Error) &lt;&lt; &quot;Detected singular mass matrix for &quot;
+@@ -125,6 +124,7 @@
+     }
+     
+     // Project away the directions handled with this current joint
++    Vector6 force = pAlpha;
+     force -= Ih*hIh.solve(trans(mJointMatrix)*pAlpha - jointForce);
+     I -= SpatialInertia(Ih*hIh.solve(trans(Ih)));
+     
+@@ -138,13 +138,13 @@
+    */
+   void acceleration(const MechanicLinkValue&amp; parentLink,
+                     MechanicLinkValue&amp; childLink, const VectorN&amp; jointForce,
+-                    const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
++                    const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                    VectorN&amp; velDot) const
+   {
+     Vector6 parentSpAccel
+       = childLink.getFrame().motionFromParent(parentLink.getFrame().getSpAccel());
+     
+-    Vector6 f = childLink.getForce();
+-    f += childLink.getInertia()*(parentSpAccel + childLink.getFrame().getHdot());
++    Vector6 f = childLink.getInertia()*parentSpAccel + pAlpha;
+     velDot = hIh.solve(jointForce - trans(mJointMatrix)*f);
+     childLink.setAccel(parentLink, mJointMatrix*velDot);
+   }
+@@ -192,12 +192,12 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const = 0;
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const = 0;
+   virtual void acceleration(const MechanicLinkValue&amp; parentLink,
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh,
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
+                             VectorN&amp; velDot) const = 0;
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+@@ -241,13 +241,13 @@
+     }
+     virtual void articulation(const Task&amp; task)
+     {
+-      mCartesianJoint-&gt;articulation(*mParentLink, *mChildLink,
+-                                    mContinousState, mPortValueList, hIh);
++      mCartesianJoint-&gt;articulation(*mParentLink, *mChildLink, mContinousState,
++                                    mPortValueList, hIh, pAlpha);
+     }
+     virtual void accelerations(const Task&amp; task)
+     {
+       mCartesianJoint-&gt;acceleration(*mParentLink, *mChildLink, mContinousState,
+-                                    mPortValueList, hIh, velDot);
++                                    mPortValueList, hIh, pAlpha, velDot);
+     }
+     
+     virtual void derivative(const Task&amp;)
+@@ -263,6 +263,7 @@
+   private:
+     // Stores some values persistent accross velocity/articulation/acceleration
+     MatrixFactorsNN hIh;
++    Vector6 pAlpha;
+     VectorN velDot;
+ 
+     SharedPtr&lt;MechanicLinkValue&gt; mParentLink;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.cpp	2008-11-21 12:48:44 UTC (rev 768)
+@@ -126,10 +126,10 @@
+ 
+ void
+ PrismaticJoint::articulation(MechanicLinkValue&amp; parentLink,
+-                            const MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const
++                             const MechanicLinkValue&amp; childLink,
++                             const ContinousStateValueVector&amp; states,
++                             PortValueList&amp; portValues,
++                             MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -137,15 +137,16 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  articulation(parentLink, childLink, jointForce, hIh);
++  articulation(parentLink, childLink, jointForce, hIh, pAlpha);
+ }
+ 
+ void
+ PrismaticJoint::acceleration(const MechanicLinkValue&amp; parentLink,
+-                            MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
++                             MechanicLinkValue&amp; childLink,
++                             const ContinousStateValueVector&amp; states,
++                             PortValueList&amp; portValues,
++                             const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                             VectorN&amp; velDot) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -153,7 +154,7 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  acceleration(parentLink, childLink, jointForce, hIh, velDot);
++  acceleration(parentLink, childLink, jointForce, hIh, pAlpha, velDot);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticJoint.h	2008-11-21 12:48:44 UTC (rev 768)
+@@ -55,12 +55,13 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const;
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const;
+   virtual void acceleration(const MechanicLinkValue&amp; parentLink,
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const;
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                            VectorN&amp; velDot) const;
+ 
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.cpp	2008-11-21 12:48:44 UTC (rev 768)
+@@ -131,7 +131,7 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -139,7 +139,7 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  articulation(parentLink, childLink, jointForce, hIh);
++  articulation(parentLink, childLink, jointForce, hIh, pAlpha);
+ }
+ 
+ void
+@@ -147,7 +147,8 @@
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                            VectorN&amp; velDot) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -155,7 +156,7 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  acceleration(parentLink, childLink, jointForce, hIh, velDot);
++  acceleration(parentLink, childLink, jointForce, hIh, pAlpha, velDot);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteJoint.h	2008-11-21 12:48:44 UTC (rev 768)
+@@ -55,12 +55,13 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const;
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const;
+   virtual void acceleration(const MechanicLinkValue&amp; parentLink,
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const;
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                            VectorN&amp; velDot) const;
+ 
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.cpp	2008-11-21 12:48:44 UTC (rev 768)
+@@ -109,10 +109,10 @@
+ 
+ void
+ RotationalJoint::articulation(MechanicLinkValue&amp; parentLink,
+-                            const MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const
++                              const MechanicLinkValue&amp; childLink,
++                              const ContinousStateValueVector&amp; states,
++                              PortValueList&amp; portValues,
++                              MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -120,15 +120,16 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  articulation(parentLink, childLink, jointForce, hIh);
++  articulation(parentLink, childLink, jointForce, hIh, pAlpha);
+ }
+ 
+ void
+ RotationalJoint::acceleration(const MechanicLinkValue&amp; parentLink,
+-                            MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
++                              MechanicLinkValue&amp; childLink,
++                              const ContinousStateValueVector&amp; states,
++                              PortValueList&amp; portValues,
++                              const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                              VectorN&amp; velDot) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -136,7 +137,7 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  acceleration(parentLink, childLink, jointForce, hIh, velDot);
++  acceleration(parentLink, childLink, jointForce, hIh, pAlpha, velDot);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RotationalJoint.h	2008-11-21 12:48:44 UTC (rev 768)
+@@ -52,12 +52,12 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const;
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const;
+   virtual void acceleration(const MechanicLinkValue&amp; parentLink,
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const;
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha, VectorN&amp; velDot) const;
+ 
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.cpp	2008-11-21 12:48:44 UTC (rev 768)
+@@ -137,10 +137,10 @@
+ 
+ void
+ UniversalJoint::articulation(MechanicLinkValue&amp; parentLink,
+-                            const MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const
++                             const MechanicLinkValue&amp; childLink,
++                             const ContinousStateValueVector&amp; states,
++                             PortValueList&amp; portValues,
++                             MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -148,15 +148,16 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  articulation(parentLink, childLink, jointForce, hIh);
++  articulation(parentLink, childLink, jointForce, hIh, pAlpha);
+ }
+ 
+ void
+ UniversalJoint::acceleration(const MechanicLinkValue&amp; parentLink,
+-                            MechanicLinkValue&amp; childLink,
+-                            const ContinousStateValueVector&amp; states,
+-                            PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const
++                             MechanicLinkValue&amp; childLink,
++                             const ContinousStateValueVector&amp; states,
++                             PortValueList&amp; portValues,
++                             const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                             VectorN&amp; velDot) const
+ {
+   VectorN jointForce;
+   if (mForcePort.empty())
+@@ -164,7 +165,7 @@
+   else
+     jointForce = portValues[mForcePort];
+   
+-  acceleration(parentLink, childLink, jointForce, hIh, velDot);
++  acceleration(parentLink, childLink, jointForce, hIh, pAlpha, velDot);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-21 12:31:29 UTC (rev 767)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UniversalJoint.h	2008-11-21 12:48:44 UTC (rev 768)
+@@ -55,12 +55,13 @@
+                             const MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            MatrixFactorsNN&amp; hIh) const;
++                            MatrixFactorsNN&amp; hIh, Vector6&amp; pAlpha) const;
+   virtual void acceleration(const MechanicLinkValue&amp; parentLink,
+                             MechanicLinkValue&amp; childLink,
+                             const ContinousStateValueVector&amp; states,
+                             PortValueList&amp; portValues,
+-                            const MatrixFactorsNN&amp; hIh, VectorN&amp; velDot) const;
++                            const MatrixFactorsNN&amp; hIh, const Vector6&amp; pAlpha,
++                            VectorN&amp; velDot) const;
+ 
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000736.html">[OpenFDM-svn] r767 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000738.html">[OpenFDM-svn] r769 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#737">[ date ]</a>
+              <a href="thread.html#737">[ thread ]</a>
+              <a href="subject.html#737">[ subject ]</a>
+              <a href="author.html#737">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

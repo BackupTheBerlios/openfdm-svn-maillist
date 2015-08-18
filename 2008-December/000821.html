@@ -1,0 +1,728 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r853 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r853%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812032057.mB3KvMRx029783%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000820.html">
+   <LINK REL="Next"  HREF="000822.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r853 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r853%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200812032057.mB3KvMRx029783%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r853 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec  3 21:57:22 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000820.html">[OpenFDM-svn] r852 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000822.html">[OpenFDM-svn] r854 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#821">[ date ]</a>
+              <a href="thread.html#821">[ thread ]</a>
+              <a href="subject.html#821">[ subject ]</a>
+              <a href="author.html#821">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-03 21:57:21 +0100 (Wed, 03 Dec 2008)
+New Revision: 853
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.h
+Log:
+Refactor the planet part of the environment.
+
+M    src/OpenFDM/FlatPlanet.h
+M    src/OpenFDM/AbstractPlanet.cpp
+M    src/OpenFDM/EllipticPlanet.cpp
+M    src/OpenFDM/EllipticPlanet.h
+M    src/OpenFDM/AbstractPlanet.h
+M    src/OpenFDM/Environment.h
+M    src/OpenFDM/FlatPlanet.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.cpp	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.cpp	2008-12-03 20:57:21 UTC (rev 853)
+@@ -4,13 +4,6 @@
+ 
+ #include &quot;AbstractPlanet.h&quot;
+ 
+-#include &lt;iosfwd&gt;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Math.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
+-
+ namespace OpenFDM {
+ 
+ AbstractPlanet::AbstractPlanet(void)
+@@ -21,112 +14,4 @@
+ {
+ }
+ 
+-Geocentric
+-AbstractPlanet::toGeoc(const Vector3&amp; cart) const
+-{
+-  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0)
+-    ? real_type(0) : atan2(cart(1), cart(0));
+-  real_type nxy = sqrt(cart(0)*cart(0)+cart(1)*cart(1));
+-  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0)
+-    ? real_type(0) : atan2(cart(2), nxy);
+-  return Geocentric(lat, lon, norm(cart));
+-}
+-
+-Vector3
+-AbstractPlanet::toCart(const Geocentric&amp; geoc) const
+-{
+-  real_type slat = sin(geoc.latitude);
+-  real_type clat = cos(geoc.latitude);
+-  real_type slon = sin(geoc.longitude);
+-  real_type clon = cos(geoc.longitude);
+-  return geoc.radius*Vector3( clat*clon, clat*slon, slat );
+-}
+-
+-Geocentric
+-AbstractPlanet::toGeoc(const Geodetic&amp; geod) const
+-{
+-  return toGeoc(toCart(geod));
+-}
+-
+-Geodetic
+-AbstractPlanet::toGeod(const Geocentric&amp; geoc) const
+-{
+-  return toGeod(toCart(geoc));
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeodHLOrientation(const Geodetic&amp; pos) const
+-{
+-  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeodHLOrientation(const Vector3&amp; pos) const
+-{
+-  return getGeodHLOrientation(toGeod(pos));
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeodHLOrientation(const Geocentric&amp; pos) const
+-{
+-  return getGeodHLOrientation(toCart(pos));
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeocHLOrientation(const Geodetic&amp; pos) const
+-{
+-  return getGeocHLOrientation(toCart(pos));
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeocHLOrientation(const Vector3&amp; pos) const
+-{
+-  return getGeocHLOrientation(toGeoc(pos));
+-}
+-
+-Quaternion
+-AbstractPlanet::getGeocHLOrientation(const Geocentric&amp; pos) const
+-{
+-  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
+-}
+-
+-Vector3
+-AbstractPlanet::getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  Quaternion hlOrientation = getGeocHLOrientation(pos);
+-  Vector3 hlVel = hlOrientation.transform(ecVel);
+-  Vector3 hlRate = Vector3(hlVel(1), -hlVel(0), -hlVel(1)*tan(pos.latitude));
+-  return hlOrientation.backTransform((1/pos.radius)*hlRate);
+-}
+-
+-Vector3
+-AbstractPlanet::getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  return getGoecHLRate(toGeoc(pos), ecVel);
+-}
+-
+-Vector3
+-AbstractPlanet::getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const
+-{
+-  return getGoecHLRate(toCart(pos), ecVel);
+-}
+-
+-std::ostream&amp;
+-operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod)
+-{
+-  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geod.longitude
+-            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geod.latitude
+-            &lt;&lt; &quot;, alt = &quot; &lt;&lt; geod.altitude
+-            &lt;&lt; &quot; ]&quot;;
+-}
+-
+-std::ostream&amp;
+-operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc)
+-{
+-  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geoc.longitude
+-            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geoc.latitude
+-            &lt;&lt; &quot;, rad = &quot; &lt;&lt; geoc.radius
+-            &lt;&lt; &quot; ]&quot;;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.h	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractPlanet.h	2008-12-03 20:57:21 UTC (rev 853)
+@@ -5,44 +5,14 @@
+ #ifndef OpenFDM_AbstractPlanet_H
+ #define OpenFDM_AbstractPlanet_H
+ 
+-#include &lt;iosfwd&gt;
+-
+ #include &quot;Types.h&quot;
+ #include &quot;Vector.h&quot;
+-#include &quot;Quaternion.h&quot;
++#include &quot;Plane.h&quot;
+ #include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /**
+- * Datatype for the Geodetic position on some ellipsoid.
+- */
+-struct Geodetic {
+-  Geodetic(real_type lat = 0.0, real_type lon = 0.0, real_type alt = 0.0)
+-    : latitude(lat), longitude(lon), altitude(alt)
+-  {}
+-  real_type latitude;
+-  real_type longitude;
+-  real_type altitude;
+-};
+-
+-/**
+- * Datatype for a position in speric coordinates.
+- */
+-struct Geocentric {
+-  Geocentric(real_type lat = 0.0, real_type lon = 0.0, real_type rad = 0.0)
+-    : latitude(lat), longitude(lon), radius(rad)
+-  {}
+-  real_type latitude;
+-  real_type longitude;
+-  real_type radius;
+-};
+-
+-// FIXME Find out what we need, Move the rest of the elliptic stuff in here
+-// into the EllipticPlanet class.
+-// We probably only need the altitude computation from the cartesian coordinates
+-
+-/**
+  * The Planet class.
+  *
+  * It holds some information about the planet the simulation is running on.
+@@ -57,75 +27,12 @@
+    */
+   virtual ~AbstractPlanet(void);
+ 
+-  /** Transform cartesian coordinates to geodetic coordinates.
++  /** Returns the horizontal plane at zero altitude.
++   *  Plane normal points downward.
+    */
+-  virtual Geodetic toGeod(const Vector3&amp; cart) const = 0;
+-
+-  /** Transform geodetic coordinates to cartesian coordinates.
+-   */
+-  virtual Vector3 toCart(const Geodetic&amp; geod) const = 0;
+-
+-  /** Transform cartesian coordinates to geocentric coordinates.
+-   */
+-  Geocentric toGeoc(const Vector3&amp; cart) const;
+-
+-  /** Transform geocentric coordinates to cartesian coordinates.
+-   */
+-  Vector3 toCart(const Geocentric&amp; geoc) const;
+-
+-  /** Transform geocentric coordinates to geodetic coordinates.
+-   */
+-  Geocentric toGeoc(const Geodetic&amp; geod) const;
+-
+-  /** Transform geodetic coordinates to geocentric coordinates.
+-   */
+-  Geodetic toGeod(const Geocentric&amp; geoc) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  virtual Quaternion getGeodHLOrientation(const Geodetic&amp; pos) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  Quaternion getGeodHLOrientation(const Vector3&amp; pos) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  Quaternion getGeodHLOrientation(const Geocentric&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Geodetic&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Vector3&amp; pos) const;
+-
+-  /** Orientation of the Geocentric horizontal local frame.
+-   */
+-  Quaternion getGeocHLOrientation(const Geocentric&amp; pos) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const;
+-
+-  /** Rotation rate of the Geocentric horizontal local frame.
+-   */
+-  Vector3 getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const;
++  virtual Plane getHorizont(const Vector3&amp; position) const = 0;
+ };
+ 
+-/** Pretty printing of geodetic coordinates.
+- */
+-std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod);
+-
+-/** Pretty printing of geocentric coordinates.
+- */
+-std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc);
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.cpp	2008-12-03 20:57:21 UTC (rev 853)
+@@ -52,6 +52,15 @@
+   e4 = e2*e2;
+ }
+ 
++Plane
++EllipticPlanet::getHorizont(const Vector3&amp; position) const
++{
++  Geodetic geodetic = toGeod(position);
++  geodetic.altitude = 0;
++  Vector down = getGeodHLOrientation(geodetic).backTransform(Vector3::unit(2));
++  return Plane(down, toCart(geodetic));
++}
++
+ Geodetic
+ EllipticPlanet::toGeod(const Vector3&amp; cart) const
+ {
+@@ -102,4 +111,112 @@
+   return Vector3(X, Y, Z);
+ }
+ 
++Geocentric
++EllipticPlanet::toGeoc(const Vector3&amp; cart) const
++{
++  real_type lon = (cart(0) == 0 &amp;&amp; cart(1) == 0)
++    ? real_type(0) : atan2(cart(1), cart(0));
++  real_type nxy = sqrt(cart(0)*cart(0)+cart(1)*cart(1));
++  real_type lat = (nxy == 0 &amp;&amp; cart(2) == 0)
++    ? real_type(0) : atan2(cart(2), nxy);
++  return Geocentric(lat, lon, norm(cart));
++}
++
++Vector3
++EllipticPlanet::toCart(const Geocentric&amp; geoc) const
++{
++  real_type slat = sin(geoc.latitude);
++  real_type clat = cos(geoc.latitude);
++  real_type slon = sin(geoc.longitude);
++  real_type clon = cos(geoc.longitude);
++  return geoc.radius*Vector3( clat*clon, clat*slon, slat );
++}
++
++Geocentric
++EllipticPlanet::toGeoc(const Geodetic&amp; geod) const
++{
++  return toGeoc(toCart(geod));
++}
++
++Geodetic
++EllipticPlanet::toGeod(const Geocentric&amp; geoc) const
++{
++  return toGeod(toCart(geoc));
++}
++
++Quaternion
++EllipticPlanet::getGeodHLOrientation(const Geodetic&amp; pos) const
++{
++  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
++}
++
++Quaternion
++EllipticPlanet::getGeodHLOrientation(const Vector3&amp; pos) const
++{
++  return getGeodHLOrientation(toGeod(pos));
++}
++
++Quaternion
++EllipticPlanet::getGeodHLOrientation(const Geocentric&amp; pos) const
++{
++  return getGeodHLOrientation(toCart(pos));
++}
++
++Quaternion
++EllipticPlanet::getGeocHLOrientation(const Geodetic&amp; pos) const
++{
++  return getGeocHLOrientation(toCart(pos));
++}
++
++Quaternion
++EllipticPlanet::getGeocHLOrientation(const Vector3&amp; pos) const
++{
++  return getGeocHLOrientation(toGeoc(pos));
++}
++
++Quaternion
++EllipticPlanet::getGeocHLOrientation(const Geocentric&amp; pos) const
++{
++  return Quaternion::fromLonLat(pos.longitude, pos.latitude);
++}
++
++Vector3
++EllipticPlanet::getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const
++{
++  Quaternion hlOrientation = getGeocHLOrientation(pos);
++  Vector3 hlVel = hlOrientation.transform(ecVel);
++  Vector3 hlRate = Vector3(hlVel(1), -hlVel(0), -hlVel(1)*tan(pos.latitude));
++  return hlOrientation.backTransform((1/pos.radius)*hlRate);
++}
++
++Vector3
++EllipticPlanet::getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const
++{
++  return getGoecHLRate(toGeoc(pos), ecVel);
++}
++
++Vector3
++EllipticPlanet::getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const
++{
++  return getGoecHLRate(toCart(pos), ecVel);
++}
++
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod)
++{
++  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geod.longitude
++            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geod.latitude
++            &lt;&lt; &quot;, alt = &quot; &lt;&lt; geod.altitude
++            &lt;&lt; &quot; ]&quot;;
++}
++
++std::ostream&amp;
++operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc)
++{
++  return os &lt;&lt; &quot;[ lon = &quot; &lt;&lt; rad2deg*geoc.longitude
++            &lt;&lt; &quot;, lat = &quot; &lt;&lt; rad2deg*geoc.latitude
++            &lt;&lt; &quot;, rad = &quot; &lt;&lt; geoc.radius
++            &lt;&lt; &quot; ]&quot;;
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/EllipticPlanet.h	2008-12-03 20:57:21 UTC (rev 853)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_EllipticPlanet_H
+ #define OpenFDM_EllipticPlanet_H
+ 
++#include &lt;iosfwd&gt;
++
+ #include &quot;Types.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Quaternion.h&quot;
+@@ -13,6 +15,30 @@
+ namespace OpenFDM {
+ 
+ /**
++ * Datatype for the Geodetic position on some ellipsoid.
++ */
++struct Geodetic {
++  Geodetic(real_type lat = 0.0, real_type lon = 0.0, real_type alt = 0.0)
++    : latitude(lat), longitude(lon), altitude(alt)
++  {}
++  real_type latitude;
++  real_type longitude;
++  real_type altitude;
++};
++
++/**
++ * Datatype for a position in speric coordinates.
++ */
++struct Geocentric {
++  Geocentric(real_type lat = 0.0, real_type lon = 0.0, real_type rad = 0.0)
++    : latitude(lat), longitude(lon), radius(rad)
++  {}
++  real_type latitude;
++  real_type longitude;
++  real_type radius;
++};
++
++/**
+  * The EllipticPlanet class.
+  *
+  * It holds some information about the planet the simulation is running on.
+@@ -39,14 +65,71 @@
+    */
+   void setFlattening(real_type flat);
+ 
++  /** Returns the horizontal plane at zero altitude.
++   *  Plane normal points downward.
++   */
++  virtual Plane getHorizont(const Vector3&amp; position) const;
++
+   /** Transform cartesian coordinates to geodetic coordinates.
+    */
+-  virtual Geodetic toGeod(const Vector3&amp; cart) const;
++  Geodetic toGeod(const Vector3&amp; cart) const;
+ 
+   /** Transform geodetic coordinates to cartesian coordinates.
+    */
+-  virtual Vector3 toCart(const Geodetic&amp; geod) const;
++  Vector3 toCart(const Geodetic&amp; geod) const;
+ 
++  /** Transform cartesian coordinates to geocentric coordinates.
++   */
++  Geocentric toGeoc(const Vector3&amp; cart) const;
++
++  /** Transform geocentric coordinates to cartesian coordinates.
++   */
++  Vector3 toCart(const Geocentric&amp; geoc) const;
++
++  /** Transform geocentric coordinates to geodetic coordinates.
++   */
++  Geocentric toGeoc(const Geodetic&amp; geod) const;
++
++  /** Transform geodetic coordinates to geocentric coordinates.
++   */
++  Geodetic toGeod(const Geocentric&amp; geoc) const;
++
++  /** Orientation of the Geodetic horizontal local frame.
++   */
++  Quaternion getGeodHLOrientation(const Geodetic&amp; pos) const;
++
++  /** Orientation of the Geodetic horizontal local frame.
++   */
++  Quaternion getGeodHLOrientation(const Vector3&amp; pos) const;
++
++  /** Orientation of the Geodetic horizontal local frame.
++   */
++  Quaternion getGeodHLOrientation(const Geocentric&amp; pos) const;
++
++  /** Orientation of the Geocentric horizontal local frame.
++   */
++  Quaternion getGeocHLOrientation(const Geodetic&amp; pos) const;
++
++  /** Orientation of the Geocentric horizontal local frame.
++   */
++  Quaternion getGeocHLOrientation(const Vector3&amp; pos) const;
++
++  /** Orientation of the Geocentric horizontal local frame.
++   */
++  Quaternion getGeocHLOrientation(const Geocentric&amp; pos) const;
++
++  /** Rotation rate of the Geocentric horizontal local frame.
++   */
++  Vector3 getGoecHLRate(const Geocentric&amp; pos, const Vector3&amp; ecVel) const;
++
++  /** Rotation rate of the Geocentric horizontal local frame.
++   */
++  Vector3 getGoecHLRate(const Vector3&amp; pos, const Vector3&amp; ecVel) const;
++
++  /** Rotation rate of the Geocentric horizontal local frame.
++   */
++  Vector3 getGoecHLRate(const Geodetic&amp; pos, const Vector3&amp; ecVel) const;
++
+ private:
+   /**
+    */
+@@ -57,6 +140,14 @@
+   real_type e4;
+ };
+ 
++/** Pretty printing of geodetic coordinates.
++ */
++std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geodetic&amp; geod);
++
++/** Pretty printing of geocentric coordinates.
++ */
++std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Geocentric&amp; geoc);
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Environment.h	2008-12-03 20:57:21 UTC (rev 853)
+@@ -82,43 +82,14 @@
+ 
+   ///////////////////////////////////////////////////////////////////////////
+   // Planet related
+-  // FIXME: find out what we really need here, may be some kind of
+-  // abstract horizontal local coordinates?
+-  // Is responsible for altitude computations ...
+-
+-  // From the planet these are so far what we need.
+-  // FIXME, invent an abstraction for that, may be optimize???
+-protected:
+-  Vector3 getHorizontalLocalDown(const Vector3&amp; position) const
+-  {
+-    Quaternion hlOr = mPlanet-&gt;getGeodHLOrientation(position);
+-    return hlOr.backTransform(Vector3::unit(2));
+-  }
+-  Vector3 getHorizontalLocalOffset(const Vector3&amp; position) const
+-  {
+-    Geodetic geod = mPlanet-&gt;toGeod(position);
+-    geod.altitude = 0;
+-    return mPlanet-&gt;toCart(geod);
+-  }
+-public:
+   real_type getAltitude(const Vector3&amp; position) const
+-  {
+-    Geodetic geod = mPlanet-&gt;toGeod(position);
+-    return geod.altitude;
+-  }
++  { return - mPlanet-&gt;getHorizont(position).getDist(position); }
+   Plane getHorizontalLocalPlane(const Vector3&amp; position) const
+-  {
+-    // Get the unit down vector.
+-    Vector3 unitDown = getHorizontalLocalDown(position);
+-    // Get the distance from the planets center.
+-    Vector3 groundOff = getHorizontalLocalOffset(position);
+-    // Then we know the plane ...
+-    return Plane(unitDown, groundOff);
+-  }
++  { return mPlanet-&gt;getHorizont(position); }
+   real_type getAboveGroundLevel(const real_type&amp; t, const Vector3&amp; pos) const
+   {
+     // Get the unit down vector.
+-    Vector3 unitDown = getHorizontalLocalDown(pos);
++    Vector3 unitDown = mPlanet-&gt;getHorizont(pos).getNormal();
+     GroundValues groundValues = getGroundPlane(t, pos);
+     Vector3 intersectPoint;
+     if (groundValues.plane.intersectLine(pos, unitDown, intersectPoint))
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.cpp	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.cpp	2008-12-03 20:57:21 UTC (rev 853)
+@@ -18,26 +18,10 @@
+ {
+ }
+ 
+-Geodetic
+-FlatPlanet::toGeod(const Vector3&amp; cart) const
++Plane
++FlatPlanet::getHorizont(const Vector3&amp; position) const
+ {
+-  return Geodetic(cart(0)/(111000*rad2deg),
+-                  -cart(1)/(111000*rad2deg),
+-                  -cart(2));
++  return Plane(Vector3::unit(2), 0);
+ }
+ 
+-Vector3
+-FlatPlanet::toCart(const Geodetic&amp; geod) const
+-{
+-  return Vector3(111000*rad2deg*geod.latitude,
+-                 -111000*rad2deg*geod.longitude,
+-                 -geod.altitude);
+-}
+-
+-Quaternion
+-FlatPlanet::getGeodHLOrientation(const Geodetic&amp;) const
+-{
+-  return Quaternion::unit();
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.h	2008-12-03 06:49:30 UTC (rev 852)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FlatPlanet.h	2008-12-03 20:57:21 UTC (rev 853)
+@@ -26,17 +26,10 @@
+    */
+   virtual ~FlatPlanet(void);
+ 
+-  /** Transform cartesian coordinates to geodetic coordinates.
++  /** Returns the horizontal plane at zero altitude.
++   *  Plane normal points downward.
+    */
+-  virtual Geodetic toGeod(const Vector3&amp; cart) const;
+-
+-  /** Transform geodetic coordinates to cartesian coordinates.
+-   */
+-  virtual Vector3 toCart(const Geodetic&amp; geod) const;
+-
+-  /** Orientation of the Geodetic horizontal local frame.
+-   */
+-  virtual Quaternion getGeodHLOrientation(const Geodetic&amp; pos) const;
++  virtual Plane getHorizont(const Vector3&amp; position) const;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000820.html">[OpenFDM-svn] r852 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000822.html">[OpenFDM-svn] r854 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#821">[ date ]</a>
+              <a href="thread.html#821">[ thread ]</a>
+              <a href="subject.html#821">[ subject ]</a>
+              <a href="author.html#821">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

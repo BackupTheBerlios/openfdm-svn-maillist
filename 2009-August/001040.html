@@ -1,0 +1,154 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1081%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091043.n79AhIn0026463%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001039.html">
+   <LINK REL="Next"  HREF="001041.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1081%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091043.n79AhIn0026463%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug  9 12:43:18 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001039.html">[OpenFDM-svn] r1080 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001041.html">[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1040">[ date ]</a>
+              <a href="thread.html#1040">[ thread ]</a>
+              <a href="subject.html#1040">[ subject ]</a>
+              <a href="author.html#1040">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-09 12:43:16 +0200 (Sun, 09 Aug 2009)
+New Revision: 1081
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+Log:
+Avoid crashing due to out of range substring access.
+
+M    JSBSimReaderBase.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-08 14:15:23 UTC (rev 1080)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-09 10:43:16 UTC (rev 1081)
+@@ -293,7 +293,7 @@
+   // input property. If so, it schedules and registers a discrete input model.
+   // If the propName points directly into the controls directory,
+   // schedule an input
+-  if (propName.substr(0, 9) == &quot;controls/&quot;) {
++  if (propName.find(&quot;controls/&quot;) == 0) {
+ //     std::string inputName = propName.substr(propName.rfind('/'));
+     std::string inputName = propName;
+     return addInputModel(&quot;Control &quot; + inputName, propName);
+@@ -331,7 +331,7 @@
+       // if this is replaced note that the above line needs to be chenged too
+       port = addInputModel(&quot;Rudder&quot;, &quot;controls/flight/rudder&quot;);
+ 
+-    } else if (propName.substr(0, 28) == &quot;fdm/jsbsim/fcs/steer-pos-deg&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/steer-pos-deg&quot;) == 0) {
+       return lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;, path);
+ 
+     } else if (propName == &quot;fdm/jsbsim/fcs/flap-cmd-norm&quot;) {
+@@ -347,34 +347,39 @@
+                            &quot;controls/flight/spoiler&quot;);
+ 
+ 
+-    } else if (propName.substr(0, 32) == &quot;fdm/jsbsim/fcs/throttle-cmd-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/throttle-cmd-norm&quot;) == 0) {
+       std::string control = &quot;controls/engines/engine&quot; +
+         propName.substr(32) + &quot;/throttle&quot;;
+       port = addInputModel(&quot;Throttle Input &quot; + propName.substr(32),
+                            control);
+ 
+-    } else if (propName.substr(0, 32) == &quot;fdm/jsbsim/fcs/throttle-pos-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/throttle-pos-norm&quot;) == 0) {
+       std::string cmd = &quot;fcs/throttle-cmd-norm&quot; + propName.substr(32);
+       return lookupJSBExpression(cmd, path);
+ 
+ 
+-    } else if (propName.substr(0, 31) == &quot;fdm/jsbsim/fcs/mixture-cmd-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/mixture-cmd-norm&quot;) == 0) {
+       std::string control = &quot;controls/engines/engine&quot; + 
+         propName.substr(31) + &quot;/mixture&quot;;
+-      port = addInputModel(&quot;Mixture Input &quot; + propName.substr(32, 1), control);
++      std::string number = &quot;0&quot;;
++      if (32 &lt;= propName.size())
++        number = propName.substr(32, 1);
++      port = addInputModel(&quot;Mixture Input &quot; + number, control);
+ 
+-    } else if (propName.substr(0, 31) == &quot;fdm/jsbsim/fcs/mixture-pos-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/mixture-pos-norm&quot;) == 0) {
+       std::string cmd = &quot;fcs/mixture-cmd-norm&quot; + propName.substr(31);
+       return lookupJSBExpression(cmd, path);
+ 
+ 
+-    } else if (propName.substr(0, 31) == &quot;fdm/jsbsim/fcs/advance-cmd-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/advance-cmd-norm&quot;) == 0) {
+       std::string control = &quot;controls/engines/engine&quot; + 
+         propName.substr(31) + &quot;/propeller-pitch&quot;;
+-      port = addInputModel(&quot;Propeller Pitch Input &quot; + propName.substr(32, 1),
+-                           control);
++      std::string number = &quot;0&quot;;
++      if (32 &lt;= propName.size())
++        number = propName.substr(32, 1);
++      port = addInputModel(&quot;Propeller Pitch Input &quot; + number, control);
+ 
+-    } else if (propName.substr(0, 31) == &quot;fdm/jsbsim/fcs/advance-pos-norm&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/advance-pos-norm&quot;) == 0) {
+       std::string cmd = &quot;fcs/advance-cmd-norm&quot; + propName.substr(31);
+       return lookupJSBExpression(cmd, path);
+ 
+@@ -466,7 +471,7 @@
+       port = lookupJSBExpression(&quot;fcs/rudder-pos-rad&quot;, path, false);
+       port = addToUnit(&quot;rudder-pos-deg unit&quot;, Unit::degree(), port);
+ 
+-    } else if (propName.substr(0, 19) == &quot;fdm/jsbsim/fcs/mag-&quot;) {
++    } else if (propName.find(&quot;fdm/jsbsim/fcs/mag-&quot;) == 0) {
+       // Special absolute modules for fcs/mag-*
+       // remove the 'mag-' substring here and use that as input for the
+       // Abs block
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001039.html">[OpenFDM-svn] r1080 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001041.html">[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1040">[ date ]</a>
+              <a href="thread.html#1040">[ thread ]</a>
+              <a href="subject.html#1040">[ subject ]</a>
+              <a href="author.html#1040">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

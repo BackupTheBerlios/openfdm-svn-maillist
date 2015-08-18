@@ -1,0 +1,192 @@
+From frohlich at mail.berlios.de  Sat Apr 10 07:35:11 2010
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 10 Apr 2010 07:35:11 +0200
+Subject: [OpenFDM-svn] r1126 - branches/OpenFDM-StateSeparation/src/OpenFDM
+Message-ID: <201004100535.o3A5ZB20030544@sheep.berlios.de>
+
+Author: frohlich
+Date: 2010-04-10 07:35:10 +0200 (Sat, 10 Apr 2010)
+New Revision: 1126
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h
+Log:
+Constify locks.
+
+M    OpenFDM/Atomic.h
+M    OpenFDM/ScopeLock.h
+M    OpenFDM/Mutex.h
+M    OpenFDM/TypeInfo.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -96,7 +96,7 @@
+   Atomic& operator=(const Atomic&);
+ 
+ #if defined(OpenFDM_USE_MUTEX)
+-  mutable Mutex mMutex;
++  Mutex mMutex;
+ #endif
+   unsigned mValue;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -40,7 +40,7 @@
+ #endif
+   }
+ 
+-  void lock(void)
++  void lock(void) const
+   {
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+@@ -51,7 +51,7 @@
+ #endif
+   }
+ 
+-  void unlock(void)
++  void unlock(void) const
+   {
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+@@ -68,9 +68,9 @@
+ 
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+-  CRITICAL_SECTION mCriticalSection;
++  mutable CRITICAL_SECTION mCriticalSection;
+ #else
+-  pthread_mutex_t mMutex;
++  mutable pthread_mutex_t mMutex;
+ #endif
+ #endif
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -11,7 +11,7 @@
+ 
+ class ScopeLock {
+ public:
+-  ScopeLock(Mutex& mutex) : mMutex(mutex)
++  ScopeLock(const Mutex& mutex) : mMutex(mutex)
+   { mMutex.lock(); }
+   ~ScopeLock(void)
+   { mMutex.unlock(); }
+@@ -21,7 +21,7 @@
+   ScopeLock(const ScopeLock&);
+   ScopeLock& operator=(const ScopeLock&);
+ 
+-  Mutex& mMutex;
++  const Mutex& mMutex;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -33,7 +33,7 @@
+   /// This *should* not be required but the standard does not provide
+   /// guarantees about that. Access through the reflection framework
+   /// should not happen on the fast path, so do that here ...
+-  mutable Mutex mMutex;
++  Mutex mMutex;
+ 
+ private:
+   TypeInfo(const TypeInfo&);
+@@ -168,12 +168,12 @@
+   typedef O ReflectedType;
+ 
+   TypeInfoTemplate(const char* name) : TypeInfo(name) {}
+-  
++
+   bool
+   getPropertyValue(const O* obj, const std::string& name, Variant& value) const
+   {
+     ScopeLock scopeLock(mMutex);
+-    
++
+     typename std::vector<SharedPtr<PropertyAccessor<O> > >::const_iterator it;
+     it = mProperyList.begin();
+     while (it != mProperyList.end()) {
+@@ -216,7 +216,7 @@
+ protected:
+   template<typename T>
+   void addProperty(const char* name, bool serializable,
+-                   const T& (O::*getter) () const, 
++                   const T& (O::*getter) () const,
+                    void (O::*setter) (const T&))
+   {
+     ScopeLock scopeLock(mMutex);
+@@ -226,7 +226,7 @@
+ 
+   template<typename T>
+   void addProperty(const char* name, bool serializable,
+-                   T (O::*getter) () const, 
++                   T (O::*getter) () const,
+                    void (O::*setter) (T))
+   {
+     ScopeLock scopeLock(mMutex);
+@@ -241,7 +241,7 @@
+     mProperyList.push_back(new TypedPropertyAccessor<O, T>(name, false,
+                                                            getter, 0));
+   }
+-  
++
+   template<typename T>
+   void addProperty(const char* name, T (O::*getter) () const)
+   {
+@@ -249,11 +249,11 @@
+     mProperyList.push_back(new TypedPropertyAccessor2<O, T>(name, false,
+                                                             getter, 0));
+   }
+-  
++
+ private:
+   TypeInfoTemplate(const TypeInfoTemplate&);
+   TypeInfoTemplate& operator=(const TypeInfoTemplate&);
+-  
++
+   std::vector<SharedPtr<PropertyAccessor<O> > > mProperyList;
+ };
+ 
+
+
+

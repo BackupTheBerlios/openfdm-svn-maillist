@@ -1,0 +1,305 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r365 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r365%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200802260613.m1Q6D7dj011446%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000337.html">
+   <LINK REL="Next"  HREF="000339.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r365 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r365%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200802260613.m1Q6D7dj011446%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r365 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Feb 26 07:13:07 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000337.html">[OpenFDM-svn] r364 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000339.html">[OpenFDM-svn] r366 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#338">[ date ]</a>
+              <a href="thread.html#338">[ thread ]</a>
+              <a href="subject.html#338">[ subject ]</a>
+              <a href="author.html#338">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-02-26 07:13:06 +0100 (Tue, 26 Feb 2008)
+New Revision: 365
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Time.cpp
+   trunk/OpenFDM/src/OpenFDM/Time.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Preliminary time class.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-26 06:13:06 UTC (rev 365)
+@@ -117,6 +117,7 @@
+   Tailhook.h \
+   Tank.h \
+   TaskInfo.h \
++  Time.h \
+   TimeDerivative.h \
+   TransferFunction.h \
+   Transform.h \
+@@ -207,6 +208,7 @@
+   Tailhook.cpp \
+   Tank.cpp \
+   TaskInfo.cpp \
++  Time.cpp \
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+   UnaryFunctionModel.cpp \
+
+Added: trunk/OpenFDM/src/OpenFDM/Time.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-26 06:13:06 UTC (rev 365)
+@@ -0,0 +1,75 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Time.h&quot;
++
++#include &lt;errno.h&gt;
++#include &lt;time.h&gt;
++#include &lt;cmath&gt;
++
++namespace OpenFDM {
++
++#define HAVE_POSIX_TIMERS 
++#define HAVE_CLOCK_MONOTONIC
++#define HAVE_CLOCK_THREAD_CPUTIME
++
++#if defined(HAVE_POSIX_TIMERS)
++static clockid_t
++typeToClockId(Time::Type type)
++{
++  switch (type) {
++#ifdef HAVE_CLOCK_MONOTONIC
++  case Time::MonotonicTime:
++    return CLOCK_MONOTONIC;
++#endif
++#ifdef HAVE_CLOCK_THREAD_CPUTIME
++  case Time::CPUTime:
++    return CLOCK_THREAD_CPUTIME_ID;
++#endif
++  default:
++    return CLOCK_REALTIME;
++  }
++}
++#endif
++
++Time
++Time::now(Type type)
++{
++#if defined(HAVE_POSIX_TIMERS)
++  struct timespec ts;
++  if (0 != clock_gettime(typeToClockId(type), &amp;ts))
++    perror(&quot;Error in clock_gettime: &quot;);
++  Time t;
++  t.setTimeUnchecked(ts.tv_sec, ts.tv_nsec);
++  return t;
++#else
++  if (type == CPUTime) {
++    struct rusage ru;
++    getrusage(RUSAGE_SELF, &amp;ru);
++    return Time(ru.ru_utime.tv_sec, 1000*ru.ru_utime.tv_usec);
++  } else {
++    struct timeval tv;
++    gettimeofday(&amp;tv, 0);
++    return Time(tv.tv_sec, 1000*tv.tv_usec);
++  }
++#endif
++}
++
++Time
++Time::resolution(Type type)
++{
++#if defined(HAVE_POSIX_TIMERS)
++  struct timespec ts;
++  if (0 != clock_getres(typeToClockId(type), &amp;ts))
++    perror(&quot;Error in clock_getres: &quot;);
++  Time t;
++  t.setTimeUnchecked(ts.tv_sec, ts.tv_nsec);
++  return t;
++#else
++  // Cannot see something better
++  return Time(0, 1000);
++#endif
++}
++
++}
+
+Added: trunk/OpenFDM/src/OpenFDM/Time.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-26 06:13:06 UTC (rev 365)
+@@ -0,0 +1,123 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Time_H
++#define OpenFDM_Time_H
++
++#include &lt;time.h&gt;
++#include &quot;Math.h&quot;
++
++namespace OpenFDM {
++
++class Time {
++  // Just to avoid typos with that magnitude of zeros
++  enum { NanoSecondsPerSecond = 1000000000 };
++
++public:
++  enum Type {
++    RealTime,
++    MonotonicTime,
++    CPUTime
++  };
++
++  typedef time_t sec_type;
++  typedef long nsec_type;
++
++  Time()
++  { setTimeUnchecked(0, 0); }
++  Time(const sec_type&amp; sec, const nsec_type&amp; nsec)
++  { setTime(sec, nsec); }
++  Time(const sec_type&amp; sec)
++  { setTimeUnchecked(sec, 0); }
++  Time(const double&amp; sec)
++  { setTime(sec); }
++
++  static Time now(Type type = RealTime);
++  static Time resolution(Type type = RealTime);
++
++  operator double() const
++  { return (1.0/NanoSecondsPerSecond)*_nsec + _sec; }
++
++  void setTime(const double&amp; seconds)
++  {
++    sec_type wholeSecs = sec_type(floor(seconds));
++    nsec_type reminder;
++    reminder = nsec_type(floor((seconds - wholeSecs)*NanoSecondsPerSecond));
++    setTimeUnchecked(wholeSecs, reminder);
++  }
++  void setTime(const sec_type&amp; sec, const nsec_type&amp; nsec)
++  {
++    nsec_type carry = nsec/NanoSecondsPerSecond;
++    _nsec = nsec - NanoSecondsPerSecond*carry;
++    _sec = sec + carry;
++  }
++  const sec_type&amp; getSeconds() const
++  { return _sec; }
++  const nsec_type&amp; getNanoSeconds() const
++  { return _nsec; }
++
++  Time&amp; operator+=(const Time&amp; c)
++  { setTime(_sec + c._sec, _nsec + c._nsec); return *this; }
++  Time&amp; operator-=(const Time&amp; c)
++  { setTime(_sec - c._sec, _nsec - c._nsec); return *this; }
++
++private:
++  void setTimeUnchecked(const sec_type&amp; sec, const nsec_type&amp; nsec)
++  { _sec = sec; _nsec = nsec; }
++
++  sec_type _sec;
++  nsec_type _nsec;
++
++  friend bool operator==(const Time&amp; c1, const Time&amp; c2);
++  friend bool operator&lt;(const Time&amp; c1, const Time&amp; c2);
++};
++
++inline bool
++operator==(const Time&amp; c1, const Time&amp; c2)
++{ return c1._nsec == c2._nsec &amp;&amp; c1._sec == c2._sec; }
++
++inline bool
++operator!=(const Time&amp; c1, const Time&amp; c2)
++{ return !operator==(c1, c2); }
++
++inline bool
++operator&lt;(const Time&amp; c1, const Time&amp; c2)
++{
++  if (c1._sec &lt; c2._sec)
++    return true;
++  else
++    return c1._sec == c2._sec &amp;&amp; c1._nsec &lt; c2._nsec;
++}
++
++inline bool
++operator&gt;(const Time&amp; c1, const Time&amp; c2)
++{ return c2 &lt; c1; }
++
++inline bool
++operator&gt;=(const Time&amp; c1, const Time&amp; c2)
++{ return !(c1 &lt; c2); }
++
++inline bool
++operator&lt;=(const Time&amp; c1, const Time&amp; c2)
++{ return !(c1 &gt; c2); }
++
++inline Time
++operator+(const Time&amp; c1)
++{ return c1; }
++
++inline Time
++operator-(const Time&amp; c1)
++{ Time c(0, 0); c -= c1; return c; /*FIXME*/ }
++
++inline Time
++operator+(const Time&amp; c1, const Time&amp; c2)
++{ Time c = c1; c += c2; return c; }
++
++inline Time
++operator-(const Time&amp; c1, const Time&amp; c2)
++{ Time c = c1; c -= c2; return c; }
++
++}
++
++#endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000337.html">[OpenFDM-svn] r364 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000339.html">[OpenFDM-svn] r366 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#338">[ date ]</a>
+              <a href="thread.html#338">[ thread ]</a>
+              <a href="subject.html#338">[ subject ]</a>
+              <a href="author.html#338">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

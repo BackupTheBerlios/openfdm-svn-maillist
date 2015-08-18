@@ -1,0 +1,275 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r968 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r968%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271917.n0RJH2QR006603%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000931.html">
+   <LINK REL="Next"  HREF="000933.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r968 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r968%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271917.n0RJH2QR006603%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r968 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jan 27 20:17:02 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000931.html">[OpenFDM-svn] r966 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000933.html">[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#932">[ date ]</a>
+              <a href="thread.html#932">[ thread ]</a>
+              <a href="subject.html#932">[ subject ]</a>
+              <a href="author.html#932">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-27 20:17:01 +0100 (Tue, 27 Jan 2009)
+New Revision: 968
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+Log:
+Add initial values.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-01-27 18:49:45 UTC (rev 967)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2009-01-27 19:17:01 UTC (rev 968)
+@@ -15,14 +15,22 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(MobileRootJoint, RootJoint)
++  DEF_OPENFDM_PROPERTY(Vector3, InitialPosition, Serialized)
++  DEF_OPENFDM_PROPERTY(Quaternion, InitialOrientation, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, InitialLinearVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, InitialAngularVelocity, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ MobileRootJoint::MobileRootJoint(const std::string&amp; name) :
+   RootJoint(name),
+-  mMechanicLink(newMechanicLink(&quot;link&quot;)),
++  mMechanicLink(new MechanicLink(this, &quot;link&quot;)),
+   mPositionStateInfo(new Vector3StateInfo),
+   mOrientationStateInfo(new Vector4StateInfo),
+-  mVelocityStateInfo(new Vector6StateInfo)
++  mVelocityStateInfo(new Vector6StateInfo),
++  mInitialPosition(Vector3::zeros()),
++  mInitialOrientation(Quaternion::unit()),
++  mInitialLinearVelocity(Vector3::zeros()),
++  mInitialAngularVelocity(Vector3::zeros())
+ {
+   addContinousStateInfo(mPositionStateInfo);
+   addContinousStateInfo(mOrientationStateInfo);
+@@ -33,20 +41,70 @@
+ {
+ }
+ 
++const Vector3&amp;
++MobileRootJoint::getInitialPosition() const
++{
++  return mInitialPosition;
++}
++
+ void
++MobileRootJoint::setInitialPosition(const Vector3&amp; initialPosition)
++{
++  mInitialPosition = initialPosition;
++}
++
++const Quaternion&amp;
++MobileRootJoint::getInitialOrientation() const
++{
++  return mInitialOrientation;
++}
++
++void
++MobileRootJoint::setInitialOrientation(const Quaternion&amp; initialOrientation)
++{
++  mInitialOrientation = initialOrientation;
++}
++
++const Vector3&amp;
++MobileRootJoint::getInitialLinearVelocity() const
++{
++  return mInitialLinearVelocity;
++}
++
++void
++MobileRootJoint::setInitialLinearVelocity(const Vector3&amp; initialVelocity)
++{
++  mInitialLinearVelocity = initialVelocity;
++}
++
++const Vector3&amp;
++MobileRootJoint::getInitialAngularVelocity() const
++{
++  return mInitialAngularVelocity;
++}
++
++void
++MobileRootJoint::setInitialAngularVelocity(const Vector3&amp; initialVelocity)
++{
++  mInitialAngularVelocity = initialVelocity;
++}
++
++
++void
+ MobileRootJoint::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                       ContinousStateValueVector&amp; continousState,
+                       const PortValueList&amp; portValues) const
+ {
+-  continousState[*mPositionStateInfo] = Vector3::zeros();
+-  continousState[*mOrientationStateInfo] = Quaternion::unit();
+-  continousState[*mVelocityStateInfo] = Vector6::zeros();
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mOrientationStateInfo] = mInitialOrientation;
++  Vector6 initialVelocity(mInitialAngularVelocity, mInitialLinearVelocity);
++  continousState[*mVelocityStateInfo] = initialVelocity;
+ }
+ 
+ void
+ MobileRootJoint::initDesignPosition(PortValueList&amp; portValues) const
+ {
+-  portValues[mMechanicLink].setDesignPosition(getPosition());
++  portValues[*mMechanicLink].setDesignPosition(getPosition());
+ }
+ 
+ void
+@@ -60,10 +118,10 @@
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+-  portValues[mMechanicLink].setCoordinateSystem(CoordinateSystem(position,
+-                                                                 orientation));
+-  portValues[mMechanicLink].setPosAndVel(angularBaseVelocity,
+-                                         position, orientation, velocity);
++  portValues[*mMechanicLink].setCoordinateSystem(CoordinateSystem(position,
++                                                                  orientation));
++  portValues[*mMechanicLink].setPosAndVel(angularBaseVelocity,
++                                          position, orientation, velocity);
+ }
+ 
+ void
+@@ -81,11 +139,11 @@
+ {
+   Vector6 spatialAcceleration = environment.getAcceleration(task.getTime());
+ 
+-  SpatialInertia inertia = portValues[mMechanicLink].getInertia();
+-  Vector6 force = portValues[mMechanicLink].getForce();
++  SpatialInertia inertia = portValues[*mMechanicLink].getInertia();
++  Vector6 force = portValues[*mMechanicLink].getForce();
+ 
+   spatialAcceleration -= solve(inertia, force);
+-  portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
++  portValues[*mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
+ }
+ 
+ void
+@@ -108,7 +166,7 @@
+   Vector3 angVel = velocity.getAngular();
+   Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
+ 
+-  Vector6 velDeriv = portValues[mMechanicLink].getFrame().getRelVelDot();
++  Vector6 velDeriv = portValues[*mMechanicLink].getFrame().getRelVelDot();
+ 
+   derivatives[*mPositionStateInfo] = pDot;
+   derivatives[*mOrientationStateInfo] = qderiv;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-01-27 18:49:45 UTC (rev 967)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2009-01-27 19:17:01 UTC (rev 968)
+@@ -22,6 +22,18 @@
+   MobileRootJoint(const std::string&amp; name);
+   virtual ~MobileRootJoint();
+ 
++  const Vector3&amp; getInitialPosition() const;
++  void setInitialPosition(const Vector3&amp; initialPosition);
++
++  const Quaternion&amp; getInitialOrientation() const;
++  void setInitialOrientation(const Quaternion&amp; initialOrientation);
++
++  const Vector3&amp; getInitialLinearVelocity() const;
++  void setInitialLinearVelocity(const Vector3&amp; initialLinearVelocity);
++
++  const Vector3&amp; getInitialAngularVelocity() const;
++  void setInitialAngularVelocity(const Vector3&amp; initialAngularVelocity);
++
+   virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+                     ContinousStateValueVector&amp;,
+                     const PortValueList&amp;) const;
+@@ -41,11 +53,16 @@
+                           const PortValueList&amp; portValues,
+                           ContinousStateValueVector&amp;) const;
+ private:
+-  MechanicLink_ mMechanicLink;
++  SharedPtr&lt;MechanicLink&gt; mMechanicLink;
+ 
+   SharedPtr&lt;Vector3StateInfo&gt; mPositionStateInfo;
+   SharedPtr&lt;Vector4StateInfo&gt; mOrientationStateInfo;
+   SharedPtr&lt;Vector6StateInfo&gt; mVelocityStateInfo;
++
++  Vector3 mInitialPosition;
++  Quaternion mInitialOrientation;
++  Vector3 mInitialLinearVelocity;
++  Vector3 mInitialAngularVelocity;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-01-27 18:49:45 UTC (rev 967)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-01-27 19:17:01 UTC (rev 968)
+@@ -44,6 +44,10 @@
+   // FIXME Implement access control for the port value
+   MechanicLinkValue&amp; operator[](const MechanicLink_&amp; port) const
+   { return *port.getPortValue(mPortValueVector); }
++  const MechanicLinkValue&amp; operator[](const MechanicLink&amp; port) const
++  { return *getPortValue(port); }
++  MechanicLinkValue&amp; operator[](const MechanicLink&amp; port)
++  { return *getPortValue(port); }
+ 
+   const NumericPortValue* getPortValue(const RealInputPort&amp; port)
+   {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000931.html">[OpenFDM-svn] r966 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000933.html">[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#932">[ date ]</a>
+              <a href="thread.html#932">[ thread ]</a>
+              <a href="subject.html#932">[ subject ]</a>
+              <a href="author.html#932">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

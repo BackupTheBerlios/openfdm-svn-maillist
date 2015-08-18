@@ -1,0 +1,824 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r146 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r146%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512310956.jBV9uwUZ020593%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000129.html">
+   <LINK REL="Next"  HREF="000131.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r146 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r146%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512310956.jBV9uwUZ020593%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r146 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Dec 31 10:56:58 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000129.html">[OpenFDM-svn] r145 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000131.html">[OpenFDM-svn] r147 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#130">[ date ]</a>
+              <a href="thread.html#130">[ thread ]</a>
+              <a href="subject.html#130">[ subject ]</a>
+              <a href="author.html#130">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-31 10:56:49 +0100 (Sat, 31 Dec 2005)
+New Revision: 146
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/AirSpring.h
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+Log:
+Change the AirSpring to be a normal model instead
+of something special. Adapt output scheduling.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -461,7 +461,7 @@
+ LegacyJSBSimReader::addInputModel(const std::string&amp; name,
+                                   const std::string&amp; propName, real_type gain)
+ {
+-  Input* input = new Input(name);
++  Input* input = new Input(name + &quot; Input&quot;);
+   input-&gt;setInputName(propName);
+   input-&gt;setInputGain(gain);
+   addFCSModel(input);
+@@ -475,7 +475,7 @@
+                                    const std::string&amp; name,
+                                    const std::string&amp; propName, real_type gain)
+ {
+-  Output* output = new Output(std::string(name) + &quot; output&quot;);
++  Output* output = new Output(name + &quot; Output&quot;);
+   output-&gt;getInputPort(0)-&gt;connect(out);
+   output-&gt;setOutputName(propName);
+   output-&gt;setOutputGain(gain);
+@@ -738,7 +738,7 @@
+ {
+   RigidBody* wheel = new RigidBody(name + &quot; Wheel&quot;);
+   InertiaMatrix wheelInertia(10, 0, 0, 100, 0, 10);
+-  wheel-&gt;addInteract(new Mass(&quot;Wheel Inertia&quot;, SpatialInertia(wheelInertia, 50)));
++  wheel-&gt;addInteract(new Mass(name + &quot; Wheel Inertia&quot;, SpatialInertia(wheelInertia, 50)));
+   mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(wheel);
+   
+   RevoluteJoint* wj = new RevoluteJoint(name + &quot; Wheel Joint&quot;);
+@@ -925,7 +925,7 @@
+       // This is the movable part of the strut, doing the compression
+       RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+-      arm-&gt;addInteract(new Mass(&quot;Strut Mass&quot;, inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
++      arm-&gt;addInteract(new Mass(name + &quot; Strut Mass&quot;, inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
+ 
+       // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+@@ -947,7 +947,12 @@
+       aoDamp-&gt;setMaxCompression(maxCompr);
+       aoDamp-&gt;setMinDamperConstant(minDamp);
+       aoDamp-&gt;setMaxDamperConstant(maxDamp);
+-      rj-&gt;setLineForce(aoDamp);
++      // That one reads the joint position and velocity ...
++      aoDamp-&gt;getInputPort(0)-&gt;connect(rj-&gt;getOutputPort(0));
++      aoDamp-&gt;getInputPort(1)-&gt;connect(rj-&gt;getOutputPort(1));
++      // ... and provides an output force
++      rj-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
++      mVehicle-&gt;getMultiBodySystem()-&gt;addModel(aoDamp);
+ 
+       // Attach a wheel to that strut part.
+       attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
+@@ -957,6 +962,7 @@
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
+ 
++      /// FIXME add a retract joint ...
+       port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+       addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+@@ -1036,7 +1042,7 @@
+       // Now the compressible part of the strut
+       RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
+       mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(arm);
+-      arm-&gt;addInteract(new Mass(&quot;Strut Mass&quot;, inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
++      arm-&gt;addInteract(new Mass(name + &quot; Strut Mass&quot;, inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
+ 
+       // This time it is a prismatic joint
+       PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
+@@ -1057,7 +1063,10 @@
+       aoDamp-&gt;setMaxCompression(maxCompr);
+       aoDamp-&gt;setMinDamperConstant(minDamp);
+       aoDamp-&gt;setMaxDamperConstant(maxDamp);
+-      pj-&gt;setLineForce(aoDamp);
++      pj-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
++      aoDamp-&gt;getInputPort(0)-&gt;connect(pj-&gt;getOutputPort(0));
++      aoDamp-&gt;getInputPort(1)-&gt;connect(pj-&gt;getOutputPort(1));
++      mVehicle-&gt;getMultiBodySystem()-&gt;addModel(aoDamp);
+ 
+       // Attach a wheel to that strut part.
+       attachWheel(name, Vector3::zeros(), brake, numStr, wheelDiam,
+@@ -2074,6 +2083,7 @@
+   port = new Port;
+   port-&gt;setProperty(e);
+   registerJSBExpression(&quot;velocities/mach-norm&quot;, port);
++  registerJSBExpression(&quot;velocities/mach&quot;, port);
+ 
+   // Rotational rates wrt air.
+   e = mAeroForce-&gt;getProperty(&quot;p&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -2,14 +2,14 @@
+  *
+  */
+ 
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
++#include &lt;string&gt;
++
+ #include &quot;AirSpring.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ AirSpring::AirSpring(const std::string&amp; name) :
+-  LineForce(name),
++  Model(name),
+   mPushPressure(2e5),
+   mPullPressure(1e5),
+   mArea(0),
+@@ -19,18 +19,51 @@
+   mMaxDamperConstant(0),
+   mGamma(1.3)
+ {
++  setDirectFeedThrough(true);
++
++  setNumInputPorts(2);
++  setInputPortName(0, &quot;position&quot;);
++  setInputPortName(1, &quot;velocity&quot;);
++  
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;force&quot;, this, &amp;AirSpring::getForce);
+ }
+ 
+ AirSpring::~AirSpring(void)
+ {
+ }
+ 
++bool
++AirSpring::init(void)
++{
++  if (!getInputPort(0)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
++
++  if (!getInputPort(1)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
++
++  return true;
++}
++
+ void
+ AirSpring::output(const TaskInfo&amp; taskInfo)
+ {
++  real_type position = mPositionPort.getRealValue();
++  real_type vel = mVelocityPort.getRealValue();
++
+   real_type maxDisp = mMaxCompression - mMinCompression;
+-  real_type pullDisp = mMaxCompression - getPosition();
+-  real_type pushDisp = getPosition() - mMinCompression;
++  real_type pullDisp = mMaxCompression - position;
++  real_type pushDisp = position - mMinCompression;
+   
+   real_type pullDispRatio = pullDisp/maxDisp;
+   real_type pushDispRatio = pushDisp/maxDisp;
+@@ -42,15 +75,19 @@
+   real_type pullPressure = mPullPressure/(1-pow(pullDispRatio, mGamma));
+   real_type pushPressure = mPushPressure/(1-pow(pushDispRatio, mGamma));
+   
+-  real_type force = sign(maxDisp)*mArea*(pullPressure - pushPressure);
++  mForce = sign(maxDisp)*mArea*(pullPressure - pushPressure);
+   // Add a position dependent damping force
+-  force += getVel()*interpolate(getPosition(),
+-                                mMinCompression, mMinDamperConstant,
+-                                mMaxCompression, mMaxDamperConstant);
+-  
+-  setForce(force);
++  mForce += vel*interpolate(position,
++                            mMinCompression, mMinDamperConstant,
++                            mMaxCompression, mMaxDamperConstant);
+ }
+ 
++const real_type&amp;
++AirSpring::getForce(void) const
++{
++  return mForce;
++}
++
+ real_type
+ AirSpring::getPushPressure(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/AirSpring.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -7,19 +7,21 @@
+ 
+ #include &quot;Model.h&quot;
+ #include &quot;Vector.h&quot;
+-#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /// AirSpring
+ class AirSpring :
+-    public LineForce {
++    public Model {
+ public:
+   AirSpring(const std::string&amp; name);
+   virtual ~AirSpring(void);
+ 
++  virtual bool init(void);
+   virtual void output(const TaskInfo&amp; taskInfo);
+ 
++  const real_type&amp; getForce(void) const;
++
+   real_type getPushPressure(void) const;
+   void setPushPressure(real_type pushPressure);
+ 
+@@ -57,6 +59,13 @@
+   real_type mMinDamperConstant;
+ 
+   real_type mGamma;
++
++  real_type mForce;
++
++  /// The intput port which must provide the position
++  RealPortHandle mPositionPort;
++  /// The intput port which must provide the velocity
++  RealPortHandle mVelocityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -28,6 +28,18 @@
+ {
+ }
+ 
++const Interact*
++Interact::toInteract(void) const
++{
++  return this;
++}
++
++Interact*
++Interact::toInteract(void)
++{
++  return this;
++}
++
+ void
+ Interact::accept(ModelVisitor&amp; visitor)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -27,6 +27,9 @@
+   Interact(const std::string&amp; name, unsigned numParents);
+   virtual ~Interact(void);
+ 
++  virtual const Interact* toInteract(void) const;
++  virtual Interact* toInteract(void);
++
+   /// Double dispatch helper for the multibody system visitor
+   virtual void accept(ModelVisitor&amp; visitor);
+   /// Double dispatch helper for the multibody system visitor
+@@ -45,6 +48,18 @@
+     OpenFDMAssert(id &lt; mParents.size());
+     return mParents[id];
+   }
++  bool isChildOf(const RigidBody* const rigidBody) const
++  {
++    if (!rigidBody)
++      return false;
++    ParentList::const_iterator it = mParents.begin();
++    while (it != mParents.end()) {
++      if ((*it) == rigidBody)
++        return true;
++      ++it;
++    }
++    return false;
++  }
+ 
+ private:
+   bool attachTo(RigidBody* rigidBody, bool upstream);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -73,6 +73,18 @@
+   return 0;
+ }
+ 
++const Interact*
++Model::toInteract(void) const
++{
++  return 0;
++}
++
++Interact*
++Model::toInteract(void)
++{
++  return 0;
++}
++
+ const Joint*
+ Model::toJoint(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -28,6 +28,7 @@
+ 
+ class Input;
+ class Output;
++class Interact;
+ class Joint;
+ class MobileRootJoint;
+ 
+@@ -57,6 +58,9 @@
+   virtual const Output* toOutput(void) const;
+   virtual Output* toOutput(void);
+ 
++  virtual const Interact* toInteract(void) const;
++  virtual Interact* toInteract(void);
++
+   virtual const Joint* toJoint(void) const;
+   virtual Joint* toJoint(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -307,8 +307,10 @@
+ }
+ 
+ bool
+-ModelGroup::appendDependecies(const Model* firstModel, Model* model, ModelList&amp; newList)
++ModelGroup::appendModel(const Model* firstModel, SharedPtr&lt;Model&gt; model,
++                        ModelList&amp; newList)
+ {
++  Interact* interact = model-&gt;toInteract();
+   Joint* joint = model-&gt;toJoint();
+   if (joint) {
+     for (;;) {
+@@ -317,23 +319,34 @@
+         Joint* joint2 = (*it)-&gt;toJoint();
+         if (joint2 &amp;&amp; dependsOnMultiBody(joint, joint2))
+           break;
++
++        Interact* interact2 = (*it)-&gt;toInteract();
++        if (interact2 &amp;&amp; interact2-&gt;isChildOf(joint-&gt;getOutboardBody())
++            &amp;&amp; !interact2-&gt;getMultiBodyAcceleration())
++          break;
++
+         ++it;
+       }
+       if (it == mModels.end())
+         break;
+ 
++      // FIXME: does not work in this algorithm
++      // Detect a circular dependency.
++//       if (*it == firstModel) {
++//         Log(Model, Warning)
++//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
++//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
++//         return false;
++//       }
++
+       // We need to store that one here since the iterator possibly invalidates
+       // during the next append dependency call
+       SharedPtr&lt;Model&gt; tmpModel = *it;
+       mModels.erase(it);
+       
+       // Now recurse into that model.
+-      if (!appendDependecies(firstModel, tmpModel, newList))
++      if (!appendModel(firstModel, tmpModel, newList))
+         return false;
+- 
+-      // Finally, past all the dependent models are already in the list,
+-      // push that one in question.
+-      newList.push_back(tmpModel);
+     }
+   }
+ 
+@@ -349,63 +362,72 @@
+       ++it;
+     }
+     if (it != mModels.end()) {
++      // FIXME: does not work in this algorithm
++      // Detect a circular dependency.
++//       if (*it == firstModel) {
++//         Log(Model, Warning)
++//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
++//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
++//         return false;
++//       }
++
+       // We need to store that one here since the iterator possibly invalidates
+       // during the next append dependency call
+       SharedPtr&lt;Model&gt; tmpModel = *it;
+       mModels.erase(it);
+-      
++
+       // Now recurse into that model.
+-      if (!appendDependecies(firstModel, tmpModel, newList))
++      if (!appendModel(firstModel, tmpModel, newList))
+         return false;
+-      
+-      // Finally, past all the dependent models are already in the list,
+-      // push that one in question.
+-      newList.push_back(tmpModel);
+     }
+   }
+ 
+   // If the model in question does not have dependencies, stop.
+-  if (!model-&gt;getDirectFeedThrough())
+-    return true;
++  if (model-&gt;getDirectFeedThrough() || joint) {
+ 
+-  // Check, all inputs for dependencies.
+-  unsigned numInputs = model-&gt;getNumInputPorts();
+-  for (unsigned i = 0; i &lt; numInputs; ++i) {
+-    // Determine the model which is the source for this port
+-    Port* port = model-&gt;getInputPort(i);
+-
+-    // Check if it is still in the list to be scheduled.
+-    ModelList::iterator it = mModels.begin();
+-    while (it != mModels.end()) {
+-      if (dependsOn(port, *it))
+-        break;
+-      ++it;
++    // Check, all inputs for dependencies.
++    unsigned numInputs = model-&gt;getNumInputPorts();
++    for (unsigned i = 0; i &lt; numInputs; ++i) {
++      // Determine the model which is the source for this port
++      Port* port = model-&gt;getInputPort(i);
++      
++      // Check if it is still in the list to be scheduled.
++      ModelList::iterator it = mModels.begin();
++      while (it != mModels.end()) {
++        /// Horrible special case for now:
++        /// Output's from joints are only state dependent,
++        /// thus these 'output ports' do not have direct feedthrough:
++        /// Possible workarounds: extra sensor models or direct feedthrough
++        /// is a property of the port ...
++        Joint* joint2 = (*it)-&gt;toJoint();
++        if (dependsOn(port, *it) &amp;&amp; !joint2)
++          break;
++        ++it;
++      }
++      if (it == mModels.end())
++        continue;
++      
++      // FIXME: does not work in this algorithm
++      // Detect a circular dependency.
++//       if (*it == firstModel) {
++//         Log(Model, Warning)
++//           &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
++//           &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
++//         return false;
++//       }
++      
++      // We need to store that one here since the iterator possibly invalidates
++      // during the next append dependency call
++      SharedPtr&lt;Model&gt; tmpModel = *it;
++      mModels.erase(it);
++      
++      // Now recurse into that model.
++      if (!appendModel(firstModel, tmpModel, newList))
++        return false;
+     }
+-    if (it == mModels.end())
+-      continue;
+-
+-    // Detect a circular dependency.
+-    if (*it == firstModel) {
+-      Log(Model, Warning)
+-        &lt;&lt; &quot;Detected circilar model dependency.\nRunning with a sample &quot;
+-        &quot;delay at input of \&quot;&quot; &lt;&lt; (*it)-&gt;getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; endl;
+-      return false;
+-    }
+-
+-    // We need to store that one here since the iterator possibly invalidates
+-    // during the next append dependency call
+-    SharedPtr&lt;Model&gt; tmpModel = *it;
+-    mModels.erase(it);
+-
+-    // Now recurse into that model.
+-    if (!appendDependecies(firstModel, tmpModel, newList))
+-      return false;
+- 
+-    // Finally, past all the dependent models are already in the list,
+-    // push that one in question.
+-    newList.push_back(tmpModel);
+   }
+ 
++  newList.push_back(model);
+   return true;
+ }
+ 
+@@ -413,14 +435,14 @@
+ ModelGroup::sortModels(void)
+ {
+   // TODO: use better sort algorithm.
++  /// erhm, FIXME: This is a horrible sort thing!!!
+   ModelList newList;
+   while (!mModels.empty()) {
+-    if (!appendDependecies(mModels.front(), mModels.front(), newList))
++    SharedPtr&lt;Model&gt; tmpModel = mModels.front();
++    mModels.erase(mModels.begin());
++
++    if (!appendModel(tmpModel, tmpModel, newList))
+       return false;
+-    // Finally, past all the dependent models are already in the list,
+-    // push that one in question.
+-    newList.push_back(mModels.front());
+-    mModels.erase(mModels.begin());
+   }
+   // Now the new ordered list is the current one.
+   mModels.swap(newList);
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -14,6 +14,8 @@
+ 
+ namespace OpenFDM {
+ 
++class Joint;
++
+ class ModelGroup
+   : public Model {
+ public:
+@@ -75,8 +77,8 @@
+   /// interact1 is higher in the tree of multibody models
+   static bool dependsOnMultiBody(Joint* joint1, Joint* joint2);
+ 
+-  bool appendDependecies(const Model* firstModel, Model* model,
+-                         ModelList&amp; newList);
++  bool appendModel(const Model* firstModel, SharedPtr&lt;Model&gt; model,
++                   ModelList&amp; newList);
+   /// Sorts the models depending their dependencies
+   bool sortModels(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -24,6 +24,11 @@
+ 
+   mPrismaticJointFrame = new PrismaticJointFrame(name);
+ 
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;jointForce&quot;);
++
++  // Since these output ports are just fed by the current state of the
++  // multibody system, we do not have a direct feedthrough model
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, this, &amp;PrismaticJoint::getJointPos);
+   setOutputPort(1, &quot;jointVel&quot;, this, &amp;PrismaticJoint::getJointVel);
+@@ -33,6 +38,19 @@
+ {
+ }
+ 
++bool
++PrismaticJoint::init(void)
++{
++  /// Check if we have an input port connected to the joint force ...
++  if (getInputPort(0)-&gt;isConnected())
++    mJointForcePort = getInputPort(0)-&gt;toRealPortHandle();
++  else
++    mJointForcePort = 0;
++
++  recheckTopology();
++  return Joint::init();
++}
++
+ void
+ PrismaticJoint::recheckTopology(void)
+ {
+@@ -110,7 +128,10 @@
+   // That projects away tha components where the degrees of freedom
+   // of the joint are.
+   CartesianJointFrame&lt;1&gt;::VectorN tau;
+-  tau(1) = getJointForce();
++  if (mJointForcePort.isConnected()) {
++    tau(1) = mJointForcePort.getRealValue();
++  } else
++    tau.clear();
+   mPrismaticJointFrame-&gt;jointArticulation(artI, artF, outF, outI, tau);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -26,8 +26,7 @@
+   PrismaticJoint(const std::string&amp; name);
+   virtual ~PrismaticJoint(void);
+ 
+-  virtual bool init(void)
+-  { recheckTopology(); return Joint::init(); }
++  virtual bool init(void);
+ 
+   virtual void recheckTopology(void);
+ 
+@@ -59,22 +58,6 @@
+    */
+   void setPosition(const Vector3&amp; position);
+ 
+-  const LineForce* getLineForce(void) const
+-  { return mLineForce; }
+-  LineForce* getLineForce(void)
+-  { return mLineForce; }
+-  void setLineForce(LineForce* lineForce)
+-  { mLineForce = lineForce; }
+-
+-  real_type getJointForce(void)
+-  {
+-    if (!mLineForce)
+-      return 0;
+-    
+-    mLineForce-&gt;computeForce(getJointPos(), getJointVel());
+-    return mLineForce-&gt;getForce();
+-  }
+-
+ private:
+   /** Computes the inboard articulated inertia and force for
+       this articulated body. It is part of the articulated body algorithm.
+@@ -83,15 +66,12 @@
+                                  const SpatialInertia&amp; outI,
+                                  const Vector6&amp; outF);
+ 
+-  /** Methods for the OpenFDM::Part.
+-   */
+   virtual void setState(const StateStream&amp; state);
+   virtual void getState(StateStream&amp; state) const;
+   virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+-  /** The direct joint interaction force
+-   */
+-  SharedPtr&lt;LineForce&gt; mLineForce;
++  /// The intput port which might provide some joint internal force
++  RealPortHandle mJointForcePort;
+ 
+   /// The frame of the mobile root
+   SharedPtr&lt;PrismaticJointFrame&gt; mPrismaticJointFrame;
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-31 09:56:49 UTC (rev 146)
+@@ -24,6 +24,9 @@
+ 
+   mRevoluteJointFrame = new RevoluteJointFrame(name);
+ 
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;jointForce&quot;);
++
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, this, &amp;RevoluteJoint::getJointPos);
+   setOutputPort(1, &quot;jointVel&quot;, this, &amp;RevoluteJoint::getJointVel);
+@@ -33,6 +36,19 @@
+ {
+ }
+ 
++bool
++RevoluteJoint::init(void)
++{
++  /// Check if we have an input port connected to the joint force ...
++  if (getInputPort(0)-&gt;isConnected())
++    mJointForcePort = getInputPort(0)-&gt;toRealPortHandle();
++  else
++    mJointForcePort = 0;
++
++  recheckTopology();
++  return Joint::init();
++}
++
+ void
+ RevoluteJoint::recheckTopology(void)
+ {
+@@ -107,7 +123,12 @@
+                                  const Vector6&amp; outF)
+ {
+   CartesianJointFrame&lt;1&gt;::VectorN tau;
+-  tau(1) = getJointForce();
++  if (mJointForcePort.isConnected()) {
++    tau(1) = mJointForcePort.getRealValue();
++  } else
++    tau.clear();
++  /// FIXME the old obsolete joint force computation
++  tau(1) += getJointForce();
+   mRevoluteJointFrame-&gt;jointArticulation(artI, artF, outF, outI, tau);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-31 09:56:02 UTC (rev 145)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-31 09:56:49 UTC (rev 146)
+@@ -26,8 +26,7 @@
+   RevoluteJoint(const std::string&amp; name);
+   virtual ~RevoluteJoint(void);
+ 
+-  virtual bool init(void)
+-  { recheckTopology(); return Joint::init(); }
++  virtual bool init(void);
+ 
+   virtual void recheckTopology(void);
+ 
+@@ -93,6 +92,9 @@
+    */
+   SharedPtr&lt;LineForce&gt; mLineForce;
+ 
++  /// The intput port which might provide some joint internal force
++  RealPortHandle mJointForcePort;
++
+   /// The frame of the mobile root
+   SharedPtr&lt;RevoluteJointFrame&gt; mRevoluteJointFrame;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000129.html">[OpenFDM-svn] r145 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000131.html">[OpenFDM-svn] r147 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#130">[ date ]</a>
+              <a href="thread.html#130">[ thread ]</a>
+              <a href="subject.html#130">[ subject ]</a>
+              <a href="author.html#130">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

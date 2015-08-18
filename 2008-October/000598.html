@@ -1,0 +1,178 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r629 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r629%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810171253.m9HCrbO2019808%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000597.html">
+   <LINK REL="Next"  HREF="000599.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r629 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r629%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810171253.m9HCrbO2019808%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r629 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct 17 14:53:37 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000597.html">[OpenFDM-svn] r628 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000599.html">[OpenFDM-svn] r630 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#598">[ date ]</a>
+              <a href="thread.html#598">[ thread ]</a>
+              <a href="subject.html#598">[ subject ]</a>
+              <a href="author.html#598">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-17 14:53:37 +0200 (Fri, 17 Oct 2008)
+New Revision: 629
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+Log:
+Remove Referenced base from the visitors.
+
+M    src/OpenFDM/NodeVisitor.h
+M    src/OpenFDM/System.h
+M    src/OpenFDM/ConstNodeVisitor.h
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-17 05:38:03 UTC (rev 628)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-17 12:53:37 UTC (rev 629)
+@@ -7,7 +7,6 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
+-#include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -28,7 +27,7 @@
+ class NumericPortInfo;
+ class MechanicLinkInfo;
+ 
+-class ConstNodeVisitor : public Referenced {
++class ConstNodeVisitor {
+ public:
+   virtual ~ConstNodeVisitor();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-17 05:38:03 UTC (rev 628)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-17 12:53:37 UTC (rev 629)
+@@ -7,7 +7,6 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
+-#include &quot;Referenced.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -28,7 +27,7 @@
+ class NumericPortInfo;
+ class MechanicLinkInfo;
+ 
+-class NodeVisitor : public Referenced {
++class NodeVisitor {
+ public:
+   virtual ~NodeVisitor();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-17 05:38:03 UTC (rev 628)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-17 12:53:37 UTC (rev 629)
+@@ -973,23 +973,27 @@
+ }
+ 
+ void
+-System::attach(SystemOutput* systemLog)
++System::attach(SystemOutput* systemOutput)
+ {
+-  mSystemOutputList.push_back(systemLog);
++  if (!systemOutput)
++    return;
++  mSystemOutputList.push_back(systemOutput);
+   if (!mAbstractSystem)
+     return;
+-  systemLog-&gt;setSystem(this);
++  systemOutput-&gt;setSystem(this);
+ }
+ 
+ void
+-System::detach(SystemOutput* systemLog)
++System::detach(SystemOutput* systemOutput)
+ {
++  if (!systemOutput)
++    return;
+   SystemOutputList::iterator i = mSystemOutputList.begin();
+   while (i != mSystemOutputList.end()) {
+-    if (*i == systemLog) {
++    if (*i == systemOutput) {
+       i = mSystemOutputList.erase(i);
+       if (mAbstractSystem)
+-        systemLog-&gt;setSystem(0);
++        systemOutput-&gt;setSystem(0);
+     } else
+       ++i;
+   }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-17 05:38:03 UTC (rev 628)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-17 12:53:37 UTC (rev 629)
+@@ -56,8 +56,8 @@
+   const AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath) const;
+   AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath);
+ 
+-  void attach(SystemOutput* systemLog);
+-  void detach(SystemOutput* systemLog);
++  void attach(SystemOutput* systemOutput);
++  void detach(SystemOutput* systemOutput);
+ 
+ private:
+   class NodeInstanceCollector;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000597.html">[OpenFDM-svn] r628 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000599.html">[OpenFDM-svn] r630 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#598">[ date ]</a>
+              <a href="thread.html#598">[ thread ]</a>
+              <a href="subject.html#598">[ subject ]</a>
+              <a href="author.html#598">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

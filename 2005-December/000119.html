@@ -1,0 +1,297 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r135 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r135%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512281050.jBSAoSop014170%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000118.html">
+   <LINK REL="Next"  HREF="000120.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r135 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r135%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512281050.jBSAoSop014170%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r135 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Dec 28 11:50:28 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000118.html">[OpenFDM-svn] r134 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000120.html">[OpenFDM-svn] r136 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#119">[ date ]</a>
+              <a href="thread.html#119">[ thread ]</a>
+              <a href="subject.html#119">[ subject ]</a>
+              <a href="author.html#119">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-28 11:50:23 +0100 (Wed, 28 Dec 2005)
+New Revision: 135
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/MobileRootJointFrame.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Move the Free joint acceleration logic into an own frame
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-28 10:28:44 UTC (rev 134)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.cpp	2005-12-28 10:50:23 UTC (rev 135)
+@@ -13,13 +13,14 @@
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;RootFrame.h&quot;
++#include &quot;MobileRootJointFrame.h&quot;
+ #include &quot;FreeJoint.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ FreeJoint::FreeJoint(const std::string&amp; name)
+   : Joint(name),
+-    mFrame(new FreeFrame(name))
++    mFrame(new MobileRootJointFrame(name))
+ {
+   setNumContinousStates(13);
+   addSampleTime(SampleTime::Continous);
+@@ -82,6 +83,36 @@
+ }
+ 
+ void
++FreeJoint::setRelVel(const Vector6&amp; vel)
++{
++  mFrame-&gt;setRelVel(vel);
++}
++
++void
++FreeJoint::setLinearRelVel(const Vector3&amp; vel)
++{
++  mFrame-&gt;setLinearRelVel(vel);
++}
++
++void
++FreeJoint::setAngularRelVel(const Vector3&amp; vel)
++{
++  mFrame-&gt;setAngularRelVel(vel);
++}
++
++void
++FreeJoint::setRefPosition(const Vector3&amp; p)
++{
++  mFrame-&gt;setRefPosition(p);
++}
++
++void
++FreeJoint::setRefOrientation(const Quaternion&amp; o)
++{
++  mFrame-&gt;setRefOrientation(o);
++}
++
++void
+ FreeJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+                              const SpatialInertia&amp; outI,
+                              const Vector6&amp; outF)
+@@ -90,24 +121,7 @@
+   artF.clear();
+ 
+   Log(ArtBody, Debug) &lt;&lt; &quot;FreeJoint::computeRelVelDot():\n&quot; &lt;&lt; outI &lt;&lt; endl;
+-
+-  // Assumption: body is small compared to the distance to the planets
+-  // center of mass. That means gravity could be considered equal for the whole
+-  // vehicle.
+-  // See Featherstone, Orin: Equations and Algorithms
+-  Vector3 ga = mGravity-&gt;gravityAccel(mFrame-&gt;getRefPosition());
+-  Vector6 grav = Vector6(Vector3::zeros(), mFrame-&gt;rotFromRef(ga));
+-
+-  Log(ArtBody, Debug) &lt;&lt; &quot;grav = &quot; &lt;&lt; trans(grav) &lt;&lt; endl
+-                      &lt;&lt; &quot;solve = &quot; &lt;&lt; trans(solve(outI, outF)) &lt;&lt; endl
+-                      &lt;&lt; &quot;parent spatial accel = &quot;
+-                      &lt;&lt; trans(mFrame-&gt;getParentSpAccel()) &lt;&lt; endl
+-                      &lt;&lt; &quot;Hdot = &quot; &lt;&lt; trans(mFrame-&gt;getHdot()) &lt;&lt; endl;
+-  
+-  Vector6 accel = grav - solve(outI, outF)
+-    - mFrame-&gt;getParentSpAccel() - mFrame-&gt;getHdot();
+-  
+-  mFrame-&gt;setRelVelDot(accel);
++  mFrame-&gt;jointArticulation(outF, outI, mGravity);
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-28 10:28:44 UTC (rev 134)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-28 10:50:23 UTC (rev 135)
+@@ -18,6 +18,8 @@
+ 
+ namespace OpenFDM {
+ 
++class MobileRootJointFrame;
++
+ class FreeJoint
+   : public Joint {
+ public:
+@@ -29,21 +31,16 @@
+   virtual void recheckTopology(void);
+ 
+   /// Set the relative velocity.
+-  void setRelVel(const Vector6&amp; vel)
+-  { mFrame-&gt;setRelVel(vel); }
++  void setRelVel(const Vector6&amp; vel);
+   /// Set the relative velocity.
+-  void setLinearRelVel(const Vector3&amp; vel)
+-  { mFrame-&gt;setLinearRelVel(vel); }
++  void setLinearRelVel(const Vector3&amp; vel);
+   /// Set the relative velocity.
+-  void setAngularRelVel(const Vector3&amp; vel)
+-  { mFrame-&gt;setAngularRelVel(vel); }
++  void setAngularRelVel(const Vector3&amp; vel);
+ 
+   /// Set the reference position.
+-  void setRefPosition(const Vector3&amp; p)
+-  { mFrame-&gt;setRefPosition(p); }
++  void setRefPosition(const Vector3&amp; p);
+   /// Set the reference orientation.
+-  void setRefOrientation(const Quaternion&amp; o)
+-  { mFrame-&gt;setRefOrientation(o); }
++  void setRefOrientation(const Quaternion&amp; o);
+ 
+ private:
+   /** Plugin function for the articulated body algorithm.
+@@ -68,7 +65,7 @@
+   SharedPtr&lt;const Gravity&gt; mGravity;
+ 
+   /// The frame of the mobile root
+-  SharedPtr&lt;FreeFrame&gt; mFrame;
++  SharedPtr&lt;MobileRootJointFrame&gt; mFrame;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-28 10:28:44 UTC (rev 134)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-28 10:50:23 UTC (rev 135)
+@@ -82,6 +82,7 @@
+   MaxModel.h \
+   MidpointRule.h \
+   MinModel.h \
++  MobileRootJointFrame.h \
+   Model.h \
+   ModelGroup.h \
+   ModelVisitor.h \
+
+Added: trunk/OpenFDM/src/OpenFDM/MobileRootJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJointFrame.h	2005-12-28 10:28:44 UTC (rev 134)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJointFrame.h	2005-12-28 10:50:23 UTC (rev 135)
+@@ -0,0 +1,63 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MobileRootJointFrame_H
++#define OpenFDM_MobileRootJointFrame_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Frame.h&quot;
++
++namespace OpenFDM {
++
++class MobileRootJointFrame :
++  public Frame {
++public:
++  MobileRootJointFrame(const std::string&amp; name) :
++    Frame(name),
++    mRelVelDot(Vector6::zeros())
++  { }
++  virtual ~MobileRootJointFrame(void)
++  { }
++
++  /// The interface routine for the Frame,
++  /// returns the relative velocity derivative of this frame
++  virtual const Vector6&amp; getRelVelDot(void) const
++  { return mRelVelDot; }
++
++  /// Compute the articulated force and inertia past inboard to that joint
++  void jointArticulation(const Vector6&amp; outF, const SpatialInertia&amp; outI,
++                         const Gravity* gravity)
++  {
++    Log(ArtBody, Debug) &lt;&lt; &quot;MobileRootJointFrame::jointArticulation()&quot; &lt;&lt; endl;
++
++    // Assumption: body is small compared to the distance to the planets
++    // center of mass. That means gravity could be considered equal for the
++    // whole vehicle.
++    // See Featherstone, Orin: Equations and Algorithms
++    Vector3 ga = gravity-&gt;gravityAccel(getRefPosition());
++    Vector6 grav = Vector6(Vector3::zeros(), rotFromRef(ga));
++
++    mRelVelDot = grav - solve(outI, outF) - getParentSpAccel() - getHdot();
++    setAccelDirty();
++  }
++
++  using Frame::setPosition;
++  using Frame::setRefPosition;
++  using Frame::setOrientation;
++  using Frame::setRefOrientation;
++  using Frame::setRelVel;
++  using Frame::setLinearRelVel;
++  using Frame::setAngularRelVel;
++
++private:
++  /// The derivative of the frame velocity
++  Vector6 mRelVelDot;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/MobileRootJointFrame.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000118.html">[OpenFDM-svn] r134 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000120.html">[OpenFDM-svn] r136 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#119">[ date ]</a>
+              <a href="thread.html#119">[ thread ]</a>
+              <a href="subject.html#119">[ subject ]</a>
+              <a href="author.html#119">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

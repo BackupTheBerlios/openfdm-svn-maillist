@@ -1,0 +1,571 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r65 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r65%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511171944.jAHJipqD009799%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000051.html">
+   <LINK REL="Next"  HREF="000053.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r65 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r65%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511171944.jAHJipqD009799%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r65 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Nov 17 20:44:51 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000051.html">[OpenFDM-svn] r64 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000053.html">[OpenFDM-svn] r67 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#52">[ date ]</a>
+              <a href="thread.html#52">[ thread ]</a>
+              <a href="subject.html#52">[ subject ]</a>
+              <a href="author.html#52">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-17 20:44:38 +0100 (Thu, 17 Nov 2005)
+New Revision: 65
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/SampleTime.h
+   trunk/OpenFDM/src/OpenFDM/TaskInfo.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Reorganize.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-17 19:08:25 UTC (rev 64)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-17 19:44:38 UTC (rev 65)
+@@ -99,6 +99,7 @@
+   RigidBody.h \
+   Rotation.h \
+   RootFrame.h \
++  SampleTime.h \
+   Saturation.h \
+   Sensor.h \
+   SimpleContact.h \
+@@ -106,6 +107,7 @@
+   Summer.h \
+   System.h \
+   Table.h \
++  TaskInfo.h \
+   TimeDerivative.h \
+   TransferFunction.h \
+   Transform.h \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-17 19:08:25 UTC (rev 64)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-17 19:44:38 UTC (rev 65)
+@@ -13,6 +13,8 @@
+ #include &quot;Object.h&quot;
+ #include &quot;Property.h&quot;
+ #include &quot;Vector.h&quot;
++#include &quot;SampleTime.h&quot;
++#include &quot;TaskInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -20,205 +22,6 @@
+ class Input;
+ class Output;
+ 
+-/// The discrete sample time for this model
+-/// There are special meanings encoded into that value:
+-/// - positive real number, this is the discrete sample time itself
+-/// - zero, continous updates
+-/// - otherwise, inherited from its parent model group
+-class SampleTime {
+-public:
+-  /// Default constructor, defaults to discrete sample time
+-  SampleTime(void) : mSampleTime(0) {}
+-  /// Constructor with given sample time
+-  SampleTime(real_type sampleTime) : mSampleTime(sampleTime) {}
+-  /// Returns true if the sample time is a continous sample time
+-  bool isContinous(void) const
+-  { return mSampleTime == 0; }
+-  /// Returns true if the sample time is discrete
+-  bool isDiscrete(void) const
+-  { return 0 &lt; mSampleTime; }
+-  /// Returns true if the sample time is just inheritted
+-  /// FIXME: empty sample time list??
+-  bool isInherited(void) const
+-  { return mSampleTime == -1; }
+-  /// Returns true if the task is a per timestep task
+-  bool isPerTimestep(void) const
+-  { return mSampleTime == -2; }
+-  /// Returns the actual sample time
+-  real_type getSampleTime(void) const
+-  { return mSampleTime; }
+-
+-  /// Returns true if th sample time is valid
+-  bool isValid(void) const
+-  { return isContinous() || isDiscrete() || isInherited() || isPerTimestep(); }
+-
+-  bool operator==(const SampleTime&amp; st) const
+-  { return mSampleTime == st.mSampleTime; }
+-  bool operator!=(const SampleTime&amp; st) const
+-  { return mSampleTime != st.mSampleTime; }
+-
+-  static const SampleTime PerTimestep;
+-  static const SampleTime Inherited;
+-  static const SampleTime Continous;
+-
+-private:
+-  real_type mSampleTime;
+-};
+-
+-class SampleTimeSet {
+-  typedef std::vector&lt;SampleTime&gt; SampleTimeData;
+-
+-public:
+-  typedef SampleTimeData::iterator iterator;
+-  typedef SampleTimeData::const_iterator const_iterator;
+-
+-  iterator begin(void)
+-  { return mSampleTimes.begin(); }
+-  iterator end(void)
+-  { return mSampleTimes.end(); }
+-
+-  const_iterator begin(void) const
+-  { return mSampleTimes.begin(); }
+-  const_iterator end(void) const
+-  { return mSampleTimes.end(); }
+-
+-  bool empty(void) const
+-  { return mSampleTimes.empty(); }
+-
+-  bool addSampleTime(const SampleTime&amp; sampleTime)
+-  {
+-    OpenFDMAssert(sampleTime.isValid());
+-    if (!sampleTime.isValid())
+-      return false;
+-    SampleTimeData::iterator it;
+-    for (it = mSampleTimes.begin(); it != mSampleTimes.end(); ++it) {
+-      // If the sample time is already included don't include twice
+-      if (it-&gt;getSampleTime() == sampleTime.getSampleTime())
+-        return true;
+-      // If we found a sample time bigger than the new one, insert the
+-      // new one before it
+-      if (sampleTime.getSampleTime() &lt; it-&gt;getSampleTime())
+-        break;
+-    }
+-    // insert before it
+-    mSampleTimes.insert(it, sampleTime);
+-    return true;
+-  }
+-  bool removeSampleTime(const SampleTime&amp; sampleTime)
+-  {
+-    OpenFDMAssert(sampleTime.isValid());
+-    if (!sampleTime.isValid())
+-      return false;
+-    SampleTimeData::iterator it;
+-    for (it = mSampleTimes.begin(); it != mSampleTimes.end(); ++it) {
+-      // If the sample time is already included don't include twice
+-      if (it-&gt;getSampleTime() == sampleTime.getSampleTime()) {
+-        mSampleTimes.erase(it);
+-        return true;
+-      }
+-    }
+-    return false;
+-  }
+-
+-  void clear(void)
+-  { mSampleTimes.resize(0); }
+-
+-private:
+-  /// Contains an ascending sorted vector of sample times belonging
+-  /// to the current set
+-  // FIXME May be std::set is a good alternative?
+-  SampleTimeData mSampleTimes;
+-};
+-
+-template&lt;typename char_type, typename traits_type&gt; 
+-inline
+-std::basic_ostream&lt;char_type, traits_type&gt;&amp;
+-operator&lt;&lt;(std::basic_ostream&lt;char_type, traits_type&gt;&amp; stream,
+-           const SampleTimeSet&amp; sts)
+-{
+-  stream &lt;&lt; &quot;{ &quot;;
+-  SampleTimeSet::const_iterator it;
+-  for (it = sts.begin(); it != sts.end(); ++it)
+-    stream &lt;&lt; it-&gt;getSampleTime() &lt;&lt; &quot; &quot;;
+-  stream &lt;&lt; &quot;}&quot;;
+-  return stream;
+-}
+-
+-inline
+-bool
+-nonZeroIntersection(const SampleTimeSet&amp; set1, const SampleTime&amp; sampleTime)
+-{
+-  SampleTimeSet::const_iterator it;
+-  for (it = set1.begin(); it != set1.end(); ++it) {
+-    if (*it == sampleTime)
+-      return true;
+-  }
+-  return false;
+-}
+-
+-inline
+-bool
+-nonZeroIntersection(const SampleTime&amp; sampleTime, const SampleTimeSet&amp; set1)
+-{
+-  return nonZeroIntersection(set1, sampleTime);
+-}
+-
+-inline
+-bool
+-nonZeroIntersection(const SampleTimeSet&amp; set1, const SampleTimeSet&amp; set2)
+-{
+-  SampleTimeSet::const_iterator it1 = set1.begin();
+-  SampleTimeSet::const_iterator it2 = set2.begin();
+-  while (it1 != set1.end() &amp;&amp; it2 != set2.end()) {
+-    if (it1-&gt;getSampleTime() == it2-&gt;getSampleTime())
+-      return true;
+-    if (it1-&gt;getSampleTime() &lt; it2-&gt;getSampleTime())
+-      ++it1;
+-    else
+-      ++it2;
+-  }
+-  return false;
+-}
+-
+-class TaskInfo {
+-public:
+-  TaskInfo(void) :
+-    mSliceSize(0),
+-    mTime(0),
+-    mNumBasicSteps(0)
+-  {}
+-
+-  void setTime(real_type t)
+-  { mTime = t; }
+-  real_type getTime(void) const
+-  { return mTime; }
+-  
+-  void addSampleTime(const SampleTime&amp; sampleTime)
+-  { mSampleTimeSet.addSampleTime(sampleTime); }
+-
+-  void clear(void)
+-  { mSampleTimeSet.clear(); }
+-
+-  const SampleTimeSet&amp; getSampleTimeSet(void) const
+-  { return mSampleTimeSet; }
+-
+-  real_type getSliceSize(void) const
+-  { return mSliceSize; }
+-  void setSliceSize(real_type sliceSize)
+-  { mSliceSize = sliceSize; }
+-
+-  unsigned getNumBasicSteps(void) const
+-  { return mNumBasicSteps; }
+-  void setNumBasicSteps(unsigned numBasicSteps)
+-  { mNumBasicSteps = numBasicSteps; }
+-
+-private:
+-  SampleTimeSet mSampleTimeSet;
+-  real_type mSliceSize;
+-  real_type mTime;
+-  unsigned mNumBasicSteps;
+-};
+-
+ class Model
+   : public Object {
+ public:
+
+Added: trunk/OpenFDM/src/OpenFDM/SampleTime.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SampleTime.h	2005-11-17 19:08:25 UTC (rev 64)
++++ trunk/OpenFDM/src/OpenFDM/SampleTime.h	2005-11-17 19:44:38 UTC (rev 65)
+@@ -0,0 +1,177 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_SampleTime_H
++#define OpenFDM_SampleTime_H
++
++#include &lt;iosfwd&gt;
++#include &lt;vector&gt;
++
++#include &quot;Assert.h&quot;
++
++namespace OpenFDM {
++
++/// The discrete sample time for this model
++/// There are special meanings encoded into that value:
++/// - positive real number, this is the discrete sample time itself
++/// - zero, continous updates
++/// - otherwise, inherited from its parent model group
++class SampleTime {
++public:
++  /// Default constructor, defaults to discrete sample time
++  SampleTime(void) : mSampleTime(0) {}
++  /// Constructor with given sample time
++  SampleTime(real_type sampleTime) : mSampleTime(sampleTime) {}
++  /// Returns true if the sample time is a continous sample time
++  bool isContinous(void) const
++  { return mSampleTime == 0; }
++  /// Returns true if the sample time is discrete
++  bool isDiscrete(void) const
++  { return 0 &lt; mSampleTime; }
++  /// Returns true if the sample time is just inheritted
++  /// FIXME: empty sample time list??
++  bool isInherited(void) const
++  { return mSampleTime == -1; }
++  /// Returns true if the task is a per timestep task
++  bool isPerTimestep(void) const
++  { return mSampleTime == -2; }
++  /// Returns the actual sample time
++  real_type getSampleTime(void) const
++  { return mSampleTime; }
++
++  /// Returns true if th sample time is valid
++  bool isValid(void) const
++  { return isContinous() || isDiscrete() || isInherited() || isPerTimestep(); }
++
++  bool operator==(const SampleTime&amp; st) const
++  { return mSampleTime == st.mSampleTime; }
++  bool operator!=(const SampleTime&amp; st) const
++  { return mSampleTime != st.mSampleTime; }
++
++  static const SampleTime PerTimestep;
++  static const SampleTime Inherited;
++  static const SampleTime Continous;
++
++private:
++  real_type mSampleTime;
++};
++
++class SampleTimeSet {
++  typedef std::vector&lt;SampleTime&gt; SampleTimeData;
++
++public:
++  typedef SampleTimeData::iterator iterator;
++  typedef SampleTimeData::const_iterator const_iterator;
++
++  iterator begin(void)
++  { return mSampleTimes.begin(); }
++  iterator end(void)
++  { return mSampleTimes.end(); }
++
++  const_iterator begin(void) const
++  { return mSampleTimes.begin(); }
++  const_iterator end(void) const
++  { return mSampleTimes.end(); }
++
++  bool empty(void) const
++  { return mSampleTimes.empty(); }
++
++  bool addSampleTime(const SampleTime&amp; sampleTime)
++  {
++    OpenFDMAssert(sampleTime.isValid());
++    if (!sampleTime.isValid())
++      return false;
++    SampleTimeData::iterator it;
++    for (it = mSampleTimes.begin(); it != mSampleTimes.end(); ++it) {
++      // If the sample time is already included don't include twice
++      if (it-&gt;getSampleTime() == sampleTime.getSampleTime())
++        return true;
++      // If we found a sample time bigger than the new one, insert the
++      // new one before it
++      if (sampleTime.getSampleTime() &lt; it-&gt;getSampleTime())
++        break;
++    }
++    // insert before it
++    mSampleTimes.insert(it, sampleTime);
++    return true;
++  }
++  bool removeSampleTime(const SampleTime&amp; sampleTime)
++  {
++    OpenFDMAssert(sampleTime.isValid());
++    if (!sampleTime.isValid())
++      return false;
++    SampleTimeData::iterator it;
++    for (it = mSampleTimes.begin(); it != mSampleTimes.end(); ++it) {
++      // If the sample time is already included don't include twice
++      if (it-&gt;getSampleTime() == sampleTime.getSampleTime()) {
++        mSampleTimes.erase(it);
++        return true;
++      }
++    }
++    return false;
++  }
++
++  void clear(void)
++  { mSampleTimes.resize(0); }
++
++private:
++  /// Contains an ascending sorted vector of sample times belonging
++  /// to the current set
++  // FIXME May be std::set is a good alternative?
++  SampleTimeData mSampleTimes;
++};
++
++template&lt;typename char_type, typename traits_type&gt; 
++inline
++std::basic_ostream&lt;char_type, traits_type&gt;&amp;
++operator&lt;&lt;(std::basic_ostream&lt;char_type, traits_type&gt;&amp; stream,
++           const SampleTimeSet&amp; sts)
++{
++  stream &lt;&lt; &quot;{ &quot;;
++  SampleTimeSet::const_iterator it;
++  for (it = sts.begin(); it != sts.end(); ++it)
++    stream &lt;&lt; it-&gt;getSampleTime() &lt;&lt; &quot; &quot;;
++  stream &lt;&lt; &quot;}&quot;;
++  return stream;
++}
++
++inline
++bool
++nonZeroIntersection(const SampleTimeSet&amp; set1, const SampleTime&amp; sampleTime)
++{
++  SampleTimeSet::const_iterator it;
++  for (it = set1.begin(); it != set1.end(); ++it) {
++    if (*it == sampleTime)
++      return true;
++  }
++  return false;
++}
++
++inline
++bool
++nonZeroIntersection(const SampleTime&amp; sampleTime, const SampleTimeSet&amp; set1)
++{
++  return nonZeroIntersection(set1, sampleTime);
++}
++
++inline
++bool
++nonZeroIntersection(const SampleTimeSet&amp; set1, const SampleTimeSet&amp; set2)
++{
++  SampleTimeSet::const_iterator it1 = set1.begin();
++  SampleTimeSet::const_iterator it2 = set2.begin();
++  while (it1 != set1.end() &amp;&amp; it2 != set2.end()) {
++    if (it1-&gt;getSampleTime() == it2-&gt;getSampleTime())
++      return true;
++    if (it1-&gt;getSampleTime() &lt; it2-&gt;getSampleTime())
++      ++it1;
++    else
++      ++it2;
++  }
++  return false;
++}
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/SampleTime.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/TaskInfo.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TaskInfo.h	2005-11-17 19:08:25 UTC (rev 64)
++++ trunk/OpenFDM/src/OpenFDM/TaskInfo.h	2005-11-17 19:44:38 UTC (rev 65)
+@@ -0,0 +1,54 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_TaskInfo_H
++#define OpenFDM_TaskInfo_H
++
++#include &quot;Assert.h&quot;
++#include &quot;SampleTime.h&quot;
++
++namespace OpenFDM {
++
++class TaskInfo {
++public:
++  TaskInfo(void) :
++    mSliceSize(0),
++    mTime(0),
++    mNumBasicSteps(0)
++  {}
++
++  void setTime(real_type t)
++  { mTime = t; }
++  real_type getTime(void) const
++  { return mTime; }
++  
++  void addSampleTime(const SampleTime&amp; sampleTime)
++  { mSampleTimeSet.addSampleTime(sampleTime); }
++
++  void clear(void)
++  { mSampleTimeSet.clear(); }
++
++  const SampleTimeSet&amp; getSampleTimeSet(void) const
++  { return mSampleTimeSet; }
++
++  real_type getSliceSize(void) const
++  { return mSliceSize; }
++  void setSliceSize(real_type sliceSize)
++  { mSliceSize = sliceSize; }
++
++  unsigned getNumBasicSteps(void) const
++  { return mNumBasicSteps; }
++  void setNumBasicSteps(unsigned numBasicSteps)
++  { mNumBasicSteps = numBasicSteps; }
++
++private:
++  SampleTimeSet mSampleTimeSet;
++  real_type mSliceSize;
++  real_type mTime;
++  unsigned mNumBasicSteps;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/TaskInfo.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000051.html">[OpenFDM-svn] r64 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000053.html">[OpenFDM-svn] r67 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#52">[ date ]</a>
+              <a href="thread.html#52">[ thread ]</a>
+              <a href="subject.html#52">[ subject ]</a>
+              <a href="author.html#52">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

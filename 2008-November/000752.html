@@ -1,0 +1,248 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r783 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r783%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232041.mANKf5bK027922%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000751.html">
+   <LINK REL="Next"  HREF="000753.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r783 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r783%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811232041.mANKf5bK027922%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r783 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 23 21:41:05 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000751.html">[OpenFDM-svn] r782 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000753.html">[OpenFDM-svn] r784 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#752">[ date ]</a>
+              <a href="thread.html#752">[ thread ]</a>
+              <a href="subject.html#752">[ subject ]</a>
+              <a href="author.html#752">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-23 21:41:05 +0100 (Sun, 23 Nov 2008)
+New Revision: 783
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Limits.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Various changes in the environmental stuff.
+
+M    src/OpenFDM/AtmosphereSTD1976.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Limits.h
+M    src/OpenFDM/AtmosphereSTD1976.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp	2008-11-23 20:29:44 UTC (rev 782)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.cpp	2008-11-23 20:41:05 UTC (rev 783)
+@@ -8,9 +8,6 @@
+ #include &quot;Types.h&quot;
+ #include &quot;LogStream.h&quot;
+ #include &quot;Math.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Atmosphere.h&quot;
+-#include &quot;Environment.h&quot;
+ #include &lt;iostream&gt;
+ 
+ namespace OpenFDM {
+@@ -25,7 +22,7 @@
+ #define R_HAT           8314.32  // J/kgmol.K (gas const.)
+ 
+ AtmosphereSTD1976::AtmosphereSTD1976(void) :
+-  Atmosphere(R_HAT/MOL_WT),
++  AbstractAtmosphere(R_HAT/MOL_WT),
+   mSlPressure(101325),
+   mSlTemperature(288.15)
+ {
+@@ -44,8 +41,9 @@
+ }
+ 
+ AtmosphereData
+-AtmosphereSTD1976::getData(real_type alt) const
++AtmosphereSTD1976::getData(const real_type&amp; altitude) const
+ {
++  real_type alt = altitude;
+   // We cannot compute data for negative altitudes, just treat them as 0 alt
+   if (alt &lt; 0.0)
+     alt = 0.0;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h	2008-11-23 20:29:44 UTC (rev 782)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AtmosphereSTD1976.h	2008-11-23 20:41:05 UTC (rev 783)
+@@ -9,7 +9,7 @@
+ 
+ #include &quot;Types.h&quot;
+ #include &quot;Object.h&quot;
+-#include &quot;Atmosphere.h&quot;
++#include &quot;AbstractAtmosphere.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -17,7 +17,7 @@
+ // <A HREF="http://nssdc.gsfc.nasa.gov/space/model/atmos/atmos_index.html">http://nssdc.gsfc.nasa.gov/space/model/atmos/atmos_index.html</A>
+ // <A HREF="ftp://nssdcftp.gsfc.nasa.gov/models/">ftp://nssdcftp.gsfc.nasa.gov/models/</A>
+ 
+-class AtmosphereSTD1976 : public Atmosphere {
++class AtmosphereSTD1976 : public AbstractAtmosphere {
+ public:
+   AtmosphereSTD1976(void);
+   virtual ~AtmosphereSTD1976(void);
+@@ -35,7 +35,7 @@
+   { mSlTemperature = temperature; }
+ 
+   // Get the atmosphere data for a given height.
+-  virtual AtmosphereData getData(real_type alt) const;
++  virtual AtmosphereData getData(const real_type&amp; alt) const;
+ private:
+ 
+   static const real_type mHydrostaticConstant;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Limits.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Limits.h	2008-11-23 20:29:44 UTC (rev 782)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Limits.h	2008-11-23 20:41:05 UTC (rev 783)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_Limits_H
+ #define OpenFDM_Limits_H
+ 
++#include &lt;algorithm&gt;
+ #include &lt;limits&gt;
+ 
+ #include &quot;Types.h&quot;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:29:44 UTC (rev 782)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-23 20:41:05 UTC (rev 783)
+@@ -12,6 +12,7 @@
+ endif
+ 
+ OpenFDMCoreHEADERS = \
++  AbstractAtmosphere.h \
+   AbstractGravity.h \
+   AbstractInertial.h \
+   AbstractModel.h \
+@@ -23,6 +24,7 @@
+   Assert.h \
+   Atomic.h \
+   BoolStateInfo.h \
++  CentralMassGravity.cpp \
+   ConstNodeVisitor.h \
+   ContinousStateInfo.h \
+   ContinousStateInfoVector.h \
+@@ -33,7 +35,6 @@
+   DoPri5.h \
+   EllipticPlanet.h \
+   Environment.h \
+-  EnvironmentObject.h \
+   ExplicitAdams.h \
+   ExplicitEuler.h \
+   FlatPlanet.h \
+@@ -130,7 +131,9 @@
+   XMLDumpModelVisitor.h
+ 
+ OpenFDMCoreSOURCES = \
++  AbstractAtmosphere.cpp \
+   AbstractGravity.cpp \
++  AbstractGround.cpp \
+   AbstractInertial.cpp \
+   AbstractModel.cpp \
+   AbstractNodeContext.cpp \
+@@ -138,6 +141,7 @@
+   AbstractPlanet.cpp \
+   AbstractWind.cpp \
+   Assert.cpp \
++  AtmosphereSTD1976.cpp \
+   Atomic.cpp \
+   ConstNodeVisitor.cpp \
+   ContinousStateValue.cpp \
+@@ -184,30 +188,21 @@
+   Unit.cpp \
+   Variant.cpp
+ 
+-#   EnvironmentObject.cpp \
+-#   ReaderWriter.cpp \
+-#   Atmosphere.cpp \
+-#   AtmosphereSTD1976.cpp \
+-#   DefaultGravity.cpp \
+-#   DefaultGround.cpp \
+-#   Gravity.cpp \
+-#   Ground.cpp
++#   ReaderWriter.cpp
+ 
+ 
+ 
+ OpenFDMModelsHEADERS = \
+   AeroForce.h \
+   AirSpring.h \
+-  Atmosphere.h \
+   AtmosphereSTD1976.h \
+   Bias.h \
+   BinaryFunction.h \
+   CartesianJoint.h \
++  CentralMassGravity.h \
+   ConstModel.h \
+   Contact.h \
+   DeadBand.h \
+-  DefaultGravity.h \
+-  DefaultGround.h \
+   Delay.h \
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+@@ -215,8 +210,6 @@
+   FixedRootJoint.h \
+   Force.h \
+   Gain.h \
+-  Gravity.h \
+-  Ground.h \
+   Input.h \
+   Integrator.h \
+   Joint.h \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000751.html">[OpenFDM-svn] r782 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000753.html">[OpenFDM-svn] r784 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#752">[ date ]</a>
+              <a href="thread.html#752">[ thread ]</a>
+              <a href="subject.html#752">[ subject ]</a>
+              <a href="author.html#752">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

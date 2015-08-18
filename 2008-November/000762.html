@@ -1,0 +1,464 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r794 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r794%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811251937.mAPJb7ER002437%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000761.html">
+   <LINK REL="Next"  HREF="000763.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r794 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r794%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811251937.mAPJb7ER002437%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r794 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 25 20:37:07 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000761.html">[OpenFDM-svn] r793 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000763.html">[OpenFDM-svn] r795 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#762">[ date ]</a>
+              <a href="thread.html#762">[ thread ]</a>
+              <a href="subject.html#762">[ subject ]</a>
+              <a href="author.html#762">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-25 20:37:06 +0100 (Tue, 25 Nov 2008)
+New Revision: 794
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Function.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Reactivate spring damper models.
+
+M    OpenFDM/Makefile.am
+M    OpenFDM/LinearSpringDamper.cpp
+M    OpenFDM/AirSpring.h
+M    OpenFDM/ConstModel.h
+M    OpenFDM/AirSpring.cpp
+M    OpenFDM/LinearSpringDamper.h
+M    OpenFDM/Function.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.cpp	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.cpp	2008-11-25 19:37:06 UTC (rev 794)
+@@ -5,6 +5,7 @@
+ #include &quot;AirSpring.h&quot;
+ 
+ #include &lt;string&gt;
++#include &quot;PortValueList.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -20,6 +21,9 @@
+ 
+ AirSpring::AirSpring(const std::string&amp; name) :
+   Model(name),
++  mPositionPort(this, &quot;position&quot;, true),
++  mVelocityPort(this, &quot;velocity&quot;, true),
++  mForcePort(this, &quot;force&quot;),
+   mPushPressure(2e5),
+   mPullPressure(1e5),
+   mArea(0),
+@@ -29,47 +33,19 @@
+   mMaxDamperConstant(0),
+   mGamma(1.4)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;position&quot;);
+-  setInputPortName(1, &quot;velocity&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;force&quot;, this, &amp;AirSpring::getForce);
+ }
+ 
+ AirSpring::~AirSpring(void)
+ {
+ }
+ 
+-bool
+-AirSpring::init(void)
+-{
+-  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mPositionPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+-  if (!mVelocityPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  return Model::init();
+-}
+-
+ void
+-AirSpring::output(const TaskInfo&amp; taskInfo)
++AirSpring::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                  const ContinousStateValueVector&amp;,
++                  PortValueList&amp; portValues) const
+ {
+-  real_type position = mPositionPort.getRealValue();
+-  real_type vel = mVelocityPort.getRealValue();
++  real_type position = portValues[mPositionPort];
++  real_type vel = portValues[mVelocityPort];
+ 
+   real_type maxDisp = mMaxCompression - mMinCompression;
+   real_type pullDisp = mMaxCompression - position;
+@@ -86,22 +62,17 @@
+   real_type pushPressure = mPushPressure/(1-pow(pushDispRatio, mGamma));
+   
+   // The output force is the pressure difference times the piston area
+-  mForce = sign(maxDisp)*mArea*(pullPressure - pushPressure);
++  real_type force = sign(maxDisp)*mArea*(pullPressure - pushPressure);
+   // Add a position dependent damping force
+   // That sign of the area is just a handy hack to determine
+   // the polarity of the output value
+-  mForce += sign(mArea)*vel*interpolate(position,
+-                                        mMinCompression, mMinDamperConstant,
+-                                        mMaxCompression, mMaxDamperConstant);
++  force += sign(mArea)*vel*interpolate(position,
++                                       mMinCompression, mMinDamperConstant,
++                                       mMaxCompression, mMaxDamperConstant);
++  portValues[mForcePort] = force;
+ }
+ 
+ const real_type&amp;
+-AirSpring::getForce(void) const
+-{
+-  return mForce;
+-}
+-
+-const real_type&amp;
+ AirSpring::getPushPressure(void) const
+ {
+   return mPushPressure;
+@@ -185,14 +156,14 @@
+   mMinDamperConstant = minDamperConstant;
+ }
+ 
+-real_type
++const real_type&amp;
+ AirSpring::getGamma(void) const
+ {
+   return mGamma;
+ }
+ 
+ void
+-AirSpring::setGamma(real_type gamma)
++AirSpring::setGamma(const real_type&amp; gamma)
+ {
+   mGamma = gamma;
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.h	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AirSpring.h	2008-11-25 19:37:06 UTC (rev 794)
+@@ -6,6 +6,8 @@
+ #define OpenFDM_AirSpring_H
+ 
+ #include &quot;Model.h&quot;
++#include &quot;RealInputPort.h&quot;
++#include &quot;RealOutputPort.h&quot;
+ #include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+@@ -17,11 +19,10 @@
+   AirSpring(const std::string&amp; name);
+   virtual ~AirSpring(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
+ 
+-  const real_type&amp; getForce(void) const;
+-
+   const real_type&amp; getPushPressure(void) const;
+   void setPushPressure(const real_type&amp; pushPressure);
+ 
+@@ -43,10 +44,14 @@
+   const real_type&amp; getMinDamperConstant(void) const;
+   void setMinDamperConstant(const real_type&amp; minDamperConstant);
+ 
+-  real_type getGamma(void) const;
+-  void setGamma(real_type gamma);
++  const real_type&amp; getGamma(void) const;
++  void setGamma(const real_type&amp; gamma);
+ 
+ private:
++  RealInputPort mPositionPort;
++  RealInputPort mVelocityPort;
++  RealOutputPort mForcePort;
++
+   real_type mPushPressure;
+   real_type mPullPressure;
+ 
+@@ -59,13 +64,6 @@
+   real_type mMinDamperConstant;
+ 
+   real_type mGamma;
+-
+-  real_type mForce;
+-
+-  /// The intput port which must provide the position
+-  RealPortHandle mPositionPort;
+-  /// The intput port which must provide the velocity
+-  RealPortHandle mVelocityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstModel.h	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstModel.h	2008-11-25 19:37:06 UTC (rev 794)
+@@ -13,8 +13,8 @@
+ class ConstModel : public Model {
+   OPENFDM_OBJECT(ConstModel, Model);
+ public:
+-  ConstModel(const std::string&amp; name, const Matrix&amp; value = Matrix());
+-  ConstModel(const std::string&amp; name, const real_type&amp; value);
++  ConstModel(const std::string&amp; name, const Matrix&amp; value);
++  ConstModel(const std::string&amp; name, const real_type&amp; value = real_type(0));
+   virtual ~ConstModel(void);
+ 
+   virtual void output(const Task&amp;,const DiscreteStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Function.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Function.h	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Function.h	2008-11-25 19:37:06 UTC (rev 794)
+@@ -11,7 +11,7 @@
+ 
+ namespace OpenFDM {
+ 
+-// FIXME: aplit that into two types of functions:
++// FIXME: split that into two types of functions:
+ // Functions from R^m-&gt;R^n
+ // and ODE Functions ...
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.cpp	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.cpp	2008-11-25 19:37:06 UTC (rev 794)
+@@ -5,6 +5,7 @@
+ #include &quot;LinearSpringDamper.h&quot;
+ 
+ #include &quot;Model.h&quot;
++#include &quot;PortValueList.h&quot;
+ #include &quot;Vector.h&quot;
+ 
+ namespace OpenFDM {
+@@ -17,62 +18,31 @@
+ 
+ LinearSpringDamper::LinearSpringDamper(const std::string&amp; name) :
+   Model(name),
++  mPositionPort(this, &quot;position&quot;, true),
++  mVelocityPort(this, &quot;velocity&quot;, true),
++  mForcePort(this, &quot;force&quot;),
+   mSpringReference(0),
+   mSpringConstant(0),
+   mDamperConstant(0)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;position&quot;);
+-  setInputPortName(1, &quot;velocity&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;force&quot;, this, &amp;LinearSpringDamper::getForce);
+ }
+ 
+ LinearSpringDamper::~LinearSpringDamper(void)
+ {
+ }
+ 
+-bool
+-LinearSpringDamper::init(void)
+-{
+-  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mPositionPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+-  if (!mVelocityPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  return Model::init();
+-}
+-
+ void
+-LinearSpringDamper::output(const TaskInfo&amp; taskInfo)
++LinearSpringDamper::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                           const ContinousStateValueVector&amp;,
++                           PortValueList&amp; portValues) const
+ {
+-  real_type position = mPositionPort.getRealValue();
+-  real_type vel = mVelocityPort.getRealValue();
++  real_type position = portValues[mPositionPort];
++  real_type vel = portValues[mVelocityPort];
+   real_type displacement = position - mSpringReference;
+-  mForce = mSpringConstant*displacement + vel*mDamperConstant;
++  portValues[mForcePort] = mSpringConstant*displacement + vel*mDamperConstant;
+ }
+ 
+ const real_type&amp;
+-LinearSpringDamper::getForce(void) const
+-{
+-  return mForce;
+-}
+-
+-const real_type&amp;
+ LinearSpringDamper::getSpringReference(void) const
+ {
+   return mSpringReference;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.h	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinearSpringDamper.h	2008-11-25 19:37:06 UTC (rev 794)
+@@ -7,8 +7,9 @@
+ 
+ #include &lt;string&gt;
+ 
+-#include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;RealInputPort.h&quot;
++#include &quot;RealOutputPort.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -19,11 +20,10 @@
+   LinearSpringDamper(const std::string&amp; name);
+   virtual ~LinearSpringDamper(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
+ 
+-  const real_type&amp; getForce(void) const;
+-
+   const real_type&amp; getSpringReference(void) const;
+   void setSpringReference(const real_type&amp; springReference);
+ 
+@@ -34,16 +34,13 @@
+   void setDamperConstant(const real_type&amp; damperConstant);
+ 
+ private:
++  RealInputPort mPositionPort;
++  RealInputPort mVelocityPort;
++  RealOutputPort mForcePort;
++
+   real_type mSpringReference;
+   real_type mSpringConstant;
+   real_type mDamperConstant;
+-
+-  real_type mForce;
+-
+-  /// The intput port which must provide the position
+-  RealPortHandle mPositionPort;
+-  /// The intput port which must provide the velocity
+-  RealPortHandle mVelocityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-25 06:32:29 UTC (rev 793)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-25 19:37:06 UTC (rev 794)
+@@ -245,6 +245,7 @@
+   Wind.h
+ 
+ OpenFDMModelsSOURCES = \
++  AirSpring.cpp \
+   Bias.cpp \
+   BinaryFunction.cpp \
+   ConstModel.cpp \
+@@ -254,6 +255,7 @@
+   Gain.cpp \
+   Input.cpp \
+   Integrator.cpp \
++  LinearSpringDamper.cpp \
+   Output.cpp \
+   Saturation.cpp \
+   SimulationTime.cpp \
+@@ -261,9 +263,7 @@
+   UnaryModel.cpp \
+   UnitConversion.cpp
+ 
+-#   AirSpring.cpp \
+ #   DiscBrake.cpp \
+-#   LinearSpringDamper.cpp \
+ #   MaxModel.cpp \
+ #   MinModel.cpp \
+ #   Product.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000761.html">[OpenFDM-svn] r793 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000763.html">[OpenFDM-svn] r795 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#762">[ date ]</a>
+              <a href="thread.html#762">[ thread ]</a>
+              <a href="subject.html#762">[ subject ]</a>
+              <a href="author.html#762">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

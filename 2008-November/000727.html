@@ -1,0 +1,1152 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r758 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r758%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM%20test&In-Reply-To=%3C200811191857.mAJIvHSM000343%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000726.html">
+   <LINK REL="Next"  HREF="000728.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r758 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r758%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM%20test&In-Reply-To=%3C200811191857.mAJIvHSM000343%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r758 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 19 19:57:17 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000726.html">[OpenFDM-svn] r757 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000728.html">[OpenFDM-svn] r759 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#727">[ date ]</a>
+              <a href="thread.html#727">[ thread ]</a>
+              <a href="subject.html#727">[ subject ]</a>
+              <a href="author.html#727">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-19 19:57:16 +0100 (Wed, 19 Nov 2008)
+New Revision: 758
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+   branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+Log:
+More model rebuild work.
+
+M    src/test/harmonic.cpp
+M    src/test/tiretestrig.cpp
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimReader.cpp
+D    src/OpenFDM/UnaryFunctionModel.h
+A    src/OpenFDM/BinaryFunction.h
+M    src/OpenFDM/Makefile.am
+D    src/OpenFDM/UnaryFunctionModel.cpp
+D    src/OpenFDM/BinaryFunctionModel.h
+A    src/OpenFDM/UnaryFunction.h
+D    src/OpenFDM/BinaryFunctionModel.cpp
+M    src/OpenFDM/Integrator.cpp
+A    src/OpenFDM/UnaryFunction.cpp
+A    src/OpenFDM/BinaryFunction.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -40,7 +40,7 @@
+ #include &lt;OpenFDM/Table.h&gt;
+ #include &lt;OpenFDM/Tailhook.h&gt;
+ #include &lt;OpenFDM/TimeDerivative.h&gt;
+-#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/Unit.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/WheelContact.h&gt;
+@@ -632,8 +632,8 @@
+ 
+         real_type maxSteer = realData((*it)-&gt;getElement(&quot;max_steer&quot;), 0);
+         if (maxSteer != 0) {
+-          UnaryFunctionModel* scale
+-            = new UnaryFunctionModel(name + &quot; Scale&quot;, UnaryFunctionModel::Abs);
++          UnaryFunction* scale
++            = new UnaryFunction(name + &quot; Scale&quot;, UnaryFunction::Abs);
+           addFCSModel(scale);
+           // FIXME: FCS might later define something for that gain ...
+           // &quot;fcs/steer-pos-deg[&quot; + numStr + &quot;]&quot;;
+@@ -730,8 +730,8 @@
+           sj-&gt;setPosition(parentPos);
+           sj-&gt;setOrientation(Quaternion::unit());
+           
+-          UnaryFunctionModel* scale
+-            = new UnaryFunctionModel(name + &quot; Scale&quot;, UnaryFunctionModel::Abs);
++          UnaryFunction* scale
++            = new UnaryFunction(name + &quot; Scale&quot;, UnaryFunction::Abs);
+           addFCSModel(scale);
+           if (!connectJSBExpression(&quot;fcs/steer-cmd-norm&quot;,
+                                     scale-&gt;getInputPort(0)))
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -39,7 +39,7 @@
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/Table.h&gt;
+ #include &lt;OpenFDM/TimeDerivative.h&gt;
+-#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/Unit.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/WheelContact.h&gt;
+@@ -711,8 +711,8 @@
+     std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     return 0;
+   }
+-  UnaryFunctionModel *unary
+-    = new UnaryFunctionModel(name + &quot; Inverter&quot;, UnaryFunctionModel::Minus);
++  UnaryFunction *unary
++    = new UnaryFunction(name + &quot; Inverter&quot;, UnaryFunction::Minus);
+   modelGroup-&gt;addModel(unary, true);
+   if (Port::Success != Connection::connect(in, unary-&gt;getInputPort(0)))
+     return 0;
+@@ -727,8 +727,8 @@
+     std::cerr &lt;&lt; &quot;Could not add inverter model \&quot;&quot; &lt;&lt; name &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     return 0;
+   }
+-  UnaryFunctionModel *unary
+-    = new UnaryFunctionModel(name + &quot; Abs&quot;, UnaryFunctionModel::Abs);
++  UnaryFunction *unary
++    = new UnaryFunction(name + &quot; Abs&quot;, UnaryFunction::Abs);
+   modelGroup-&gt;addModel(unary, true);
+   if (Port::Success != Connection::connect(in, unary-&gt;getInputPort(0)))
+     return 0;
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp (from rev 754, branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp	2008-11-18 19:50:03 UTC (rev 754)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -0,0 +1,88 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;BinaryFunction.h&quot;
++
++#include &quot;ModelContext.h&quot;
++#include &quot;PortValueList.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(BinaryFunction, Model)
++  END_OPENFDM_OBJECT_DEF
++
++BinaryFunction::BinaryFunction(const std::string&amp; name, Type type) :
++  Model(name),
++  mInput0Port(newMatrixInputPort(&quot;input0&quot;, true)),
++  mInput1Port(newMatrixInputPort(&quot;input1&quot;, true)),
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;))
++{
++}
++
++BinaryFunction::~BinaryFunction(void)
++{
++}
++
++bool
++BinaryFunction::alloc(ModelContext&amp; context) const
++{
++  Size sz = size(context.getPortValueList()[mInput0Port]);
++  Log(Initialization, Debug)
++    &lt;&lt; &quot;Size for BinaryFunction is detemined by input0 &quot;
++    &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
++  if (!context.getPortValueList().setOrCheckPortSize(mInput1Port, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input1 port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  if (!context.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for output port does not match!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++void
++BinaryFunction::output(const Task&amp;,const DiscreteStateValueVector&amp;,
++                       const ContinousStateValueVector&amp;,
++                       PortValueList&amp; portValues) const
++{
++  Size sz = size(portValues[mOutputPort]);
++  for (unsigned j = 0; j &lt; sz(1); ++j) {
++    for (unsigned i = 0; i &lt; sz(0); ++i) {
++      switch (mType) {
++      case Atan2:
++        portValues[mOutputPort](i, j) =
++          atan2(portValues[mInput0Port](i, j), portValues[mInput1Port](i, j));
++        break;
++      case Pow:
++        portValues[mOutputPort](i, j) =
++          pow(portValues[mInput0Port](i, j), portValues[mInput1Port](i, j));
++        break;
++      case Div:
++        portValues[mOutputPort](i, j) =
++          portValues[mInput0Port](i, j) / portValues[mInput1Port](i, j);
++        break;
++      default:
++        OpenFDMAssert(false);
++        break;
++      }
++    }
++  }
++}
++
++void
++BinaryFunction::setType(const BinaryFunction::Type&amp; type)
++{
++  mType = type;
++}
++
++const BinaryFunction::Type&amp;
++BinaryFunction::getType(void) const
++{
++  return mType;
++}
++
++} // namespace OpenFDM
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h (from rev 754, branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h	2008-11-18 19:50:03 UTC (rev 754)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunction.h	2008-11-19 18:57:16 UTC (rev 758)
+@@ -0,0 +1,44 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_BinaryFunction_H
++#define OpenFDM_BinaryFunction_H
++
++#include &lt;string&gt;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++/// Class representing a model with exactly two inputs.
++class BinaryFunction : public Model {
++  OPENFDM_OBJECT(BinaryFunction, Model);
++public:
++  enum Type {
++    Atan2,
++    Pow,
++    Div
++  };
++
++  BinaryFunction(const std::string&amp; name, Type type);
++  virtual ~BinaryFunction(void);
++
++  virtual bool alloc(ModelContext&amp;) const;
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++
++  void setType(const Type&amp; type);
++  const Type&amp; getType(void) const;
++
++private:
++  MatrixInputPort mInput0Port;
++  MatrixInputPort mInput1Port;
++  MatrixOutputPort mOutputPort;
++  
++  Type mType;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -1,137 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;BinaryFunctionModel.h&quot;
+-
+-#include &lt;string&gt;
+-#include &quot;Types.h&quot;
+-
+-namespace OpenFDM {
+-
+-class BinaryFunctionModelImpl :
+-    public Referenced {
+-public:
+-  virtual ~BinaryFunctionModelImpl(void) {}
+-  void setRealPortHandle(unsigned idx, const RealPortHandle&amp; realPortHandle)
+-  { mRealPortHandle[idx] = realPortHandle; }
+-  virtual real_type getValue(void) = 0;
+-protected:
+-  RealPortHandle mRealPortHandle[2];
+-};
+-
+-class Atan2BinaryFunctionModelImpl :
+-    public BinaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return atan2(mRealPortHandle[0].getRealValue(), mRealPortHandle[1].getRealValue()); }
+-};
+-
+-class PowBinaryFunctionModelImpl :
+-    public BinaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return pow(mRealPortHandle[0].getRealValue(), mRealPortHandle[1].getRealValue()); }
+-};
+-
+-class DivBinaryFunctionModelImpl :
+-    public BinaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return mRealPortHandle[0].getRealValue() / mRealPortHandle[1].getRealValue(); }
+-};
+-
+-
+-BEGIN_OPENFDM_OBJECT_DEF(BinaryFunctionModel, Model)
+-  END_OPENFDM_OBJECT_DEF
+-
+-BinaryFunctionModel::BinaryFunctionModel(const std::string&amp; name, Type type) :
+-  Model(name)
+-{
+-  setType(type);
+-
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;input 0&quot;);
+-  setInputPortName(1, &quot;input 1&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;BinaryFunctionModel::getFunctionValue);
+-}
+-
+-BinaryFunctionModel::~BinaryFunctionModel(void)
+-{
+-}
+-
+-bool
+-BinaryFunctionModel::init(void)
+-{
+-  if (!mImpl) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of BinaryFunctionModel model \&quot;&quot;
+-                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; failed: No funcion given!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  RealPortHandle portHandle = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!portHandle.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of BinaryFunctionModel model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mImpl-&gt;setRealPortHandle(0, portHandle);
+-
+-  portHandle = getInputPort(1)-&gt;toRealPortHandle();
+-  if (!portHandle.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of BinaryFunctionModel model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mImpl-&gt;setRealPortHandle(1, portHandle);
+-
+-  return Model::init();
+-}
+-
+-void
+-BinaryFunctionModel::output(const TaskInfo&amp;)
+-{
+-  // Evaluate the expression.
+-  mFunctionValue = mImpl-&gt;getValue();
+-}
+-
+-const real_type&amp;
+-BinaryFunctionModel::getFunctionValue(void) const
+-{
+-  return mFunctionValue;
+-}
+-
+-void
+-BinaryFunctionModel::setType(BinaryFunctionModel::Type type)
+-{
+-  mType = type;
+-  switch (type) {
+-  case Atan2:
+-    mImpl = new Atan2BinaryFunctionModelImpl;
+-    break;
+-  case Pow:
+-    mImpl = new PowBinaryFunctionModelImpl;
+-    break;
+-  case Div:
+-    mImpl = new DivBinaryFunctionModelImpl;
+-    break;
+-  default:
+-    break;
+-  }
+-}
+-
+-BinaryFunctionModel::Type
+-BinaryFunctionModel::getType(void) const
+-{
+-  return mType;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/BinaryFunctionModel.h	2008-11-19 18:57:16 UTC (rev 758)
+@@ -1,46 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_BinaryFunctionModel_H
+-#define OpenFDM_BinaryFunctionModel_H
+-
+-#include &lt;string&gt;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Model.h&quot;
+-
+-namespace OpenFDM {
+-
+-class BinaryFunctionModelImpl;
+-
+-/// Class representing a model with exactly two inputs.
+-class BinaryFunctionModel : public Model {
+-  OPENFDM_OBJECT(BinaryFunctionModel, Model);
+-public:
+-  enum Type {
+-    Atan2,
+-    Pow,
+-    Div
+-  };
+-
+-  BinaryFunctionModel(const std::string&amp; name, Type type);
+-  virtual ~BinaryFunctionModel(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+-  const real_type&amp; getFunctionValue(void) const;
+-
+-  void setType(Type type);
+-  Type getType(void) const;
+-
+-private:
+-  SharedPtr&lt;BinaryFunctionModelImpl&gt; mImpl;
+-  Type mType;
+-  real_type mFunctionValue;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Integrator.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -29,11 +29,11 @@
+ }
+ 
+ bool
+-Integrator::alloc(ModelContext&amp; leafContext) const
++Integrator::alloc(ModelContext&amp; context) const
+ {
+   Size sz;
+   if (getEnableInitialValuePort()) {
+-    sz = size(leafContext.getPortValueList()[mInitialValuePort]);
++    sz = size(context.getPortValueList()[mInitialValuePort]);
+     Log(Initialization, Debug)
+       &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
+       &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+@@ -43,22 +43,22 @@
+       &lt;&lt; &quot;Size for Integrator is detemined by the static initial value &quot;
+       &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+   }
+-  if (!leafContext.getPortValueList().setOrCheckPortSize(mInputPort, sz)) {
++  if (!context.getPortValueList().setOrCheckPortSize(mInputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  if (!leafContext.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
++  if (!context.getPortValueList().setOrCheckPortSize(mOutputPort, sz)) {
+     Log(Initialization, Error)
+       &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
+     return false;
+   }
+-  leafContext.setContinousStateSize(*mMatrixStateInfo, sz);
++  context.setContinousStateSize(*mMatrixStateInfo, sz);
+   return true;
+ }
+ 
+ void
+-Integrator::init(const Task&amp;, DiscreteStateValueVector&amp; discreteState,
++Integrator::init(const Task&amp;, DiscreteStateValueVector&amp;,
+                  ContinousStateValueVector&amp; continousState,
+                  const PortValueList&amp; portValues) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 18:57:16 UTC (rev 758)
+@@ -194,7 +194,7 @@
+   Atmosphere.h \
+   AtmosphereSTD1976.h \
+   Bias.h \
+-  BinaryFunctionModel.h \
++  BinaryFunction.h \
+   CartesianJoint.h \
+   ConstModel.h \
+   Contact.h \
+@@ -238,7 +238,7 @@
+   TimeDerivative.h \
+   TransferFunction.h \
+   Turbulence.h \
+-  UnaryFunctionModel.h \
++  UnaryFunction.h \
+   UnaryModel.h \
+   UnitConversion.h \
+   UniversalJoint.h \
+@@ -247,6 +247,7 @@
+ 
+ OpenFDMModelsSOURCES = \
+   Bias.cpp \
++  BinaryFunction.cpp \
+   ConstModel.cpp \
+   DeadBand.cpp \
+   Delay.cpp \
+@@ -256,10 +257,12 @@
+   Integrator.cpp \
+   Output.cpp \
+   Saturation.cpp \
+-  SimulationTime.cpp
++  SimulationTime.cpp \
++  UnaryFunction.cpp \
++  UnaryModel.cpp \
++  UnitConversion.cpp
+ 
+ #   AirSpring.cpp \
+-#   BinaryFunctionModel.cpp \
+ #   DiscBrake.cpp \
+ #   LinearSpringDamper.cpp \
+ #   MaxModel.cpp \
+@@ -269,7 +272,7 @@
+ #   Table.cpp \
+ #   TimeDerivative.cpp \
+ #   TransferFunction.cpp \
+-#   UnaryFunctionModel.cpp
++#
+ 
+ OpenFDMMechanicSOURCES = \
+   Joint.cpp \
+@@ -281,8 +284,6 @@
+   RevoluteJoint.cpp \
+   RotationalJoint.cpp \
+   Sensor.cpp \
+-  UnaryModel.cpp \
+-  UnitConversion.cpp \
+   UniversalJoint.cpp
+ 
+ #   AeroForce.cpp \
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.cpp (from rev 756, branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp	2008-11-19 17:53:21 UTC (rev 756)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -0,0 +1,104 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;UnaryFunction.h&quot;
++
++#include &lt;string&gt;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(UnaryFunction, UnaryModel)
++  END_OPENFDM_OBJECT_DEF
++
++UnaryFunction::UnaryFunction(const std::string&amp; name, const Type&amp; type) :
++  UnaryModel(name),
++  mType(type)
++{
++}
++
++UnaryFunction::~UnaryFunction(void)
++{
++}
++
++ModelContext*
++UnaryFunction::newModelContext(PortValueList&amp; portValueList) const
++{
++  return UnaryModel::newModelContext(this, portValueList);
++}
++
++void
++UnaryFunction::output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const
++{
++  // FIXME, optimize, move that into a proper context ...
++  // For now make it work
++  Size sz = size(inputValue);
++  for (unsigned j = 0; j &lt; sz(1); ++j) {
++    for (unsigned i = 0; i &lt; sz(0); ++i) {
++      switch (mType) {
++      case Abs:
++        outputValue(i, j) = fabs(inputValue(i, j));
++        break;
++      case Acos:
++        outputValue(i, j) = acos(inputValue(i, j));
++        break;
++      case Asin:
++        outputValue(i, j) = asin(inputValue(i, j));
++        break;
++      case Atan:
++        outputValue(i, j) = atan(inputValue(i, j));
++        break;
++      case Ceil:
++        outputValue(i, j) = ceil(inputValue(i, j));
++        break;
++      case Cos:
++        outputValue(i, j) = cos(inputValue(i, j));
++        break;
++      case Exp:
++        outputValue(i, j) = exp(inputValue(i, j));
++        break;
++      case Floor:
++        outputValue(i, j) = floor(inputValue(i, j));
++        break;
++      case Log:
++        outputValue(i, j) = log(inputValue(i, j));
++        break;
++      case Log10:
++        outputValue(i, j) = log10(inputValue(i, j));
++        break;
++      case Minus:
++        outputValue(i, j) = -inputValue(i, j);
++        break;
++      case Sin:
++        outputValue(i, j) = sin(inputValue(i, j));
++        break;
++      case Sqr:
++        outputValue(i, j) = inputValue(i, j)*inputValue(i, j);
++        break;
++      case Sqrt:
++        outputValue(i, j) = sqrt(inputValue(i, j));
++        break;
++      case Tan:
++        outputValue(i, j) = tan(inputValue(i, j));
++        break;
++      default:
++        outputValue(i, j) = inputValue(i, j);
++        break;
++      }
++    }
++  }
++}
++
++void
++UnaryFunction::setType(const UnaryFunction::Type&amp; type)
++{
++  mType = type;
++}
++
++const UnaryFunction::Type&amp;
++UnaryFunction::getType(void) const
++{
++  return mType;
++}
++
++} // namespace OpenFDM
+
+Copied: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.h (from rev 756, branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h)
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h	2008-11-19 17:53:21 UTC (rev 756)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunction.h	2008-11-19 18:57:16 UTC (rev 758)
+@@ -0,0 +1,50 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_UnaryFunction_H
++#define OpenFDM_UnaryFunction_H
++
++#include &lt;string&gt;
++#include &quot;UnaryModel.h&quot;
++
++namespace OpenFDM {
++
++/// Class representing a model with exactly one input.
++class UnaryFunction : public UnaryModel {
++  OPENFDM_OBJECT(UnaryFunction, UnaryModel);
++public:
++  enum Type {
++    Abs,
++    Acos,
++    Asin,
++    Atan,
++    Ceil,
++    Cos,
++    Exp,
++    Floor,
++    Log,
++    Log10,
++    Minus,
++    Sin,
++    Sqr,
++    Sqrt,
++    Tan
++  };
++
++  UnaryFunction(const std::string&amp; name, const Type&amp; type);
++  virtual ~UnaryFunction(void);
++
++  ModelContext* newModelContext(PortValueList&amp;) const;
++  void output(const Matrix&amp; inputValue, Matrix&amp; outputValue) const;
++
++  void setType(const Type&amp; type);
++  const Type&amp; getType(void) const;
++
++private:
++  Type mType;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -1,247 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;UnaryFunctionModel.h&quot;
+-
+-#include &lt;string&gt;
+-
+-#include &quot;Types.h&quot;
+-
+-namespace OpenFDM {
+-
+-class UnaryFunctionModelImpl :
+-    public Referenced {
+-public:
+-  virtual ~UnaryFunctionModelImpl(void) {}
+-  void setRealPortHandle(const RealPortHandle&amp; realPortHandle)
+-  { mRealPortHandle = realPortHandle; }
+-  virtual real_type getValue(void) = 0;
+-protected:
+-  RealPortHandle mRealPortHandle;
+-};
+-
+-/// Implementations of various similar functions.
+-class AbsUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return fabs(mRealPortHandle.getRealValue()); }
+-};
+-
+-class AcosUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return acos(mRealPortHandle.getRealValue()); }
+-};
+-
+-class AsinUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return asin(mRealPortHandle.getRealValue()); }
+-};
+-
+-class AtanUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return atan(mRealPortHandle.getRealValue()); }
+-};
+-
+-class CeilUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return ceil(mRealPortHandle.getRealValue()); }
+-};
+-
+-class CosUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return cos(mRealPortHandle.getRealValue()); }
+-};
+-
+-class ExpUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return exp(mRealPortHandle.getRealValue()); }
+-};
+-
+-class FloorUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return floor(mRealPortHandle.getRealValue()); }
+-};
+-
+-class LogUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return log(mRealPortHandle.getRealValue()); }
+-};
+-
+-class Log10UnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return log10(mRealPortHandle.getRealValue()); }
+-};
+-
+-class MinusUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return -mRealPortHandle.getRealValue(); }
+-};
+-
+-class SinUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return sin(mRealPortHandle.getRealValue()); }
+-};
+-
+-class SqrUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { real_type v = mRealPortHandle.getRealValue(); return v*v; }
+-};
+-
+-class SqrtUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return sqrt(mRealPortHandle.getRealValue()); }
+-};
+-
+-class TanUnaryFunctionModelImpl :
+-    public UnaryFunctionModelImpl {
+-private:
+-  virtual real_type getValue(void)
+-  { return tan(mRealPortHandle.getRealValue()); }
+-};
+-
+-BEGIN_OPENFDM_OBJECT_DEF(UnaryFunctionModel, Model)
+-  END_OPENFDM_OBJECT_DEF
+-
+-UnaryFunctionModel::UnaryFunctionModel(const std::string&amp; name, Type type) :
+-  Model(name),
+-  mType(type)
+-{
+-  setType(type);
+-
+-  setDirectFeedThrough(true);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;UnaryFunctionModel::getFunctionValue);
+-}
+-
+-UnaryFunctionModel::~UnaryFunctionModel(void)
+-{
+-}
+-
+-bool
+-UnaryFunctionModel::init(void)
+-{
+-  if (!mImpl) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of UnaryFunctionModel model \&quot;&quot;
+-                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; failed: No funcion given!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  RealPortHandle portHandle = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!portHandle.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of UnaryFunctionModel model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mImpl-&gt;setRealPortHandle(portHandle);
+-  return Model::init();
+-}
+-
+-void
+-UnaryFunctionModel::output(const TaskInfo&amp;)
+-{
+-  // Evaluate the expression.
+-  mFunctionValue = mImpl-&gt;getValue();
+-}
+-
+-const real_type&amp;
+-UnaryFunctionModel::getFunctionValue(void) const
+-{
+-  return mFunctionValue;
+-}
+-
+-void
+-UnaryFunctionModel::setType(UnaryFunctionModel::Type type)
+-{
+-  mType = type;
+-  switch (type) {
+-  case Abs:
+-    mImpl = new AbsUnaryFunctionModelImpl;
+-    break;
+-  case Acos:
+-    mImpl = new AcosUnaryFunctionModelImpl;
+-    break;
+-  case Asin:
+-    mImpl = new AsinUnaryFunctionModelImpl;
+-    break;
+-  case Atan:
+-    mImpl = new AtanUnaryFunctionModelImpl;
+-    break;
+-  case Ceil:
+-    mImpl = new CeilUnaryFunctionModelImpl;
+-    break;
+-  case Cos:
+-    mImpl = new CosUnaryFunctionModelImpl;
+-    break;
+-  case Exp:
+-    mImpl = new ExpUnaryFunctionModelImpl;
+-    break;
+-  case Floor:
+-    mImpl = new FloorUnaryFunctionModelImpl;
+-    break;
+-  case Log:
+-    mImpl = new LogUnaryFunctionModelImpl;
+-    break;
+-  case Log10:
+-    mImpl = new Log10UnaryFunctionModelImpl;
+-    break;
+-  case Minus:
+-    mImpl = new MinusUnaryFunctionModelImpl;
+-    break;
+-  case Sin:
+-    mImpl = new SinUnaryFunctionModelImpl;
+-    break;
+-  case Sqr:
+-    mImpl = new SqrUnaryFunctionModelImpl;
+-    break;
+-  case Sqrt:
+-    mImpl = new SqrtUnaryFunctionModelImpl;
+-    break;
+-  case Tan:
+-    mImpl = new TanUnaryFunctionModelImpl;
+-    break;
+-  default:
+-    break;
+-  }
+-}
+-
+-UnaryFunctionModel::Type
+-UnaryFunctionModel::getType(void) const
+-{
+-  return mType;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/UnaryFunctionModel.h	2008-11-19 18:57:16 UTC (rev 758)
+@@ -1,58 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_UnaryFunctionModel_H
+-#define OpenFDM_UnaryFunctionModel_H
+-
+-#include &lt;string&gt;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Model.h&quot;
+-
+-namespace OpenFDM {
+-
+-class UnaryFunctionModelImpl;
+-
+-/// Class representing a model with exactly one input.
+-class UnaryFunctionModel : public Model {
+-  OPENFDM_OBJECT(UnaryFunctionModel, Model);
+-public:
+-  enum Type {
+-    Abs,
+-    Acos,
+-    Asin,
+-    Atan,
+-    Ceil,
+-    Cos,
+-    Exp,
+-    Floor,
+-    Log,
+-    Log10,
+-    Minus,
+-    Sin,
+-    Sqr,
+-    Sqrt,
+-    Tan
+-  };
+-
+-  UnaryFunctionModel(const std::string&amp; name, Type type = Abs /*FIXME*/);
+-  virtual ~UnaryFunctionModel(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+-  const real_type&amp; getFunctionValue(void) const;
+-
+-  void setType(Type type);
+-  Type getType(void) const;
+-
+-private:
+-  SharedPtr&lt;UnaryFunctionModelImpl&gt; mImpl;
+-  Type mType;
+-  real_type mFunctionValue;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -11,7 +11,7 @@
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+-#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &quot;ErrorCollectorCallback.h&quot;
+ 
+ using namespace OpenFDM;
+@@ -56,14 +56,14 @@
+   Connection::connect(gain-&gt;getInputPort(0),
+                       simulationTime-&gt;getOutputPort(0));
+ 
+-  UnaryFunctionModel* cosFunction
+-    = new UnaryFunctionModel(&quot;Exact Pos Solution&quot;, UnaryFunctionModel::Cos);
++  UnaryFunction* cosFunction
++    = new UnaryFunction(&quot;Exact Pos Solution&quot;, UnaryFunction::Cos);
+   system-&gt;addModel(cosFunction);
+   Connection::connect(cosFunction-&gt;getInputPort(0),
+                       gain-&gt;getOutputPort(0));
+ 
+-  UnaryFunctionModel* sinFunction
+-    = new UnaryFunctionModel(&quot;Exact Vel Solution&quot;, UnaryFunctionModel::Sin);
++  UnaryFunction* sinFunction
++    = new UnaryFunction(&quot;Exact Vel Solution&quot;, UnaryFunction::Sin);
+   system-&gt;addModel(sinFunction);
+   Connection::connect(sinFunction-&gt;getInputPort(0),
+                       gain-&gt;getOutputPort(0));
+
+Modified: branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2008-11-19 18:01:54 UTC (rev 757)
++++ branches/OpenFDM-StateSeparation/src/test/tiretestrig.cpp	2008-11-19 18:57:16 UTC (rev 758)
+@@ -21,7 +21,7 @@
+ #include &lt;OpenFDM/SimulationTime.h&gt;
+ #include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+-#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/WheelContact.h&gt;
+ 
+ #include &quot;HDF5Writer.h&quot;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000726.html">[OpenFDM-svn] r757 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000728.html">[OpenFDM-svn] r759 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#727">[ date ]</a>
+              <a href="thread.html#727">[ thread ]</a>
+              <a href="subject.html#727">[ subject ]</a>
+              <a href="author.html#727">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

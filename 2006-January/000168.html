@@ -1,0 +1,116 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r185 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r185%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200601051047.k05AlTa1024391%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000169.html">
+   <LINK REL="Next"  HREF="000170.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r185 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r185%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200601051047.k05AlTa1024391%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r185 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 11:47:29 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000169.html">[OpenFDM-svn] r184 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000170.html">[OpenFDM-svn] r186 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#168">[ date ]</a>
+              <a href="thread.html#168">[ thread ]</a>
+              <a href="subject.html#168">[ subject ]</a>
+              <a href="author.html#168">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 11:47:27 +0100 (Thu, 05 Jan 2006)
+New Revision: 185
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+Log:
+Make use of that LineForce component
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-05 10:46:58 UTC (rev 184)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-05 10:47:27 UTC (rev 185)
+@@ -1165,6 +1165,7 @@
+       rj-&gt;setPosition(structToBody(compressJointPos));
+       rj-&gt;setOrientation(Quaternion::unit());
+ 
++#if 0
+       // Well, we use an air spring for that. It is directly in the
+       // revolute joint. That is wring, but at the moment aprioriate.
+       AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
+@@ -1181,7 +1182,31 @@
+       // ... and provides an output force
+       rj-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
+       addMultiBodyModel(aoDamp);
++#else
++      LineForce* lineForce = new LineForce(name + &quot; Air Spring LineForce&quot;);
++      /// FIXME that ordering in attachment is messy!
++      lineForce-&gt;setPosition0(structToBody(compressJointPos) - Vector3(0.1, 0, 0.5));
++      lineForce-&gt;setPosition1(Vector3(-0.5, 0, 0));
++      mVehicle-&gt;getTopBody()-&gt;addInteract(lineForce);
++      arm-&gt;addInteract(lineForce);
+ 
++      AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
++      aoDamp-&gt;setPullPressure(pullPress);
++      aoDamp-&gt;setPushPressure(pushPress);
++      aoDamp-&gt;setArea(area);
++      aoDamp-&gt;setMinCompression(minCompr);
++      aoDamp-&gt;setMaxCompression(maxCompr);
++      aoDamp-&gt;setMinDamperConstant(minDamp);
++      aoDamp-&gt;setMaxDamperConstant(maxDamp);
++      addMultiBodyModel(aoDamp);
++
++      // That one reads the joint position and velocity ...
++      aoDamp-&gt;getInputPort(0)-&gt;connect(lineForce-&gt;getOutputPort(0));
++      aoDamp-&gt;getInputPort(1)-&gt;connect(lineForce-&gt;getOutputPort(1));
++      // ... and provides an output force
++      lineForce-&gt;getInputPort(0)-&gt;connect(aoDamp-&gt;getOutputPort(0));
++#endif
++
+       // Attach a wheel to that strut part.
+       attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
+                   tireSpring, tireDamp, arm);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000169.html">[OpenFDM-svn] r184 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000170.html">[OpenFDM-svn] r186 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#168">[ date ]</a>
+              <a href="thread.html#168">[ thread ]</a>
+              <a href="subject.html#168">[ subject ]</a>
+              <a href="author.html#168">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,153 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r285 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r285%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200606011631.k51GVgXx026662%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000264.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r285 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r285%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200606011631.k51GVgXx026662%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r285 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jun  1 18:31:42 CEST 2006</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000264.html">[OpenFDM-svn] r286 - in trunk/OpenFDM: . src/builder
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#263">[ date ]</a>
+              <a href="thread.html#263">[ thread ]</a>
+              <a href="subject.html#263">[ subject ]</a>
+              <a href="author.html#263">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-06-01 18:31:40 +0200 (Thu, 01 Jun 2006)
+New Revision: 285
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Assert.h
+   trunk/OpenFDM/src/OpenFDM/LogStream.h
+   trunk/OpenFDM/src/OpenFDM/TableData.h
+Log:
+Fix some warnings
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-06-01 16:31:40 UTC (rev 285)
+@@ -1489,8 +1489,6 @@
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+ 
+-  OpenFDMAssert(out-&gt;isConnected());
+-
+   // Register all output property names.
+   std::string implicitOutname = normalizeComponentName(name);
+   registerJSBExpression(std::string(&quot;fcs/&quot;) + implicitOutname, out);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Assert.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Assert.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/Assert.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -23,7 +23,7 @@
+   }                                                 \
+ } while (0)
+ #else
+-# define OpenFDMAssert(a) do {} while (0)
++# define OpenFDMAssert(a) do { (void)(a); } while (0)
+ #endif
+ 
+ #ifdef OpenFDMLinAlgDebug
+@@ -34,7 +34,7 @@
+   }                                                 \
+ } while (0)
+ #else
+-# define OpenFDMLinAlgAssert(a) do {} while (0)
++# define OpenFDMLinAlgAssert(a) do { (void)(a); } while (0)
+ #endif
+ 
+ #define OpenFDMError(a) ::OpenFDM::Assertion(__FILE__, __LINE__, a );
+
+Modified: trunk/OpenFDM/src/OpenFDM/LogStream.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/LogStream.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -124,7 +124,7 @@
+ 
+   std::basic_ostream&lt;char&gt;* mStream;
+   unsigned mCategory;
+-  unsigned mPriority;
++  int mPriority;
+ };
+ 
+ #if defined(NDEBUG)
+
+Modified: trunk/OpenFDM/src/OpenFDM/TableData.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TableData.h	2006-05-30 19:42:49 UTC (rev 284)
++++ trunk/OpenFDM/src/OpenFDM/TableData.h	2006-06-01 16:31:40 UTC (rev 285)
+@@ -139,7 +139,6 @@
+     unsigned loIdx = loBoundIt-&gt;second;
+     if (loBound == upBound)
+       return loIdx;
+-    unsigned upIdx = upBoundIt-&gt;second;
+     real_type theta = (input - loBound)/(upBound-loBound);
+     return loIdx + theta;
+   }
+@@ -172,14 +171,14 @@
+     mData(0)
+   {}
+   TableData(const SizeVector&amp; size) :
+-    mSize(size), mData(new real_type[product(size)])
++    mData(new real_type[product(size)]), mSize(size)
+   {
+     unsigned totalLen = product(mSize);
+     for (unsigned i = 0; i &lt; totalLen; ++i)
+       mData[i] = 0;
+   }
+   TableData(const TableData&amp; ndarray) :
+-    mSize(ndarray.size()), mData(new real_type[product(ndarray.size())])
++    mData(new real_type[product(ndarray.size())]), mSize(ndarray.size())
+   {
+     unsigned totalLen = product(mSize);
+     for (unsigned i = 0; i &lt; totalLen; ++i)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000264.html">[OpenFDM-svn] r286 - in trunk/OpenFDM: . src/builder
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#263">[ date ]</a>
+              <a href="thread.html#263">[ thread ]</a>
+              <a href="subject.html#263">[ subject ]</a>
+              <a href="author.html#263">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

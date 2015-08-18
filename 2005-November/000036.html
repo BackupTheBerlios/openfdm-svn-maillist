@@ -1,0 +1,110 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r49 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r49%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511010827.jA18RNtC011973%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000037.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r49 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r49%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511010827.jA18RNtC011973%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r49 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Nov  1 09:27:23 CET 2005</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000037.html">[OpenFDM-svn] r50 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#36">[ date ]</a>
+              <a href="thread.html#36">[ thread ]</a>
+              <a href="subject.html#36">[ subject ]</a>
+              <a href="author.html#36">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-01 09:27:13 +0100 (Tue, 01 Nov 2005)
+New Revision: 49
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+Log:
+Simpliy the transform to wheel ccordinates.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2005-10-29 19:30:51 UTC (rev 48)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2005-11-01 08:27:13 UTC (rev 49)
+@@ -148,15 +148,14 @@
+   // The wheel coordinates x asxis is defined by the forward orientation
+   // of the wheel, the z axis points perpandicular to the ground
+   // plane downwards.
+-  real_type sinsa = sin(mSteeringAngle);
+-  real_type cossa = cos(mSteeringAngle);
+-  Rotation wheelOrientation
+-    = Quaternion::fromRotateTo(1, Vector3(cossa, sinsa, 0),
+-                               3, groundNormal);
+-  
+-  // Compute the wheel velocity in wheel coordinates.
+-  Vector3 wheelVel = wheelOrientation.transform(vel);
+-  
++  Vector3 forward(cos(mSteeringAngle), sin(mSteeringAngle), 0);
++  Vector3 side = cross(groundNormal, forward);
++  forward = normalize(cross(side, groundNormal));
++  side = normalize(side);
++
++  // Transformed to the ground plane
++  Vector2 wheelVel(dot(forward, vel), dot(side, vel));
++
+   // Now we compute something like the JSBSim gear friction model.
+   // The x coordinate is in wheel forward direction,
+   // the y coordinate points towards right. 
+@@ -184,10 +183,9 @@
+   
+   // The friction force for fast movement.
+   Vector2 fricForce = (-friction*mFrictionCoef*normForce)*slip;
+-  Vector3 fricForce3(fricForce(1), fricForce(2), 0);
+   
+   // Transform the friction force back and return
+-  return wheelOrientation.backTransform(fricForce3);
++  return fricForce(1)*forward + fricForce(2)*side;
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000037.html">[OpenFDM-svn] r50 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#36">[ date ]</a>
+              <a href="thread.html#36">[ thread ]</a>
+              <a href="subject.html#36">[ subject ]</a>
+              <a href="author.html#36">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,194 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r281 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-May/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r281%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605281124.k4SBOcUU002961%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000258.html">
+   <LINK REL="Next"  HREF="000260.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r281 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r281%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200605281124.k4SBOcUU002961%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r281 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun May 28 13:24:38 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000258.html">[OpenFDM-svn] r280 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000260.html">[OpenFDM-svn] r282 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#259">[ date ]</a>
+              <a href="thread.html#259">[ thread ]</a>
+              <a href="subject.html#259">[ subject ]</a>
+              <a href="author.html#259">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-05-28 13:24:35 +0200 (Sun, 28 May 2006)
+New Revision: 281
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+Log:
+Move joint computations into the output routine
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2006-05-28 11:24:35 UTC (rev 281)
+@@ -45,6 +45,18 @@
+   Log(ArtBody, Debug) &lt;&lt; &quot;Preparing Body \&quot;&quot;
+                       &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
+                       &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++
++  // We need the articulated inertia and force from the outboard body.
++  // Apply the joint degrees of freedom to that.
++  // If there was an error, (something was singular ???)
++  // just ignore that part. FIXME, ist this ok????
++  jointArticulation(mInboardInertia, mInboardForce,
++                    outboardBody-&gt;getArtInertia(),
++                    outboardBody-&gt;getArtForce());
++
++  Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values past joint &quot;
++                       &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; trans(mInboardForce)
++                       &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; mInboardInertia &lt;&lt; endl;
+ }
+ 
+ bool
+@@ -71,6 +83,8 @@
+ Joint::interactWith(RigidBody* rigidBody)
+ {
+   // HMmMm
++  if (!rigidBody)
++    return;
+   if (rigidBody != getInboardBody())
+     return;
+   
+@@ -78,30 +92,10 @@
+   if (!outboardBody)
+     return;
+   
+-  Log(ArtBody, Debug) &lt;&lt; &quot;Contributing articulation from \&quot;&quot;
+-                      &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
+-                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-  
+-  // We need the articulated inertia and force from the outboard body.
+-  SpatialInertia I;
+-  Vector6 F;
+-  
+-  // Apply the joint degrees of freedom to that.
+-  // If there was an error, (something was singular ???)
+-  // just ignore that part. FIXME, ist this ok????
+-  jointArticulation(I, F, outboardBody-&gt;getArtInertia(),
+-                    outboardBody-&gt;getArtForce());
+-  
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values past joint &quot;
+-                       &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; trans(F)
+-                       &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
+-  
+   // Contribute the transformed values to the parent.
+-  if (!rigidBody)
+-    return;
+   Frame* frame = outboardBody-&gt;getFrame();
+-  rigidBody-&gt;contributeInertia(frame-&gt;inertiaToParent(I));
+-  rigidBody-&gt;contributeForce(frame-&gt;forceToParent(F));
++  rigidBody-&gt;contributeInertia(frame-&gt;inertiaToParent(mInboardInertia));
++  rigidBody-&gt;contributeForce(frame-&gt;forceToParent(mInboardForce));
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2006-05-28 11:24:35 UTC (rev 281)
+@@ -49,7 +49,9 @@
+   virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+                                  const SpatialInertia&amp; outI,
+                                  const Vector6&amp; outF) = 0;
+-
++private:
++  SpatialInertia mInboardInertia;
++  Vector6 mInboardForce;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-05-28 11:24:35 UTC (rev 281)
+@@ -62,19 +62,6 @@
+ }
+ 
+ void
+-MobileRootJoint::output(const TaskInfo&amp; taskInfo)
+-{
+-  RigidBody* outboardBody = getOutboardBody();
+-  if (!outboardBody)
+-    return;
+-  
+-  Log(ArtBody, Debug) &lt;&lt; &quot;Computing mobile root accelerations for joint \&quot;&quot;
+-                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-  
+-  interactWith(getInboardBody());
+-}
+-
+-void
+ MobileRootJoint::recheckTopology(void)
+ {
+   // Hmm, works for the first cut, but rethink what happens with strange
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 09:43:10 UTC (rev 280)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-05-28 11:24:35 UTC (rev 281)
+@@ -34,7 +34,6 @@
+ //   virtual void accept(ConstModelVisitor&amp; visitor) const;
+ 
+   virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
+ 
+   virtual void recheckTopology(void);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000258.html">[OpenFDM-svn] r280 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000260.html">[OpenFDM-svn] r282 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#259">[ date ]</a>
+              <a href="thread.html#259">[ thread ]</a>
+              <a href="subject.html#259">[ subject ]</a>
+              <a href="author.html#259">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

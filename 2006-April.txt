@@ -1,0 +1,884 @@
+From frohlich at berlios.de  Sat Apr  8 10:14:32 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sat, 8 Apr 2006 10:14:32 +0200
+Subject: [OpenFDM-svn] r272 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200604080814.k388EW3V009078@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-04-08 10:14:06 +0200 (Sat, 08 Apr 2006)
+New Revision: 272
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+   trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MaxModel.h
+   trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MinModel.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+   trunk/OpenFDM/src/OpenFDM/Saturation.h
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+   trunk/OpenFDM/src/OpenFDM/SimpleGear.h
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+   trunk/OpenFDM/src/OpenFDM/TimeDerivative.h
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.h
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+Log:
+Use preevaluated port interfaces everywhere
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -82,28 +82,28 @@
+   if (!mEnvironment)
+     return false;
+ 
+-  if (getInputPort("roll")->isConnected())
++  if (getInputPort("roll"))
+     mBodyAxisTorque[0] = getInputPort("roll")->toRealPortHandle();
+   else
+     mBodyAxisTorque[0] = 0;
+-  if (getInputPort("pitch")->isConnected())
++  if (getInputPort("pitch"))
+     mBodyAxisTorque[1] = getInputPort("pitch")->toRealPortHandle();
+   else
+     mBodyAxisTorque[1] = 0;
+-  if (getInputPort("yaw")->isConnected())
++  if (getInputPort("yaw"))
+     mBodyAxisTorque[2] = getInputPort("yaw")->toRealPortHandle();
+   else
+     mBodyAxisTorque[2] = 0;
+ 
+-  if (getInputPort("drag")->isConnected())
++  if (getInputPort("drag"))
+     mStabilityAxisForce[0] = getInputPort("drag")->toRealPortHandle();
+   else
+     mStabilityAxisForce[0] = 0;
+-  if (getInputPort("side")->isConnected())
++  if (getInputPort("side"))
+     mStabilityAxisForce[1] = getInputPort("side")->toRealPortHandle();
+   else
+     mStabilityAxisForce[1] = 0;
+-  if (getInputPort("lift")->isConnected())
++  if (getInputPort("lift"))
+     mStabilityAxisForce[2] = getInputPort("lift")->toRealPortHandle();
+   else
+     mStabilityAxisForce[2] = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -67,14 +67,32 @@
+ bool
+ BinaryFunctionModel::init(void)
+ {
+-  OpenFDMAssert(mImpl);
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  OpenFDMAssert(getInputPort(1)->isConnected());
+-  mImpl->setRealPortHandle(0, getInputPort(0)->toRealPortHandle());
+-  mImpl->setRealPortHandle(1, getInputPort(1)->toRealPortHandle());
+-  if (!getInputPort(0)->isConnected() || !getInputPort(1)->isConnected())
++  if (!mImpl) {
++    Log(Model, Error) << "Initialization of BinaryFunctionModel model \""
++                      << getName() << "\" failed: No funcion given!" << endl;
+     return false;
++  }
+ 
++  RealPortHandle portHandle = getInputPort(0)->toRealPortHandle();
++  if (!portHandle.isConnected()) {
++    Log(Model, Error) << "Initialization of BinaryFunctionModel model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++  mImpl->setRealPortHandle(0, portHandle);
++
++  portHandle = getInputPort(1)->toRealPortHandle();
++  if (!portHandle.isConnected()) {
++    Log(Model, Error) << "Initialization of BinaryFunctionModel model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(1)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++  mImpl->setRealPortHandle(1, portHandle);
++
+   return Model::init();
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -37,21 +37,21 @@
+ bool
+ DiscBrake::init(void)
+ {
+-  if (!getInputPort(0)->isConnected()) {
++  mBrakePressurePort = getInputPort(0)->toRealPortHandle();
++  if (!mBrakePressurePort.isConnected()) {
+     Log(Model, Error) << "Initialization of DiscBrake model \"" << getName()
+                       << "\" failed: Input port \"" << getInputPortName(0)
+                       << "\" is not connected!" << endl;
+     return false;
+   }
+-  mBrakePressurePort = getInputPort(0)->toRealPortHandle();
+ 
+-  if (!getInputPort(1)->isConnected()) {
++  mVelocityPort = getInputPort(1)->toRealPortHandle();
++  if (!mVelocityPort.isConnected()) {
+     Log(Model, Error) << "Initialization of DiscBrake model \"" << getName()
+                       << "\" failed: Input port \"" << getInputPortName(1)
+                       << "\" is not connected!" << endl;
+     return false;
+   }
+-  mVelocityPort = getInputPort(1)->toRealPortHandle();
+ 
+   // start with zero friction force
+   mZ = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -107,7 +107,7 @@
+ bool
+ DiscreteIntegrator::dependsDirectOn(Model* model)
+ {
+-  if (getInputPort(1)->isConnected()) {
++  if (getInputPort(1)) {
+     // return true if we find the one connected to the initial value port
+     for (unsigned j = 0; j < model->getNumOutputPorts(); ++j)
+       if (getInputPort(1)->isConnectedTo(model->getOutputPort(j)))
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -37,21 +37,21 @@
+ bool
+ LinearSpringDamper::init(void)
+ {
+-  if (!getInputPort(0)->isConnected()) {
++  mPositionPort = getInputPort(0)->toRealPortHandle();
++  if (!mPositionPort.isConnected()) {
+     Log(Model, Error) << "Initialization of AirSpring model \"" << getName()
+                       << "\" failed: Input port \"" << getInputPortName(0)
+                       << "\" is not connected!" << endl;
+     return false;
+   }
+-  mPositionPort = getInputPort(0)->toRealPortHandle();
+ 
+-  if (!getInputPort(1)->isConnected()) {
++  mVelocityPort = getInputPort(1)->toRealPortHandle();
++  if (!mVelocityPort.isConnected()) {
+     Log(Model, Error) << "Initialization of AirSpring model \"" << getName()
+                       << "\" failed: Input port \"" << getInputPortName(1)
+                       << "\" is not connected!" << endl;
+     return false;
+   }
+-  mVelocityPort = getInputPort(1)->toRealPortHandle();
+ 
+   return Model::init();
+ }
+
+Modified: trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -35,31 +35,47 @@
+ bool
+ MaxModel::init(void)
+ {
+-  for (unsigned i = 0; i < getNumInputPorts(); ++i)
+-    OpenFDMAssert(getInputPort(i)->isConnected());
+-  
+   // Make sure it is invalid if sizes do not match.
+   mMax.resize(0, 0);
+-  // Check if the sizes match.
+-  Matrix a0 = getInputPort(0)->getValue().toMatrix();
+-  for (unsigned i = 1; i < getNumInputPorts(); ++i) {
+-    Matrix a = getInputPort(i)->getValue().toMatrix();
+-    if (size(a0) != size(a))
++
++  mInputPorts.clear();
++  unsigned n = getNumInputPorts();
++  if (n == 0) {
++      Log(Model, Error) << "No input ports for MaxModel \""
++                        << getName() << "\"" << endl;
+       return false;
+   }
+-  mMax.resize(a0);
++  for (unsigned i = 0; i < n; ++i) {
++    MatrixPortHandle matrixPort = getInputPort(i)->toMatrixPortHandle();
++    if (!matrixPort.isConnected()) {
++      Log(Model, Error) << "Found unconnected input Port for MaxModel \""
++                        << getName() << "\"" << endl;
++      return false;
++    }
++    mInputPorts.push_back(matrixPort);
++
++    Matrix a = matrixPort.getMatrixValue();
++    if (i == 0) {
++      mMax.resize(a);
++    } else {
++      if (size(mMax) != size(a)) {
++        Log(Model, Error) << "Input port sizes for MaxModel \""
++                          << getName() << "\" do not match." << endl;
++        return false;
++      }
++    }
++  }
++
+   return Model::init();
+ }
+ 
+ void
+ MaxModel::output(const TaskInfo&)
+ {
+-  MatrixPortHandle mh = getInputPort(0)->toMatrixPortHandle();
+-  mMax = mh.getMatrixValue();
+-  for (unsigned i = 1; i < getNumInputPorts(); ++i) {
+-    MatrixPortHandle mh = getInputPort(i)->toMatrixPortHandle();
+-    mMax = LinAlg::max(mMax, mh.getMatrixValue());
+-  }
++  // the input method guarantees that there is at least one input
++  mMax = mInputPorts[0].getMatrixValue();
++  for (unsigned i = 1; i < mInputPorts.size(); ++i)
++    mMax = LinAlg::max(mMax, mInputPorts[i].getMatrixValue());
+ }
+ 
+ const Matrix&
+
+Modified: trunk/OpenFDM/src/OpenFDM/MaxModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MaxModel.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/MaxModel.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -28,6 +28,7 @@
+ 
+ private:
+   Matrix mMax;
++  std::vector<MatrixPortHandle> mInputPorts;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -35,31 +35,48 @@
+ bool
+ MinModel::init(void)
+ {
+-  for (unsigned i = 0; i < getNumInputPorts(); ++i)
+-    OpenFDMAssert(getInputPort(i)->isConnected());
+-  
+   // Make sure it is invalid if sizes do not match.
+   mMin.resize(0, 0);
+-  // Check if the sizes match.
+-  Matrix a0 = getInputPort(0)->getValue().toMatrix();
+-  for (unsigned i = 1; i < getNumInputPorts(); ++i) {
+-    Matrix a = getInputPort(i)->getValue().toMatrix();
+-    if (size(a0) != size(a))
++
++  mInputPorts.clear();
++
++  unsigned n = getNumInputPorts();
++  if (n == 0) {
++      Log(Model, Error) << "No input ports for MinModel \""
++                        << getName() << "\"" << endl;
+       return false;
+   }
+-  mMin.resize(a0);
++  for (unsigned i = 0; i < n; ++i) {
++    MatrixPortHandle matrixPort = getInputPort(i)->toMatrixPortHandle();
++    if (!matrixPort.isConnected()) {
++      Log(Model, Error) << "Found unconnected input Port for MinModel \""
++                        << getName() << "\"" << endl;
++      return false;
++    }
++    mInputPorts.push_back(matrixPort);
++
++    Matrix a = matrixPort.getMatrixValue();
++    if (i == 0) {
++      mMin.resize(a);
++    } else {
++      if (size(mMin) != size(a)) {
++        Log(Model, Error) << "Input port sizes for MinModel \""
++                          << getName() << "\" do not match." << endl;
++        return false;
++      }
++    }
++  }
++
+   return Model::init();
+ }
+ 
+ void
+ MinModel::output(const TaskInfo&)
+ {
+-  MatrixPortHandle mh = getInputPort(0)->toMatrixPortHandle();
+-  mMin = mh.getMatrixValue();
+-  for (unsigned i = 1; i < getNumInputPorts(); ++i) {
+-    MatrixPortHandle mh = getInputPort(i)->toMatrixPortHandle();
+-    mMin = LinAlg::min(mMin, mh.getMatrixValue());
+-  }
++  // the input method guarantees that there is at least one input
++  mMin = mInputPorts[0].getMatrixValue();
++  for (unsigned i = 1; i < mInputPorts.size(); ++i)
++    mMin = LinAlg::min(mMin, mInputPorts[i].getMatrixValue());
+ }
+ 
+ const Matrix&
+
+Modified: trunk/OpenFDM/src/OpenFDM/MinModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MinModel.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/MinModel.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -28,6 +28,7 @@
+ 
+ private:
+   Matrix mMin;
++  std::vector<MatrixPortHandle> mInputPorts;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -48,7 +48,7 @@
+ PrismaticJoint::init(void)
+ {
+   /// Check if we have an input port connected to the joint force ...
+-  if (getInputPort(0)->isConnected())
++  if (getInputPort(0))
+     mJointForcePort = getInputPort(0)->toRealPortHandle();
+   else
+     mJointForcePort = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -48,6 +48,22 @@
+ {
+ }
+ 
++bool
++RevoluteActuator::init(void)
++{
++  mDesiredPositionPort = getInputPort(0)->toRealPortHandle();
++  if (!mDesiredPositionPort.isConnected()) {
++    Log(Model, Error) << "Initialization of RevoluteActuator model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  recheckTopology();
++  return Joint::init();
++}
++
+ void
+ RevoluteActuator::recheckTopology(void)
+ {
+@@ -121,13 +137,10 @@
+                                  const SpatialInertia& outI,
+                                  const Vector6& outF)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  RealPortHandle rh = getInputPort(0)->toRealPortHandle();
+-  real_type desiredPos = rh.getRealValue();
++  real_type desiredPos = mDesiredPositionPort.getRealValue();
+ 
+   real_type posErr = desiredPos - mRevoluteActuatorFrame->getJointPos();
+ 
+-//   real_type desiredVel = saturate(mVelGain*posErr, mMaxVel);
+   real_type desiredVel = smoothSaturate(mVelGain*posErr, mMaxVel);
+ 
+   real_type velErr = desiredVel - mRevoluteActuatorFrame->getJointVel();
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuator.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -25,8 +25,7 @@
+   RevoluteActuator(const std::string& name);
+   virtual ~RevoluteActuator(void);
+ 
+-  virtual bool init(void)
+-  { recheckTopology(); return Joint::init(); }
++  virtual bool init(void);
+ 
+   virtual void recheckTopology(void);
+ 
+@@ -96,6 +95,9 @@
+ 
+   /// The frame of the mobile root
+   SharedPtr<RevoluteActuatorFrame> mRevoluteActuatorFrame;
++
++  /// Input port for the desired position
++  RealPortHandle mDesiredPositionPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -46,7 +46,7 @@
+ RevoluteJoint::init(void)
+ {
+   /// Check if we have an input port connected to the joint force ...
+-  if (getInputPort(0)->isConnected())
++  if (getInputPort(0))
+     mJointForcePort = getInputPort(0)->toRealPortHandle();
+   else
+     mJointForcePort = 0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -37,9 +37,16 @@
+ bool
+ Saturation::init(void)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  
+-  Matrix inputMatrix = getInputPort(0)->getValue().toMatrix();
++  mInputPort = getInputPort(0)->toMatrixPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) << "Initialization of Saturation model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++
++  Matrix inputMatrix = mInputPort.getMatrixValue();
+   if (0 < rows(mMaxSaturation) && 0 < cols(mMaxSaturation) &&
+       size(mMaxSaturation) != size(inputMatrix))
+     mOutput.resize(0, 0);
+@@ -55,9 +62,7 @@
+ void
+ Saturation::output(const TaskInfo&)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  MatrixPortHandle mh = getInputPort(0)->toMatrixPortHandle();
+-  mOutput = mh.getMatrixValue();
++  mOutput = mInputPort.getMatrixValue();
+   if (0 < rows(mMaxSaturation) && 0 < cols(mMaxSaturation))
+     mOutput = LinAlg::min(mOutput, mMaxSaturation);
+   if (0 < rows(mMinSaturation) && 0 < cols(mMinSaturation))
+
+Modified: trunk/OpenFDM/src/OpenFDM/Saturation.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Saturation.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/Saturation.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -36,6 +36,8 @@
+   Matrix mMaxSaturation;
+   Matrix mMinSaturation;
+   Matrix mOutput;
++
++  MatrixPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -45,25 +45,36 @@
+ {
+ }
+ 
+-// bool
+-// SimpleGear::init(void)
+-// {
+-//   return true;
+-// }
++bool
++SimpleGear::init(void)
++{
++  Port* port = getInputPort("brakeCommand");
++  if (port)
++    mBrakeCommandHandle = port->toRealPortHandle();
++  else
++    mBrakeCommandHandle = RealPortHandle(0);
+ 
++  port = getInputPort("steeringAngle");
++  if (port)
++    mSteeringAngleHandle = port->toRealPortHandle();
++  else
++    mSteeringAngleHandle = RealPortHandle(0);
++
++  mBrake = 0;
++  mSteeringAngle = 0;
++
++  return Contact::init();
++}
++
+ void
+ SimpleGear::output(const TaskInfo& taskInfo)
+ {
+   if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
+                           SampleTime::PerTimestep)) {
+-    if (getInputPort("brakeCommand")->isConnected()) {
+-      RealPortHandle rh = getInputPort("brakeCommand")->toRealPortHandle();
+-      mBrake = rh.getRealValue();
+-    }
+-    if (getInputPort("steeringAngle")->isConnected()) {
+-      RealPortHandle rh = getInputPort("steeringAngle")->toRealPortHandle();
+-      mSteeringAngle = rh.getRealValue();
+-    }
++    if (mBrakeCommandHandle.isConnected())
++      mBrake = mBrakeCommandHandle.getRealValue();
++    if (mSteeringAngleHandle.isConnected())
++      mSteeringAngle = mSteeringAngleHandle.getRealValue();
+   }
+ 
+   Contact::output(taskInfo);
+@@ -127,7 +138,7 @@
+ SimpleGear::setFrictionCoeficient(real_type frictionCoef)
+ {
+   mFrictionCoef = frictionCoef;
+- }
++}
+ 
+ // Compute the plane normal force.
+ real_type
+
+Modified: trunk/OpenFDM/src/OpenFDM/SimpleGear.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimpleGear.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/SimpleGear.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -21,7 +21,7 @@
+   SimpleGear(const std::string& name);
+   virtual ~SimpleGear(void);
+ 
+-//   virtual bool init(void);
++  virtual bool init(void);
+   virtual void output(const TaskInfo&);
+ 
+   real_type getSteeringAngle(void) const;
+@@ -55,6 +55,9 @@
+   real_type mSpringConst;
+   real_type mSpringDamp;
+   real_type mFrictionCoef;
++
++  RealPortHandle mBrakeCommandHandle;
++  RealPortHandle mSteeringAngleHandle;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -41,18 +41,19 @@
+   mPositiveSummandPorts.clear();
+   mNegativeSummandPorts.clear();
+   for (unsigned i = 0; i < getNumInputPorts(); ++i) {
+-    if (!getInputPort(i)->isConnected()) {
++    MatrixPortHandle matrixPort = getInputPort(i)->toMatrixPortHandle();
++    if (!matrixPort.isConnected()) {
+       Log(Model, Error) << "Found unconnected input Port for Summer \""
+                         << getName() << "\"" << endl;
+       return false;
+     }
+     if (getInputPortName(i) == "-") {
+-      mNegativeSummandPorts.push_back(getInputPort(i)->toMatrixPortHandle());
++      mNegativeSummandPorts.push_back(matrixPort);
+     } else {
+-      mPositiveSummandPorts.push_back(getInputPort(i)->toMatrixPortHandle());
++      mPositiveSummandPorts.push_back(matrixPort);
+     }
+ 
+-    Matrix a = getInputPort(i)->getValue().toMatrix();
++    Matrix a = matrixPort.getMatrixValue();
+     if (i == 0) {
+       mSum.resize(a);
+     } else {
+
+Modified: trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -27,10 +27,16 @@
+ bool
+ TimeDerivative::init(void)
+ {
+-  if (!getInputPort(0)->isConnected())
++  mInputPort = getInputPort(0)->toMatrixPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) << "Initialization of TimeDerivative model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
+     return false;
++  }
+ 
+-  mDerivativeOutput.resize(getInputPort(0)->getValue().toMatrix());
++  mDerivativeOutput.resize(mInputPort.getMatrixValue());
+ 
+   // Set a mark for the first step.
+   mDt = 0.0;
+@@ -41,19 +47,17 @@
+ void
+ TimeDerivative::output(const TaskInfo&)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  MatrixPortHandle mh = getInputPort(0)->toMatrixPortHandle();
+   // If we are here at the first time, dt is set to zero.
+   // So, computing a derivative is not possible in the first step.
+   // Prepare zero output in this case.
+   if (mDt != 0.0) {
+-    OpenFDMAssert(size(mh.getMatrixValue()) == size(mPastInput));
+-    if (size(mh.getMatrixValue()) == size(mPastInput)) {
+-      mDerivativeOutput = mh.getMatrixValue() - mPastInput;
++    OpenFDMAssert(size(mInputPort.getMatrixValue()) == size(mPastInput));
++    if (size(mInputPort.getMatrixValue()) == size(mPastInput)) {
++      mDerivativeOutput = mInputPort.getMatrixValue() - mPastInput;
+       mDerivativeOutput *= 1/mDt;
+     }
+   } else {
+-    mDerivativeOutput.resize(mh.getMatrixValue());
++    mDerivativeOutput.resize(mInputPort.getMatrixValue());
+     mDerivativeOutput.clear();
+   }
+ }
+@@ -61,13 +65,10 @@
+ void
+ TimeDerivative::update(const TaskInfo& taskInfo)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-
+   // FIXME
+   real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
+   // Updating is just storing required information for the next output step.
+-  MatrixPortHandle mh = getInputPort(0)->toMatrixPortHandle();
+-  mPastInput = mh.getMatrixValue();
++  mPastInput = mInputPort.getMatrixValue();
+   mDt = dt;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/TimeDerivative.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TimeDerivative.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/TimeDerivative.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -27,6 +27,9 @@
+   Matrix mDerivativeOutput;
+   Matrix mPastInput;
+   double mDt;
++
++  /// The input port handle
++  MatrixPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -59,9 +59,14 @@
+ bool
+ DiscreteTransferFunction::init(void)
+ {
+-  OpenFDMAssert(getInputPort(0)->isConnected());
+-  if (!getInputPort(0)->isConnected())
++  mInputPort = getInputPort(0)->toRealPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) << "Initialization of DiscreteTransferFunction model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
+     return false;
++  }
+ 
+   mNumNorm.resize(0);
+   mDenNorm.resize(0);
+@@ -129,8 +134,7 @@
+ DiscreteTransferFunction::output(const TaskInfo&)
+ {
+   // Compute the output ...
+-  RealPortHandle rh = getInputPort(0)->toRealPortHandle();
+-  real_type input = rh.getRealValue();
++  real_type input = mInputPort.getRealValue();
+   mOutput = dot(mNumNorm, mState) + mD*input;
+ }
+ 
+@@ -143,8 +147,7 @@
+   if (0 < rows(mState)) {
+     // FIXME: use exponential integration scheme here ...
+     // looks very benificial, since it is exact here!
+-    RealPortHandle rh = getInputPort(0)->toRealPortHandle();
+-    real_type input = rh.getRealValue();
++    real_type input = mInputPort.getRealValue();
+     if (mState.size() == 1) {
+       /// On dimensional exponetial integrator ...
+       real_type z = -dt*dot(mDenNorm, mState);
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.h	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.h	2006-04-08 08:14:06 UTC (rev 272)
+@@ -59,6 +59,8 @@
+   /// Holds the interal discrete state
+   Vector mState;
+ 
++  /// Holds the handle to the input port
++  RealPortHandle mInputPort;
+   /// FIXME, at the moment only explicit integration ...
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-03-12 20:31:45 UTC (rev 271)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-04-08 08:14:06 UTC (rev 272)
+@@ -144,10 +144,21 @@
+ bool
+ UnaryFunctionModel::init(void)
+ {
+-  OpenFDMAssert(mImpl);
+-  mImpl->setRealPortHandle(getInputPort(0)->toRealPortHandle());
+-  if (!getInputPort(0)->isConnected())
++  if (!mImpl) {
++    Log(Model, Error) << "Initialization of UnaryFunctionModel model \""
++                      << getName() << "\" failed: No funcion given!" << endl;
+     return false;
++  }
++
++  RealPortHandle portHandle = getInputPort(0)->toRealPortHandle();
++  if (!portHandle.isConnected()) {
++    Log(Model, Error) << "Initialization of UnaryFunctionModel model \""
++                      << getName()
++                      << "\" failed: Input port \"" << getInputPortName(0)
++                      << "\" is not connected!" << endl;
++    return false;
++  }
++  mImpl->setRealPortHandle(portHandle);
+   return Model::init();
+ }
+ 
+
+
+
+From frohlich at berlios.de  Sat Apr 15 15:57:42 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Sat, 15 Apr 2006 15:57:42 +0200
+Subject: [OpenFDM-svn] r273 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200604151357.k3FDvgeI027170@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-04-15 15:57:36 +0200 (Sat, 15 Apr 2006)
+New Revision: 273
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+Log:
+Use preevaluated port
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-04-08 08:14:06 UTC (rev 272)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-04-15 13:57:36 UTC (rev 273)
+@@ -44,7 +44,7 @@
+     mIntegralState = mInitialValuePort.getMatrixValue();
+   } else {
+     if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+-      mInitialValue.resize(getInputPort(0)->getValue().toMatrix());
++      mInitialValue.resize(mDerivativePort.getMatrixValue());
+       mInitialValue.clear();
+     }
+     mIntegralState = mInitialValue;
+
+
+
+From frohlich at berlios.de  Mon Apr 17 10:57:14 2006
+From: frohlich at berlios.de (frohlich at BerliOS)
+Date: Mon, 17 Apr 2006 10:57:14 +0200
+Subject: [OpenFDM-svn] r274 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200604170857.k3H8vEip020951@sheep.berlios.de>
+
+Author: frohlich
+Date: 2006-04-17 10:57:13 +0200 (Mon, 17 Apr 2006)
+New Revision: 274
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+Log:
+Silent some debug output
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tailhook.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-04-15 13:57:36 UTC (rev 273)
++++ trunk/OpenFDM/src/OpenFDM/Tailhook.cpp	2006-04-17 08:57:13 UTC (rev 274)
+@@ -89,7 +89,6 @@
+   // ... yes this function works through sideffects ... :-/
+   real_type width;
+   if (!computeWireFrame(taskInfo.getTime(), width)) {
+-    Log(Model,Error) << "1" << endl;
+     mHasWire = false;
+     setForce(Vector6::zeros());
+     return;
+@@ -107,7 +106,6 @@
+   // Ok, the hook intersects the wire but the aircraft is sufficiently
+   // far that the hook tip has reached the wire
+   if (norm(hookWireInters) < mLength) {
+-    Log(Model,Error) << "2" << endl;
+     setForce(Vector6::zeros());
+     return;
+   }
+@@ -138,12 +136,11 @@
+   real_type v = 0.5*(vel0 + vel1);
+   if (v < 0.1) {
+     mHasWire = false;
+-    Log(Model,Error) << "3" << endl;
+     setForce(Vector6::zeros());
+     return;
+   }
+ 
+-  setForce(Vector6(Vector3::zeros(), (5e4 + v*5e3)*(wireDir0 + wireDir1)));
++  setForce(Vector6(Vector3::zeros(), (5e4 + v*3e3)*(wireDir0 + wireDir1)));
+ }
+ 
+ void
+@@ -162,7 +159,7 @@
+     const Ground* ground = mEnvironment->getGround();
+     mHasWire = ground->caughtWire(mOldHookPosition, currentPosition);
+     if (mHasWire)
+-      Log(Model,Error) << "Caught wire!" << endl;
++      Log(Model,Debug) << "Caught wire!" << endl;
+   }
+   mOldHookPosition = currentPosition;
+   mFirstTime = false;
+
+
+

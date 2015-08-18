@@ -1,0 +1,113 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r269 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r269%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603121911.k2CJB7xc027629%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000247.html">
+   <LINK REL="Next"  HREF="000249.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r269 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r269%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603121911.k2CJB7xc027629%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r269 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Mar 12 20:11:07 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000247.html">[OpenFDM-svn] r268 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000249.html">[OpenFDM-svn] r270 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#248">[ date ]</a>
+              <a href="thread.html#248">[ thread ]</a>
+              <a href="subject.html#248">[ subject ]</a>
+              <a href="author.html#248">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-03-12 20:11:04 +0100 (Sun, 12 Mar 2006)
+New Revision: 269
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+Log:
+Expose vc and ve to the property registry.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-03-12 18:50:10 UTC (rev 268)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReaderBase.cpp	2006-03-12 19:11:04 UTC (rev 269)
+@@ -479,6 +479,20 @@
+     port = mAeroForce-&gt;getOutputPort(&quot;trueSpeed&quot;);
+     port = addMultiBodyToUnit(&quot;True Speed kts&quot;, uKnots, port);
+ 
++  } else if (propName == &quot;fdm/jsbsim/velocities/vc-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;calibratedAirSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;Calibrated Speed fps&quot;, uFeetPSecond, port);
++  } else if (propName == &quot;fdm/jsbsim/velocities/vc-kts&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;calibratedAirSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;Calibrated Speed kts&quot;, uKnots, port);
++
++  } else if (propName == &quot;fdm/jsbsim/velocities/ve-fps&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;calibratedAirSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;Equivalent Speed fps&quot;, uFeetPSecond, port);
++  } else if (propName == &quot;fdm/jsbsim/velocities/ve-kts&quot;) {
++    port = mAeroForce-&gt;getOutputPort(&quot;calibratedAirSpeed&quot;);
++    port = addMultiBodyToUnit(&quot;Equivalent Speed kts&quot;, uKnots, port);
++
+   } else if (propName == &quot;fdm/jsbsim/velocities/mach-norm&quot; ||
+              propName == &quot;fdm/jsbsim/velocities/mach&quot;) {
+     port = mAeroForce-&gt;getOutputPort(&quot;machNumber&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-03-12 18:50:10 UTC (rev 268)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-03-12 19:11:04 UTC (rev 269)
+@@ -47,6 +47,9 @@
+   addOutputPort(&quot;coordOver2Speed&quot;, this, &amp;AeroForce::getCoordOver2Speed);
+   addOutputPort(&quot;hOverWingSpan&quot;, this, &amp;AeroForce::getHOverWingSpan);
+ 
++  addOutputPort(&quot;equivalentAirSpeed&quot;, this, &amp;AeroForce::getEquivalentAirSpeed);
++  addOutputPort(&quot;calibratedAirSpeed&quot;, this, &amp;AeroForce::getCalibratedAirSpeed);
++
+   addOutputPort(&quot;pressure&quot;, this, &amp;AeroForce::getPressure);
+   addOutputPort(&quot;density&quot;, this, &amp;AeroForce::getDensity);
+   addOutputPort(&quot;soundSpeed&quot;, this, &amp;AeroForce::getSoundSpeed);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000247.html">[OpenFDM-svn] r268 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000249.html">[OpenFDM-svn] r270 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#248">[ date ]</a>
+              <a href="thread.html#248">[ thread ]</a>
+              <a href="subject.html#248">[ subject ]</a>
+              <a href="author.html#248">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

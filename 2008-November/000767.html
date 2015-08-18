@@ -1,0 +1,184 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r799 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r799%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811270555.mAR5tq8c031437%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000766.html">
+   <LINK REL="Next"  HREF="000768.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r799 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r799%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200811270555.mAR5tq8c031437%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r799 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Nov 27 06:55:52 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000766.html">[OpenFDM-svn] r798 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000768.html">[OpenFDM-svn] r800 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#767">[ date ]</a>
+              <a href="thread.html#767">[ thread ]</a>
+              <a href="subject.html#767">[ subject ]</a>
+              <a href="author.html#767">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-27 06:55:50 +0100 (Thu, 27 Nov 2008)
+New Revision: 799
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Do not use the global port value storage. Will vanish at some time.
+
+M    src/test/structure.cpp
+M    src/OpenFDM/SimpleDirectModel.h
+M    src/OpenFDM/SimpleDirectModel.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-26 19:32:26 UTC (rev 798)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.cpp	2008-11-27 05:55:50 UTC (rev 799)
+@@ -28,6 +28,24 @@
+ {
+   return *mModel;
+ }
++
++const PortValue*
++SimpleDirectModel::Context::getPortValue(const PortInfo&amp; portInfo) const
++{
++  if (mModel-&gt;mOutputPort == &amp;portInfo)
++    return mOutputValue;
++  OpenFDMAssert(mInputValues.size() == mModel-&gt;mInputPorts.size());
++  for (unsigned i = 0; i &lt; mInputValues.size(); ++i)
++    if (mModel-&gt;mInputPorts[i] == &amp;portInfo)
++      return mInputValues[i];
++  return 0;
++}
++
++void
++SimpleDirectModel::Context::setPortValue(const PortInfo&amp; i, PortValue* v)
++{
++  OpenFDMAssert(false);
++}
+     
+ void
+ SimpleDirectModel::Context::initOutput(const /*Init*/Task&amp;)
+@@ -119,28 +137,7 @@
+     }
+   }
+   
+-  SharedPtr&lt;Context&gt; context;
+-  context = new Context(this, inputValues, outputPortValue);
+-  /// FIXME, this is for legacy lport value stuff ...
+-  for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+-    PortValue* portValue = portValueList.getPortValue(i);
+-    if (!portValue) {
+-      Log(Model, Error) &lt;&lt; &quot;No port value given for model \&quot;&quot; &lt;&lt; getName()
+-                        &lt;&lt; &quot;\&quot; and port \&quot;&quot; &lt;&lt; getPort(i)-&gt;getName()
+-                        &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return 0;
+-    }
+-    context-&gt;setPortValue(*getPort(i), portValue);
+-  }
+-  
+-  /// FIXME, should not need to do that either ...
+-  if (!context-&gt;allocStates()) {
+-    Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-    return 0;
+-  }
+-  
+-  return context.release();
++  return new Context(this, inputValues, outputPortValue);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-26 19:32:26 UTC (rev 798)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleDirectModel.h	2008-11-27 05:55:50 UTC (rev 799)
+@@ -34,6 +34,8 @@
+     virtual ~Context();
+     
+     virtual const SimpleDirectModel&amp; getNode() const;
++    virtual const PortValue* getPortValue(const PortInfo&amp;) const;
++    virtual void setPortValue(const PortInfo&amp;, PortValue*);
+     
+     virtual void initOutput(const /*Init*/Task&amp;);
+     virtual void output(const Task&amp;);
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-11-26 19:32:26 UTC (rev 798)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-11-27 05:55:50 UTC (rev 799)
+@@ -8,6 +8,7 @@
+ #include &lt;OpenFDM/GroupOutput.h&gt;
+ #include &lt;OpenFDM/LibraryNode.h&gt;
+ #include &lt;OpenFDM/LibraryModel.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+ 
+@@ -121,11 +122,18 @@
+   Group::NodeId delay = group-&gt;addChild(new Delay(&quot;D&quot;));
+   Group::NodeId outputDelay = group-&gt;addChild(new Output(&quot;OD&quot;));
+ 
++  Summer* summer = new Summer(&quot;S&quot;);
++  summer-&gt;addInputPort(&quot;input0&quot;);
++  summer-&gt;addInputPort(&quot;input1&quot;);
++  Group::NodeId summerId = group-&gt;addChild(summer);
++
+   group-&gt;connect(integrator1, &quot;output&quot;, integrator2, &quot;input&quot;);
+   group-&gt;connect(integrator2, &quot;output&quot;, gain, &quot;input&quot;);
+   group-&gt;connect(gain, &quot;output&quot;, integrator1, &quot;input&quot;);
++  group-&gt;connect(gain, &quot;output&quot;, summerId, &quot;input0&quot;);
++  group-&gt;connect(gain, &quot;output&quot;, summerId, &quot;input1&quot;);
+   group-&gt;connect(integrator2, &quot;output&quot;, output, &quot;input&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
++  group-&gt;connect(summerId, &quot;output&quot;, delay, &quot;input&quot;);
+   group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+ 
+   Group::NodeId groupOutputNode = group-&gt;addChild(new GroupOutput(&quot;GIO&quot;));
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000766.html">[OpenFDM-svn] r798 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000768.html">[OpenFDM-svn] r800 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#767">[ date ]</a>
+              <a href="thread.html#767">[ thread ]</a>
+              <a href="subject.html#767">[ subject ]</a>
+              <a href="author.html#767">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

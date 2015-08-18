@@ -1,0 +1,186 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r298 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r298%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200611100536.kAA5a4he022395%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r298 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r298%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200611100536.kAA5a4he022395%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r298 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov 10 06:36:04 CET 2006</I>
+    <P><UL>
+        
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#276">[ date ]</a>
+              <a href="thread.html#276">[ thread ]</a>
+              <a href="subject.html#276">[ subject ]</a>
+              <a href="author.html#276">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-11-10 06:36:02 +0100 (Fri, 10 Nov 2006)
+New Revision: 298
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+Log:
+Make refcounting threadsafe
+
+
+Added: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2006-09-26 18:29:34 UTC (rev 297)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2006-11-10 05:36:02 UTC (rev 298)
+@@ -0,0 +1,74 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Atomic_H
++#define OpenFDM_Atomic_H
++
++#if defined(__GNUC__) &amp;&amp; (4 &lt;= __GNUC__) &amp;&amp; (1 &lt;= __GNUC_MINOR__)
++// No need to include something. Is a Compiler API ...
++# define OpenFDM_USE_GCC4_BUILTINS
++#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
++// Neat old Win32 functions
++# include &lt;windows.h&gt;
++# define OpenFDM_USE_WIN32_INTERLOCKED
++#else
++// The sledge hammer ...
++# include &quot;Mutex.h&quot;
++# include &quot;ScopedLock.h&quot;
++#endif
++
++namespace OpenFDM {
++
++class Atomic {
++public:
++  Atomic(unsigned value = 0) : mValue(value)
++  { }
++  unsigned operator++()
++  {
++#if defined(OpenFDM_USE_GCC4_BUILTINS)
++    return __sync_add_and_fetch(&amp;mValue, 1);
++#elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
++    return InterlockedIncrement(reinterpret_cast&lt;long volatile*&gt;(&amp;mValue));
++#else
++    ScopedLock lock(mMutex);
++    return ++mValue;
++#endif
++  }
++  unsigned operator--()
++  {
++#if defined(OpenFDM_USE_GCC4_BUILTINS)
++    return __sync_sub_and_fetch(&amp;mValue, 1);
++#elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
++    return InterlockedDecrement(reinterpret_cast&lt;long volatile*&gt;(&amp;mValue));
++#else
++    ScopedLock lock(mMutex);
++    return --mValue;
++#endif
++  }
++  operator unsigned() const
++  {
++#if defined(OpenFDM_USE_GCC4_BUILTINS)
++    __sync_synchronize();
++    return mValue;
++#elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
++    return static_cast&lt;unsigned const volatile &amp;&gt;(mValue);
++#else
++    ScopedLock lock(mMutex);
++    return mValue;
++#endif
++ }
++
++private:
++  Atomic(const Atomic&amp;);
++  Atomic&amp; operator=(const Atomic&amp;);
++
++#if !defined(OpenFDM_USE_GCC4_BUILTINS) &amp;&amp; !defined(OpenFDM_USE_WIN32_INTERLOCKED)
++  mutable Mutex mMutex;
++#endif
++  unsigned mValue;
++};
++
++}  // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-09-26 18:29:34 UTC (rev 297)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-11-10 05:36:02 UTC (rev 298)
+@@ -26,6 +26,7 @@
+   Assert.h \
+   Atmosphere.h \
+   AtmosphereSTD1976.h \
++  Atomic.h \
+   Bias.h \
+   BinaryFunctionModel.h \
+   CartesianActuatorFrame.h \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2006-09-26 18:29:34 UTC (rev 297)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2006-11-10 05:36:02 UTC (rev 298)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_Referenced_H
+ #define OpenFDM_Referenced_H
+ 
++#include &quot;Atomic.h&quot;
++
+ namespace OpenFDM {
+ 
+ class Referenced {
+@@ -28,7 +30,7 @@
+   { if (ref) return 1u &lt; ref-&gt;_refcount; else return false; }
+ 
+ private:
+-  mutable unsigned _refcount;
++  mutable Atomic _refcount;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#276">[ date ]</a>
+              <a href="thread.html#276">[ thread ]</a>
+              <a href="subject.html#276">[ subject ]</a>
+              <a href="author.html#276">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

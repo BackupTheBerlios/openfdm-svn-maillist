@@ -1,0 +1,321 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r553 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r553%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810031515.m93FFWvr024559%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000523.html">
+   <LINK REL="Next"  HREF="000525.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r553 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r553%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810031515.m93FFWvr024559%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r553 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct  3 17:15:32 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000523.html">[OpenFDM-svn] r552 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000525.html">[OpenFDM-svn] r554 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#524">[ date ]</a>
+              <a href="thread.html#524">[ thread ]</a>
+              <a href="subject.html#524">[ subject ]</a>
+              <a href="author.html#524">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-03 17:15:32 +0200 (Fri, 03 Oct 2008)
+New Revision: 553
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h
+Log:
+Add the derivative computation task.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-03 15:08:11 UTC (rev 552)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-03 15:15:32 UTC (rev 553)
+@@ -13,8 +13,9 @@
+ namespace OpenFDM {
+ 
+ class Task;
++class ContinousTask;
+ class DiscreteTask;
+-class ContinousTask;
++class InitTask;
+ 
+ class MechanicContext : public LeafContext {
+ public:
+@@ -25,19 +26,19 @@
+ 
+   bool alloc()
+   { return mMechanicNode-&gt;alloc(*this); }
+-  void init(const Task&amp;)
++  void init(const /*Init*/Task&amp;)
+   { mMechanicNode-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
+ 
+-  void velocities(const ContinousTask&amp;)
++  void velocities(const Task&amp;)
+   { mMechanicNode-&gt;velocity(mContinousState, mPortValueList); }
+-  void articulation(const ContinousTask&amp;)
++  void articulation(const Task&amp;)
+   { mMechanicNode-&gt;articulation(mContinousState, mPortValueList); }
+-  void accelerations(const ContinousTask&amp;)
++  void accelerations(const Task&amp;)
+   { }
+ 
+-//   virtual void derivative(const ContinousStateValueVector&amp;,
+-//                           const PortValueList&amp;,
+-//                           ContinousStateValueVector&amp;) const
++  void derivative(const Task&amp;)
++  { mMechanicNode-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
++                              mContinousStateDerivative); }
+  
+ //   void outputVelocities()
+ //   { }
+@@ -72,23 +73,23 @@
+         return false;
+     return true;
+   }
+-  void init(const Task&amp; task) const
++  void init(const /*Init*/Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;init(task);
+   }
+-  void velocities(const ContinousTask&amp; task) const
++  void velocities(const Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;velocities(task);
+   }
+-  void articulation(const ContinousTask&amp; task) const
++  void articulation(const Task&amp; task) const
+   {
+     // Note that this list is traversed from the mechanic leafs to the root
+     for (list_type::const_reverse_iterator i = rbegin(); i != rend(); ++i)
+       (*i)-&gt;articulation(task);
+   }
+-  void accelerations(const ContinousTask&amp; task) const
++  void accelerations(const Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;accelerations(task);
+@@ -98,6 +99,11 @@
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;update(task);
+   }
++  void derivative(const Task&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;derivative(task);
++  }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-10-03 15:08:11 UTC (rev 552)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-10-03 15:15:32 UTC (rev 553)
+@@ -28,7 +28,8 @@
+   virtual void articulation(const ContinousStateValueVector&amp;,
+                             PortValueList&amp;) const
+   { }
+-  virtual void derivative(const ContinousStateValueVector&amp;,
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
+                           const PortValueList&amp;,
+                           ContinousStateValueVector&amp;) const
+   { }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-10-03 15:08:11 UTC (rev 552)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-10-03 15:15:32 UTC (rev 553)
+@@ -13,8 +13,9 @@
+ namespace OpenFDM {
+ 
+ class Task;
++class ContinousTask;
+ class DiscreteTask;
+-class ContinousTask;
++class InitTask;
+ 
+ //// This one is used to execute the simulation system
+ class ModelContext : public LeafContext {
+@@ -26,18 +27,16 @@
+ 
+   bool alloc()
+   { return mModel-&gt;alloc(*this); }
+-  void init()
++  void init(const /*Init*/Task&amp;)
+   { mModel-&gt;init(mDiscreteState, mContinousState, mPortValueList); }
+   void output(const Task&amp;)
+   { mModel-&gt;output(mDiscreteState, mContinousState, mPortValueList); }
+   void update(const DiscreteTask&amp; discreteTask)
+   { mModel-&gt;update(discreteTask, mDiscreteState, mContinousState, mPortValueList); }
+ 
+-//   void derivative()
+-//   { mModel-&gt;derivative(mDiscreteState,
+-//                        mContinousState,
+-//                        mPortValueList,
+-//                        mContinousStateDerivative); }
++  void derivative(const Task&amp;)
++  { mModel-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
++                       mContinousStateDerivative); }
+ 
+   // Return true if this model directly depends on one of models outputs
+   bool dependsOn(const ModelContext&amp; modelContext) const;
+@@ -61,10 +60,10 @@
+         return false;
+     return true;
+   }
+-  void init(const Task&amp; task) const
++  void init(const /*Init*/Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i) {
+-      (*i)-&gt;init();
++      (*i)-&gt;init(task);
+       (*i)-&gt;output(task);
+     }
+   }
+@@ -78,6 +77,11 @@
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;update(task);
+   }
++  void derivative(const Task&amp; task) const
++  {
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
++      (*i)-&gt;derivative(task);
++  }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-03 15:08:11 UTC (rev 552)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-03 15:15:32 UTC (rev 553)
+@@ -505,7 +505,7 @@
+     // FIXME is here just for curiousity :)
+     ModelInstanceList::const_iterator i;
+     for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
+-      (*i)-&gt;getNodeContext().init();
++      (*i)-&gt;getNodeContext().init(*reinterpret_cast&lt;Task*&gt;(0));
+       (*i)-&gt;getNodeContext().output(*reinterpret_cast&lt;Task*&gt;(0));
+     }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h	2008-10-03 15:08:11 UTC (rev 552)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h	2008-10-03 15:15:32 UTC (rev 553)
+@@ -18,7 +18,10 @@
+   const real_type&amp; getTime() const
+   { return mTime; }
+ 
+-// protected:
++  /// Hmm, there should be some exec method,
++  /// that can be used to do real multitasking here ...
++
++protected:
+   void setTime(const real_type&amp; time)
+   { mTime = time; }
+ 
+@@ -26,6 +29,32 @@
+   real_type mTime;
+ };
+ 
++class InitTask : public Task {
++public:
++  void init(const real_type&amp; t)
++  {
++    setTime(t);
++    // The model outputs before mechanical state propagation
++    mModelContextList[0].init(*this);
++    // Now the mechanical state propagation
++    mMechanicContextList.init(*this);
++    mMechanicContextList.velocities(*this);
++    // The model outputs before mechanical force propagation
++    mModelContextList[1].init(*this);
++    // Now the mechanical force propagation
++    mMechanicContextList.articulation(*this);
++    // The model outputs before mechanical acceleration propagation
++    mModelContextList[2].init(*this);
++    // Now the mechanical acceleration propagation
++    mMechanicContextList.accelerations(*this);
++    // The model outputs past mechanical acceleration propagation
++    mModelContextList[3].init(*this);
++  }
++
++  ModelContextList mModelContextList[4];
++  MechanicContextList mMechanicContextList;
++};
++
+ class DiscreteTask : public Task {
+ public:
+   DiscreteTask(const real_type&amp; stepsize) : mStepsize(stepsize) { }
+@@ -34,13 +63,16 @@
+   const real_type&amp; getStepsize() const
+   { return mStepsize; }
+ 
+-  void output()
++  void output(const real_type&amp; t)
+   {
++    setTime(t);
+     mModelContextList.output(*this);
+-    mMechanicContextList.init(*this);
++    // ?????
++//     mMechanicContextList.output(*this);
+   }
+-  void update()
++  void update(const real_type&amp; startTime)
+   {
++    OpenFDMAssert(equal(startTime, getTime(), 100));
+     mModelContextList.update(*this);
+     mMechanicContextList.update(*this);
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000523.html">[OpenFDM-svn] r552 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000525.html">[OpenFDM-svn] r554 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#524">[ date ]</a>
+              <a href="thread.html#524">[ thread ]</a>
+              <a href="subject.html#524">[ subject ]</a>
+              <a href="author.html#524">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

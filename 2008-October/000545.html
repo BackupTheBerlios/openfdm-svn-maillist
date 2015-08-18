@@ -1,0 +1,154 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r574 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r574%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810070527.m975RXw8007711%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000544.html">
+   <LINK REL="Next"  HREF="000546.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r574 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r574%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810070527.m975RXw8007711%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r574 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct  7 07:27:33 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000544.html">[OpenFDM-svn] r573 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000546.html">[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#545">[ date ]</a>
+              <a href="thread.html#545">[ thread ]</a>
+              <a href="subject.html#545">[ subject ]</a>
+              <a href="author.html#545">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-07 07:27:31 +0200 (Tue, 07 Oct 2008)
+New Revision: 574
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h
+Log:
+Dump an idea to improove the port system.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h	2008-10-07 04:55:54 UTC (rev 573)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AcceptorPortInfo.h	2008-10-07 05:27:31 UTC (rev 574)
+@@ -15,6 +15,9 @@
+   AcceptorPortInfo(Node* node, const std::string&amp; name);
+   virtual ~AcceptorPortInfo();
+ 
++  virtual bool canConnect(const PortInfo&amp; portInfo) const
++  { return portInfo.toProviderPortInfo(); }
++
+   virtual const AcceptorPortInfo* toAcceptorPortInfo() const;
+ 
+   virtual bool getDirectInput() const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-07 04:55:54 UTC (rev 573)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-10-07 05:27:31 UTC (rev 574)
+@@ -23,7 +23,7 @@
+ /// Port structure:
+ /// InputPort (NumericPortValue, size constraint?)
+ /// OutputPort (NumericPortValue, size constraint?)
+-/// BodyLink (MechanicPortValue ...)
++/// MechanicLink (MechanicPortValue ...)
+ 
+ class ProxyAcceptorPortInfo;
+ class ProxyProviderPortInfo;
+@@ -157,6 +157,10 @@
+     if (!port1)
+       return false;
+ 
++    // Just a crude first time check if this will work in principle.
++    if (!port0-&gt;canConnect(*port1))
++      return false;
++
+     if (port0-&gt;toProviderPortInfo() &amp;&amp; port1-&gt;toAcceptorPortInfo()) {
+       SharedPtr&lt;Connect&gt; connect = new Connect;
+       if (!connect-&gt;setProvider(nodeId0, portId0))
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-07 04:55:54 UTC (rev 573)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-07 05:27:31 UTC (rev 574)
+@@ -37,6 +37,9 @@
+ 
+   unsigned getIndex() const { return mIndex; }
+ 
++  virtual bool canConnect(const PortInfo&amp; portInfo) const
++  { return false; }
++
+   virtual const AcceptorPortInfo* toAcceptorPortInfo() const
+   { return 0; }
+   virtual const ProviderPortInfo* toProviderPortInfo() const
+@@ -45,7 +48,8 @@
+   { return 0; }
+   virtual const ProxyProviderPortInfo* toProxyProviderPortInfo() const
+   { return 0; }
+-  
++
++  // May be virtual here ???, identify the fast and the slow path ...
+   PortValue* getPortValue(const PortValueVector&amp; portValueVector) const
+   {
+     unsigned index = getIndex();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h	2008-10-07 04:55:54 UTC (rev 573)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ProviderPortInfo.h	2008-10-07 05:27:31 UTC (rev 574)
+@@ -18,6 +18,9 @@
+   /// Public interface to instantiate a new port value
+   PortValue* newValue() const;
+ 
++  virtual bool canConnect(const PortInfo&amp; portInfo) const
++  { return portInfo.toAcceptorPortInfo(); }
++
+   /// Dynamic casts
+   virtual const ProviderPortInfo* toProviderPortInfo() const;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000544.html">[OpenFDM-svn] r573 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000546.html">[OpenFDM-svn] r575 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#545">[ date ]</a>
+              <a href="thread.html#545">[ thread ]</a>
+              <a href="subject.html#545">[ subject ]</a>
+              <a href="author.html#545">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

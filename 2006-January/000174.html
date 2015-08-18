@@ -1,0 +1,227 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r191%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051536.k05Fa2BS000290%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000173.html">
+   <LINK REL="Next"  HREF="000175.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r191%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051536.k05Fa2BS000290%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 16:36:02 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000173.html">[OpenFDM-svn] r189 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000175.html">[OpenFDM-svn] r192 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#174">[ date ]</a>
+              <a href="thread.html#174">[ thread ]</a>
+              <a href="subject.html#174">[ subject ]</a>
+              <a href="author.html#174">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 16:35:57 +0100 (Thu, 05 Jan 2006)
+New Revision: 191
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Bias.cpp
+   trunk/OpenFDM/src/OpenFDM/Bias.h
+   trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+   trunk/OpenFDM/src/OpenFDM/DeadBand.h
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+Log:
+Preevaluate more inputs
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Bias.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-01-05 15:35:57 UTC (rev 191)
+@@ -38,32 +38,31 @@
+ {
+   // Invalidate outputs
+   mOutput.resize(0, 0);
+-  
+-  // Minimal check of the input port 
+-  if (!getInputPort(0)-&gt;isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Input port of \&quot;&quot; &lt;&lt; getName()
+-                   &lt;&lt; &quot;\&quot;, is not valid&quot; &lt;&lt; endl;
++
++  mInputPort = getInputPort(0)-&gt;toMatrixPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of Bias model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+     return false;
+   }
+ 
+   // Size compatibility check
+-  if (size(getInputPort(0)-&gt;getValue().toMatrix()) != size(mBias)) {
++  if (size(mInputPort.getMatrixValue()) != size(mBias)) {
+     Log(Model, Error) &lt;&lt; &quot;Input port of \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;, does not &quot;
+                       &lt;&lt; &quot;match the size of the bias property&quot; &lt;&lt; endl;
+     return false;
+   }
++  mOutput.resize(mInputPort.getMatrixValue());
+ 
+-  // Make sure it is invalid if sizes do not match.
+-  mOutput.resize(getInputPort(0)-&gt;getValue().toMatrix());
+   return true;
+ }
+ 
+ void
+ Bias::output(const TaskInfo&amp;)
+ {
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  MatrixPortHandle mh = getInputPort(0)-&gt;toMatrixPortHandle();
+-  mOutput = mh.getMatrixValue();
++  OpenFDMAssert(mInputPort.isConnected());
++  mOutput = mInputPort.getMatrixValue();
+   mOutput += mBias;
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Bias.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Bias.h	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/Bias.h	2006-01-05 15:35:57 UTC (rev 191)
+@@ -32,6 +32,7 @@
+ private:
+   Matrix mBias;
+   Matrix mOutput;
++  MatrixPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-01-05 15:35:57 UTC (rev 191)
+@@ -34,17 +34,23 @@
+ bool
+ DeadBand::init(void)
+ {
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+-  return getInputPort(0)-&gt;isConnected();
++  mInputPort = getInputPort(0)-&gt;toRealPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of DeadBand model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++
++  return true;
+ }
+ 
+ void
+ DeadBand::output(const TaskInfo&amp;)
+ {
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++  OpenFDMAssert(mInputPort.isConnected());
+   
+-  RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
+-  mOutput = rh.getRealValue();
++  mOutput = mInputPort.getRealValue();
+   if (mOutput &lt; -mWidth)
+     mOutput += mWidth;
+   else if (mWidth &lt; mOutput)
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.h	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.h	2006-01-05 15:35:57 UTC (rev 191)
+@@ -31,6 +31,7 @@
+ private:
+   real_type mWidth;
+   real_type mOutput;
++  RealPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-01-05 15:35:57 UTC (rev 191)
+@@ -243,12 +243,23 @@
+ bool
+ UnitConversionModel::init(void)
+ {
++  mInputPort = getInputPort(0)-&gt;toRealPortHandle();
++  if (!mInputPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of UnitConversion model \&quot;&quot;
++                      &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++
++  return true;
+ }
+ 
+ void
+ UnitConversionModel::output(const TaskInfo&amp;)
+ {
+-  real_type value = getInputPort(0)-&gt;toRealPortHandle().getRealValue();
++  OpenFDMAssert(mInputPort.isConnected());
++  real_type value = mInputPort.getRealValue();
+   if (mType == UnitToSi) {
+     mValue = convertFrom(mUnit, value);
+   } else {
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2006-01-05 15:11:24 UTC (rev 190)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2006-01-05 15:35:57 UTC (rev 191)
+@@ -78,6 +78,7 @@
+   Type mType;
+   Unit mUnit;
+   real_type mValue;
++  RealPortHandle mInputPort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000173.html">[OpenFDM-svn] r189 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000175.html">[OpenFDM-svn] r192 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#174">[ date ]</a>
+              <a href="thread.html#174">[ thread ]</a>
+              <a href="subject.html#174">[ subject ]</a>
+              <a href="author.html#174">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

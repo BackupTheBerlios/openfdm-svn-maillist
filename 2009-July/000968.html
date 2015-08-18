@@ -1,0 +1,157 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1006 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1006%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907150522.n6F5Mqep006515%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000983.html">
+   <LINK REL="Next"  HREF="000969.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1006 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1006%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907150522.n6F5Mqep006515%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1006 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Jul 15 07:22:52 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000983.html">[OpenFDM-svn] r1005 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000969.html">[OpenFDM-svn] r1007 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#968">[ date ]</a>
+              <a href="thread.html#968">[ thread ]</a>
+              <a href="subject.html#968">[ subject ]</a>
+              <a href="author.html#968">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-15 07:22:50 +0200 (Wed, 15 Jul 2009)
+New Revision: 1006
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h
+Log:
+Reuse the Coordinate System's position for the DesignPosition computation.
+
+M    src/OpenFDM/Task.h
+M    src/OpenFDM/MechanicContext.h
+M    src/OpenFDM/MechanicLinkValue.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2009-07-15 05:21:29 UTC (rev 1005)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2009-07-15 05:22:50 UTC (rev 1006)
+@@ -57,10 +57,8 @@
+ 
+   void initVelocities(const /*Init*/Task&amp; task) const
+   {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i) {
+-      (*i)-&gt;initDesignPosition();
++    for (list_type::const_iterator i = begin(); i != end(); ++i)
+       (*i)-&gt;initVelocities(task);
+-    }
+   }
+   void velocities(const Task&amp; task) const
+   {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-15 05:21:29 UTC (rev 1005)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2009-07-15 05:22:50 UTC (rev 1006)
+@@ -104,11 +104,6 @@
+     mVelocity = mCoordinateSystem.rotToReference(velocity) + parentVel;
+   }
+ 
+-  const Vector3&amp; getDesignPosition() const
+-  { return mDesignPosition; }
+-  void setDesignPosition(const Vector3&amp; designPosition)
+-  { mDesignPosition = designPosition; }
+-
+ protected:
+   /// The local coordinate system of the mechanic link.
+   CoordinateSystem mCoordinateSystem;
+@@ -122,10 +117,10 @@
+   /// The spacial velocities pivot point is at the coordinate systems origin.
+   Vector6 mAcceleration;
+ 
++  // These are stored in local coordinates.
++  // FIXME: move them to global coordinates too
+   Vector6 mArticulatedForce;
+   SpatialInertia mArticulatedInertia;
+-
+-  Vector3 mDesignPosition;
+ };
+ 
+ class ParentLink {
+@@ -196,7 +191,8 @@
+   void setDesignPosition(const Vector3&amp; position)
+   {
+     OpenFDMAssert(isConnected());
+-    mLinkRelPos = position - mMechanicLinkValue-&gt;getDesignPosition();
++    mLinkRelPos = position;
++    mLinkRelPos -= mMechanicLinkValue-&gt;getCoordinateSystem().getPosition();
+   }
+ 
+   void applyBodyForce(const Vector6&amp; force)
+@@ -282,7 +278,7 @@
+   { return *mMechanicLinkValue; }
+ 
+   void setDesignPosition(const Vector3&amp; position)
+-  { mMechanicLinkValue-&gt;setDesignPosition(position); }
++  { mMechanicLinkValue-&gt;setCoordinateSystem(CoordinateSystem(position)); }
+ 
+   void setLocalAcceleration(const Vector6&amp; accel)
+   { mMechanicLinkValue-&gt;setLocalAcceleration(accel); }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h	2009-07-15 05:21:29 UTC (rev 1005)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Task.h	2009-07-15 05:22:50 UTC (rev 1006)
+@@ -37,6 +37,8 @@
+     setTime(t);
+     // The model outputs before mechanical state propagation
+     mModelContextList[0].initOutput(*this);
++    // The mechanical systems design positions
++    mMechanicContextList.initDesignPosition();
+     // Now the mechanical state propagation
+     mMechanicContextList.initVelocities(*this);
+     // The model outputs before mechanical force propagation
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000983.html">[OpenFDM-svn] r1005 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000969.html">[OpenFDM-svn] r1007 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#968">[ date ]</a>
+              <a href="thread.html#968">[ thread ]</a>
+              <a href="subject.html#968">[ subject ]</a>
+              <a href="author.html#968">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

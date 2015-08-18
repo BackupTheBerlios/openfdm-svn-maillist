@@ -1,0 +1,363 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r970 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r970%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271932.n0RJWg8d007768%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000933.html">
+   <LINK REL="Next"  HREF="000935.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r970 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r970%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271932.n0RJWg8d007768%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r970 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jan 27 20:32:42 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000933.html">[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000935.html">[OpenFDM-svn] r971 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#934">[ date ]</a>
+              <a href="thread.html#934">[ thread ]</a>
+              <a href="subject.html#934">[ subject ]</a>
+              <a href="author.html#934">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-27 20:32:41 +0100 (Tue, 27 Jan 2009)
+New Revision: 970
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInterfaceNode.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/GroupMechanicLink.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Port.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+Log:
+Move MechanicLink into its own implementation.
+
+M    src/OpenFDM/GroupMechanicLink.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/MechanicLink.h
+M    src/OpenFDM/Port.h
+M    src/OpenFDM/PortValueList.h
+M    src/OpenFDM/Node.cpp
+M    src/OpenFDM/GroupInterfaceNode.cpp
+M    src/OpenFDM/Port.cpp
+AM   src/OpenFDM/MechanicLink.cpp
+M    src/OpenFDM/MechanicNode.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInterfaceNode.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInterfaceNode.cpp	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupInterfaceNode.cpp	2009-01-27 19:32:41 UTC (rev 970)
+@@ -5,6 +5,8 @@
+ #include &quot;GroupInterfaceNode.h&quot;
+ 
+ #include &quot;ConstNodeVisitor.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Model.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/GroupMechanicLink.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/GroupMechanicLink.h	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/GroupMechanicLink.h	2009-01-27 19:32:41 UTC (rev 970)
+@@ -7,6 +7,7 @@
+ 
+ #include &lt;string&gt;
+ #include &quot;GroupInterfaceNode.h&quot;
++#include &quot;MechanicLink.h&quot;
+ #include &quot;Port.h&quot;
+ #include &quot;SharedPtr.h&quot;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-27 19:32:41 UTC (rev 970)
+@@ -163,6 +163,7 @@
+   LibraryNode.cpp \
+   Logger.cpp \
+   MechanicContext.cpp \
++  MechanicLink.cpp \
+   MechanicLinkValue.cpp \
+   MechanicNode.cpp \
+   MidpointRule.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.cpp	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.cpp	2009-01-27 19:32:41 UTC (rev 970)
+@@ -0,0 +1,39 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;MechanicLink.h&quot;
++
++#include &quot;ConstNodeVisitor.h&quot;
++#include &quot;NodeVisitor.h&quot;
++
++namespace OpenFDM {
++
++MechanicLink::MechanicLink(Node* node, const std::string&amp; name) :
++  Port(node, name)
++{
++}
++
++MechanicLink::~MechanicLink()
++{
++}
++
++void
++MechanicLink::accept(NodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++MechanicLink::accept(ConstNodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++const MechanicLink*
++MechanicLink::toMechanicLink() const
++{
++  return this;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLink.h	2009-01-27 19:32:41 UTC (rev 970)
+@@ -11,26 +11,28 @@
+ 
+ namespace OpenFDM {
+ 
+-class MechanicLink_ {
++class MechanicLink : public Port {
+ public:
+-  MechanicLink_(Node* node, const std::string&amp; name) :
+-    mPort(new MechanicLink(node, name))
+-  {}
+-  MechanicLinkValue* getPortValue(const PortValueVector&amp; portValueVector) const
+-  {
+-    PortValue* portValue = mPort-&gt;getPortValue(portValueVector);
+-    OpenFDMAssert(portValue);
+-    OpenFDMAssert(portValue-&gt;toMechanicLinkValue());
+-    return static_cast&lt;MechanicLinkValue*&gt;(portValue);
+-  }
+-  bool empty() const
+-  { return !mPort; }
+-  void clear()
+-  { if (!mPort) return; mPort-&gt;clear(); mPort = 0; }
+-  unsigned getPortIndex() const
+-  { OpenFDMAssert(mPort); return mPort-&gt;getIndex(); }
+-private:
+-  SharedPtr&lt;MechanicLink&gt; mPort;
++  MechanicLink(Node* node, const std::string&amp; name);
++  virtual ~MechanicLink();
++
++  virtual void accept(NodeVisitor&amp; visitor) const;
++  virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
++  virtual const MechanicLink* toMechanicLink() const;
++
++  virtual unsigned getMaxConnects() const
++  { return 1; }
++
++  virtual bool canConnect(const Port&amp; portInfo) const
++  { return portInfo.toMechanicLink(); }
++
++  virtual bool acceptPortValue(PortValue* portValue) const
++  { return portValue-&gt;toMechanicLinkValue(); }
++
++protected:
++  virtual MechanicLinkValue* newValueImplementation() const
++  { return new MechanicLinkValue; }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2009-01-27 19:32:41 UTC (rev 970)
+@@ -49,10 +49,6 @@
+ 
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+-
+-protected:
+-  MechanicLink_ newMechanicLink(const std::string&amp; name)
+-  { return MechanicLink_(this, name); }
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2009-01-27 19:32:41 UTC (rev 970)
+@@ -6,6 +6,7 @@
+ 
+ #include &quot;ConstNodeVisitor.h&quot;
+ #include &quot;Group.h&quot;
++#include &quot;LogStream.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Port.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Port.cpp	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Port.cpp	2009-01-27 19:32:41 UTC (rev 970)
+@@ -65,16 +65,4 @@
+   visitor.apply(*this);
+ }
+ 
+-void
+-MechanicLink::accept(NodeVisitor&amp; visitor) const
+-{
+-  visitor.apply(*this);
+-}
+-
+-void
+-MechanicLink::accept(ConstNodeVisitor&amp; visitor) const
+-{
+-  visitor.apply(*this);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h	2009-01-27 19:32:41 UTC (rev 970)
+@@ -11,7 +11,6 @@
+ #include &quot;WeakPtr.h&quot;
+ #include &quot;WeakReferenced.h&quot;
+ 
+-#include &quot;MechanicLinkValue.h&quot;
+ #include &quot;NumericPortValue.h&quot;
+ 
+ namespace OpenFDM {
+@@ -189,35 +188,6 @@
+   bool mAccelerationOutput;
+ };
+ 
+-class MechanicLink : public Port {
+-public:
+-  // FIXME: mechanic links are special. Just allow them in MechanicNodes ...
+-  MechanicLink(/*Mechanic*/Node* node, const std::string&amp; name) :
+-    Port(node, name)
+-  { }
+-  virtual ~MechanicLink()
+-  { }
+-
+-  virtual void accept(NodeVisitor&amp; visitor) const;
+-  virtual void accept(ConstNodeVisitor&amp; visitor) const;
+-
+-  virtual const MechanicLink* toMechanicLink() const
+-  { return this; }
+-
+-  virtual unsigned getMaxConnects() const
+-  { return 1; }
+-
+-  virtual bool canConnect(const Port&amp; portInfo) const
+-  { return portInfo.toMechanicLink(); }
+-
+-  virtual bool acceptPortValue(PortValue* portValue) const
+-  { return portValue-&gt;toMechanicLinkValue(); }
+-
+-protected:
+-  virtual MechanicLinkValue* newValueImplementation() const
+-  { return new MechanicLinkValue; }
+-};
+-
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-01-27 19:18:25 UTC (rev 969)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2009-01-27 19:32:41 UTC (rev 970)
+@@ -42,8 +42,6 @@
+ 
+   // Accessors for matrix valued ports
+   // FIXME Implement access control for the port value
+-  MechanicLinkValue&amp; operator[](const MechanicLink_&amp; port) const
+-  { return *port.getPortValue(mPortValueVector); }
+   const MechanicLinkValue&amp; operator[](const MechanicLink&amp; port) const
+   { return *getPortValue(port); }
+   MechanicLinkValue&amp; operator[](const MechanicLink&amp; port)
+@@ -73,12 +71,6 @@
+       return 0;
+     return port.getPortValue(mPortValueVector);
+   }
+-  MechanicLinkValue* getPortValue(const MechanicLink_&amp; port)
+-  {
+-    if (port.empty())
+-      return 0;
+-    return port.getPortValue(mPortValueVector);
+-  }
+ 
+   // FIXME, avoid this method here. With this method the output stage of a model
+   // can change the port values, this should not be available in a model.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000933.html">[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000935.html">[OpenFDM-svn] r971 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#934">[ date ]</a>
+              <a href="thread.html#934">[ thread ]</a>
+              <a href="subject.html#934">[ subject ]</a>
+              <a href="author.html#934">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

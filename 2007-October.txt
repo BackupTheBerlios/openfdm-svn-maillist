@@ -1,0 +1,860 @@
+From frohlich at mail.berlios.de  Sat Oct  6 18:06:53 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 6 Oct 2007 18:06:53 +0200
+Subject: [OpenFDM-svn] r325 - trunk/flightgear
+Message-ID: <200710061606.l96G6rTI012341@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-06 18:06:53 +0200 (Sat, 06 Oct 2007)
+New Revision: 325
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+change inheritance hierarchy.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2007-10-06 16:06:00 UTC (rev 324)
++++ trunk/flightgear/FGOpenFDM.cpp	2007-10-06 16:06:53 UTC (rev 325)
+@@ -578,7 +578,7 @@
+ {
+   unsigned numModels = modelGroup->getNumModels();
+   for (unsigned i = 0; i < numModels; ++i) {
+-    Model* model = modelGroup->getModel(i);
++    Node* model = modelGroup->getModel(i);
+     std::string pName = toPropname(model->getName());
+     SGPropertyNode* sgProp = base->getNode(pName.c_str(), true);
+     tieObject(sgProp, model);
+
+
+
+From frohlich at mail.berlios.de  Sat Oct  6 19:11:35 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 6 Oct 2007 19:11:35 +0200
+Subject: [OpenFDM-svn] r326 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710061711.l96HBZdh002683@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-06 19:11:34 +0200 (Sat, 06 Oct 2007)
+New Revision: 326
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Make the path available in the visitor.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-10-06 16:06:53 UTC (rev 325)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-10-06 17:11:34 UTC (rev 326)
+@@ -13,6 +13,8 @@
+ 
+ namespace OpenFDM {
+ 
++typedef std::list<SharedPtr<Node> > NodePath;
++
+ class ModelVisitor {
+ public:
+   virtual ~ModelVisitor(void)
+@@ -31,15 +33,30 @@
+   { apply(static_cast<Interact&>(joint)); }
+   virtual void apply(MobileRootJoint& mobileRootJoint)
+   { apply(static_cast<Joint&>(mobileRootJoint)); }
++
++  const NodePath& getNodePath() const
++  { return mNodePath; }
++
+ protected:
+   /// Call this in the apply(ModelGroup&) method if you want to
+   /// traverse downward
+   inline void traverse(ModelGroup& modelGroup)
+-  { modelGroup.traverse(*this); }
++  {
++    mNodePath.push_back(&modelGroup);
++    modelGroup.traverse(*this);
++    mNodePath.pop_back();
++  }
+   /// Call this in the apply(ModelGroup&) method if you want to
+   /// traverse upward
+   inline void ascend(Node& node)
+-  { node.ascend(*this); }
++  {
++    mNodePath.push_back(&node);
++    node.ascend(*this);
++    mNodePath.pop_back();
++  }
++private:
++  // The path that visitor has passed
++  NodePath mNodePath;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-10-06 16:06:53 UTC (rev 325)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-10-06 17:11:34 UTC (rev 326)
+@@ -24,6 +24,7 @@
+ 
+ struct ModelListEntry {
+   SharedPtr<Model> model;
++  NodePath nodePath;
+   SampleTimeSet sampleTimeSet;  
+ };
+ 
+@@ -38,6 +39,7 @@
+   {
+     ModelListEntry entry;
+     entry.model = &model;
++    entry.nodePath = getNodePath();
+     entry.sampleTimeSet = model.getSampleTimeSet();
+     if (entry.sampleTimeSet.isInherited()) {
+       SampleTimeSet::const_iterator it;
+@@ -748,13 +750,17 @@
+   mModels.swap(newList);
+ 
+   // print the schedule ...
+-//   ModelList2::const_iterator it;
+-//   it = mModels.begin();
+-//   while (it != mModels.end()) {
+-//     Log(Model,Error) << it->model->getPathString() << " "
+-//                      << it->sampleTimeSet << endl;
+-//     ++it;
+-//   }
++  Log(Schedule,Info) << "Model Schedule:" << endl;
++  ModelList2::const_iterator it;
++  it = mModels.begin();
++  while (it != mModels.end()) {
++    NodePath::const_iterator ni;
++    for (ni = it->nodePath.begin(); ni != it->nodePath.end(); ++ni)
++      Log(Schedule,Info) << "/" << (*ni)->getName();
++    Log(Schedule,Info) << "/" << it->model->getName() << " "
++                       << it->sampleTimeSet << endl;
++    ++it;
++  }
+ 
+   return true;
+ }
+
+
+
+From frohlich at mail.berlios.de  Sat Oct  6 19:24:16 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 6 Oct 2007 19:24:16 +0200
+Subject: [OpenFDM-svn] r327 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710061724.l96HOGC8000363@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-06 19:24:15 +0200 (Sat, 06 Oct 2007)
+New Revision: 327
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/GroupInput.cpp
+   trunk/OpenFDM/src/OpenFDM/GroupInput.h
+   trunk/OpenFDM/src/OpenFDM/GroupOutput.cpp
+   trunk/OpenFDM/src/OpenFDM/GroupOutput.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Just use ModelGroup instad of Group.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/GroupInput.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/GroupInput.cpp	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/GroupInput.cpp	2007-10-06 17:24:15 UTC (rev 327)
+@@ -21,7 +21,7 @@
+ }
+ 
+ unsigned
+-GroupInput::addParent(Group* group)
++GroupInput::addParent(ModelGroup* group)
+ {
+   unsigned parentIndex = Model::addParent(group);
+   if (parentIndex == ~0u)
+@@ -37,7 +37,7 @@
+ void
+ GroupInput::removeParent(unsigned idx)
+ {
+-  SharedPtr<Group> oldParent = getParent(idx).lock();
++  SharedPtr<ModelGroup> oldParent = getParent(idx).lock();
+   if (oldParent) {
+     // detach from a ModelGroup
+     oldParent->removeInputPort(mPortProxy);
+
+Modified: trunk/OpenFDM/src/OpenFDM/GroupInput.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/GroupInput.h	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/GroupInput.h	2007-10-06 17:24:15 UTC (rev 327)
+@@ -17,7 +17,7 @@
+   GroupInput(const std::string& name);
+   virtual ~GroupInput();
+   
+-  virtual unsigned addParent(Group* model);
++  virtual unsigned addParent(ModelGroup* model);
+   virtual void removeParent(unsigned idx);
+ 
+   NumericPortAcceptor* getGroupInput()
+
+Modified: trunk/OpenFDM/src/OpenFDM/GroupOutput.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/GroupOutput.cpp	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/GroupOutput.cpp	2007-10-06 17:24:15 UTC (rev 327)
+@@ -22,7 +22,7 @@
+ }
+ 
+ unsigned
+-GroupOutput::addParent(Group* group)
++GroupOutput::addParent(ModelGroup* group)
+ {
+   unsigned parentIndex = Model::addParent(group);
+   if (parentIndex == ~0u)
+@@ -39,7 +39,7 @@
+ void
+ GroupOutput::removeParent(unsigned idx)
+ {
+-  SharedPtr<Group> oldParent = getParent(idx).lock();
++  SharedPtr<ModelGroup> oldParent = getParent(idx).lock();
+   if (oldParent) {
+     // detach from a ModelGroup
+     oldParent->removeOutputPort(mPortProxy->getPortProvider());
+
+Modified: trunk/OpenFDM/src/OpenFDM/GroupOutput.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/GroupOutput.h	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/GroupOutput.h	2007-10-06 17:24:15 UTC (rev 327)
+@@ -17,7 +17,7 @@
+   GroupOutput(const std::string& name);
+   virtual ~GroupOutput();
+ 
+-  virtual unsigned addParent(Group* model);
++  virtual unsigned addParent(ModelGroup* model);
+   virtual void removeParent(unsigned idx);
+ 
+   PortProvider* getGroupOutput()
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-10-06 17:24:15 UTC (rev 327)
+@@ -33,7 +33,7 @@
+ Node::ascend(ModelVisitor& visitor)
+ {
+   for (ParentList::iterator i = mParents.begin(); i != mParents.end(); ++i) {
+-    SharedPtr<Group> group = i->lock();
++    SharedPtr<ModelGroup> group = i->lock();
+     if (!group)
+       continue;
+     group->accept(visitor);
+@@ -52,31 +52,31 @@
+   return 0;
+ }
+ 
+-const Group*
++const ModelGroup*
+ Node::toModelGroup(void) const
+ {
+   return 0;
+ }
+ 
+-Group*
++ModelGroup*
+ Node::toModelGroup(void)
+ {
+   return 0;
+ }
+ 
+-WeakPtr<const Group>
++WeakPtr<const ModelGroup>
+ Node::getParent(unsigned idx) const
+ {
+   if (mParents.size() <= idx)
+-    return WeakPtr<const Group>(0);
++    return WeakPtr<const ModelGroup>(0);
+   return mParents[idx];
+ }
+ 
+-WeakPtr<Group>
++WeakPtr<ModelGroup>
+ Node::getParent(unsigned idx)
+ {
+   if (mParents.size() <= idx)
+-    return WeakPtr<Group>(0);
++    return WeakPtr<ModelGroup>(0);
+   return mParents[idx];
+ }
+ 
+@@ -110,11 +110,11 @@
+ }
+ 
+ unsigned
+-Node::addParent(Group* model)
++Node::addParent(ModelGroup* model)
+ {
+   if (!model)
+     return ~0u;
+-  mParents.push_back(WeakPtr<Group>(model));
++  mParents.push_back(WeakPtr<ModelGroup>(model));
+   return mParents.size() - 1;
+ }
+ 
+@@ -184,18 +184,6 @@
+   visitor.apply(*this);
+ }
+ 
+-const ModelGroup*
+-Model::toModelGroup(void) const
+-{
+-  return 0;
+-}
+-
+-ModelGroup*
+-Model::toModelGroup(void)
+-{
+-  return 0;
+-}
+-
+ const Input*
+ Model::toInput(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-10-06 17:11:34 UTC (rev 326)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-10-06 17:24:15 UTC (rev 327)
+@@ -42,12 +42,10 @@
+ 
+ 
+ 
+-typedef ModelGroup Group;
+-
+ class Node : public Object {
+   OPENFDM_OBJECT(Node, Object);
+ public:
+-  typedef std::list<SharedPtr<Group> > Path;
++  typedef std::list<SharedPtr<ModelGroup> > Path;
+ 
+   Node(const std::string& name);
+   virtual ~Node(void);
+@@ -65,11 +63,11 @@
+   virtual const Model* toModel(void) const;
+   virtual Model* toModel(void);
+ 
+-  virtual const Group* toModelGroup(void) const;
+-  virtual Group* toModelGroup(void);
++  virtual const ModelGroup* toModelGroup(void) const;
++  virtual ModelGroup* toModelGroup(void);
+ 
+-  WeakPtr<const Group> getParent(unsigned idx) const;
+-  WeakPtr<Group> getParent(unsigned idx);
++  WeakPtr<const ModelGroup> getParent(unsigned idx) const;
++  WeakPtr<ModelGroup> getParent(unsigned idx);
+ 
+   Path getPath() /* FIXME const*/;
+ 
+@@ -83,7 +81,7 @@
+   // Sets the parent model.
+   unsigned getNumParents(void) const;
+   // FIXME: remove virtual here ...
+-  virtual unsigned addParent(Group* model);
++  virtual unsigned addParent(ModelGroup* model);
+   virtual void removeParent(unsigned idx);
+ 
+ public:
+@@ -149,7 +147,7 @@
+   friend class GroupOutput;
+ 
+ private:
+-  typedef std::vector<WeakPtr<Group> > ParentList;
++  typedef std::vector<WeakPtr<ModelGroup> > ParentList;
+   ParentList mParents;
+ 
+   // FIXME
+@@ -179,9 +177,6 @@
+   /// Double dispatch helper for the system visitor
+ //   virtual void accept(ConstModelVisitor& visitor) const;
+ 
+-  virtual const ModelGroup* toModelGroup(void) const;
+-  virtual ModelGroup* toModelGroup(void);
+-
+   virtual const Input* toInput(void) const;
+   virtual Input* toInput(void);
+ 
+
+
+
+From frohlich at mail.berlios.de  Sun Oct  7 08:43:55 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 7 Oct 2007 08:43:55 +0200
+Subject: [OpenFDM-svn] r328 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710070643.l976ht0C013018@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-07 08:43:55 +0200 (Sun, 07 Oct 2007)
+New Revision: 328
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/CowPtr.h
+Log:
+Make use of already implemented functions.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/CowPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-10-06 17:24:15 UTC (rev 327)
++++ trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-10-07 06:43:55 UTC (rev 328)
+@@ -27,7 +27,7 @@
+ 
+   T* ptr(void)
+   {
+-    if (mPtr->isShared())
++    if (shared(mPtr))
+       mPtr = mPtr->clone();
+     return mPtr;
+   }
+
+
+
+From frohlich at mail.berlios.de  Sun Oct  7 08:44:25 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 7 Oct 2007 08:44:25 +0200
+Subject: [OpenFDM-svn] r329 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710070644.l976iPEJ013063@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-07 08:44:25 +0200 (Sun, 07 Oct 2007)
+New Revision: 329
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+Move some configury into the config file.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2007-10-07 06:43:55 UTC (rev 328)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2007-10-07 06:44:25 UTC (rev 329)
+@@ -5,18 +5,11 @@
+ #ifndef OpenFDM_Atomic_H
+ #define OpenFDM_Atomic_H
+ 
+-#if defined(__GNUC__) && (4 <= __GNUC__) && (1 <= __GNUC_MINOR__)
+-// No need to include something. Is a Compiler API ...
+-# define OpenFDM_USE_GCC4_BUILTINS
+-#elif defined(__sgi) && defined(_COMPILER_VERSION) && (_COMPILER_VERSION>=730)
+-// No need to include something. Is a Compiler API ...
+-# define OpenFDM_USE_MIPSPRO_BUILTINS
+-#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
+-// Neat old Win32 functions
++#include "OpenFDMConfig.h"
++
++#if defined(OpenFDM_USE_WIN32_INTERLOCKED)
+ # include <windows.h>
+-# define OpenFDM_USE_WIN32_INTERLOCKED
+-#else
+-// The sledge hammer ...
++#elif defined(OpenFDM_USE_MUTEX)
+ # include "Mutex.h"
+ # include "ScopeLock.h"
+ #endif
+@@ -35,9 +28,11 @@
+     return __add_and_fetch(&mValue, 1);
+ #elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
+     return InterlockedIncrement(reinterpret_cast<long volatile*>(&mValue));
+-#else
++#elif defined(OpenFDM_USE_MUTEX)
+     ScopeLock lock(mMutex);
+     return ++mValue;
++#else
++    return ++mValue;
+ #endif
+   }
+   unsigned operator--()
+@@ -48,9 +43,11 @@
+     return __sub_and_fetch(&mValue, 1);
+ #elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
+     return InterlockedDecrement(reinterpret_cast<long volatile*>(&mValue));
+-#else
++#elif defined(OpenFDM_USE_MUTEX)
+     ScopeLock lock(mMutex);
+     return --mValue;
++#else
++    return --mValue;
+ #endif
+   }
+   operator unsigned() const
+@@ -63,9 +60,11 @@
+     return mValue;
+ #elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
+     return static_cast<unsigned const volatile &>(mValue);
+-#else
++#elif defined(OpenFDM_USE_MUTEX)
+     ScopeLock lock(mMutex);
+     return mValue;
++#else
++    return mValue;
+ #endif
+  }
+ 
+@@ -73,12 +72,10 @@
+   Atomic(const Atomic&);
+   Atomic& operator=(const Atomic&);
+ 
+-#if !defined(OpenFDM_USE_GCC4_BUILTINS) \
+-  && !defined(OpenFDM_USE_MIPOSPRO_BUILTINS) \
+-  && !defined(OpenFDM_USE_WIN32_INTERLOCKED)
++#if defined(OpenFDM_USE_MUTEX)
+   mutable Mutex mMutex;
+ #endif
+-#ifdef OpenFDM_USE_WIN32_INTERLOCKED
++#if defined(OpenFDM_USE_WIN32_INTERLOCKED)
+   __declspec(align(32))
+ #endif
+   unsigned mValue;
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2007-10-07 06:43:55 UTC (rev 328)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2007-10-07 06:44:25 UTC (rev 329)
+@@ -0,0 +1,31 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_OpenFDMConfig_H
++#define OpenFDM_OpenFDMConfig_H
++
++#if defined(__GNUC__) && (4 <= __GNUC__) && (1 <= __GNUC_MINOR__)
++#define OpenFDM_DEPRECATED __attribute__ ((deprecated))
++#else
++#define OpenFDM_DEPRECATED
++#endif
++
++// FIXME: move these tests into autoconf and define one of the following
++// at configure time. This will guarantee that the binaries do work if
++// they compile.
++#if defined(__GNUC__) && (4 <= __GNUC__) && (1 <= __GNUC_MINOR__)
++// No need to include something. Is a Compiler API ...
++# define OpenFDM_USE_GCC4_BUILTINS
++#elif defined(__sgi) && defined(_COMPILER_VERSION) && (_COMPILER_VERSION>=730)
++// No need to include something. Is a Compiler API ...
++# define OpenFDM_USE_MIPSPRO_BUILTINS
++#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
++// Neat old Win32 functions
++# define OpenFDM_USE_WIN32_INTERLOCKED
++#else
++// The sledge hammer ...
++# define OpenFDM_USE_MUTEX
++#endif
++
++#endif
+
+
+
+From frohlich at mail.berlios.de  Sun Oct  7 08:46:01 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 7 Oct 2007 08:46:01 +0200
+Subject: [OpenFDM-svn] r330 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710070646.l976k1Dj013225@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-07 08:46:01 +0200 (Sun, 07 Oct 2007)
+New Revision: 330
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Deprecate the getPath method.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-10-07 06:44:25 UTC (rev 329)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-10-07 06:46:01 UTC (rev 330)
+@@ -69,7 +69,7 @@
+   WeakPtr<const ModelGroup> getParent(unsigned idx) const;
+   WeakPtr<ModelGroup> getParent(unsigned idx);
+ 
+-  Path getPath() /* FIXME const*/;
++  Path getPath() OpenFDM_DEPRECATED;
+ 
+   /// Returns the number of input properties.
+   unsigned getNumInputPorts(void) const
+
+
+
+From frohlich at mail.berlios.de  Thu Oct 25 06:31:02 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 25 Oct 2007 06:31:02 +0200
+Subject: [OpenFDM-svn] r331 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710250431.l9P4V2Db003348@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-25 06:31:01 +0200 (Thu, 25 Oct 2007)
+New Revision: 331
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/CowPtr.h
+Log:
+Add a comment about an impossible race condition.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/CowPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-10-07 06:46:01 UTC (rev 330)
++++ trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-10-25 04:31:01 UTC (rev 331)
+@@ -27,6 +27,12 @@
+ 
+   T* ptr(void)
+   {
++    // Ok, asking here if the data is shared one time is suficient.
++    // For the first cut, it might happen that just past shared returned
++    // false a new reference is generated in an othe thread.
++    // That can not happen, since a reference in an other thread would
++    // cause a reference count > 1 what means that we cannot use
++    // the shared copy anyway and we have already made a copy anyway.
+     if (shared(mPtr))
+       mPtr = mPtr->clone();
+     return mPtr;
+
+
+
+From frohlich at mail.berlios.de  Thu Oct 25 06:33:03 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 25 Oct 2007 06:33:03 +0200
+Subject: [OpenFDM-svn] r332 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710250433.l9P4X3rX009058@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-25 06:33:02 +0200 (Thu, 25 Oct 2007)
+New Revision: 332
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+Log:
+Include OpenFDMConfig.h.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2007-10-25 04:31:01 UTC (rev 331)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2007-10-25 04:33:02 UTC (rev 332)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_Referenced_H
+ #define OpenFDM_Referenced_H
+ 
++#include "OpenFDMConfig.h"
+ #include "Atomic.h"
+ 
+ namespace OpenFDM {
+
+
+
+From frohlich at mail.berlios.de  Thu Oct 25 06:33:40 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 25 Oct 2007 06:33:40 +0200
+Subject: [OpenFDM-svn] r333 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710250433.l9P4Xe2S010462@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-25 06:33:39 +0200 (Thu, 25 Oct 2007)
+New Revision: 333
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Object.h
+Log:
+Include OpenFDMConfig.h
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.h	2007-10-25 04:33:02 UTC (rev 332)
++++ trunk/OpenFDM/src/OpenFDM/Object.h	2007-10-25 04:33:39 UTC (rev 333)
+@@ -9,6 +9,8 @@
+ #include <map>
+ #include <string>
+ 
++#include "OpenFDMConfig.h"
++
+ #include "SharedPtr.h"
+ #include "WeakReferenced.h"
+ #include "Variant.h"
+
+
+
+From frohlich at mail.berlios.de  Thu Oct 25 06:34:28 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 25 Oct 2007 06:34:28 +0200
+Subject: [OpenFDM-svn] r334 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200710250434.l9P4YSPt012586@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-25 06:34:28 +0200 (Thu, 25 Oct 2007)
+New Revision: 334
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Connection.h
+Log:
+Mark connectRoute as deprecated.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.h	2007-10-25 04:33:39 UTC (rev 333)
++++ trunk/OpenFDM/src/OpenFDM/Connection.h	2007-10-25 04:34:28 UTC (rev 334)
+@@ -5,6 +5,8 @@
+ #ifndef OpenFDM_Connection_H
+ #define OpenFDM_Connection_H
+ 
++#include "OpenFDMConfig.h"
++
+ #include "Object.h"
+ #include "SharedPtr.h"
+ #include "PortAcceptor.h"
+@@ -46,7 +48,8 @@
+   /// The two ports must just belong to models of the same system.
+   /// If required ModelGroup inputs or outputs are inserted.
+   static Port::ConnectResult connectRoute(PortProvider* port0,
+-                                          PortAcceptor* port1);
++                                          PortAcceptor* port1)
++    OpenFDM_DEPRECATED;
+ 
+ private:
+   /// Disconnect this connection from all attached Ports
+
+
+
+From frohlich at mail.berlios.de  Sun Oct 28 22:35:56 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 28 Oct 2007 22:35:56 +0100
+Subject: [OpenFDM-svn] r336 - trunk/flightgear
+Message-ID: <200710282135.l9SLZudO025781@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-10-28 22:35:56 +0100 (Sun, 28 Oct 2007)
+New Revision: 336
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Make use of the unit system
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2007-10-28 21:30:10 UTC (rev 335)
++++ trunk/flightgear/FGOpenFDM.cpp	2007-10-28 21:35:56 UTC (rev 336)
+@@ -11,7 +11,7 @@
+ #include <Main/fg_props.hxx>
+ 
+ #include <JSBSim/JSBSimReader.h>
+-#include <OpenFDM/Units.h>
++#include <OpenFDM/Unit.h>
+ #include <OpenFDM/Vehicle.h>
+ #include <OpenFDM/Input.h>
+ #include <OpenFDM/Output.h>
+@@ -206,7 +206,7 @@
+     double east = fgGetDouble("/environment/wind-from-east-fps");
+     double down = fgGetDouble("/environment/wind-from-down-fps");
+ 
+-    return convertFrom(uFeetPSecond, T*Vector3(north, east, down));
++    return Unit::footPerSecond().convertFrom(T*Vector3(north, east, down));
+   }
+ };
+ 
+@@ -335,7 +335,7 @@
+   // Check the position
+   Geodetic gp = Geodetic(get_Latitude(),
+                          get_Longitude(),
+-                         convertFrom(uFoot, get_Altitude()));
++                         Unit::foot().convertFrom(get_Altitude()));
+   SG_LOG(SG_FLIGHT, SG_INFO, "Geod Pos " << gp << " set.");
+   mobileRootJoint->setGeodPosition(gp);
+ 
+@@ -351,7 +351,7 @@
+   if (speed_set == "UVW") {
+     Vector3 bodyVel(get_uBody(), get_vBody(), get_wBody());
+     mobileRootJoint->setAngularRelVel(Vector3::zeros());
+-    mobileRootJoint->setLinearRelVel(convertFrom(uFeetPSecond, bodyVel));
++    mobileRootJoint->setLinearRelVel(Unit::footPerSecond().convertFrom(bodyVel));
+ //   } else if (speed_set == "NED") {
+ //   } else if (speed_set == "KNOTS") {
+ //   } else if (speed_set == "MACH") {
+@@ -366,7 +366,7 @@
+   // Copy the trim results back
+   gp = vehicle->getGeodPosition();
+   _updateGeodeticPosition(gp.latitude, gp.longitude,
+-                          convertTo(uFoot, gp.altitude));
++                          Unit::foot().convertTo(gp.altitude));
+ 
+   Rotation geodOr = vehicle->getGeodOrientation();
+   Vector3 euler = geodOr.getEuler();
+@@ -414,7 +414,7 @@
+   // Check the position
+   Geodetic gp = Geodetic(get_Latitude(),
+                          get_Longitude(),
+-                         convertFrom(uFoot, get_Altitude()));
++                         Unit::foot().convertFrom(get_Altitude()));
+   if (!equal(vehicle->getPlanet()->toCart(gp), vehicle->getCartPosition())) {
+     SG_LOG(SG_FLIGHT, SG_INFO,
+            "Geod Pos set, error = "
+@@ -454,7 +454,7 @@
+   // Now write the newly computed values into the interface class.
+   gp = vehicle->getGeodPosition();
+   _updateGeodeticPosition(gp.latitude, gp.longitude,
+-                          convertTo(uFoot, gp.altitude));
++                          Unit::foot().convertTo(gp.altitude));
+ //   _set_Altitude_AGL(model->getAGL() * M2FT);
+ 
+   Rotation geodOr = vehicle->getGeodOrientation();
+@@ -463,23 +463,23 @@
+ 
+   // FIXME: wrong velocities are set here ...
+   Vector3 velWrtWind = vehicle->getVelocity().getLinear();
+-  _set_V_rel_wind(convertTo(uFeetPSecond, norm(velWrtWind)));
+-  _set_Velocities_Wind_Body(convertTo(uFeetPSecond, velWrtWind(0)),
+-                            convertTo(uFeetPSecond, velWrtWind(1)),
+-                            convertTo(uFeetPSecond, velWrtWind(2)));
+-  _set_V_equiv_kts(convertTo(uKnots, norm(velWrtWind)));
+-  _set_V_calibrated_kts(convertTo(uKnots, norm(velWrtWind)));
++  _set_V_rel_wind(Unit::footPerSecond().convertTo(norm(velWrtWind)));
++  _set_Velocities_Wind_Body(Unit::footPerSecond().convertTo(velWrtWind(0)),
++                            Unit::footPerSecond().convertTo(velWrtWind(1)),
++                            Unit::footPerSecond().convertTo(velWrtWind(2)));
++  _set_V_equiv_kts(Unit::knots().convertTo(norm(velWrtWind)));
++  _set_V_calibrated_kts(Unit::knots().convertTo(norm(velWrtWind)));
+   _set_Mach_number(norm(velWrtWind)/340);
+ 
+-  Vector3 localVel = convertTo(uFeetPSecond, geodOr.backTransform(velWrtWind));
++  Vector3 localVel = Unit::footPerSecond().convertTo(geodOr.backTransform(velWrtWind));
+   _set_Velocities_Local(localVel(0),localVel(1), localVel(2));
+-  _set_V_ground_speed(convertTo(uFeetPSecond,
++  _set_V_ground_speed(Unit::footPerSecond().convertTo(
+              sqrt(localVel(0)*localVel(0) + localVel(1)*localVel(1))));
+   _set_Velocities_Ground(localVel(0), localVel(1), -localVel(2));;
+   _set_Climb_Rate(-localVel(2));
+ 
+   const RigidBody* topBody = vehicle->getTopBody();
+-  Vector3 bodyAccel = convertTo(uFeetPSec2, topBody->getFrame()->getClassicAccel().getLinear());
++  Vector3 bodyAccel = Unit::footPerSecond2().convertTo(topBody->getFrame()->getClassicAccel().getLinear());
+   _set_Accels_Body(bodyAccel(0), bodyAccel(1), bodyAccel(2));
+   _set_Accels_Pilot_Body(bodyAccel(0), bodyAccel(1), bodyAccel(2));
+   _set_Accels_CG_Body(bodyAccel(0), bodyAccel(1), bodyAccel(2));
+@@ -488,7 +488,7 @@
+   Vector3 localAccel = geodOr.backTransform(bodyAccel);
+   _set_Accels_Local(localAccel(0), localAccel(1), localAccel(2));
+ 
+-  Vector3 nAccel = 1/convertTo(uFeetPSec2, 9.81) * bodyAccel;
++  Vector3 nAccel = 1/Unit::footPerSecond2().convertTo(9.81) * bodyAccel;
+   _set_Accels_CG_Body_N(nAccel(0), nAccel(1), nAccel(2));
+ 
+ 
+
+
+

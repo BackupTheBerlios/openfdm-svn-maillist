@@ -1,0 +1,142 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r513%20-%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg&In-Reply-To=%3C200809271530.m8RFUFEJ002128%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000484.html">
+   <LINK REL="Next"  HREF="000486.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r513%20-%0A%09branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg&In-Reply-To=%3C200809271530.m8RFUFEJ002128%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r513 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Sep 27 17:30:16 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000484.html">[OpenFDM-svn] r512 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000486.html">[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#485">[ date ]</a>
+              <a href="thread.html#485">[ thread ]</a>
+              <a href="subject.html#485">[ subject ]</a>
+              <a href="author.html#485">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-27 17:30:14 +0200 (Sat, 27 Sep 2008)
+New Revision: 513
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/IO.h
+Log:
+Updates to the linuea algebra stuff.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h	2008-09-27 11:59:32 UTC (rev 512)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Container.h	2008-09-27 15:30:14 UTC (rev 513)
+@@ -144,6 +144,15 @@
+   Matrix&amp; operator*=(value_type scalar)
+   { scalarMultiplyMatrix(*this, scalar); return *this; }
+ 
++  static Matrix zeros(size_type r, size_type c)
++  {
++    Matrix ret(r, c);
++    for (size_type i = 0; i &lt; r; ++i)
++      for (size_type j = 0; j &lt; c; ++j)
++        ret(i, j) = 0;
++    return ret;
++  }
++
+ private:
+   using MatrixLValue&lt;Matrix&lt;T,rows_,cols_&gt;,rows_,cols_&gt;::assign;
+   RectangularArray&lt;T,rows_,cols_&gt; data_;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/IO.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/IO.h	2008-09-27 11:59:32 UTC (rev 512)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/IO.h	2008-09-27 15:30:14 UTC (rev 513)
+@@ -38,18 +38,16 @@
+ 
+   size_type rows = A.asImpl().rows();
+   size_type cols = A.asImpl().cols();
+-  size_type i, j;
+-  for (i = 0; i &lt; rows; ++i) {
+-    if (i == 0)
+-      os &lt;&lt; '[';
+-    else
+-      os &lt;&lt; ' ';
++  os &lt;&lt; os.widen('[');
++  for (size_type i = 0; i &lt; rows; ++i) {
++    if (0 &lt; i)
++      os &lt;&lt; os.widen(' ');
+ 
+-    for (j = 0; j &lt; cols; ++j) {
++    for (size_type j = 0; j &lt; cols; ++j) {
+       value_type val = A.asImpl()(i, j);
+     
+       if (val == 0) {
+-        os &lt;&lt; std::setw(width) &lt;&lt; '0' &lt;&lt; ' ';
++        os &lt;&lt; std::setw(width) &lt;&lt; os.widen('0') &lt;&lt; os.widen(' ');
+       } else {
+         int expo = static_cast&lt;int&gt;(floor(fabs(log10(fabs(val)))));
+         
+@@ -59,15 +57,14 @@
+           os &lt;&lt; std::setprecision(width-8);
+         }
+         
+-        os &lt;&lt; std::setw(width) &lt;&lt; val &lt;&lt; ' ';
++        os &lt;&lt; std::setw(width) &lt;&lt; val &lt;&lt; os.widen(' ');
+       }
+     }
+ 
+-    if (i == rows-1)
+-      os &lt;&lt; ']';
+-    else
++    if (i &lt; rows-1)
+       os &lt;&lt; std::endl;
+   }
++  os &lt;&lt; os.widen(']');
+ 
+   // Restore old flags.
+   os.flags(old_flags);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000484.html">[OpenFDM-svn] r512 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000486.html">[OpenFDM-svn] r514 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#485">[ date ]</a>
+              <a href="thread.html#485">[ thread ]</a>
+              <a href="subject.html#485">[ subject ]</a>
+              <a href="author.html#485">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

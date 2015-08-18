@@ -1,0 +1,992 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r223 - in trunk/OpenFDM/src: OpenFDM builder
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r223%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20builder&In-Reply-To=%3C200601281556.k0SFuKGE020251%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000203.html">
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r223 - in trunk/OpenFDM/src: OpenFDM builder</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r223%20-%20in%20trunk/OpenFDM/src%3A%20OpenFDM%20builder&In-Reply-To=%3C200601281556.k0SFuKGE020251%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r223 - in trunk/OpenFDM/src: OpenFDM builder">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Jan 28 16:56:20 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000203.html">[OpenFDM-svn] r222 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#204">[ date ]</a>
+              <a href="thread.html#204">[ thread ]</a>
+              <a href="subject.html#204">[ subject ]</a>
+              <a href="author.html#204">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-28 16:56:04 +0100 (Sat, 28 Jan 2006)
+New Revision: 223
+
+Added:
+   trunk/OpenFDM/src/builder/FrameItem.cpp
+   trunk/OpenFDM/src/builder/FrameItem.h
+   trunk/OpenFDM/src/builder/MainWindow.cpp
+   trunk/OpenFDM/src/builder/MainWindow.h
+   trunk/OpenFDM/src/builder/ModelItem.cpp
+   trunk/OpenFDM/src/builder/ModelItem.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+   trunk/OpenFDM/src/builder/Makefile.am
+   trunk/OpenFDM/src/builder/main.cpp
+Log:
+Some experiments with qt/interview
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2006-01-28 15:56:04 UTC (rev 223)
+@@ -149,6 +149,20 @@
+   return mChildFrames[i];
+ }
+ 
++unsigned
++Frame::getChildFrameIndex(const Frame* child) const
++{
++  if (!child)
++    return mChildFrames.size();
++
++  unsigned i = 0;
++  for (; i &lt; mChildFrames.size(); ++i) {
++    if (mChildFrames[i] == child)
++      return i;
++  }
++  return i;
++}
++
+ void
+ Frame::reparentChildren(Frame* frame)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2006-01-28 15:56:04 UTC (rev 223)
+@@ -108,6 +108,8 @@
+   Frame* getChildFrame(unsigned i);
+   /// Get the i-th child frame. Returns a 0 pointer if i is out of range.
+   const Frame* getChildFrame(unsigned i) const;
++  /// Returns the child frame index of the given frame
++  unsigned getChildFrameIndex(const Frame* child) const;
+   /// Returns the number of child frames
+   unsigned getNumChildFrames(void) const
+   { return mChildFrames.size(); }
+
+Added: trunk/OpenFDM/src/builder/FrameItem.cpp
+===================================================================
+--- trunk/OpenFDM/src/builder/FrameItem.cpp	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/FrameItem.cpp	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,154 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iostream&gt;
++
++#include &lt;OpenFDM/Frame.h&gt;
++#include &quot;FrameItem.h&quot;
++
++using OpenFDM::Frame;
++
++static Frame* frameFrom(const QModelIndex&amp; index)
++{
++  if (!index.isValid())
++    return 0;
++  return static_cast&lt;Frame*&gt;(index.internalPointer());
++}
++
++FrameItem::FrameItem(QObject* parent) :
++  QAbstractItemModel(parent)
++{
++}
++
++FrameItem::~FrameItem(void)
++{
++}
++
++QModelIndex
++FrameItem::index(int row, int column, const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid()) {
++    if (!mRootFrame)
++      return QModelIndex();
++    if (row != 0)
++      return QModelIndex();
++
++    return createIndex(row, 0, mRootFrame);
++  }
++
++  Frame* frame = frameFrom(parent);
++  if (!frame)
++    return QModelIndex();
++  if (frame-&gt;getNumChildFrames() &lt;= row)
++    return QModelIndex();
++
++  Frame* childFrame = frame-&gt;getChildFrame(row);
++  if (!childFrame)
++    return QModelIndex();
++
++  return createIndex(row, 0, childFrame);
++}
++
++QModelIndex
++FrameItem::parent(const QModelIndex &amp;child) const
++{
++  if (!child.isValid())
++    return QModelIndex();
++
++  Frame* frame = frameFrom(child);
++  if (!frame)
++    return QModelIndex();
++
++  Frame* parentFrame = frame-&gt;getParentFrame();
++  if (!parentFrame)
++    return QModelIndex();
++  if (parentFrame == mRootFrame)
++    return createIndex(0, 0, parentFrame);
++
++  Frame* parentFrame2 = parentFrame-&gt;getParentFrame();
++  if (!parentFrame2)
++    return QModelIndex();
++  unsigned row = parentFrame2-&gt;getChildFrameIndex(parentFrame);
++  if (row &gt;= parentFrame2-&gt;getNumChildFrames())
++    return QModelIndex();
++
++  return createIndex(row, 0, parentFrame);
++}
++
++int
++FrameItem::rowCount(const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid()) {
++    if (!mRootFrame)
++      return 0;
++
++    return 1;
++  }
++
++  Frame* frame = frameFrom(parent);
++  if (!frame)
++    return 0;
++  return frame-&gt;getNumChildFrames();
++}
++
++int
++FrameItem::columnCount(const QModelIndex &amp;parent) const
++{
++  return 2;
++}
++
++bool
++FrameItem::hasChildren(const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid())
++    return true;
++  Frame* frame = frameFrom(parent);
++  if (!frame)
++    return false;
++  return 0 &lt; frame-&gt;getNumChildFrames();
++}
++
++QVariant
++FrameItem::data(const QModelIndex &amp;index, int role) const
++{
++  if (!index.isValid())
++    return QVariant();
++
++  Frame* frame = frameFrom(index);
++  if (!frame)
++    return QVariant();
++  switch (role) {
++  case Qt::DisplayRole:
++    return QVariant(QString(frame-&gt;getName().c_str()));
++  case Qt::ToolTipRole:
++    return QVariant(QString(frame-&gt;getTypeName()));
++  default:
++    return QVariant();
++  }
++}
++
++QVariant
++FrameItem::headerData(int section, Qt::Orientation orientation, int role) const
++{
++  if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
++    return QVariant();
++
++  switch (section) {
++  case 0:
++    return QString(&quot;Name&quot;);
++  case 1:
++    return QString(&quot;Properties&quot;);
++  default:
++    return QVariant();
++  }
++}
++
++Qt::ItemFlags
++FrameItem::flags(const QModelIndex &amp;index) const
++{
++//   if (!index.isValid())
++//     return Qt::ItemIsEnabled;
++
++  return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
++}
+
+
+Property changes on: trunk/OpenFDM/src/builder/FrameItem.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/builder/FrameItem.h
+===================================================================
+--- trunk/OpenFDM/src/builder/FrameItem.h	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/FrameItem.h	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,71 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef FrameItem_H
++#define FrameItem_H
++
++#include &lt;Qt/QAbstractItemModel&gt;
++
++#include &lt;OpenFDM/System.h&gt;
++
++class FrameItem : public QAbstractItemModel {
++public:
++  FrameItem(QObject* parent = 0);
++  virtual ~FrameItem(void);
++
++  virtual QModelIndex index(int row, int col, const QModelIndex &amp;parent) const;
++  virtual QModelIndex parent(const QModelIndex &amp;child) const;
++
++  virtual int rowCount(const QModelIndex &amp;parent) const;
++  virtual int columnCount(const QModelIndex &amp;parent) const;
++  virtual bool hasChildren(const QModelIndex &amp;parent) const;
++
++  virtual QVariant data(const QModelIndex &amp;index, int role) const;
++//virtual bool setData(const QModelIndex &amp;index, const QVariant &amp;value, int role);
++
++  virtual QVariant headerData(int section, Qt::Orientation orientation,
++                              int role) const;
++//virtual bool setHeaderData(int section, Qt::Orientation orientation, const QVariant &amp;value,
++//                                int role);
++
++//     virtual QMap&lt;int, QVariant&gt; itemData(const QModelIndex &amp;index) const;
++//     virtual bool setItemData(const QModelIndex &amp;index, const QMap&lt;int, QVariant&gt; &amp;roles);
++
++//     virtual QStringList mimeTypes() const;
++//     virtual QMimeData *mimeData(const QModelIndexList &amp;indexes) const;
++//     virtual bool dropMimeData(const QMimeData *data, Qt::DropAction action,
++//                               int row, int col, const QModelIndex &amp;parent);
++//     virtual Qt::DropActions supportedDropActions() const;
++
++//     virtual bool insertRows(int row, int count, const QModelIndex &amp;parent);
++//     virtual bool insertColumns(int col, int count, const QModelIndex &amp;parent);
++//     virtual bool removeRows(int row, int count, const QModelIndex &amp;parent);
++//     virtual bool removeColumns(int col, int count, const QModelIndex &amp;parent);
++
++//     inline bool insertRow(int row, const QModelIndex &amp;parent);
++//     inline bool insertColumn(int col, const QModelIndex &amp;parent);
++//     inline bool removeRow(int row, const QModelIndex &amp;parent);
++//     inline bool removeColumn(int col, const QModelIndex &amp;parent);
++
++//     virtual void fetchMore(const QModelIndex &amp;parent);
++//     virtual bool canFetchMore(const QModelIndex &amp;parent) const;
++  virtual Qt::ItemFlags flags(const QModelIndex &amp;index) const;
++//     virtual void sort(int col, Qt::SortOrder order);
++//     virtual QModelIndex buddy(const QModelIndex &amp;index) const;
++//     virtual QModelIndexList match(const QModelIndex &amp;start, int role,
++//                                   const QVariant &amp;value, int hits,
++//                                   Qt::MatchFlags flags) const;
++//     virtual QSize span(const QModelIndex &amp;index) const;
++
++  /// set and get the system represented with that ItemModel
++  void setRootFrame(OpenFDM::Frame* frame)
++  { mRootFrame = frame; }
++  OpenFDM::Frame* getRootFrame(void) const
++  { return mRootFrame; }
++
++private:
++  OpenFDM::SharedPtr&lt;OpenFDM::Frame&gt; mRootFrame;
++};
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/builder/FrameItem.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/builder/MainWindow.cpp
+===================================================================
+--- trunk/OpenFDM/src/builder/MainWindow.cpp	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/MainWindow.cpp	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,174 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#include &lt;QtGui/QMainWindow&gt;
++#include &lt;QtGui/QMenu&gt;
++#include &lt;QtGui/QMenuBar&gt;
++
++#include &lt;osg/Node&gt;
++#include &lt;osg/Group&gt;
++#include &lt;osg/Geometry&gt;
++#include &lt;osg/Geode&gt;
++#include &lt;osg/StateSet&gt;
++#include &lt;osg/CullFace&gt;
++#include &lt;osg/Transform&gt;
++#include &lt;osg/Quat&gt;
++#include &lt;osg/PositionAttitudeTransform&gt;
++#include &lt;osgDB/Archive&gt;
++#include &lt;osgDB/ReadFile&gt;
++
++#include &lt;OpenFDM/ReaderWriter.h&gt;
++#include &lt;OpenFDM/XMLDumpModelVisitor.h&gt;
++#include &lt;JSBSim/LegacyJSBSimReader.h&gt;
++
++using OpenFDM::ReaderWriter;
++using OpenFDM::LegacyJSBSimReader;
++
++#include &lt;iostream&gt;
++
++#include &quot;Geometries.h&quot;
++#include &quot;QOsgWidget.h&quot;
++
++#include &quot;FrameItem.h&quot;
++#include &quot;ModelItem.h&quot;
++#include &quot;MainWindow.h&quot;
++
++MainWindow::MainWindow(QWidget *parent, Qt::WFlags flags)
++  : QMainWindow(parent, flags)
++{
++  setObjectName(&quot;MainWindow&quot;);
++  setWindowTitle(&quot;OpenFDM Flightmodel Builder&quot;);
++  
++  // Make sure the actions are present
++  setupActions();
++  
++  setupToolBar();
++  setupMenuBar();
++  setupDockWindows();
++  
++  if (QGLFormat::hasOpenGL()) {
++    QOsgWidget *center = new QOsgWidget(this);
++    setCentralWidget(center);
++    
++    //       osgDB::ReaderWriter::Options* opts = new osgDB::ReaderWriter::Options;
++    //       opts-&gt;setObjectCacheHint(osgDB::ReaderWriter::Options::CACHE_ALL);
++    //       osgDB::Registry::instance()-&gt;setOptions(opts);
++    //       center-&gt;setScene(osgDB::readNodeFile(&quot;/home/frohlich/3D-Models/FA-18/Body/fa-18ab.ac&quot;));
++    
++    center-&gt;setScene(OpenFDM::genCoordinateBullet());
++  }
++
++  
++  //     statusBar()-&gt;message(tr(&quot;Status Bar&quot;));
++}
++
++MainWindow::~MainWindow(void)
++{
++}
++
++void
++MainWindow::setupToolBar()
++{
++//     toolbar = new ToolBar(this);
++//     toolbar-&gt;setAllowedAreas(Qt::ToolBarAreaTop | Qt::ToolBarAreaBottom);
++//     addToolBar(toolbar);
++}
++
++void
++MainWindow::setupMenuBar()
++{
++  QMenu *menu = menuBar()-&gt;addMenu(tr(&quot;&amp;File&quot;));
++  menu-&gt;addAction(mOpenAction);
++  menu-&gt;addAction(mSaveAsAction);
++  menu-&gt;addSeparator();
++  menu-&gt;addAction(mImportAction);
++  menu-&gt;addSeparator();
++  menu-&gt;addAction(mQuitAction);
++  
++  menu = menuBar()-&gt;addMenu(tr(&quot;&amp;Tools&quot;));
++  menu-&gt;addAction(mOpenModelBrowserAction);
++  menu-&gt;addAction(mOpenFrameBrowserAction);
++  menu-&gt;addAction(mOpen3DViewAction);
++  
++  menu = menuBar()-&gt;addMenu(tr(&quot;&amp;Help&quot;));
++  menu-&gt;addAction(mAboutAction);
++}
++
++void
++MainWindow::setupDockWindows()
++{
++  // Try to read JSBSim legacy files.
++  LegacyJSBSimReader reader;
++  
++  reader.addAircraftPath(&quot;/home/flightgear/sw/share/FlightGear/Aircraft/FA-18/&quot;);
++  reader.addEnginePath(&quot;/home/flightgear/sw/share/FlightGear/Aircraft/FA-18/Engines/&quot;);
++  
++  reader.loadAircraft(&quot;FA-18-cross.xml&quot;);
++  if (reader.getErrorState()) {
++    const ReaderWriter::StringList errors = reader.getErrors();
++    ReaderWriter::StringList::const_iterator it;
++    for (it = errors.begin(); it != errors.end(); ++it)
++      std::cerr &lt;&lt; *it &lt;&lt; std::endl;
++    return;
++  }
++  
++  // Ok, now the Vehicle here contains the imported data
++  // When the reflection stuff is ready, we can dump that data to a
++  // native format ...
++  reader.getVehicle()-&gt;getSystem()-&gt;init();
++  
++  ModelItem* model = new ModelItem;
++  model-&gt;setSystem(reader.getVehicle()-&gt;getSystem());
++
++  QDockWidget* dockWidget = new QDockWidget(this);
++  QTreeView* treeView = new QTreeView(dockWidget);
++  treeView-&gt;setModel(model);
++  dockWidget-&gt;setWidget(treeView);
++  addDockWidget(Qt::LeftDockWidgetArea, dockWidget);
++
++
++  FrameItem* frameModel = new FrameItem;
++  frameModel-&gt;setRootFrame(reader.getVehicle()-&gt;getSystem()-&gt;getEnvironment()-&gt;getRootFrame());
++
++  dockWidget = new QDockWidget(this);
++  treeView = new QTreeView(dockWidget);
++  treeView-&gt;setModel(frameModel);
++  dockWidget-&gt;setWidget(treeView);
++  addDockWidget(Qt::RightDockWidgetArea, dockWidget);
++}
++
++void
++MainWindow::setupActions(void)
++{
++  mOpenAction = new QAction(tr(&quot;&amp;Open...&quot;), this);
++  mOpenAction-&gt;setShortcut(tr(&quot;Ctrl+O&quot;));
++  //     connect(mOpenAction, SIGNAL(triggered()), this, SLOT(open()));
++  
++  mSaveAsAction = new QAction(tr(&quot;&amp;Save As...&quot;), this);
++  mSaveAsAction-&gt;setShortcut(tr(&quot;Ctrl+S&quot;));
++  //     connect(mSaveAsAction, SIGNAL(triggered()), this, SLOT(saveAs()));
++  
++  mImportAction = new QAction(tr(&quot;&amp;Import...&quot;), this);
++  mImportAction-&gt;setShortcut(tr(&quot;Ctrl+I&quot;));
++  //     connect(mImportAction, SIGNAL(triggered()), this, SLOT(saveAs()));
++  
++  mQuitAction = new QAction(tr(&quot;&amp;Quit&quot;), this);
++  mQuitAction-&gt;setShortcut(tr(&quot;Ctrl+Q&quot;));
++  connect(mQuitAction, SIGNAL(triggered()), this, SLOT(close()));
++  
++  mOpenModelBrowserAction = new QAction(tr(&quot;Open &amp;Model Browser&quot;), this);
++  mOpenModelBrowserAction-&gt;setShortcut(tr(&quot;Ctrl+M&quot;));
++  //     connect(mOpenModelBrowserAction, SIGNAL(triggered()), this, SLOT(close()));
++  
++  mOpenFrameBrowserAction = new QAction(tr(&quot;Open &amp;Frame Browser&quot;), this);
++  mOpenFrameBrowserAction-&gt;setShortcut(tr(&quot;Ctrl+F&quot;));
++  //     connect(mOpenFrameBrowserAction, SIGNAL(triggered()), this, SLOT(close()));
++  
++  mOpen3DViewAction = new QAction(tr(&quot;Open &amp;3D View&quot;), this);
++  mOpen3DViewAction-&gt;setShortcut(tr(&quot;Ctrl+3&quot;));
++  //     connect(mOpen3DViewAction, SIGNAL(triggered()), this, SLOT(close()));
++  
++  mAboutAction = new QAction(tr(&quot;&amp;About&quot;), this);
++  connect(mAboutAction, SIGNAL(triggered()), this, SLOT(about()));
++}
+
+
+Property changes on: trunk/OpenFDM/src/builder/MainWindow.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/builder/MainWindow.h
+===================================================================
+--- trunk/OpenFDM/src/builder/MainWindow.h	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/MainWindow.h	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,36 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef MainWindow_H
++#define MainWindow_H
++
++#include &lt;QtGui/QMainWindow&gt;
++
++class MainWindow : public QMainWindow
++{
++//   Q_OBJECT
++public:
++  MainWindow(QWidget *parent = 0, Qt::WFlags flags = 0);
++  ~MainWindow(void);
++
++private:
++  void setupToolBar(void);
++  void setupMenuBar(void);
++  void setupDockWindows(void);
++  void setupActions(void);
++
++  // All the actions we can have in this application
++  QAction* mOpenAction;
++  QAction* mSaveAsAction;
++  QAction* mImportAction;
++  QAction* mQuitAction;
++
++  QAction* mOpenModelBrowserAction;
++  QAction* mOpenFrameBrowserAction;
++  QAction* mOpen3DViewAction;
++
++  QAction* mAboutAction;
++};
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/builder/MainWindow.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-01-28 15:56:04 UTC (rev 223)
+@@ -16,12 +16,18 @@
+ 	main.cpp \
+ 	Configuration.h \
+ 	Configuration.cpp \
++	FrameItem.h \
++	FrameItem.cpp \
+ 	Geometries.h \
+ 	Geometries.cpp \
++	MainWindow.h \
++	MainWindow.cpp \
++	ModelItem.h \
++	ModelItem.cpp \
+ 	QOsgWidget.h \
+ 	QOsgWidget.cpp
+ 
+-openfdm_LDADD = ../OpenFDM/libOpenFDM.la \
++openfdm_LDADD = ../JSBSim/libJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+                 -lQtGui -lQtOpenGL -lQtCore \
+                 -lGL -lGLU
+
+Added: trunk/OpenFDM/src/builder/ModelItem.cpp
+===================================================================
+--- trunk/OpenFDM/src/builder/ModelItem.cpp	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/ModelItem.cpp	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,169 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iostream&gt;
++
++#include &lt;OpenFDM/Model.h&gt;
++#include &lt;OpenFDM/ModelGroup.h&gt;
++#include &quot;ModelItem.h&quot;
++
++using OpenFDM::Model;
++using OpenFDM::ModelGroup;
++
++static Model* modelFrom(const QModelIndex&amp; index)
++{
++  if (!index.isValid())
++    return 0;
++  return static_cast&lt;Model*&gt;(index.internalPointer());
++}
++
++static ModelGroup* modelGroupFrom(const QModelIndex&amp; index)
++{
++  if (!index.isValid())
++    return 0;
++  Model* model = static_cast&lt;Model*&gt;(index.internalPointer());
++  if (!model)
++    return 0;
++  return model-&gt;toModelGroup();
++}
++
++ModelItem::ModelItem(QObject* parent) :
++  QAbstractItemModel(parent)
++{
++}
++
++ModelItem::~ModelItem(void)
++{
++}
++
++QModelIndex
++ModelItem::index(int row, int column, const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid()) {
++    if (!mSystem)
++      return QModelIndex();
++    if (row != 0)
++      return QModelIndex();
++
++    return createIndex(row, 0, mSystem);
++  }
++
++  ModelGroup* modelGroup = modelGroupFrom(parent);
++  if (!modelGroup)
++    return QModelIndex();
++  if (modelGroup-&gt;getNumModels() &lt;= row)
++    return QModelIndex();
++
++  Model* childModel = modelGroup-&gt;getModel(row);
++  if (!childModel)
++    return QModelIndex();
++
++  return createIndex(row, 0, childModel);
++}
++
++QModelIndex
++ModelItem::parent(const QModelIndex &amp;child) const
++{
++  if (!child.isValid())
++    return QModelIndex();
++
++  Model* model = modelFrom(child);
++  if (!model)
++    return QModelIndex();
++
++  Model* parentModel = model-&gt;getParent();
++  if (!parentModel)
++    return QModelIndex();
++  if (parentModel == mSystem)
++    return createIndex(0, 0, parentModel);
++
++  Model* parentModel2 = parentModel-&gt;getParent();
++  if (!parentModel2)
++    return QModelIndex();
++  ModelGroup* parentModelGroup2 = parentModel2-&gt;toModelGroup();
++  if (!parentModelGroup2)
++    return QModelIndex();
++  unsigned row = parentModelGroup2-&gt;getModelIndex(parentModel);
++  if (row &gt;= parentModelGroup2-&gt;getNumModels())
++    return QModelIndex();
++
++  return createIndex(row, 0, parentModel);
++}
++
++int
++ModelItem::rowCount(const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid()) {
++    if (!mSystem)
++      return 0;
++
++    return 1;
++  }
++
++  ModelGroup* modelGroup = modelGroupFrom(parent);
++  if (!modelGroup)
++    return 0;
++  return modelGroup-&gt;getNumModels();
++}
++
++int
++ModelItem::columnCount(const QModelIndex &amp;parent) const
++{
++  return 2;
++}
++
++bool
++ModelItem::hasChildren(const QModelIndex &amp;parent) const
++{
++  if (!parent.isValid())
++    return true;
++  ModelGroup* modelGroup = modelGroupFrom(parent);
++  if (!modelGroup)
++    return false;
++  return 0 &lt; modelGroup-&gt;getNumModels();
++}
++
++QVariant
++ModelItem::data(const QModelIndex &amp;index, int role) const
++{
++  if (!index.isValid())
++    return QVariant();
++
++  Model* model = modelFrom(index);
++  if (!model)
++    return QVariant();
++  switch (role) {
++  case Qt::DisplayRole:
++    return QVariant(QString(model-&gt;getName().c_str()));
++  case Qt::ToolTipRole:
++    return QVariant(QString(model-&gt;getTypeName()));
++  default:
++    return QVariant();
++  }
++}
++
++QVariant
++ModelItem::headerData(int section, Qt::Orientation orientation, int role) const
++{
++  if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
++    return QVariant();
++
++  switch (section) {
++  case 0:
++    return QString(&quot;Name&quot;);
++  case 1:
++    return QString(&quot;Properties&quot;);
++  default:
++    return QVariant();
++  }
++}
++
++Qt::ItemFlags
++ModelItem::flags(const QModelIndex &amp;index) const
++{
++//   if (!index.isValid())
++//     return Qt::ItemIsEnabled;
++
++  return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
++}
+
+
+Property changes on: trunk/OpenFDM/src/builder/ModelItem.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/builder/ModelItem.h
+===================================================================
+--- trunk/OpenFDM/src/builder/ModelItem.h	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/ModelItem.h	2006-01-28 15:56:04 UTC (rev 223)
+@@ -0,0 +1,71 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2005-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef ModelItem_H
++#define ModelItem_H
++
++#include &lt;Qt/QAbstractItemModel&gt;
++
++#include &lt;OpenFDM/System.h&gt;
++
++class ModelItem : public QAbstractItemModel {
++public:
++  ModelItem(QObject* parent = 0);
++  virtual ~ModelItem(void);
++
++  virtual QModelIndex index(int row, int col, const QModelIndex &amp;parent) const;
++  virtual QModelIndex parent(const QModelIndex &amp;child) const;
++
++  virtual int rowCount(const QModelIndex &amp;parent) const;
++  virtual int columnCount(const QModelIndex &amp;parent) const;
++  virtual bool hasChildren(const QModelIndex &amp;parent) const;
++
++  virtual QVariant data(const QModelIndex &amp;index, int role) const;
++//virtual bool setData(const QModelIndex &amp;index, const QVariant &amp;value, int role);
++
++  virtual QVariant headerData(int section, Qt::Orientation orientation,
++                              int role) const;
++//virtual bool setHeaderData(int section, Qt::Orientation orientation, const QVariant &amp;value,
++//                                int role);
++
++//     virtual QMap&lt;int, QVariant&gt; itemData(const QModelIndex &amp;index) const;
++//     virtual bool setItemData(const QModelIndex &amp;index, const QMap&lt;int, QVariant&gt; &amp;roles);
++
++//     virtual QStringList mimeTypes() const;
++//     virtual QMimeData *mimeData(const QModelIndexList &amp;indexes) const;
++//     virtual bool dropMimeData(const QMimeData *data, Qt::DropAction action,
++//                               int row, int col, const QModelIndex &amp;parent);
++//     virtual Qt::DropActions supportedDropActions() const;
++
++//     virtual bool insertRows(int row, int count, const QModelIndex &amp;parent);
++//     virtual bool insertColumns(int col, int count, const QModelIndex &amp;parent);
++//     virtual bool removeRows(int row, int count, const QModelIndex &amp;parent);
++//     virtual bool removeColumns(int col, int count, const QModelIndex &amp;parent);
++
++//     inline bool insertRow(int row, const QModelIndex &amp;parent);
++//     inline bool insertColumn(int col, const QModelIndex &amp;parent);
++//     inline bool removeRow(int row, const QModelIndex &amp;parent);
++//     inline bool removeColumn(int col, const QModelIndex &amp;parent);
++
++//     virtual void fetchMore(const QModelIndex &amp;parent);
++//     virtual bool canFetchMore(const QModelIndex &amp;parent) const;
++  virtual Qt::ItemFlags flags(const QModelIndex &amp;index) const;
++//     virtual void sort(int col, Qt::SortOrder order);
++//     virtual QModelIndex buddy(const QModelIndex &amp;index) const;
++//     virtual QModelIndexList match(const QModelIndex &amp;start, int role,
++//                                   const QVariant &amp;value, int hits,
++//                                   Qt::MatchFlags flags) const;
++//     virtual QSize span(const QModelIndex &amp;index) const;
++
++  /// set and get the system represented with that ItemModel
++  void setSystem(OpenFDM::System* system)
++  { mSystem = system; }
++  OpenFDM::System* getSystem(void) const
++  { return mSystem; }
++
++private:
++  OpenFDM::SharedPtr&lt;OpenFDM::System&gt; mSystem;
++};
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/builder/ModelItem.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/builder/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/builder/main.cpp	2006-01-28 10:14:29 UTC (rev 222)
++++ trunk/OpenFDM/src/builder/main.cpp	2006-01-28 15:56:04 UTC (rev 223)
+@@ -1,90 +1,12 @@
+ #include &lt;QtGui/QApplication&gt;
+-#include &lt;QtGui/QMainWindow&gt;
+-#include &lt;QtGui/QMenu&gt;
+-#include &lt;QtGui/QMenuBar&gt;
++#include &quot;MainWindow.h&quot;
+ 
+-#include &lt;osg/Node&gt;
+-#include &lt;osg/Group&gt;
+-#include &lt;osg/Geometry&gt;
+-#include &lt;osg/Geode&gt;
+-#include &lt;osg/StateSet&gt;
+-#include &lt;osg/CullFace&gt;
+-#include &lt;osg/Transform&gt;
+-#include &lt;osg/Quat&gt;
+-#include &lt;osg/PositionAttitudeTransform&gt;
+-#include &lt;osgDB/Archive&gt;
+-#include &lt;osgDB/ReadFile&gt;
+-
+-#include &lt;iostream&gt;
+-
+-#include &quot;Geometries.h&quot;
+-#include &quot;QOsgWidget.h&quot;
+-
+-class MainWindow : public QMainWindow
+-{
+-//   Q_OBJECT
+-  
+-  QMenu *dockWindowMenu;
+-  
+-public:
+-  MainWindow(QWidget *parent = 0, Qt::WFlags flags = 0)
+-    : QMainWindow(parent, flags)
+-  {
+-    setObjectName(&quot;MainWindow&quot;);
+-    setWindowTitle(&quot;OpenFDM Flightmodel Builder&quot;);
+-    
+-//     setupToolBar();
+-    setupMenuBar();
+-//     setupDockWindows();
+-
+-    if (QGLFormat::hasOpenGL()) {
+-      QOsgWidget *center = new QOsgWidget(this);
+-      setCentralWidget(center);
+-
+-//       osgDB::ReaderWriter::Options* opts = new osgDB::ReaderWriter::Options;
+-//       opts-&gt;setObjectCacheHint(osgDB::ReaderWriter::Options::CACHE_ALL);
+-//       osgDB::Registry::instance()-&gt;setOptions(opts);
+-//       center-&gt;setScene(osgDB::readNodeFile(&quot;/home/frohlich/3D-Models/FA-18/Body/fa-18ab.ac&quot;));
+-
+-      center-&gt;setScene(OpenFDM::genCoordinateBullet());
+-    }
+-
+-
+-//     statusBar()-&gt;message(tr(&quot;Status Bar&quot;));
+-  }
+-
+-  
+-public slots:
+-  void actionTriggered(QAction *action)
+-  {
+-    qDebug(&quot;action '%s' triggered&quot;, action-&gt;text().toLocal8Bit().data());
+-  }
+-
+-  
+-private:
+-//   void setupToolBar()
+-//   {
+-//     toolbar = new ToolBar(this);
+-//     toolbar-&gt;setAllowedAreas(Qt::ToolBarAreaTop | Qt::ToolBarAreaBottom);
+-//     addToolBar(toolbar);
+-//   }
+-
+-  void setupMenuBar()
+-  {
+-    QMenu *menu = menuBar()-&gt;addMenu(tr(&quot;&amp;File&quot;));
+-    menu-&gt;addAction(tr(&quot;&amp;Quit&quot;), this, SLOT(close()));
+-    
+-//     menuBar()-&gt;addMenu(toolbar-&gt;menu);
+-//     dockWindowMenu = menuBar()-&gt;addMenu(tr(&quot;&amp;Dock windows&quot;));
+-  }
+-//   void setupDockWindows();
+-};
+-
+ int main(int argc, char **argv)
+ {
+   QApplication app(argc, argv);
+-  MainWindow mwd;
+-  app.setActiveWindow(&amp;mwd);
+-  mwd.show();
++
++  MainWindow mainWindow;
++  app.setActiveWindow(&amp;mainWindow);
++  mainWindow.show();
+   return app.exec();
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000203.html">[OpenFDM-svn] r222 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#204">[ date ]</a>
+              <a href="thread.html#204">[ thread ]</a>
+              <a href="subject.html#204">[ subject ]</a>
+              <a href="author.html#204">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,490 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r914 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r914%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901031406.n03E6chx003581%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000881.html">
+   <LINK REL="Next"  HREF="000883.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r914 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r914%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901031406.n03E6chx003581%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r914 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan  3 15:06:38 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000881.html">[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000883.html">[OpenFDM-svn] r915 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#882">[ date ]</a>
+              <a href="thread.html#882">[ thread ]</a>
+              <a href="subject.html#882">[ subject ]</a>
+              <a href="author.html#882">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-03 15:06:38 +0100 (Sat, 03 Jan 2009)
+New Revision: 914
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h
+Log:
+Reactivate Contact and SimpleContact.
+
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Contact.h
+M    src/OpenFDM/Contact.cpp
+M    src/OpenFDM/SimpleContact.h
+M    src/OpenFDM/SimpleContact.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp	2009-01-03 13:09:28 UTC (rev 913)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.cpp	2009-01-03 14:06:38 UTC (rev 914)
+@@ -6,89 +6,96 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;LogStream.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
++#include &quot;Task.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Contact, ExternalForce)
++BEGIN_OPENFDM_OBJECT_DEF(Contact, SingleLinkInteract)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Contact::Contact(const std::string&amp; name)
+-  : ExternalForce(name)
+-{
+-  setDisableMode(Model::ResetHold);
++class Contact::Context : public SingleLinkInteract::Context {
++public:
++  Context(const Contact* wheelContact,
++          const Environment* environment, PortValueList&amp; portValueList) :
++    SingleLinkInteract::Context(wheelContact, environment, portValueList),
++    mContact(wheelContact)
++  { }
++  virtual ~Context() {}
++    
++  virtual const Contact&amp; getNode() const
++  { return *mContact; }
+ 
+-  // FIXME??
+-  addSampleTime(SampleTime::PerTimestep);
+-  addSampleTime(SampleTime::Continous);
+-}
++  virtual void articulation(const Task&amp; task)
++  {
++    const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
+ 
+-Contact::~Contact(void)
++    // The coordinate system at the hub.
++    CoordinateSystem localCoordSys(cs.getRelative(getLinkRelPos()));
++    
++    // Get the ground values in the hub coordinate system.
++    GroundValues groundValues =
++      getEnvironment().getGroundPlane(localCoordSys, task.getTime());
++    
++    // Transform the plane equation to the local frame.
++    Plane lp = groundValues.plane;
++    
++    // Get the intersection length.
++    real_type compressLength = lp.getDist(Vector3::zeros());
++    
++    // Don't bother if we do not intersect the ground.
++    if (compressLength &lt; 0)
++      return;
++    
++    // The velocity of the ground patch in the current frame.
++    Vector3 relVel = groundValues.vel.getLinear();
++    // Now get the relative velocity of the ground wrt the contact point
++    relVel -= getLink().getReferenceVelocity(getLinkRelPos()).getLinear();
++    
++    // The velocity perpandicular to the plane.
++    // Positive when the contact spring is compressed,
++    // negative when decompressed.
++    real_type compressVel = - lp.scalarProjectToNormal(relVel);
++    
++    // The in plane velocity.
++    Vector3 sVel = lp.projectToPlane(relVel);
++    
++    // Get the plane normal force.
++    real_type normForce = mContact-&gt;computeNormalForce(compressLength,
++                                                       compressVel);
++    // The normal force cannot get negative here.
++    normForce = max(static_cast&lt;real_type&gt;(0), normForce);
++    
++    // Get the friction force.
++    Vector3 fricForce = mContact-&gt;computeFrictionForce(normForce, sVel,
++                                                       lp.getNormal(),
++                                                       groundValues.friction);
++    
++    // The resulting force is the sum of both.
++    // The minus sign is because of the direction of the surface normal.
++    Vector3 force = fricForce - normForce*lp.getNormal();
++    
++    // We don't have an angular moment.
++    applyBodyForce(force);
++  }
++
++private:
++  SharedPtr&lt;const Contact&gt; mContact;
++};
++
++Contact::Contact(const std::string&amp; name) :
++  SingleLinkInteract(name)
+ {
+ }
+ 
+-bool
+-Contact::init(void)
++Contact::~Contact(void)
+ {
+-  setForce(Vector6::zeros());
+-  return ExternalForce::init();
+ }
+ 
+-void
+-Contact::output(const TaskInfo&amp; taskInfo)
++MechanicContext*
++Contact::newMechanicContext(const Environment* environment,
++                            PortValueList&amp; portValueList) const
+ {
+-  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
+-                          SampleTime::PerTimestep)) {
+-    Log(Model, Debug) &lt;&lt; &quot;Contact::output(): \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+-    getGround(taskInfo.getTime());
+-  }
+-
+-  // Transform the plane equation to the local frame.
+-  Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
+-  
+-  // Get the intersection length.
+-  real_type compressLength = lp.getDist(Vector3::zeros());
+-  
+-  // Don't bother if we do not intersect the ground.
+-  if (compressLength &lt; 0) {
+-    setForce(Vector6::zeros());
+-    return;
+-  }
+-  
+-  // The velocity of the ground patch in the current frame.
+-  Vector6 groundVel(mMountFrame-&gt;rotFromRef(mGroundVal.vel.getAngular()),
+-                    mMountFrame-&gt;rotFromRef(mGroundVal.vel.getLinear()));
+-  groundVel -= mMountFrame-&gt;getRefVel();
+-  // Now get the relative velocity of the ground wrt the contact point
+-  Vector3 relVel = - groundVel.getLinear();
+-
+-  // The velocity perpandicular to the plane.
+-  // Positive when the contact spring is compressed,
+-  // negative when decompressed.
+-  real_type compressVel = - lp.scalarProjectToNormal(relVel);
+-  
+-  // The in plane velocity.
+-  Vector3 sVel = lp.projectToPlane(relVel);
+-  
+-  // Get the plane normal force.
+-  real_type normForce = computeNormalForce(compressLength, compressVel);
+-  // The normal force cannot get negative here.
+-  normForce = max(static_cast&lt;real_type&gt;(0), normForce);
+-  
+-  // Get the friction force.
+-  Vector3 fricForce = computeFrictionForce(normForce, sVel, lp.getNormal(),
+-                                           mGroundVal.friction);
+-  
+-  // The resulting force is the sum of both.
+-  // The minus sign is because of the direction of the surface normal.
+-  Vector3 force = fricForce - normForce*lp.getNormal();
+-  
+-  // We don't have an angular moment.
+-  setForce(Vector6(Vector3::zeros(), force));
++  return new Context(this, environment, portValueList);
+ }
+ 
+ real_type
+@@ -105,19 +112,4 @@
+   return Vector3::zeros();
+ }
+ 
+-void
+-Contact::setEnvironment(Environment* environment)
+-{
+-  mEnvironment = environment;
+-}
+-
+-void
+-Contact::getGround(real_type t)
+-{
+-  // Get the position of the contact in the reference system.
+-  Vector3 pos = mMountFrame-&gt;getRefPosition();
+-  // Query for the ground parameters at this point.
+-  mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h	2009-01-03 13:09:28 UTC (rev 913)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Contact.h	2009-01-03 14:06:38 UTC (rev 914)
+@@ -5,24 +5,19 @@
+ #ifndef OpenFDM_Contact_H
+ #define OpenFDM_Contact_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+-#include &quot;Ground.h&quot;
+-#include &quot;Environment.h&quot;
++#include &quot;SingleLinkInteract.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Contact : public ExternalForce {
+-  OPENFDM_OBJECT(Contact, ExternalForce);
++class Contact : public SingleLinkInteract {
++  OPENFDM_OBJECT(Contact, SingleLinkInteract);
++  class Context;
+ public:
+   Contact(const std::string&amp; name);
+   virtual ~Contact(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual MechanicContext*
++  newMechanicContext(const Environment*, PortValueList&amp;) const;
+ 
+   // Compute the plane normal force.
+   virtual real_type
+@@ -32,15 +27,6 @@
+   virtual Vector3
+   computeFrictionForce(real_type normForce, const Vector3&amp; vel,
+                        const Vector3&amp; groundNormal, real_type friction) const;
+-
+-protected:
+-  virtual void setEnvironment(Environment* environment);
+-
+-private:
+-  void getGround(real_type t);
+-
+-  GroundValues mGroundVal;
+-  SharedPtr&lt;const Environment&gt; mEnvironment;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-03 13:09:28 UTC (rev 913)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-03 14:06:38 UTC (rev 914)
+@@ -272,6 +272,7 @@
+   UnitConversion.cpp
+ 
+ OpenFDMMechanicSOURCES = \
++  Contact.cpp \
+   DoubleLinkInteract.cpp \
+   Joint.cpp \
+   ExternalForce.cpp \
+@@ -284,14 +285,13 @@
+   RevoluteJoint.cpp \
+   RotationalJoint.cpp \
+   Sensor.cpp \
++  SimpleContact.cpp \
+   SingleLinkInteract.cpp \
+   UniversalJoint.cpp \
+   WheelContact.cpp
+ 
+ #   AeroForce.cpp \
+-#   Contact.cpp \
+ #   Force.cpp \
+-#   SimpleContact.cpp \
+ #   SimpleGear.cpp \
+ #   Tank.cpp
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp	2009-01-03 13:09:28 UTC (rev 913)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.cpp	2009-01-03 14:06:38 UTC (rev 914)
+@@ -5,25 +5,19 @@
+ #include &quot;SimpleContact.h&quot;
+ 
+ #include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+-#include &quot;Contact.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(SimpleContact, Contact)
+   DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
+-/// FIXME want to have similar names than with linearspringdamper
+-  DEF_OPENFDM_PROPERTY(Real, SpringDamping, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, DamperConstant, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, FrictionCoeficient, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ SimpleContact::SimpleContact(const std::string&amp; name) :
+   Contact(name),
+   mSpringConst(0),
+-  mSpringDamp(0),
++  mDamperConstant(0),
+   mFrictionCoef(0)
+ {
+ }
+@@ -32,13 +26,48 @@
+ {
+ }
+ 
++const real_type&amp;
++SimpleContact::getSpringConstant(void) const
++{
++  return mSpringConst;
++}
++
++void
++SimpleContact::setSpringConstant(const real_type&amp; springConst)
++{
++  mSpringConst = springConst;
++}
++
++const real_type&amp;
++SimpleContact::getDamperConstant(void) const
++{
++  return mDamperConstant;
++}
++
++void
++SimpleContact::setDamperConstant(const real_type&amp; damperConstant)
++{
++  mDamperConstant = damperConstant;
++}
++
++const real_type&amp;
++SimpleContact::getFrictionCoeficient(void) const
++{
++  return mFrictionCoef;
++}
++
++void
++SimpleContact::setFrictionCoeficient(const real_type&amp; frictionCoef)
++{
++  mFrictionCoef = frictionCoef;
++}
++
+ // Compute the plane normal force.
+ real_type
+ SimpleContact::computeNormalForce(real_type compressLen,
+                                   real_type compressVel) const
+ {
+-  return compressLen*mSpringConst
+-    - mSpringDamp*min(compressVel, static_cast&lt;real_type&gt;(0));
++  return compressLen*mSpringConst - mDamperConstant*compressVel;
+ }
+ 
+ // Compute the friction force.
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h	2009-01-03 13:09:28 UTC (rev 913)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SimpleContact.h	2009-01-03 14:06:38 UTC (rev 914)
+@@ -5,11 +5,6 @@
+ #ifndef OpenFDM_SimpleContact_H
+ #define OpenFDM_SimpleContact_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;Force.h&quot;
+ #include &quot;Contact.h&quot;
+ 
+ namespace OpenFDM {
+@@ -20,20 +15,14 @@
+   SimpleContact(const std::string&amp; name);
+   virtual ~SimpleContact(void);
+ 
+-  const real_type&amp; getSpringConstant(void) const
+-  { return mSpringConst; }
+-  void setSpringConstant(const real_type&amp; springConst)
+-  { mSpringConst = springConst; }
++  const real_type&amp; getSpringConstant(void) const;
++  void setSpringConstant(const real_type&amp; springConst);
+ 
+-  const real_type&amp; getSpringDamping(void) const
+-  { return mSpringDamp; }
+-  void setSpringDamping(const real_type&amp; springDamp)
+-  { mSpringDamp = springDamp; }
++  const real_type&amp; getDamperConstant(void) const;
++  void setDamperConstant(const real_type&amp; damperConstant);
+ 
+-  const real_type&amp; getFrictionCoeficient(void) const
+-  { return mFrictionCoef; }
+-  void setFrictionCoeficient(const real_type&amp; frictionCoef)
+-  { mFrictionCoef = frictionCoef; }
++  const real_type&amp; getFrictionCoeficient(void) const;
++  void setFrictionCoeficient(const real_type&amp; frictionCoef);
+ 
+   // Compute the plane normal force.
+   virtual real_type
+@@ -46,7 +35,7 @@
+ 
+ private:
+   real_type mSpringConst;
+-  real_type mSpringDamp;
++  real_type mDamperConstant;
+   real_type mFrictionCoef;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000881.html">[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000883.html">[OpenFDM-svn] r915 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#882">[ date ]</a>
+              <a href="thread.html#882">[ thread ]</a>
+              <a href="subject.html#882">[ subject ]</a>
+              <a href="author.html#882">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

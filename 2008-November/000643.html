@@ -1,0 +1,211 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r674%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811062141.mA6Lf5Nc032168%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000642.html">
+   <LINK REL="Next"  HREF="000644.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r674%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811062141.mA6Lf5Nc032168%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r674 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Nov  6 22:41:05 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000642.html">[OpenFDM-svn] r673 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000644.html">[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#643">[ date ]</a>
+              <a href="thread.html#643">[ thread ]</a>
+              <a href="subject.html#643">[ subject ]</a>
+              <a href="author.html#643">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-06 22:41:04 +0100 (Thu, 06 Nov 2008)
+New Revision: 674
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Streamline PortValue alloction somehow.
+
+M    src/OpenFDM/ModelInstance.h
+M    src/OpenFDM/LibraryModel.h
+M    src/OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h	2008-11-06 20:45:11 UTC (rev 673)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LibraryModel.h	2008-11-06 21:41:04 UTC (rev 674)
+@@ -13,6 +13,9 @@
+ 
+ namespace OpenFDM {
+ 
++// Group |- LibraryNode
++//       |- 
++
+ class LibraryNode;
+ 
+ class LibraryModel : public Object {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-11-06 20:45:11 UTC (rev 673)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-11-06 21:41:04 UTC (rev 674)
+@@ -21,7 +21,6 @@
+   // Return true if this leaf directly depends on one of leafInstance outputs
+   bool dependsOn(const ModelInstance&amp; modelInstance) const;
+ 
+-  // FIXME
+ // protected:
+   /// The node context that belongs to this instance.
+   virtual ModelContext&amp; getNodeContext();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-06 20:45:11 UTC (rev 673)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-06 21:41:04 UTC (rev 674)
+@@ -341,15 +341,14 @@
+     {
+       OpenFDMAssert(!mNodeInstance);
+       mNodeInstance = nodeInstance;
+-      mPortDataVector.resize(nodeInstance-&gt;getNode().getNumPorts());
++      unsigned numPorts = nodeInstance-&gt;getNode().getNumPorts();
++      mPortDataVector.resize(numPorts);
++      for (unsigned i = 0; i &lt; numPorts; ++i)
++        mPortDataVector[i] = new PortData(nodeInstance, nodeInstance-&gt;getNode().getPort(i));
+     }
+     
+-    PortData* newPortData(const PortInfo* portInfo)
+-    {
+-      PortData* portData = new PortData(mNodeInstance, portInfo);
+-      mPortDataVector[portInfo-&gt;getIndex()] = portData;
+-      return portData;
+-    }
++    PortData* getPortData(const PortInfo&amp; portInfo)
++    { return mPortDataVector[portInfo.getIndex()]; }
+     
+     bool allocAndConnectProviderPortValues()
+     {
+@@ -403,7 +402,7 @@
+   {
+     PortDataList* portDataList = buildNodeContext(leaf);
+     OpenFDMAssert(leaf.getPort(0));
+-    PortData* portData = portDataList-&gt;newPortData(leaf.getPort(0));
++    PortData* portData = portDataList-&gt;getPortData(*leaf.getPort(0));
+     _groupPortDataMap[leaf.getExternalPortIndex()] = portData;
+   }
+ 
+@@ -412,9 +411,6 @@
+     PortDataList* portDataList;
+     portDataList = getCurrentNodePortDataList();
+     portDataList-&gt;setNodeInstance(nodeInstance);
+-
+-    for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i)
+-      portDataList-&gt;newPortData(leaf.getPort(i));
+   }
+ 
+   virtual void apply(const RootJoint&amp; node)
+@@ -462,12 +458,6 @@
+   {
+     // Prepare a new leaf map for the child group
+     PortDataMap parentPortDataMap(group.getNumChildren());
+-    for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
+-      PortDataList* portDataList;
+-      portDataList = new PortDataList;
+-      parentPortDataMap[i] = portDataList;
+-      _portDataListList.push_back(portDataList);
+-    }
+     parentPortDataMap.swap(_portDataMap);
+ 
+     // Get PortDataList indexed by group port index
+@@ -478,11 +468,6 @@
+ 
+     // Now walk the children
+     for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
+-      // Push the right per node port information struct
+-      SharedPtr&lt;PortDataList&gt; parentNodePortDataList;
+-      parentNodePortDataList.swap(mCurrentNodePortDataList);
+-      mCurrentNodePortDataList = _portDataMap[i];
+-
+       // push the sample time
+       SampleTime sampleTime = mSampleTime;
+ 
+@@ -504,14 +489,22 @@
+         }
+       }
+ 
++      // Push the right per node port information struct
++      SharedPtr&lt;PortDataList&gt; parentNodePortDataList;
++      parentNodePortDataList.swap(mCurrentNodePortDataList);
++
++      mCurrentNodePortDataList = new PortDataList;
++      _portDataMap[i] = mCurrentNodePortDataList;
++      _portDataListList.push_back(mCurrentNodePortDataList);
++
+       // now traverse the child ...
+       node-&gt;accept(*this);
+ 
+-      // restore old group sample time
+-      mSampleTime = sampleTime;
+-
+       // Pop the per node port information struct
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
++
++      // restore old group sample time
++      mSampleTime = sampleTime;
+     }
+ 
+     // Apply the group internal connections to the instances
+@@ -564,7 +557,7 @@
+       }
+ 
+       // Allocate a new port data struct in the parent.
+-      PortData* parentPortData = portDataList-&gt;newPortData(group.getPort(i));
++      PortData* parentPortData = portDataList-&gt;getPortData(*group.getPort(i));
+       parentPortData-&gt;setProxyPortData(portData);
+       portData-&gt;setProxyPortData(parentPortData);
+     }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000642.html">[OpenFDM-svn] r673 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000644.html">[OpenFDM-svn] r675 -	branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#643">[ date ]</a>
+              <a href="thread.html#643">[ thread ]</a>
+              <a href="subject.html#643">[ subject ]</a>
+              <a href="author.html#643">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

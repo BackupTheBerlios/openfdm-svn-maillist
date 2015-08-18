@@ -1,0 +1,284 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r80 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r80%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511281937.jASJbkgp001830%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000063.html">
+   <LINK REL="Next"  HREF="000065.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r80 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r80%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511281937.jASJbkgp001830%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r80 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Nov 28 20:37:46 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000063.html">[OpenFDM-svn] r79 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000065.html">[OpenFDM-svn] r81 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#64">[ date ]</a>
+              <a href="thread.html#64">[ thread ]</a>
+              <a href="subject.html#64">[ subject ]</a>
+              <a href="author.html#64">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-28 20:37:39 +0100 (Mon, 28 Nov 2005)
+New Revision: 80
+
+Added:
+   trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp
+   trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Model.h
+Log:
+Also convert that scheduled gain as FCS module.
+
+
+Added: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp	2005-11-27 20:31:10 UTC (rev 79)
++++ trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp	2005-11-28 19:37:39 UTC (rev 80)
+@@ -0,0 +1,53 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &lt;OpenFDM/ModelGroup.h&gt;
++#include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/Table.h&gt;
++
++#include &quot;JSBSimScheduledGain.h&quot;
++
++namespace OpenFDM {
++
++JSBSimScheduledGain::JSBSimScheduledGain(const std::string&amp; name) :
++  JSBSimFCSComponent(name, false)
++{
++  // Such a component is a simple product and a table lookup
++  //
++  // -----------|
++  // --|Table|-|Product|-
++  //
++
++  Product* product = new Product(&quot;Product&quot;);
++  getModelGroup()-&gt;addModel(product);
++
++  mTable = new Table1D(&quot;Table&quot;);
++  getModelGroup()-&gt;addModel(mTable);
++  product-&gt;getInputPort(0)-&gt;connect(mTable-&gt;getOutputPort(0));
++
++  // Now connect the input and the output to this groups in and outputs
++  getModelGroup()-&gt;setNumInputPorts(2);
++  getModelGroup()-&gt;getInputPort(1)-&gt;setName(&quot;Schedule Input&quot;);
++  mTable-&gt;getInputPort(0)-&gt;connect(getModelGroup()-&gt;getInputPort(1));
++
++  getModelGroup()-&gt;getInputPort(0)-&gt;setName(&quot;Input&quot;);
++  product-&gt;getInputPort(1)-&gt;connect(getModelGroup()-&gt;getInputPort(0));
++
++  // That single output port is this one
++  getOutputPort()-&gt;connect(product-&gt;getOutputPort(0));
++}
++
++JSBSimScheduledGain::~JSBSimScheduledGain(void)
++{
++}
++
++void
++JSBSimScheduledGain::setTableData(const TableData&lt;1&gt;&amp; tableData,
++                                  const TableLookup&amp; lookup)
++{
++  mTable-&gt;setTableData(tableData);
++  mTable-&gt;setTableLookup(lookup);
++}
++
++} //namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h	2005-11-27 20:31:10 UTC (rev 79)
++++ trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h	2005-11-28 19:37:39 UTC (rev 80)
+@@ -0,0 +1,33 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_JSBSimScheduledGain_H
++#define OpenFDM_JSBSimScheduledGain_H
++
++#include &quot;JSBSimFCSComponent.h&quot;
++
++namespace OpenFDM {
++
++class Table1D;
++template&lt;unsigned&gt;
++class TableData;
++class TableLookup;
++
++/// Just a small container mapping the JSBSim ScheduledGain parameters to
++/// the OpenFDM models.
++class JSBSimScheduledGain :
++    public JSBSimFCSComponent {
++public:
++  JSBSimScheduledGain(const std::string&amp; name);
++  virtual ~JSBSimScheduledGain(void);
++
++  void setTableData(const TableData&lt;1&gt;&amp; tableData, const TableLookup&amp; lookup);
++
++private:
++  shared_ptr&lt;Table1D&gt; mTable;
++};
++
++} //namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/JSBSim/JSBSimScheduledGain.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-27 20:31:10 UTC (rev 79)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-28 19:37:39 UTC (rev 80)
+@@ -46,6 +46,7 @@
+ 
+ #include &quot;JSBSimAerosurfaceScale.h&quot;
+ #include &quot;JSBSimKinemat.h&quot;
++#include &quot;JSBSimScheduledGain.h&quot;
+ 
+ #include &quot;LegacyJSBSimReader.h&quot;
+ 
+@@ -1130,10 +1131,9 @@
+   shared_ptr&lt;Summer&gt; summer;
+   shared_ptr&lt;Gain&gt; gain;
+   shared_ptr&lt;DiscreteTransferFunction&gt; discreteTransfFunc;
+-  shared_ptr&lt;Table1D&gt; table1D;
+-  shared_ptr&lt;Saturation&gt; inputSaturation;
+   shared_ptr&lt;JSBSimAerosurfaceScale&gt; asScale;
+   shared_ptr&lt;JSBSimKinemat&gt; kinemat;
++  shared_ptr&lt;JSBSimScheduledGain&gt; sGain;
+ 
+   // The final output property.
+   shared_ptr&lt;Port&gt; out;
+@@ -1194,13 +1194,10 @@
+     addFCSModel(model);
+     out = asScale-&gt;getOutputPort();
+     normOut = asScale-&gt;getOutputNormPort();
++
+   } else if (type == &quot;SCHEDULED_GAIN&quot;) {
+-    Product* prod = new Product(name);
+-    prod-&gt;setNumFactors(2);
+-    table1D = new Table1D(std::string(&quot;Lookup table for &quot;) + name);
+-    addFCSModel(table1D);
+-    prod-&gt;getInputPort(1)-&gt;connect(table1D-&gt;getOutputPort(0));
+-    model = prod;
++    sGain = new JSBSimScheduledGain(name);
++    model = sGain-&gt;getModelGroup();
+     addFCSModel(model);
+     out = model-&gt;getOutputPort(0);
+ 
+@@ -1565,16 +1562,13 @@
+       if (!parseTable1D(datastr, tableData, lookup))
+         return error(&quot;Cannot parse lookup table for \&quot;&quot; + type + &quot;\&quot;&quot;);
+ 
+-      if (table1D) {
+-        table1D-&gt;setTableData(tableData);
+-        table1D-&gt;setTableLookup(lookup);
+-      }
++      sGain-&gt;setTableData(tableData, lookup);
+ 
+     } else if (token == &quot;SCHEDULED_BY&quot;) {
+       datastr &gt;&gt; token;
+       
+-      if (table1D) {
+-        table1D-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(token));
++      if (sGain) {
++        model-&gt;getInputPort(1)-&gt;connect(lookupJSBExpression(token));
+       } else
+         return error(&quot;SCHEDULED_BY without table ??&quot;);
+       
+
+Modified: trunk/OpenFDM/src/JSBSim/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/Makefile.am	2005-11-27 20:31:10 UTC (rev 79)
++++ trunk/OpenFDM/src/JSBSim/Makefile.am	2005-11-28 19:37:39 UTC (rev 80)
+@@ -12,6 +12,7 @@
+   JSBSimFCSComponent.h \
+   JSBSimAerosurfaceScale.h \
+   JSBSimKinemat.h \
++  JSBSimScheduledGain.h \
+   LegacyJSBSimReader.h
+ 
+ lib_LTLIBRARIES = libJSBReader.la
+@@ -19,4 +20,5 @@
+   JSBSimFCSComponent.cpp \
+   JSBSimAerosurfaceScale.cpp \
+   JSBSimKinemat.cpp \
++  JSBSimScheduledGain.cpp \
+   LegacyJSBSimReader.cpp
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-27 20:31:10 UTC (rev 79)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-28 19:37:39 UTC (rev 80)
+@@ -24,6 +24,11 @@
+ class Input;
+ class Output;
+ 
++/// Class for an inout or output port of a Model.
++/// Ports can be connected together. This means in effect that the reader
++/// gains access to value at the source model.
++/// Additional information must be carried through that class.
++/// ...
+ class Port :
+     public Object {
+ public:
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000063.html">[OpenFDM-svn] r79 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000065.html">[OpenFDM-svn] r81 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#64">[ date ]</a>
+              <a href="thread.html#64">[ thread ]</a>
+              <a href="subject.html#64">[ subject ]</a>
+              <a href="author.html#64">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

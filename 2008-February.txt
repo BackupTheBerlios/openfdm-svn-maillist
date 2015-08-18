@@ -1,0 +1,1657 @@
+From frohlich at mail.berlios.de  Sun Feb  3 09:54:14 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 3 Feb 2008 09:54:14 +0100
+Subject: [OpenFDM-svn] r351 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802030854.m138sEkO011584@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-03 09:54:14 +0100 (Sun, 03 Feb 2008)
+New Revision: 351
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Limits.h
+Log:
+Add safe_min(), min_value(), max_value().
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Limits.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Limits.h	2007-12-16 08:14:37 UTC (rev 350)
++++ trunk/OpenFDM/src/OpenFDM/Limits.h	2008-02-03 08:54:14 UTC (rev 351)
+@@ -17,7 +17,17 @@
+ /// So this is one of the three places where modifications for special
+ /// real types must be made (@see Types.h, @see Math.h).
+ template<typename T>
+-struct Limits : public std::numeric_limits<T> {};
++struct Limits : public std::numeric_limits<T> {
++   /// smalles value so that 1/safe_min is still finite
++   static T safe_min()
++   { return std::max((T(1) + std::numeric_limits<T>::epsilon())/std::numeric_limits<T>::max(), std::numeric_limits<T>::min()); }
++   /// minimum value this type can represent
++   static T min_value()
++   { return std::min(std::numeric_limits<T>::min(), -std::numeric_limits<T>::max()); }
++   /// maximum value this type can represent
++   static T max_value()
++   { return std::numeric_limits<T>::max(); }
++};
+ 
+ } // namespace OpenFDM
+ 
+
+
+
+From frohlich at mail.berlios.de  Sun Feb  3 10:04:44 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 3 Feb 2008 10:04:44 +0100
+Subject: [OpenFDM-svn] r352 - trunk/OpenFDM/src/OpenFDM/LinAlg
+Message-ID: <200802030904.m1394iP2012348@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-03 10:04:43 +0100 (Sun, 03 Feb 2008)
+New Revision: 352
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+Log:
+Cleanup and make use of safe_min().
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2008-02-03 08:54:14 UTC (rev 351)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/Algorithm.h	2008-02-03 09:04:43 UTC (rev 352)
+@@ -133,7 +133,7 @@
+ {
+   typedef typename Impl::value_type value_type;
+   value_type nrm = norm(v);
+-  if (fabs(nrm) <= Limits<real_type>::min())
++  if (fabs(nrm) <= Limits<real_type>::safe_min())
+     return Vector<value_type,n>(v);
+   else
+     return Vector<value_type,n>((1/nrm)*v);
+@@ -474,10 +474,13 @@
+ Vector<typename Impl1::value_type,3>
+ cross(const MatrixRValue<Impl1,3,1>& u, const MatrixRValue<Impl2,3,1>& v)
+ {
++  const Impl1& ui = u.asImpl();
++  const Impl2& vi = v.asImpl();
++
+   Vector<typename Impl1::value_type,3> ret;
+-  ret(0,0) = u.asImpl()(1,0)*v.asImpl()(2,0) - u.asImpl()(2,0)*v.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0)*v.asImpl()(0,0) - u.asImpl()(0,0)*v.asImpl()(2,0);
+-  ret(2,0) = u.asImpl()(0,0)*v.asImpl()(1,0) - u.asImpl()(1,0)*v.asImpl()(0,0);
++  ret(0,0) = ui(1,0)*vi(2,0) - ui(2,0)*vi(1,0);
++  ret(1,0) = ui(2,0)*vi(0,0) - ui(0,0)*vi(2,0);
++  ret(2,0) = ui(0,0)*vi(1,0) - ui(1,0)*vi(0,0);
+   return ret;
+ }
+ 
+@@ -498,19 +501,22 @@
+ Matrix<typename Impl1::value_type,3,3>
+ cross(const MatrixRValue<Impl1,3,3>& u, const MatrixRValue<Impl2,3,1>& v)
+ {
++  const Impl1& ui = u.asImpl();
++  const Impl2& vi = v.asImpl();
++
+   Matrix<typename Impl1::value_type,3,3> ret;
+ 
+-  ret(0,0) = v.asImpl()(2,0)*u.asImpl()(0,1) - v.asImpl()(1,0)*u.asImpl()(0,2);
+-  ret(1,0) = v.asImpl()(2,0)*u.asImpl()(1,1) - v.asImpl()(1,0)*u.asImpl()(1,2);
+-  ret(2,0) = v.asImpl()(2,0)*u.asImpl()(2,1) - v.asImpl()(1,0)*u.asImpl()(2,2);
++  ret(0,0) = vi(2,0)*ui(0,1) - vi(1,0)*ui(0,2);
++  ret(1,0) = vi(2,0)*ui(1,1) - vi(1,0)*ui(1,2);
++  ret(2,0) = vi(2,0)*ui(2,1) - vi(1,0)*ui(2,2);
+ 
+-  ret(0,1) = v.asImpl()(0,0)*u.asImpl()(0,2) - v.asImpl()(2,0)*u.asImpl()(0,0);
+-  ret(1,1) = v.asImpl()(0,0)*u.asImpl()(1,2) - v.asImpl()(2,0)*u.asImpl()(1,0);
+-  ret(2,1) = v.asImpl()(0,0)*u.asImpl()(2,2) - v.asImpl()(2,0)*u.asImpl()(2,0);
++  ret(0,1) = vi(0,0)*ui(0,2) - vi(2,0)*ui(0,0);
++  ret(1,1) = vi(0,0)*ui(1,2) - vi(2,0)*ui(1,0);
++  ret(2,1) = vi(0,0)*ui(2,2) - vi(2,0)*ui(2,0);
+ 
+-  ret(0,2) = v.asImpl()(1,0)*u.asImpl()(0,0) - v.asImpl()(0,0)*u.asImpl()(0,1);
+-  ret(1,2) = v.asImpl()(1,0)*u.asImpl()(1,0) - v.asImpl()(0,0)*u.asImpl()(1,1);
+-  ret(2,2) = v.asImpl()(1,0)*u.asImpl()(2,0) - v.asImpl()(0,0)*u.asImpl()(2,1);
++  ret(0,2) = vi(1,0)*ui(0,0) - vi(0,0)*ui(0,1);
++  ret(1,2) = vi(1,0)*ui(1,0) - vi(0,0)*ui(1,1);
++  ret(2,2) = vi(1,0)*ui(2,0) - vi(0,0)*ui(2,1);
+ 
+   return ret;
+ }
+@@ -533,19 +539,22 @@
+ Matrix<typename Impl1::value_type,3,3>
+ cross(const MatrixRValue<Impl1,3,1>& u, const MatrixRValue<Impl2,3,3>& v)
+ {
++  const Impl1& ui = u.asImpl();
++  const Impl2& vi = v.asImpl();
++
+   Matrix<typename Impl1::value_type,3,3> ret;
+ 
+-  ret(0,0) = u.asImpl()(1,0)*v.asImpl()(2,0) - u.asImpl()(2,0)*v.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0)*v.asImpl()(0,0) - u.asImpl()(0,0)*v.asImpl()(2,0);
+-  ret(2,0) = u.asImpl()(0,0)*v.asImpl()(1,0) - u.asImpl()(1,0)*v.asImpl()(0,0);
++  ret(0,0) = ui(1,0)*vi(2,0) - ui(2,0)*vi(1,0);
++  ret(1,0) = ui(2,0)*vi(0,0) - ui(0,0)*vi(2,0);
++  ret(2,0) = ui(0,0)*vi(1,0) - ui(1,0)*vi(0,0);
+ 
+-  ret(0,1) = u.asImpl()(1,0)*v.asImpl()(2,1) - u.asImpl()(2,0)*v.asImpl()(1,1);
+-  ret(1,1) = u.asImpl()(2,0)*v.asImpl()(0,1) - u.asImpl()(0,0)*v.asImpl()(2,1);
+-  ret(2,1) = u.asImpl()(0,0)*v.asImpl()(1,1) - u.asImpl()(1,0)*v.asImpl()(0,1);
++  ret(0,1) = ui(1,0)*vi(2,1) - ui(2,0)*vi(1,1);
++  ret(1,1) = ui(2,0)*vi(0,1) - ui(0,0)*vi(2,1);
++  ret(2,1) = ui(0,0)*vi(1,1) - ui(1,0)*vi(0,1);
+ 
+-  ret(0,2) = u.asImpl()(1,0)*v.asImpl()(2,2) - u.asImpl()(2,0)*v.asImpl()(1,2);
+-  ret(1,2) = u.asImpl()(2,0)*v.asImpl()(0,2) - u.asImpl()(0,0)*v.asImpl()(2,2);
+-  ret(2,2) = u.asImpl()(0,0)*v.asImpl()(1,2) - u.asImpl()(1,0)*v.asImpl()(0,2);
++  ret(0,2) = ui(1,0)*vi(2,2) - ui(2,0)*vi(1,2);
++  ret(1,2) = ui(2,0)*vi(0,2) - ui(0,0)*vi(2,2);
++  ret(2,2) = ui(0,0)*vi(1,2) - ui(1,0)*vi(0,2);
+ 
+   return ret;
+ }
+@@ -557,10 +566,11 @@
+ Matrix<typename Impl1::value_type,3,3>
+ cross(const MatrixRValue<Impl1,3,1>& u)
+ {
++  const Impl1& ui = u.asImpl();
+   Matrix<typename Impl1::value_type,3,3> ret;
+-  ret(0,0) = 0;  ret(0,1) = -u.asImpl()(2,0);  ret(0,2) = u.asImpl()(1,0);
+-  ret(1,0) = u.asImpl()(2,0);  ret(1,1) = 0;  ret(1,2) = -u.asImpl()(0,0);
+-  ret(2,0) = -u.asImpl()(1,0);  ret(2,1) = u.asImpl()(0,0);  ret(2,2) = 0;
++  ret(0,0) =        0;  ret(0,1) = -ui(2,0);  ret(0,2) =  ui(1,0);
++  ret(1,0) =  ui(2,0);  ret(1,1) =        0;  ret(1,2) = -ui(0,0);
++  ret(2,0) = -ui(1,0);  ret(2,1) =  ui(0,0);  ret(2,2) =        0;
+   return ret;
+ }
+ 
+@@ -611,7 +621,7 @@
+       value_type Aii = A(i,i);
+       // If the matrix is exactly singular, compute the solution where the
+       // righthandside is projected into the image of the matrix.
+-      if (fabs(Aii) <= Limits<value_type>::min()) {
++      if (fabs(Aii) <= fabs(v(i))*Limits<value_type>::safe_min()) {
+         v(i) = static_cast<value_type>(0);
+       } else {
+         v(i) /= Aii;
+@@ -638,7 +648,7 @@
+         value_type Aii = A(i,i);
+         // If the matrix is exactly singular, compute the solution where the
+         // righthandside is projected into the image of the matrix.
+-        if (fabs(Aii) <= Limits<value_type>::min()) {
++        if (fabs(Aii) <= fabs(v(i,j))*Limits<value_type>::safe_min()) {
+           v(i,j) = static_cast<value_type>(0);
+         } else {
+           v(i,j) /= Aii;
+@@ -751,7 +761,9 @@
+   size_type n = A.cols();
+   for (size_type j = 0; j < n; ++j) {
+     // The matrix is exactly singular.
+-    if (fabs(A(j,j)) <= Limits<value_type>::min())
++    // Hmm, should read like that??
++    // if (fabs(A(j,j)) <= normInf(A(Range(j+1, m-1), j))*Limits<value_type>::safe_min())
++    if (fabs(A(j,j)) <= Limits<value_type>::safe_min())
+       nonsingular = false;
+     else {
+       if (j < n-1) {
+@@ -785,7 +797,7 @@
+     perm(j) = jp;
+ 
+     // The matrix is exactly singular.
+-    if (fabs(A(jp,j)) <= Limits<value_type>::min())
++    if (fabs(A(jp,j)) <= Limits<value_type>::safe_min())
+       nonsingular = false;
+     else {
+       if (jp != j) {
+@@ -870,9 +882,7 @@
+     if (0 <= alpha)
+       beta = -beta;
+ 
+-    value_type mn = Limits<value_type>::min();
+-    value_type eps = Limits<value_type>::epsilon();
+-    value_type safmin = mn/eps;
++    value_type safmin = Limits<value_type>::safe_min();
+ 
+     if (fabs(beta) < safmin) {
+       value_type rsafmn = 1/safmin;
+@@ -928,7 +938,7 @@
+ 
+     // Check if that thing is singular.
+     value_type Ajj = A(j, j);
+-    if (fabs(Ajj) <= Limits<value_type>::min())
++    if (fabs(Ajj) <= Limits<value_type>::safe_min())
+       nonsingular = false;
+ 
+     A(j, j) = 1;
+
+
+
+From frohlich at mail.berlios.de  Sun Feb 17 11:13:09 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sun, 17 Feb 2008 11:13:09 +0100
+Subject: [OpenFDM-svn] r353 - in trunk/OpenFDM/src/OpenFDM: . LinAlg XML
+Message-ID: <200802171013.m1HAD9bw012208@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-17 11:13:07 +0100 (Sun, 17 Feb 2008)
+New Revision: 353
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Assert.cpp
+   trunk/OpenFDM/src/OpenFDM/LinAlg/IO.h
+   trunk/OpenFDM/src/OpenFDM/Quaternion.h
+   trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+Log:
+Make it compile with gcc-4.3.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Assert.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Assert.cpp	2008-02-03 09:04:43 UTC (rev 352)
++++ trunk/OpenFDM/src/OpenFDM/Assert.cpp	2008-02-17 10:13:07 UTC (rev 353)
+@@ -19,6 +19,7 @@
+ #endif
+ 
+ #include <iostream>
++#include <cstdlib>
+ 
+ namespace OpenFDM {
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinAlg/IO.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinAlg/IO.h	2008-02-03 09:04:43 UTC (rev 352)
++++ trunk/OpenFDM/src/OpenFDM/LinAlg/IO.h	2008-02-17 10:13:07 UTC (rev 353)
+@@ -5,8 +5,7 @@
+ #ifndef OpenFDM_Matrix_IO_H
+ #define OpenFDM_Matrix_IO_H
+ 
+-#include <iosfwd>
+-#include <ios>
++#include <iostream>
+ #include <iomanip>
+ 
+ namespace OpenFDM {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Quaternion.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Quaternion.h	2008-02-03 09:04:43 UTC (rev 352)
++++ trunk/OpenFDM/src/OpenFDM/Quaternion.h	2008-02-17 10:13:07 UTC (rev 353)
+@@ -31,9 +31,9 @@
+ class Quaternion
+   : public Vector4<T> {
+ public:
+-  typedef typename Vector4<T>::value_type value_type;
+-  typedef Vector3<value_type> Vector3;
+-  typedef Matrix33<value_type> Matrix33;
++  typedef typename OpenFDM::LinAlg::Vector4<T>::value_type value_type;
++  typedef OpenFDM::LinAlg::Vector3<value_type> Vector3;
++  typedef OpenFDM::LinAlg::Matrix33<value_type> Matrix33;
+   
+   OpenFDM_FORCE_INLINE
+   Quaternion(void)
+
+Modified: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2008-02-03 09:04:43 UTC (rev 352)
++++ trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2008-02-17 10:13:07 UTC (rev 353)
+@@ -4,6 +4,7 @@
+ 
+ #include "ExpatXMLReader.h"
+ #include <iostream>
++#include <cstring>
+ #include <expat.h>
+ #include "config.h"
+ 
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 19:02:20 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 19:02:20 +0100
+Subject: [OpenFDM-svn] r354 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201802.m1KI2KZ4011796@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 19:02:18 +0100 (Wed, 20 Feb 2008)
+New Revision: 354
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Output.cpp
+Log:
+Fix uninitialized variable.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Output.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.cpp	2008-02-17 10:13:07 UTC (rev 353)
++++ trunk/OpenFDM/src/OpenFDM/Output.cpp	2008-02-20 18:02:18 UTC (rev 354)
+@@ -17,7 +17,8 @@
+ }
+ 
+ Output::Output(const std::string& name) :
+-  Model(name)
++  Model(name),
++  mOutputGain(1)
+ {
+   setDirectFeedThrough(true);
+   setNumInputPorts(1);
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 19:06:15 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 19:06:15 +0100
+Subject: [OpenFDM-svn] r355 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201806.m1KI6Fxa014686@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 19:06:10 +0100 (Wed, 20 Feb 2008)
+New Revision: 355
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Fix initialization order for Integrator models.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 18:02:18 UTC (rev 354)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 18:06:10 UTC (rev 355)
+@@ -124,24 +124,6 @@
+  
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+-  // build up the lists of stateful models and count the number of states
+-  unsigned numContinousStates = 0;
+-  unsigned numDiscreteStates = 0;
+-  mit = modelCollectVisitor.modelList.begin();
+-  while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit->model->getNumContinousStates()) {
+-      mContinousModelList.push_back(mit->model);
+-      numContinousStates += mit->model->getNumContinousStates();
+-    }
+-    if (mit->model->getNumDiscreteStates()) {
+-      mDiscreteModelList.push_back(mit->model);
+-      numDiscreteStates += mit->model->getNumDiscreteStates();
+-    }
+-    ++mit;
+-  }
+-  setNumContinousStates(numContinousStates);
+-  setNumDiscreteStates(numDiscreteStates);
+-
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+   real_type gcd = 0;
+@@ -230,6 +212,24 @@
+     ++mit;
+   }
+ 
++  // build up the lists of stateful models and count the number of states
++  unsigned numContinousStates = 0;
++  unsigned numDiscreteStates = 0;
++  mit = modelCollectVisitor.modelList.begin();
++  while (mit != modelCollectVisitor.modelList.end()) {
++    if (mit->model->getNumContinousStates()) {
++      mContinousModelList.push_back(mit->model);
++      numContinousStates += mit->model->getNumContinousStates();
++    }
++    if (mit->model->getNumDiscreteStates()) {
++      mDiscreteModelList.push_back(mit->model);
++      numDiscreteStates += mit->model->getNumDiscreteStates();
++    }
++    ++mit;
++  }
++  setNumContinousStates(numContinousStates);
++  setNumDiscreteStates(numDiscreteStates);
++
+   // Just a verbose print here ...
+   Log(Schedule, Info) << "gcd of sample times is: " << gcd
+                    << ", scm of sample times is: " << scm << endl;
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 19:06:53 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 19:06:53 +0100
+Subject: [OpenFDM-svn] r356 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201806.m1KI6rCG015617@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 19:06:53 +0100 (Wed, 20 Feb 2008)
+New Revision: 356
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/SimulationTime.cpp
+   trunk/OpenFDM/src/OpenFDM/SimulationTime.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Add SimulationTime Model.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-20 18:06:10 UTC (rev 355)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-20 18:06:53 UTC (rev 356)
+@@ -108,6 +108,7 @@
+   SharedPtr.h \
+   SimpleContact.h \
+   SimpleGear.h \
++  SimulationTime.h \
+   StateStream.h \
+   Summer.h \
+   System.h \
+@@ -199,6 +200,7 @@
+   Saturation.cpp \
+   SimpleContact.cpp \
+   SimpleGear.cpp \
++  SimulationTime.cpp \
+   Summer.cpp \
+   System.cpp \
+   Table.cpp \
+
+Added: trunk/OpenFDM/src/OpenFDM/SimulationTime.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimulationTime.cpp	2008-02-20 18:06:10 UTC (rev 355)
++++ trunk/OpenFDM/src/OpenFDM/SimulationTime.cpp	2008-02-20 18:06:53 UTC (rev 356)
+@@ -0,0 +1,48 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include "SimulationTime.h"
++#include "ModelVisitor.h"
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(SimulationTime, Model)
++  END_OPENFDM_OBJECT_DEF
++
++SimulationTime::SimulationTime(const std::string& name) :
++  Model(name)
++{
++  setNumOutputPorts(1);
++  setOutputPort(0, "output", this, &SimulationTime::getOutputValue);
++}
++
++SimulationTime::~SimulationTime(void)
++{
++}
++
++void
++SimulationTime::accept(ModelVisitor& visitor)
++{
++  visitor.apply(*this);
++}
++
++bool
++SimulationTime::init()
++{
++  return Model::init();
++}
++
++void
++SimulationTime::output(const TaskInfo& taskInfo)
++{
++  mOutputValue = taskInfo.getTime();
++}
++
++const real_type&
++SimulationTime::getOutputValue(void) const
++{
++  return mOutputValue;
++}
++
++} // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/SimulationTime.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SimulationTime.h	2008-02-20 18:06:10 UTC (rev 355)
++++ trunk/OpenFDM/src/OpenFDM/SimulationTime.h	2008-02-20 18:06:53 UTC (rev 356)
+@@ -0,0 +1,34 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_SimulationTime_H
++#define OpenFDM_SimulationTime_H
++
++#include "Model.h"
++
++namespace OpenFDM {
++
++class SimulationTime : public Model {
++  OPENFDM_OBJECT(SimulationTime, Model);
++public:
++  SimulationTime(const std::string& name);
++  virtual ~SimulationTime(void);
++
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor& visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor& visitor) const;
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&);
++
++  const real_type& getOutputValue(void) const;
++
++private:
++  real_type mOutputValue;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 19:07:24 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 19:07:24 +0100
+Subject: [OpenFDM-svn] r357 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201807.m1KI7ON4016104@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 19:07:24 +0100 (Wed, 20 Feb 2008)
+New Revision: 357
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/Summer.h
+Log:
+Add api to change the signs of the inputs.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2008-02-20 18:06:53 UTC (rev 356)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2008-02-20 18:07:24 UTC (rev 357)
+@@ -109,4 +109,26 @@
+     setInputPortName(oldnum, "+");
+ }
+ 
++void
++Summer::setInputSign(unsigned num, Sign sign)
++{
++  if (getNumSummands() <= num)
++    return;
++  if (sign == Minus)
++    setInputPortName(num, "-");
++  else
++    setInputPortName(num, "+");
++}
++
++Summer::Sign
++Summer::getInputSign(unsigned num) const
++{
++  if (getNumSummands() <= num)
++    return Plus;
++  if (getInputPortName(num) == "-")
++    return Minus;
++  else
++    return Plus;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.h	2008-02-20 18:06:53 UTC (rev 356)
++++ trunk/OpenFDM/src/OpenFDM/Summer.h	2008-02-20 18:07:24 UTC (rev 357)
+@@ -26,6 +26,10 @@
+   unsigned getNumSummands(void) const;
+   void setNumSummands(unsigned num);
+ 
++  enum Sign { Plus, Minus };
++  void setInputSign(unsigned num, Sign sign);
++  Sign getInputSign(unsigned num) const;
++
+ private:
+   Matrix mSum;
+   std::vector<MatrixPortHandle> mPositiveSummandPorts;
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 20:42:38 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 20:42:38 +0100
+Subject: [OpenFDM-svn] r358 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201942.m1KJgc6O031671@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 20:42:38 +0100 (Wed, 20 Feb 2008)
+New Revision: 358
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+System scheduling updates.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 18:07:24 UTC (rev 357)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 19:42:38 UTC (rev 358)
+@@ -82,6 +82,7 @@
+ {
+   setTimestepper(new ExplicitEuler);
+   mEnvironment = new Environment;
++  addSampleTime(SampleTime::Continous);
+ }
+ 
+ System::~System(void)
+@@ -124,6 +125,16 @@
+  
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
++  // build up the lists of stateful models and
++  mit = modelCollectVisitor.modelList.begin();
++  while (mit != modelCollectVisitor.modelList.end()) {
++    if (mit->model->getNumContinousStates())
++      mContinousModelList.push_back(mit->model);
++    if (mit->model->getNumDiscreteStates())
++      mDiscreteModelList.push_back(mit->model);
++    ++mit;
++  }
++
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+   real_type gcd = 0;
+@@ -212,19 +223,15 @@
+     ++mit;
+   }
+ 
+-  // build up the lists of stateful models and count the number of states
++  // count the number of states
+   unsigned numContinousStates = 0;
+   unsigned numDiscreteStates = 0;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit->model->getNumContinousStates()) {
+-      mContinousModelList.push_back(mit->model);
++    if (mit->model->getNumContinousStates())
+       numContinousStates += mit->model->getNumContinousStates();
+-    }
+-    if (mit->model->getNumDiscreteStates()) {
+-      mDiscreteModelList.push_back(mit->model);
++    if (mit->model->getNumDiscreteStates())
+       numDiscreteStates += mit->model->getNumDiscreteStates();
+-    }
+     ++mit;
+   }
+   setNumContinousStates(numContinousStates);
+@@ -370,6 +377,11 @@
+ 
+     if (!continousStates) {
+       mTime = loopTEnd;
++
++      Log(Schedule, Info) << "Preparing Models: continous output step" << endl;
++      mContinousTask.setTime(getTime());
++      output(mContinousTask);
++
+     } else {
+       // Do the pre integration output round
+       Log(Schedule, Info) << "Preparing Models: pre integration step" << endl;
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 20:56:41 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 20:56:41 +0100
+Subject: [OpenFDM-svn] r359 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802201956.m1KJufJU000159@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 20:56:40 +0100 (Wed, 20 Feb 2008)
+New Revision: 359
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+Log:
+No need to add a continous sample time to the multi body system ...
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2008-02-20 19:42:38 UTC (rev 358)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2008-02-20 19:56:40 UTC (rev 359)
+@@ -27,6 +27,7 @@
+ {
+   mSystem = new System("Top Vehicle System");
+ 
++//   mSystem->setTimestepper(new ExplicitEuler);
+ //   mSystem->setTimestepper(new ExplicitAdams);
+   mSystem->setTimestepper(new DoPri5);
+ //   mSystem->setTimestepper(new ImplicitEuler);
+@@ -37,7 +38,6 @@
+ 
+   mMultiBodySystem = new ModelGroup("Multi Body System");
+   mSystem->addModel(mMultiBodySystem);
+-  mMultiBodySystem->addSampleTime(SampleTime::Continous);
+ 
+   mTopBody = new RigidBody("Topmost rigid body");
+   mMultiBodySystem->addModel(mTopBody);
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 21:14:09 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 21:14:09 +0100
+Subject: [OpenFDM-svn] r360 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802202014.m1KKE9sQ003910@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 21:14:09 +0100 (Wed, 20 Feb 2008)
+New Revision: 360
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Revert part of last change.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 19:56:40 UTC (rev 359)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 20:14:09 UTC (rev 360)
+@@ -125,16 +125,6 @@
+  
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+-  // build up the lists of stateful models and
+-  mit = modelCollectVisitor.modelList.begin();
+-  while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit->model->getNumContinousStates())
+-      mContinousModelList.push_back(mit->model);
+-    if (mit->model->getNumDiscreteStates())
+-      mDiscreteModelList.push_back(mit->model);
+-    ++mit;
+-  }
+-
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+   real_type gcd = 0;
+@@ -223,15 +213,19 @@
+     ++mit;
+   }
+ 
+-  // count the number of states
++  // build up the lists of stateful models and count the number of states
+   unsigned numContinousStates = 0;
+   unsigned numDiscreteStates = 0;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit->model->getNumContinousStates())
++    if (mit->model->getNumContinousStates()) {
++      mContinousModelList.push_back(mit->model);
+       numContinousStates += mit->model->getNumContinousStates();
+-    if (mit->model->getNumDiscreteStates())
++    }
++    if (mit->model->getNumDiscreteStates()) {
++      mDiscreteModelList.push_back(mit->model);
+       numDiscreteStates += mit->model->getNumDiscreteStates();
++    }
+     ++mit;
+   }
+   setNumContinousStates(numContinousStates);
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 21:33:28 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 21:33:28 +0100
+Subject: [OpenFDM-svn] r361 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802202033.m1KKXSsF006150@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 21:33:28 +0100 (Wed, 20 Feb 2008)
+New Revision: 361
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+Log:
+Sin function was missing.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2008-02-20 20:14:09 UTC (rev 360)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2008-02-20 20:33:28 UTC (rev 361)
+@@ -99,6 +99,13 @@
+   { return -mRealPortHandle.getRealValue(); }
+ };
+ 
++class SinUnaryFunctionModelImpl :
++    public UnaryFunctionModelImpl {
++private:
++  virtual real_type getValue(void)
++  { return sin(mRealPortHandle.getRealValue()); }
++};
++
+ class SqrUnaryFunctionModelImpl :
+     public UnaryFunctionModelImpl {
+ private:
+@@ -214,6 +221,9 @@
+   case Minus:
+     mImpl = new MinusUnaryFunctionModelImpl;
+     break;
++  case Sin:
++    mImpl = new SinUnaryFunctionModelImpl;
++    break;
+   case Sqr:
+     mImpl = new SqrUnaryFunctionModelImpl;
+     break;
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2008-02-20 20:14:09 UTC (rev 360)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.h	2008-02-20 20:33:28 UTC (rev 361)
+@@ -31,6 +31,7 @@
+     Log,
+     Log10,
+     Minus,
++    Sin,
+     Sqr,
+     Sqrt,
+     Tan
+
+
+
+From frohlich at mail.berlios.de  Wed Feb 20 22:09:25 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Wed, 20 Feb 2008 22:09:25 +0100
+Subject: [OpenFDM-svn] r362 - trunk/OpenFDM/src/test
+Message-ID: <200802202109.m1KL9Pk3011466@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-20 22:09:25 +0100 (Wed, 20 Feb 2008)
+New Revision: 362
+
+Added:
+   trunk/OpenFDM/src/test/ErrorCollectorCallback.h
+   trunk/OpenFDM/src/test/constintegral.cpp
+   trunk/OpenFDM/src/test/harmonic.cpp
+   trunk/OpenFDM/src/test/simulationtime.cpp
+Modified:
+   trunk/OpenFDM/src/test/Makefile.am
+Log:
+Add some unit test for the systems
+
+
+Added: trunk/OpenFDM/src/test/ErrorCollectorCallback.h
+===================================================================
+--- trunk/OpenFDM/src/test/ErrorCollectorCallback.h	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/ErrorCollectorCallback.h	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,33 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include <vector>
++#include <OpenFDM/Vector.h>
++#include <OpenFDM/Output.h>
++
++#ifndef ErrorCollectorCallback_H
++#define ErrorCollectorCallback_H
++
++class ErrorCollectorCallback : public OpenFDM::Output::Callback {
++public:
++  virtual void setValue(OpenFDM::real_type value)
++  { values.push_back(value); }
++  void print() const
++  {
++    std::vector<OpenFDM::real_type>::const_iterator i;
++    for (i = values.begin(); i != values.end(); ++i)
++      std::cout << *i << std::endl;
++  }
++  OpenFDM::real_type error() const
++  {
++    OpenFDM::Vector errors(values.size());
++    for (unsigned i = 0; i < values.size(); ++i)
++      errors(i) = values[i];
++    return normInf(errors);
++  }
++private:
++  std::vector<OpenFDM::real_type> values;
++};
++
++#endif
+
+Modified: trunk/OpenFDM/src/test/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/test/Makefile.am	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/Makefile.am	2008-02-20 21:09:25 UTC (rev 362)
+@@ -1,7 +1,7 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some unit tests
+-check_PROGRAMS = quattest unitstest
++check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic
+ TESTS          = $(check_PROGRAMS)
+ 
+ unitstest_SOURCES = unitstest.cpp
+@@ -10,3 +10,11 @@
+ quattest_SOURCES = quattest.cpp
+ quattest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++simulationtime_SOURCES = simulationtime.cpp
++simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
++
++constintegral_SOURCES = constintegral.cpp
++constintegral_LDADD = ../OpenFDM/libOpenFDM.la
++
++harmonic_SOURCES = harmonic.cpp
++harmonic_LDADD = ../OpenFDM/libOpenFDM.la
+
+Added: trunk/OpenFDM/src/test/constintegral.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/constintegral.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/constintegral.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,81 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include <cstdlib>
++#include <iostream>
++#include <OpenFDM/ConstModel.h>
++#include <OpenFDM/Integrator.h>
++#include <OpenFDM/Output.h>
++#include <OpenFDM/SimulationTime.h>
++#include <OpenFDM/Summer.h>
++#include <OpenFDM/System.h>
++#include "ErrorCollectorCallback.h"
++
++using namespace OpenFDM;
++
++int
++main(int argc, char *argv[])
++{
++  real_type rate = 0.1;
++
++  SharedPtr<System> system = new System("Constant Integration");
++
++  Matrix m(1, 1);
++  m(0, 0) = 1;
++
++  ConstModel* constModel = new ConstModel("Constant", m);
++  system->addModel(constModel);
++
++  Integrator* integrator = new Integrator("Integrator");
++  system->addModel(integrator);
++  m(0, 0) = 0;
++  integrator->setInitialValue(m);
++
++  Connection::connect(integrator->getInputPort(0),
++                      constModel->getOutputPort(0));
++
++  SimulationTime* simulationTime = new SimulationTime("Simulation Time");
++  system->addModel(simulationTime);
++
++  Summer* summer = new Summer("Error to exact Solution");
++  system->addModel(summer);
++  summer->setNumSummands(2);
++  summer->setInputSign(0, Summer::Plus);
++  Connection::connect(simulationTime->getOutputPort(0),
++                      summer->getInputPort(0));
++  summer->setInputSign(1, Summer::Minus);
++  Connection::connect(integrator->getOutputPort(0),
++                      summer->getInputPort(1));
++
++  Output* output = new Output("Error Output");
++  SharedPtr<ErrorCollectorCallback> errors;
++  errors = new ErrorCollectorCallback;
++  output->setCallback(errors);
++  output->addSampleTime(rate);
++  system->addModel(output);
++  Connection::connect(output->getInputPort(0), summer->getOutputPort(0));
++
++  if (!system->init()) {
++    std::cout << "Could not initialize the system" << std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system->simulate(10);
++
++  real_type expectedRoundoff;
++  expectedRoundoff = 64*Limits<real_type>::epsilon()*system->getTime()/rate;
++  real_type error = errors->error();
++  if (expectedRoundoff < error) {
++    std::cerr << "Maximum simulation time error " << error
++              << " exceeds limit of expected roundoff "
++              << expectedRoundoff << std::endl;
++    return EXIT_FAILURE;
++  }
++
++  std::cout << "Maximum simulation time error " << error
++            << " passes limit of expected roundoff "
++            << expectedRoundoff << std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+Added: trunk/OpenFDM/src/test/harmonic.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/harmonic.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/harmonic.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,138 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include <cstdlib>
++#include <iostream>
++#include <OpenFDM/DoPri5.h>
++#include <OpenFDM/Gain.h>
++#include <OpenFDM/Integrator.h>
++#include <OpenFDM/Output.h>
++#include <OpenFDM/SimulationTime.h>
++#include <OpenFDM/Summer.h>
++#include <OpenFDM/System.h>
++#include <OpenFDM/UnaryFunctionModel.h>
++#include "ErrorCollectorCallback.h"
++
++using namespace OpenFDM;
++
++int
++main(int argc, char *argv[])
++{
++  real_type omega = 2;
++
++  SharedPtr<System> system = new System("Harmonic Oszilator");
++  system->addSampleTime(0.01);
++  system->setTimestepper(new DoPri5);
++  
++  Integrator* integrator0 = new Integrator("Acceleration Integrator");
++  Matrix initialValue(1, 1);
++  initialValue(0, 0) = 0;
++  integrator0->setInitialValue(initialValue);
++  system->addModel(integrator0);
++
++  Integrator* integrator1 = new Integrator("Velocity Integrator");
++  initialValue(0, 0) = 1;
++  integrator1->setInitialValue(initialValue);
++  system->addModel(integrator1);
++
++  Gain* gain = new Gain("Gain");
++  gain->setGain(-omega*omega);
++  system->addModel(gain);
++
++  Connection::connect(gain->getInputPort(0),
++                      integrator1->getOutputPort(0));
++  Connection::connect(integrator1->getInputPort(0),
++                      integrator0->getOutputPort(0));
++  Connection::connect(integrator0->getInputPort(0),
++                      gain->getOutputPort(0));
++
++  SimulationTime* simulationTime = new SimulationTime("Simulation Time");
++  system->addModel(simulationTime);
++
++  gain = new Gain("Cosinus Input Gain");
++  system->addModel(gain);
++  gain->setGain(omega);
++  Connection::connect(gain->getInputPort(0),
++                      simulationTime->getOutputPort(0));
++
++  UnaryFunctionModel* cosFunction
++    = new UnaryFunctionModel("Exact Pos Solution", UnaryFunctionModel::Cos);
++  system->addModel(cosFunction);
++  Connection::connect(cosFunction->getInputPort(0),
++                      gain->getOutputPort(0));
++
++  UnaryFunctionModel* sinFunction
++    = new UnaryFunctionModel("Exact Vel Solution", UnaryFunctionModel::Sin);
++  system->addModel(sinFunction);
++  Connection::connect(sinFunction->getInputPort(0),
++                      gain->getOutputPort(0));
++
++  gain = new Gain("Cosinus Output Gain");
++  system->addModel(gain);
++  gain->setGain(-omega);
++  Connection::connect(gain->getInputPort(0),
++                      sinFunction->getOutputPort(0));
++
++
++  Summer* summer0 = new Summer("Position Error to exact Solution");
++  system->addModel(summer0);
++  summer0->setNumSummands(2);
++  summer0->setInputSign(0, Summer::Plus);
++  Connection::connect(cosFunction->getOutputPort(0),
++                      summer0->getInputPort(0));
++  summer0->setInputSign(1, Summer::Minus);
++  Connection::connect(integrator1->getOutputPort(0),
++                      summer0->getInputPort(1));
++
++  Output* output = new Output("Position Error Output");
++  SharedPtr<ErrorCollectorCallback> posErrorCallback;
++  posErrorCallback = new ErrorCollectorCallback;
++  output->setCallback(posErrorCallback);
++  output->addSampleTime(0.1);
++  system->addModel(output);
++  Connection::connect(output->getInputPort(0), summer0->getOutputPort(0));
++
++
++  Summer* summer1 = new Summer("Velocity Error to exact Solution");
++  system->addModel(summer1);
++  summer1->setNumSummands(2);
++  summer1->setInputSign(0, Summer::Plus);
++  Connection::connect(gain->getOutputPort(0),
++                      summer1->getInputPort(0));
++  summer1->setInputSign(1, Summer::Minus);
++  Connection::connect(integrator0->getOutputPort(0),
++                      summer1->getInputPort(1));
++
++  output = new Output("Velocity Error Output");
++  SharedPtr<ErrorCollectorCallback> velErrorCallback;
++  velErrorCallback = new ErrorCollectorCallback;
++  output->setCallback(velErrorCallback);
++  output->addSampleTime(0.1);
++  system->addModel(output);
++  Connection::connect(output->getInputPort(0), summer1->getOutputPort(0));
++
++  if (!system->init()) {
++    std::cout << "Could not initialize the system" << std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system->simulate(10);
++
++  real_type posError = posErrorCallback->error();
++  if (1e-6 < posError) {
++    std::cerr << "Position error of " << posError << " is too big" << std::endl;
++    return EXIT_FAILURE;
++  }
++  std::cout << "Passed position error check with error = "
++            << posError << std::endl;
++  real_type velError = velErrorCallback->error();
++  if (1e-6 < velError) {
++    std::cerr << "Velocity error of " << velError << " is too big" << std::endl;
++    return EXIT_FAILURE;
++  }
++  std::cout << "Passed velocity error check with error = "
++            << velError << std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+Added: trunk/OpenFDM/src/test/simulationtime.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/simulationtime.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/simulationtime.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,72 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include <cstdlib>
++#include <vector>
++#include <iostream>
++#include <OpenFDM/Output.h>
++#include <OpenFDM/SimulationTime.h>
++#include <OpenFDM/System.h>
++
++using namespace OpenFDM;
++
++class CollectOutputCallback : public Output::Callback {
++public:
++  virtual void setValue(real_type value)
++  { values.push_back(value); }
++  void print() const
++  {
++    std::vector<real_type>::const_iterator i;
++    for (i = values.begin(); i != values.end(); ++i)
++      std::cout << *i << std::endl;
++  }
++  std::vector<real_type> values;
++};
++
++int
++main(int argc, char *argv[])
++{
++  real_type rate = 0.1;
++
++  SharedPtr<System> system = new System("Simulation Time System");
++  
++  SimulationTime* simulationTime = new SimulationTime("Simulation Time");
++  system->addModel(simulationTime);
++
++  Output* output = new Output("Simulation Time Output");
++  system->addModel(output);
++  SharedPtr<CollectOutputCallback> simTimeCallback = new CollectOutputCallback;
++  output->setCallback(simTimeCallback);
++  output->addSampleTime(rate);
++  Connection::connect(output->getInputPort(0),
++                      simulationTime->getOutputPort(0));
++
++  if (!system->init()) {
++    std::cout << "Could not initialize the system" << std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system->simulate(10);
++
++  Vector errors(simTimeCallback->values.size());
++  for (unsigned i = 0; i < simTimeCallback->values.size(); ++i) {
++    errors(i) = simTimeCallback->values[i] - i*rate;
++  }
++
++  real_type expectedRoundoff;
++  expectedRoundoff = Limits<real_type>::epsilon()*system->getTime()/rate;
++  real_type error = normInf(errors);
++  if (expectedRoundoff < error) {
++    std::cerr << "Maximum simulation time error " << error
++              << " exceeds limit of expected roundoff "
++              << expectedRoundoff << std::endl;
++    return EXIT_FAILURE;
++  }
++
++  std::cout << "Maximum simulation time error " << error
++            << " passes limit of expected roundoff "
++            << expectedRoundoff << std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+
+
+From frohlich at mail.berlios.de  Tue Feb 26 06:55:10 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 26 Feb 2008 06:55:10 +0100
+Subject: [OpenFDM-svn] r364 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802260555.m1Q5tAZY032276@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-26 06:55:07 +0100 (Tue, 26 Feb 2008)
+New Revision: 364
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+Log:
+Update copyright
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2008-02-25 19:44:01 UTC (rev 363)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2008-02-26 05:55:07 UTC (rev 364)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+  *
+  */
+ 
+
+
+
+From frohlich at mail.berlios.de  Tue Feb 26 07:13:07 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 26 Feb 2008 07:13:07 +0100
+Subject: [OpenFDM-svn] r365 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802260613.m1Q6D7dj011446@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-26 07:13:06 +0100 (Tue, 26 Feb 2008)
+New Revision: 365
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Time.cpp
+   trunk/OpenFDM/src/OpenFDM/Time.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Preliminary time class.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-26 06:13:06 UTC (rev 365)
+@@ -117,6 +117,7 @@
+   Tailhook.h \
+   Tank.h \
+   TaskInfo.h \
++  Time.h \
+   TimeDerivative.h \
+   TransferFunction.h \
+   Transform.h \
+@@ -207,6 +208,7 @@
+   Tailhook.cpp \
+   Tank.cpp \
+   TaskInfo.cpp \
++  Time.cpp \
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+   UnaryFunctionModel.cpp \
+
+Added: trunk/OpenFDM/src/OpenFDM/Time.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-26 06:13:06 UTC (rev 365)
+@@ -0,0 +1,75 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include "Time.h"
++
++#include <errno.h>
++#include <time.h>
++#include <cmath>
++
++namespace OpenFDM {
++
++#define HAVE_POSIX_TIMERS 
++#define HAVE_CLOCK_MONOTONIC
++#define HAVE_CLOCK_THREAD_CPUTIME
++
++#if defined(HAVE_POSIX_TIMERS)
++static clockid_t
++typeToClockId(Time::Type type)
++{
++  switch (type) {
++#ifdef HAVE_CLOCK_MONOTONIC
++  case Time::MonotonicTime:
++    return CLOCK_MONOTONIC;
++#endif
++#ifdef HAVE_CLOCK_THREAD_CPUTIME
++  case Time::CPUTime:
++    return CLOCK_THREAD_CPUTIME_ID;
++#endif
++  default:
++    return CLOCK_REALTIME;
++  }
++}
++#endif
++
++Time
++Time::now(Type type)
++{
++#if defined(HAVE_POSIX_TIMERS)
++  struct timespec ts;
++  if (0 != clock_gettime(typeToClockId(type), &ts))
++    perror("Error in clock_gettime: ");
++  Time t;
++  t.setTimeUnchecked(ts.tv_sec, ts.tv_nsec);
++  return t;
++#else
++  if (type == CPUTime) {
++    struct rusage ru;
++    getrusage(RUSAGE_SELF, &ru);
++    return Time(ru.ru_utime.tv_sec, 1000*ru.ru_utime.tv_usec);
++  } else {
++    struct timeval tv;
++    gettimeofday(&tv, 0);
++    return Time(tv.tv_sec, 1000*tv.tv_usec);
++  }
++#endif
++}
++
++Time
++Time::resolution(Type type)
++{
++#if defined(HAVE_POSIX_TIMERS)
++  struct timespec ts;
++  if (0 != clock_getres(typeToClockId(type), &ts))
++    perror("Error in clock_getres: ");
++  Time t;
++  t.setTimeUnchecked(ts.tv_sec, ts.tv_nsec);
++  return t;
++#else
++  // Cannot see something better
++  return Time(0, 1000);
++#endif
++}
++
++}
+
+Added: trunk/OpenFDM/src/OpenFDM/Time.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-26 05:55:07 UTC (rev 364)
++++ trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-26 06:13:06 UTC (rev 365)
+@@ -0,0 +1,123 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Time_H
++#define OpenFDM_Time_H
++
++#include <time.h>
++#include "Math.h"
++
++namespace OpenFDM {
++
++class Time {
++  // Just to avoid typos with that magnitude of zeros
++  enum { NanoSecondsPerSecond = 1000000000 };
++
++public:
++  enum Type {
++    RealTime,
++    MonotonicTime,
++    CPUTime
++  };
++
++  typedef time_t sec_type;
++  typedef long nsec_type;
++
++  Time()
++  { setTimeUnchecked(0, 0); }
++  Time(const sec_type& sec, const nsec_type& nsec)
++  { setTime(sec, nsec); }
++  Time(const sec_type& sec)
++  { setTimeUnchecked(sec, 0); }
++  Time(const double& sec)
++  { setTime(sec); }
++
++  static Time now(Type type = RealTime);
++  static Time resolution(Type type = RealTime);
++
++  operator double() const
++  { return (1.0/NanoSecondsPerSecond)*_nsec + _sec; }
++
++  void setTime(const double& seconds)
++  {
++    sec_type wholeSecs = sec_type(floor(seconds));
++    nsec_type reminder;
++    reminder = nsec_type(floor((seconds - wholeSecs)*NanoSecondsPerSecond));
++    setTimeUnchecked(wholeSecs, reminder);
++  }
++  void setTime(const sec_type& sec, const nsec_type& nsec)
++  {
++    nsec_type carry = nsec/NanoSecondsPerSecond;
++    _nsec = nsec - NanoSecondsPerSecond*carry;
++    _sec = sec + carry;
++  }
++  const sec_type& getSeconds() const
++  { return _sec; }
++  const nsec_type& getNanoSeconds() const
++  { return _nsec; }
++
++  Time& operator+=(const Time& c)
++  { setTime(_sec + c._sec, _nsec + c._nsec); return *this; }
++  Time& operator-=(const Time& c)
++  { setTime(_sec - c._sec, _nsec - c._nsec); return *this; }
++
++private:
++  void setTimeUnchecked(const sec_type& sec, const nsec_type& nsec)
++  { _sec = sec; _nsec = nsec; }
++
++  sec_type _sec;
++  nsec_type _nsec;
++
++  friend bool operator==(const Time& c1, const Time& c2);
++  friend bool operator<(const Time& c1, const Time& c2);
++};
++
++inline bool
++operator==(const Time& c1, const Time& c2)
++{ return c1._nsec == c2._nsec && c1._sec == c2._sec; }
++
++inline bool
++operator!=(const Time& c1, const Time& c2)
++{ return !operator==(c1, c2); }
++
++inline bool
++operator<(const Time& c1, const Time& c2)
++{
++  if (c1._sec < c2._sec)
++    return true;
++  else
++    return c1._sec == c2._sec && c1._nsec < c2._nsec;
++}
++
++inline bool
++operator>(const Time& c1, const Time& c2)
++{ return c2 < c1; }
++
++inline bool
++operator>=(const Time& c1, const Time& c2)
++{ return !(c1 < c2); }
++
++inline bool
++operator<=(const Time& c1, const Time& c2)
++{ return !(c1 > c2); }
++
++inline Time
++operator+(const Time& c1)
++{ return c1; }
++
++inline Time
++operator-(const Time& c1)
++{ Time c(0, 0); c -= c1; return c; /*FIXME*/ }
++
++inline Time
++operator+(const Time& c1, const Time& c2)
++{ Time c = c1; c += c2; return c; }
++
++inline Time
++operator-(const Time& c1, const Time& c2)
++{ Time c = c1; c -= c2; return c; }
++
++}
++
++#endif
+
+
+
+From frohlich at mail.berlios.de  Fri Feb 29 18:04:04 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 29 Feb 2008 18:04:04 +0100
+Subject: [OpenFDM-svn] r366 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802291704.m1TH44GW015054@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-29 18:04:03 +0100 (Fri, 29 Feb 2008)
+New Revision: 366
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Time.cpp
+   trunk/OpenFDM/src/OpenFDM/Time.h
+Log:
+small include updates, provide a stream output operator.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Time.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-26 06:13:06 UTC (rev 365)
++++ trunk/OpenFDM/src/OpenFDM/Time.cpp	2008-02-29 17:04:03 UTC (rev 366)
+@@ -4,8 +4,8 @@
+ 
+ #include "Time.h"
+ 
+-#include <errno.h>
+ #include <time.h>
++#include <cerrno>
+ #include <cmath>
+ 
+ namespace OpenFDM {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Time.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-26 06:13:06 UTC (rev 365)
++++ trunk/OpenFDM/src/OpenFDM/Time.h	2008-02-29 17:04:03 UTC (rev 366)
+@@ -5,9 +5,16 @@
+ #ifndef OpenFDM_Time_H
+ #define OpenFDM_Time_H
+ 
+-#include <time.h>
++#include <ctime>
++#include <iosfwd>
++#include <iomanip>
++#include <sstream>
++// FIXME
++#include <iostream>
+ #include "Math.h"
+ 
++// FIXME move into own tools library.
++
+ namespace OpenFDM {
+ 
+ class Time {
+@@ -21,7 +28,7 @@
+     CPUTime
+   };
+ 
+-  typedef time_t sec_type;
++  typedef std::time_t sec_type;
+   typedef long nsec_type;
+ 
+   Time()
+@@ -118,6 +125,18 @@
+ operator-(const Time& c1, const Time& c2)
+ { Time c = c1; c -= c2; return c; }
+ 
++template<typename char_type, typename traits_type> 
++inline
++std::basic_ostream<char_type, traits_type>&
++operator<<(std::basic_ostream<char_type, traits_type>& os, const Time& t)
++{
++  std::basic_stringstream<char_type, traits_type> stream;
++  stream << t.getSeconds() << '.'
++         << std::setw(9) << std::right << std::setfill('0')
++         << t.getNanoSeconds();
++  return os << stream.str();
+ }
+ 
++}
++
+ #endif
+
+
+
+From frohlich at mail.berlios.de  Fri Feb 29 18:04:45 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 29 Feb 2008 18:04:45 +0100
+Subject: [OpenFDM-svn] r367 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200802291704.m1TH4jnJ015167@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-02-29 18:04:44 +0100 (Fri, 29 Feb 2008)
+New Revision: 367
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Add -lrt because of the posix timers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-29 17:04:03 UTC (rev 366)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2008-02-29 17:04:44 UTC (rev 367)
+@@ -5,6 +5,7 @@
+ OpenFDMincludedir = $(includedir)/OpenFDM
+ 
+ lib_LTLIBRARIES = libOpenFDM.la
++libOpenFDM_la_LIBADD = -lrt
+ 
+ # Will need these at the moment ...
+ nobase_OpenFDMinclude_HEADERS = \
+
+
+

@@ -1,0 +1,379 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r212 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r212%20-%20trunk/flightgear&In-Reply-To=%3C200601211149.k0LBnNdq015844%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000192.html">
+   <LINK REL="Next"  HREF="000194.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r212 - trunk/flightgear</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r212%20-%20trunk/flightgear&In-Reply-To=%3C200601211149.k0LBnNdq015844%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r212 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Jan 21 12:49:23 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000192.html">[OpenFDM-svn] r211 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000194.html">[OpenFDM-svn] r213 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#193">[ date ]</a>
+              <a href="thread.html#193">[ thread ]</a>
+              <a href="subject.html#193">[ subject ]</a>
+              <a href="author.html#193">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-21 12:49:15 +0100 (Sat, 21 Jan 2006)
+New Revision: 212
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Huge update. Longe time since the past checkin here ...
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-01-21 11:48:39 UTC (rev 211)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-01-21 11:49:15 UTC (rev 212)
+@@ -15,8 +15,10 @@
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+ #include &lt;OpenFDM/Ground.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/Model.h&gt;
+ #include &lt;OpenFDM/ModelGroup.h&gt;
++#include &lt;OpenFDM/XMLDumpModelVisitor.h&gt;
+ 
+ #include &quot;FGPropertyAdapter.h&quot;
+ 
+@@ -140,19 +142,6 @@
+ //     turbulence_rate = fgGetNode(&quot;/environment/turbulence/rate-hz&quot;,true);
+ 
+ 
+-
+-class FGPropertyImpl : public PropertyImpl&lt;real_type&gt; {
+-public:
+-  FGPropertyImpl(SGPropertyNode* ptr) : mPropertyNode(ptr) {}
+-  virtual void setValue(const real_type&amp; value) { if (mPropertyNode.valid()) mPropertyNode-&gt;setDoubleValue(value); }
+-  virtual const Object* getObject(void) const { return 0; }
+-  virtual Object* getObject(void) { return 0; }
+-  virtual bool isValid(void) const { return true; }
+-  virtual real_type getValue(void) const { if (mPropertyNode.valid()) return mPropertyNode-&gt;getDoubleValue(); else return 0; }
+-private:
+-  SGPropertyNode_ptr mPropertyNode;
+-};
+-
+ void printVehicle(Vehicle* vehicle)
+ {
+   cout &lt;&lt; &quot;T = &quot; &lt;&lt; vehicle-&gt;getTime()
+@@ -197,7 +186,7 @@
+   LegacyJSBSimReader reader;
+   reader.addAircraftPath(fgGetString(&quot;/sim/aircraft-dir&quot;));
+   reader.addEnginePath(std::string(fgGetString(&quot;/sim/aircraft-dir&quot;))
+-                       + &quot;/Engine&quot;);
++                       + &quot;/Engines&quot;);
+   reader.loadAircraft(std::string(fgGetString(&quot;/sim/aero&quot;)) + &quot;.xml&quot;);
+   if (reader.getErrorState()) {
+     SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() cannot read aircraft!&quot;);
+@@ -210,17 +199,59 @@
+   }
+ 
+   mData-&gt;vehicle = reader.getVehicle();
++  Vehicle* vehicle = mData-&gt;vehicle;
+   mData-&gt;ground = new FGGround(this);
+-  mData-&gt;vehicle-&gt;setGround(mData-&gt;ground);
+-  mData-&gt;vehicle-&gt;setPlanet(new FGPlanet);
+-  mData-&gt;vehicle-&gt;setWind(new FGWind);
++  vehicle-&gt;setGround(mData-&gt;ground);
++  vehicle-&gt;setPlanet(new FGPlanet);
++  vehicle-&gt;setWind(new FGWind);
+ 
+-  // Call what needs to be done ... ;-(
++  // Call what needs to be done ... ;-)
+   common_init();
+ 
+   // Hmm, twice ??
+-  mData-&gt;vehicle-&gt;init();
++  vehicle-&gt;init();
+ 
++  MobileRootJoint* mobileRootJoint = vehicle-&gt;getMobileRootJoint();
++  // Check the position
++  Geodetic gp = Geodetic(get_Latitude(),
++                         get_Longitude(),
++                         convertFrom(uFoot, get_Altitude()));
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;Geod Pos &quot; &lt;&lt; gp &lt;&lt; &quot; set.&quot;);
++  mobileRootJoint-&gt;setGeodPosition(gp);
++
++  // Orientation
++  Quaternion go = Quaternion::fromHeadAttBank(get_Psi(),
++                                              get_Theta(),
++                                              get_Phi());
++  SG_LOG(SG_FLIGHT, SG_INFO, &quot;Geod Orientation &quot; &lt;&lt; go &lt;&lt; &quot; set!&quot;);
++  vehicle-&gt;setGeodOrientation(go);
++
++  // Velocity
++  std::string speed_set = fgGetString(&quot;/sim/presets/speed-set&quot;, &quot;UVW&quot;);
++  if (speed_set == &quot;UVW&quot;) {
++    Vector3 bodyVel(get_uBody(), get_vBody(), get_wBody());
++    mobileRootJoint-&gt;setAngularRelVel(Vector3::zeros());
++    mobileRootJoint-&gt;setLinearRelVel(convertFrom(uFeetPSecond, bodyVel));
++//   } else if (speed_set == &quot;NED&quot;) {
++//   } else if (speed_set == &quot;KNOTS&quot;) {
++//   } else if (speed_set == &quot;MACH&quot;) {
++  } else {
++    mobileRootJoint-&gt;setRelVel(Vector6::zeros());
++  }
++
++  // Try to find a stable set of states
++  if (!vehicle-&gt;trim())
++    SG_LOG(SG_FLIGHT, SG_WARN, &quot;Trimming failed!&quot;);
++
++  // Copy the trim results back
++  gp = vehicle-&gt;getGeodPosition();
++  _updateGeodeticPosition(gp.latitude, gp.longitude,
++                          convertTo(uFoot, gp.altitude));
++
++  Rotation geodOr = vehicle-&gt;getGeodOrientation();
++  Vector3 euler = geodOr.getEuler();
++  _set_Euler_Angles(euler(1), euler(2), euler(3));
++
+   set_inited(true);
+ }
+ 
+@@ -245,30 +276,25 @@
+   FGInterface::unbind();
+ }
+ 
+-void FGOpenFDM::update(double dt)
++void
++FGOpenFDM::update(double dt)
+ {
+   if (is_suspended() || dt == 0)
+     return;
+ 
+   // Get a local vehicle pointer
+   Vehicle* vehicle = mData-&gt;vehicle;
+-
+   if (!vehicle) {
+     SG_LOG(SG_FLIGHT, SG_ALERT,
+            &quot;FGOpenFDM::update(double) is called without an aircraft loaded!&quot;);
+     return;
+   }
+ 
+-
+-  // Check if somebody has fiddled with the state values since the past step...
+-  bool stateChanged = false;
+-
+   // Check the position
+   Geodetic gp = Geodetic(get_Latitude(),
+                          get_Longitude(),
+                          convertFrom(uFoot, get_Altitude()));
+   if (!equal(vehicle-&gt;getPlanet()-&gt;toCart(gp), vehicle-&gt;getCartPosition())) {
+-    stateChanged = true;
+     SG_LOG(SG_FLIGHT, SG_INFO,
+            &quot;Geod Pos set, error = &quot;
+            &lt;&lt; norm(vehicle-&gt;getPlanet()-&gt;toCart(gp)-vehicle-&gt;getCartPosition())
+@@ -280,7 +306,6 @@
+   // Check the orientation 
+   Vector3 euler = vehicle-&gt;getGeodOrientation().getEuler();
+   if (!equal(euler, Vector3(get_Phi(), get_Theta(), get_Psi()))) {
+-    stateChanged = true;
+     Quaternion
+       go = Quaternion::fromHeadAttBank(get_Psi(), get_Theta(), get_Phi());
+     SG_LOG(SG_FLIGHT, SG_INFO,
+@@ -301,20 +326,10 @@
+     SG_LOG(SG_FLIGHT, SG_WARN,
+            &quot;FGInterface is beeing called without scenery below the aircraft!&quot;);
+ 
+-  if (stateChanged) {
+-    SG_LOG(SG_FLIGHT, SG_INFO, &quot;State changed ------------------------------&quot;);
+-//     printVehicle(vehicle);
+-    vehicle-&gt;init();
+-    vehicle-&gt;trim();
+-//     printVehicle(vehicle);
+-  }
+-
+   // Here a miracle occures :)
+   vehicle-&gt;output();
+   vehicle-&gt;update(dt);
+ 
+-//   printVehicle(vehicle);
+-
+   // Now write the newly computed values into the interface class.
+   gp = vehicle-&gt;getGeodPosition();
+   _updateGeodeticPosition(gp.latitude, gp.longitude,
+@@ -376,7 +391,7 @@
+   if (outputModel) {
+     std::string pName = outputModel-&gt;getOutputName();
+     SGPropertyNode* sgProp = mAircraftRootNode-&gt;getNode(pName.c_str(), true);
+-    sgProp-&gt;tie(FGRealPropertyAdapter(outputModel, &quot;value&quot;));
++    sgProp-&gt;tie(FGOutputReflector(outputModel));
+   }
+ 
+   // Check for input models
+@@ -392,6 +407,17 @@
+     inputModel-&gt;setUserData(new InputChangeUserData(inputModel, sgProp));
+   }
+ 
++  // Reflect all output ports
++  Model* model = dynamic_cast&lt;Model*&gt;(object);
++  if (model &amp;&amp; model-&gt;getNumOutputPorts()) {
++    SGPropertyNode* outputBase = base-&gt;getNode(&quot;outputs&quot;, true);
++    for (unsigned i = 0; i &lt; model-&gt;getNumOutputPorts(); ++i) {
++      std::string name = model-&gt;getOutputPortName(i);
++      SGPropertyNode* sgProp = outputBase-&gt;getNode(name.c_str(), true);
++      sgProp-&gt;tie(FGRealPortReflector(model-&gt;getOutputPort(i)));
++    }
++  }
++
+   // The usual, whole object reflection so that one can take a look into
+   // OpenFDM's internal modules ...
+   std::list&lt;std::string&gt; propertyList = object-&gt;listProperties();
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2006-01-21 11:48:39 UTC (rev 211)
++++ trunk/flightgear/FGPropertyAdapter.h	2006-01-21 11:49:15 UTC (rev 212)
+@@ -80,8 +80,8 @@
+   virtual bool setValue(double value)
+   {
+     Matrix m = getPropertyValue().toMatrix();
+-    unsigned r = mIndex % rows(m);
+-    unsigned c = mIndex / rows(m);
++    unsigned r = mIndex % rows(m) + 1;
++    unsigned c = mIndex / rows(m) + 1;
+     if (r &lt; 1 || rows(m) &lt; r)
+       return false;
+     if (c &lt; 1 || cols(m) &lt; c)
+@@ -97,8 +97,8 @@
+       return getPropertyValue().toReal();
+     else {
+       Matrix m = getPropertyValue().toMatrix();
+-      unsigned r = mIndex % rows(m);
+-      unsigned c = mIndex / rows(m);
++      unsigned r = mIndex % rows(m) + 1;
++      unsigned c = mIndex / rows(m) + 1;
+       if (r &lt; 1 || rows(m) &lt; r)
+         return 0;
+       if (c &lt; 1 || cols(m) &lt; c)
+@@ -179,6 +179,80 @@
+   InputChangeListener* mListener;
+ };
+ 
++class FGOutputReflector :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGOutputReflector(Output* output) :
++    mOutputModel(output)
++  {}
++
++  virtual bool setValue(double value)
++  { return false; }
++  
++  virtual double getValue(void) const
++  {
++    if (!mOutputModel)
++      return 0;
++    return mOutputModel-&gt;getValue();
++  }
++
++  virtual FGOutputReflector* clone(void) const
++  { return new FGOutputReflector(*this); }
++
++private:
++  // Holds the output model where it should write the value
++  // Note that this shal not be a SharedPtr, since we get a recursive
++  // ref count loop in that case.
++  WeakPtr&lt;Output&gt; mOutputModel;
++};
++
++class FGRealPortReflector :
++    public SGRawValue&lt;double&gt; {
++public:
++  FGRealPortReflector(Port* port, unsigned index = 1u) :
++    mPort(port), mIndex(index)
++  {}
++
++  /// Implements the SimGear property interface.
++  virtual bool setValue(double value)
++  { return false; }
++  /// Implements the SimGear property interface.
++  virtual double getValue(void) const
++  {
++    if (!mPort)
++      return 0;
++    if (mIndex == 1) {
++      const Port* port = mPort;
++      RealPortHandle realPortHandle = const_cast&lt;Port*&gt;(port)-&gt;toRealPortHandle();
++      if (realPortHandle.isConnected())
++        return realPortHandle.getRealValue();
++      else
++        return 0;
++    } else {
++      const Port* port = mPort;
++      MatrixPortHandle matrixPortHandle = const_cast&lt;Port*&gt;(port)-&gt;toMatrixPortHandle();
++      if (matrixPortHandle.isConnected()) {
++        Matrix m = matrixPortHandle.getMatrixValue();
++        unsigned r = mIndex % rows(m) + 1;
++        unsigned c = mIndex / rows(m) + 1;
++        if (r &lt; 1 || rows(m) &lt; r)
++          return 0;
++        if (c &lt; 1 || cols(m) &lt; c)
++          return 0;
++        return m(r, c);
++      } else
++        return 0;
++    }
++  }
++  
++  virtual FGRealPortReflector* clone(void) const
++  { return new FGRealPortReflector(*this); }
++
++private:
++  unsigned mIndex;
++  WeakPtr&lt;Port&gt; mPort;
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000192.html">[OpenFDM-svn] r211 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000194.html">[OpenFDM-svn] r213 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#193">[ date ]</a>
+              <a href="thread.html#193">[ thread ]</a>
+              <a href="subject.html#193">[ subject ]</a>
+              <a href="author.html#193">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,383 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r866 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r866%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812080707.mB877Lmq017692%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000833.html">
+   <LINK REL="Next"  HREF="000835.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r866 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r866%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812080707.mB877Lmq017692%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r866 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Dec  8 08:07:21 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000833.html">[OpenFDM-svn] r865 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000835.html">[OpenFDM-svn] r867 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#834">[ date ]</a>
+              <a href="thread.html#834">[ thread ]</a>
+              <a href="subject.html#834">[ subject ]</a>
+              <a href="author.html#834">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-08 08:07:20 +0100 (Mon, 08 Dec 2008)
+New Revision: 866
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+Log:
+Add an internal sensor.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-07 16:26:07 UTC (rev 865)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.cpp	2008-12-08 07:07:20 UTC (rev 866)
+@@ -0,0 +1,150 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;InternalSensor.h&quot;
++
++#include &quot;MechanicLinkValue.h&quot;
++#include &quot;NumericPortValue.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;Task.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(InternalSensor, Interact)
++  DEF_OPENFDM_PROPERTY(Vector3, Position0, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, Position1, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableDistance, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, EnableVelocity, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++InternalSensor::InternalSensor(const std::string&amp; name) :
++  Interact(name),
++  mMechanicLink0(newMechanicLink(&quot;link0&quot;)),
++  mMechanicLink1(newMechanicLink(&quot;link1&quot;)),
++  mPosition0(0, 0, 0),
++  mPosition1(0, 0, 0)
++{
++}
++
++InternalSensor::~InternalSensor(void)
++{
++}
++
++void
++InternalSensor::velocity(const Task&amp; task, const ContinousStateValueVector&amp;,
++                         PortValueList&amp; portValues) const
++{
++  const Frame&amp; frame0 = portValues[mMechanicLink0].getFrame();
++  const Frame&amp; frame1 = portValues[mMechanicLink1].getFrame();
++
++  // FIXME, for now relative position
++  Vector3 position0 = mPosition0-portValues[mMechanicLink0].getDesignPosition();
++  Vector3 position1 = mPosition1-portValues[mMechanicLink1].getDesignPosition();
++
++  bool enableDistance = getEnableDistance();
++  bool enableVelocity = getEnableVelocity();
++  if (enableDistance || enableVelocity) {
++    Vector3 relPos = frame0.posFromRef(frame1.posToRef(position1)) - position0;
++    real_type nrmRelPos = norm(relPos);
++
++    // The relative distance of these two points
++    if (enableDistance)
++      portValues[mDistancePort] = nrmRelPos;
++
++    if (enableVelocity) {
++      /// FIXME: avoid that transform to the reference frame. The relative
++      /// position must be sufficient ...
++      Vector6 refVel1 = frame1.motionToRef(motionTo(position1, frame1.getRefVel()));
++      Vector6 refVel0 = motionTo(position0, frame0.motionFromRef(refVel1) - frame0.getRefVel());
++
++      Vector3 relVel = refVel0.getLinear();
++      if (nrmRelPos &lt;= Limits&lt;real_type&gt;::min())
++        portValues[mVelocityPort] = 0;
++      else
++        portValues[mVelocityPort] = dot(relPos, relVel)/nrmRelPos;
++    }
++  }
++}
++
++/// Force computation:
++//     Vector3 dir;
++//     Vector3 relPos = frame0.getRelPosition(frame1);
++//     // if we have really reached the zero position, we must have the full
++//     // speed in exactly the relPos direction.
++//     real_type nrmRelPos = norm(relPos);
++//     if (nrmRelPos &lt;= Limits&lt;real_type&gt;::min()) {
++//       dir = Vector3::zeros();
++//     } else
++//       dir = (1/nrmRelPos)*relPos;
++//     // Since we assume positive input forces to push the two attached
++//     // RigidBodies, we need that minus sign to negate the current position
++//     // offset
++//     mForce = Vector6(Vector3::zeros(), (-mForcePort.getRealValue())*dir);
++
++void
++InternalSensor::setPosition0(const Vector3&amp; position)
++{
++  mPosition0 = position;
++}
++
++const Vector3&amp;
++InternalSensor::getPosition0() const
++{
++  return mPosition0;
++}
++
++void
++InternalSensor::setPosition1(const Vector3&amp; position)
++{
++  mPosition1 = position;
++}
++
++const Vector3&amp;
++InternalSensor::getPosition1() const
++{
++  return mPosition1;
++}
++
++void
++InternalSensor::setEnableDistance(bool enable)
++{
++  if (enable == getEnableDistance())
++    return;
++  if (enable)
++    mDistancePort = RealOutputPort(this, &quot;distance&quot;);
++  else
++    mDistancePort.clear();
++}
++
++bool
++InternalSensor::getEnableDistance() const
++{
++  return !mDistancePort.empty();
++}
++
++void
++InternalSensor::setEnableVelocity(bool enable)
++{
++  if (enable == getEnableVelocity())
++    return;
++  if (enable)
++    mVelocityPort = RealOutputPort(this, &quot;velocity&quot;);
++  else
++    mVelocityPort.clear();
++}
++
++bool
++InternalSensor::getEnableVelocity() const
++{
++  return !mVelocityPort.empty();
++}
++
++void
++InternalSensor::setEnableAll(bool enable)
++{
++  setEnableDistance(enable);
++  setEnableVelocity(enable);
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.h	2008-12-07 16:26:07 UTC (rev 865)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/InternalSensor.h	2008-12-08 07:07:20 UTC (rev 866)
+@@ -0,0 +1,62 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_InternalSensor_H
++#define OpenFDM_InternalSensor_H
++
++#include &quot;Interact.h&quot;
++#include &quot;MechanicLink.h&quot;
++#include &quot;RealOutputPort.h&quot;
++#include &quot;Vector.h&quot;
++
++namespace OpenFDM {
++
++class InternalSensor : public Interact {
++  OPENFDM_OBJECT(InternalSensor, Interact);
++public:
++  InternalSensor(const std::string&amp; name);
++  virtual ~InternalSensor(void);
++
++  virtual void initDesignPosition(PortValueList&amp;) const {}
++  virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
++                        PortValueList&amp;) const;
++
++  /// Set the position of the sensor in design coordinates
++  void setPosition0(const Vector3&amp; position);
++  /// Get the position of the sensor in design coordinates
++  const Vector3&amp; getPosition0() const;
++
++  /// Set the position of the sensor in design coordinates
++  void setPosition1(const Vector3&amp; position);
++  /// Get the position of the sensor in design coordinates
++  const Vector3&amp; getPosition1() const;
++
++  /// Set availabilty of the distance output port
++  void setEnableDistance(bool enable);
++  /// Get availabilty of the distance output port
++  bool getEnableDistance() const;
++
++  /// Set availabilty of the velocity output port
++  void setEnableVelocity(bool enable);
++  /// Get availabilty of the velocity output port
++  bool getEnableVelocity() const;
++
++  /// Set availabilty of all output ports
++  /// This is mostly for convinience in testing
++  void setEnableAll(bool enable);
++
++protected:
++  MechanicLink mMechanicLink0;
++  MechanicLink mMechanicLink1;
++
++  Vector3 mPosition0;
++  Vector3 mPosition1;
++
++  RealOutputPort mDistancePort;
++  RealOutputPort mVelocityPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-07 16:26:07 UTC (rev 865)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-12-08 07:07:20 UTC (rev 866)
+@@ -211,6 +211,7 @@
+   Gain.h \
+   Input.h \
+   Integrator.h \
++  InternalSensor.h \
+   Joint.h \
+   Launchbar.h \
+   LinearSpringDamper.h \
+@@ -273,6 +274,7 @@
+   Joint.cpp \
+   ExternalForce.cpp \
+   FixedRootJoint.cpp \
++  InternalSensor.cpp \
+   Mass.cpp \
+   MobileRootJoint.cpp \
+   PrismaticJoint.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-12-07 16:26:07 UTC (rev 865)
++++ branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-12-08 07:07:20 UTC (rev 866)
+@@ -1,5 +1,6 @@
+ #include &lt;OpenFDM/ConstModel.h&gt;
+ #include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/InternalSensor.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+ #include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/RevoluteJoint.h&gt;
+@@ -52,6 +53,8 @@
+   RigidBody *rigidBody = new RigidBody(&quot;Rigid Body&quot;);
+   rigidBody-&gt;addLink(&quot;link2&quot;);
+   rigidBody-&gt;addLink(&quot;sensorLink&quot;);
++  rigidBody-&gt;addLink(&quot;internalSensorLink&quot;);
++  rigidBody-&gt;addLink(&quot;internalSensorLink2&quot;);
+   group-&gt;addChild(rigidBody);
+   InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
+   Mass* mass = new Mass(&quot;Mass&quot;, 1, inertia);
+@@ -61,6 +64,8 @@
+   group-&gt;addChild(revoluteJoint);
+   RigidBody *rigidBody2 = new RigidBody(&quot;Rigid Body 2&quot;);
+   rigidBody2-&gt;addLink(&quot;sensorLink&quot;);
++  rigidBody2-&gt;addLink(&quot;internalSensorLink&quot;);
++  rigidBody2-&gt;addLink(&quot;internalSensorLink2&quot;);
+   group-&gt;addChild(rigidBody2);
+   Mass* mass2 = new Mass(&quot;Mass 2&quot;, 1, inertia);
+   group-&gt;addChild(mass2);
+@@ -86,8 +91,31 @@
+   ConstModel* jointForce = new ConstModel(&quot;Joint Force&quot;, 1);
+   group-&gt;addChild(jointForce);
+ 
+-  group-&gt;connect(jointForce-&gt;getPort(&quot;output&quot;), revoluteJoint-&gt;getPort(&quot;force&quot;));
++  group-&gt;connect(jointForce-&gt;getPort(&quot;output&quot;),
++                 revoluteJoint-&gt;getPort(&quot;force&quot;));
+ 
++  InternalSensor* internalSensor = new InternalSensor(&quot;Internal Sensor&quot;);
++  internalSensor-&gt;setPosition0(Vector3(0, 0, 1));
++  internalSensor-&gt;setPosition1(Vector3(0, 0, 0.8));
++  internalSensor-&gt;setEnableAll(true);
++  group-&gt;addChild(internalSensor);
++  group-&gt;connect(internalSensor-&gt;getPort(&quot;link0&quot;),
++                 rigidBody-&gt;getPort(&quot;internalSensorLink&quot;));
++  group-&gt;connect(internalSensor-&gt;getPort(&quot;link1&quot;),
++                 rigidBody2-&gt;getPort(&quot;internalSensorLink&quot;));
++
++
++  InternalSensor* internalSensor2 = new InternalSensor(&quot;Internal Sensor 2&quot;);
++  internalSensor2-&gt;setPosition0(Vector3(0, 0, 0.8));
++  internalSensor2-&gt;setPosition1(Vector3(0, 0, 1));
++  internalSensor2-&gt;setEnableAll(true);
++  group-&gt;addChild(internalSensor2);
++  group-&gt;connect(internalSensor2-&gt;getPort(&quot;link1&quot;),
++                 rigidBody-&gt;getPort(&quot;internalSensorLink2&quot;));
++  group-&gt;connect(internalSensor2-&gt;getPort(&quot;link0&quot;),
++                 rigidBody2-&gt;getPort(&quot;internalSensorLink2&quot;));
++
++
+   return group.release();
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000833.html">[OpenFDM-svn] r865 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000835.html">[OpenFDM-svn] r867 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#834">[ date ]</a>
+              <a href="thread.html#834">[ thread ]</a>
+              <a href="subject.html#834">[ subject ]</a>
+              <a href="author.html#834">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

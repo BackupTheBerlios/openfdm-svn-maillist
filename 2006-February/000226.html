@@ -1,0 +1,161 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r246%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200602131940.k1DJeMnG010732%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000225.html">
+   <LINK REL="Next"  HREF="000227.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r246%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200602131940.k1DJeMnG010732%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r246 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Feb 13 20:40:22 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000225.html">[OpenFDM-svn] r245 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000227.html">[OpenFDM-svn] r248 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#226">[ date ]</a>
+              <a href="thread.html#226">[ thread ]</a>
+              <a href="subject.html#226">[ subject ]</a>
+              <a href="author.html#226">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-13 20:40:16 +0100 (Mon, 13 Feb 2006)
+New Revision: 246
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Fix a cast error
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -6,11 +6,10 @@
+ #define OpenFDM_EnvironmentObject_H
+ 
+ #include &quot;Object.h&quot;
++#include &quot;Environment.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class Environment;
+-
+ class EnvironmentObject :
+     public Object {
+ public:
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -10,8 +10,6 @@
+ namespace OpenFDM {
+ 
+ template&lt;typename T&gt;
+-class SharedPtr;
+-template&lt;typename T&gt;
+ class WeakPtr;
+ 
+ template&lt;typename T&gt;
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -36,6 +36,9 @@
+   WeakPtr&amp; operator=(const WeakPtr&amp; p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
++  SharedPtr&lt;T&gt; lock(void) const
++  { return SharedPtr&lt;T&gt;(ptr()); }
++
+   T* operator-&gt;(void) const
+   { return ptr(); }
+ 
+@@ -47,12 +50,22 @@
+ 
+ private:
+   T* ptr(void) const
+-  { return reinterpret_cast&lt;T*&gt;(objectPtr()); }
++  { return static_cast&lt;T*&gt;(objectPtr()); }
+ 
+   WeakReferenced* objectPtr(void) const
+-  { return mWeakDataPtr ? mWeakDataPtr-&gt;object : 0; }
++  {
++    if (mWeakDataPtr)
++      return mWeakDataPtr-&gt;object;
++    else
++      return 0;
++  }
+   void assign(T* p)
+-  { mWeakDataPtr = p ? p-&gt;mWeakDataPtr : 0; }
++  {
++    if (p)
++      mWeakDataPtr = p-&gt;mWeakDataPtr;
++    else
++      mWeakDataPtr = 0;
++  }
+   
+   // The indirect reference itself.
+   SharedPtr&lt;WeakReferenced::WeakData&gt; mWeakDataPtr;
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-12 15:37:37 UTC (rev 245)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2006-02-13 19:40:16 UTC (rev 246)
+@@ -24,7 +24,7 @@
+   { mWeakDataPtr-&gt;object = 0; }
+ 
+   /// Do not copy the weak backward references ...
+-  WeakReferenced&amp; operator=(const WeakReferenced&amp; wr)
++  WeakReferenced&amp; operator=(const WeakReferenced&amp;)
+   { return *this; }
+ 
+ private:
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000225.html">[OpenFDM-svn] r245 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000227.html">[OpenFDM-svn] r248 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#226">[ date ]</a>
+              <a href="thread.html#226">[ thread ]</a>
+              <a href="subject.html#226">[ subject ]</a>
+              <a href="author.html#226">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

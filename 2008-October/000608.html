@@ -1,0 +1,160 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r639 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r639%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810201745.m9KHjh67029141%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000607.html">
+   <LINK REL="Next"  HREF="000609.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r639 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r639%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810201745.m9KHjh67029141%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r639 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Oct 20 19:45:43 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000607.html">[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000609.html">[OpenFDM-svn] r640 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#608">[ date ]</a>
+              <a href="thread.html#608">[ thread ]</a>
+              <a href="subject.html#608">[ subject ]</a>
+              <a href="author.html#608">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-20 19:45:43 +0200 (Mon, 20 Oct 2008)
+New Revision: 639
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+Log:
+Make more use of the Frame included in the mechanic link.
+
+M    src/OpenFDM/MobileRootJoint.cpp
+M    src/OpenFDM/Frame.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 17:17:59 UTC (rev 638)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 17:45:43 UTC (rev 639)
+@@ -87,6 +87,18 @@
+     mParentSpAccel = Vector6::zeros();
+   }
+ 
++  void setSpAccel(const Vector6&amp; spatialAcceleration)
++  {
++    mParentSpAccel = Vector6::zeros();
++    mRelVelDot = spatialAcceleration - mParentSpAccel - getHdot();
++  }
++  void setSpAccel(const Frame&amp; parent, const Vector6&amp; spatialAcceleration)
++  {
++    mParentSpAccel = parent.getSpAccel();
++    mRelVelDot = spatialAcceleration - mParentSpAccel - getHdot();
++  }
++
++
+   // FIXME: they do not yet update the dependent values inside ...
+ //   void setRefOrientation(const Frame&amp; parent, const Quaternion&amp; o)
+ //   { setOrientation(inverse(parent.getRefOrientation())*o); }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-20 17:17:59 UTC (rev 638)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-20 17:45:43 UTC (rev 639)
+@@ -49,15 +49,12 @@
+ void
+ MobileRootJoint::velocity(const Task&amp;,
+                           const ContinousStateValueVector&amp; continousState,
+-                          PortValueList&amp; portValues, FrameData&amp; frameData) const
++                          PortValueList&amp; portValues, FrameData&amp;) const
+ {
+   Vector3 position = continousState[*mPositionStateInfo];
+   Quaternion orientation = continousState[*mOrientationStateInfo];
+   Vector6 velocity = continousState[*mVelocityStateInfo];
+ 
+-  frameData.setVelocity(getAngularBaseVelocity(),
+-                        position, orientation, velocity);
+-
+   portValues[mMechanicLink].getFrame().setPosAndVel(getAngularBaseVelocity(),
+                                                     position, orientation,
+                                                     velocity);
+@@ -73,7 +70,7 @@
+ void
+ MobileRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+                               PortValueList&amp; portValues,
+-                              FrameData&amp; frameData) const
++                              FrameData&amp;) const
+ {
+   // Assumption: body is small compared to the distance to the planets
+   // center of mass. That means gravity could be considered equal for the
+@@ -88,14 +85,8 @@
+   SpatialInertia inertia = portValues[mMechanicLink].getInertia();
+   Vector6 force = portValues[mMechanicLink].getForce();
+ 
+-  Vector6 parentSpAccel = Vector6::zeros();
+-
+-  // FIXME
+-//   mRelVelDot = grav - solve(inertia, force) - getParentSpAccel() - getHdot();
+-  Vector6 acceleration = grav - solve(inertia, force) - parentSpAccel - frameData.mHDot;
+-  frameData.mRelVelocityDot = acceleration;
+-
+-  portValues[mMechanicLink].getFrame().setAccel(acceleration);
++  Vector6 spatialAcceleration = grav - solve(inertia, force);
++  portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
+ }
+ 
+ void
+@@ -118,9 +109,11 @@
+   Vector3 angVel = velocity.getAngular();
+   Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
+ 
++  Vector6 velDeriv = portValues[mMechanicLink].getFrame().getRelVelDot();
++
+   derivatives[*mPositionStateInfo] = pDot;
+   derivatives[*mOrientationStateInfo] = qderiv;
+-  derivatives[*mVelocityStateInfo] = context.mRelVelocityDot;
++  derivatives[*mVelocityStateInfo] = velDeriv;
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000607.html">[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000609.html">[OpenFDM-svn] r640 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#608">[ date ]</a>
+              <a href="thread.html#608">[ thread ]</a>
+              <a href="subject.html#608">[ subject ]</a>
+              <a href="author.html#608">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

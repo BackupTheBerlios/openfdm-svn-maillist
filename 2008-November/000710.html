@@ -1,0 +1,425 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r741 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r741%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811171919.mAHJJPx3026117%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000709.html">
+   <LINK REL="Next"  HREF="000711.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r741 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r741%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811171919.mAHJJPx3026117%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r741 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 17 20:19:25 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000709.html">[OpenFDM-svn] r740 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000711.html">[OpenFDM-svn] r742 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#710">[ date ]</a>
+              <a href="thread.html#710">[ thread ]</a>
+              <a href="subject.html#710">[ subject ]</a>
+              <a href="author.html#710">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-17 20:19:24 +0100 (Mon, 17 Nov 2008)
+New Revision: 741
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Introduce an AbstractModel class providing only the Context factory.
+
+M    src/OpenFDM/Model.h
+M    src/OpenFDM/Makefile.am
+A    src/OpenFDM/AbstractModel.h
+M    src/OpenFDM/NodeVisitor.h
+A    src/OpenFDM/AbstractModel.cpp
+M    src/OpenFDM/ConstNodeVisitor.h
+M    src/OpenFDM/NodeVisitor.cpp
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/Model.cpp
+M    src/OpenFDM/ConstNodeVisitor.cpp
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.cpp	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.cpp	2008-11-17 19:19:24 UTC (rev 741)
+@@ -0,0 +1,36 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;AbstractModel.h&quot;
++
++#include &quot;ConstNodeVisitor.h&quot;
++#include &quot;NodeVisitor.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(AbstractModel, LeafNode)
++  END_OPENFDM_OBJECT_DEF
++
++AbstractModel::AbstractModel(const std::string&amp; name) :
++  LeafNode(name)
++{
++}
++
++AbstractModel::~AbstractModel()
++{
++}
++
++void
++AbstractModel::accept(NodeVisitor&amp; visitor)
++{
++  visitor.handleNodePathAndApply(this);
++}
++
++void
++AbstractModel::accept(ConstNodeVisitor&amp; visitor) const
++{
++  visitor.handleNodePathAndApply(this);
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractModel.h	2008-11-17 19:19:24 UTC (rev 741)
+@@ -0,0 +1,32 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_AbstractModel_H
++#define OpenFDM_AbstractModel_H
++
++#include &lt;string&gt;
++
++#include &quot;OpenFDMConfig.h&quot;
++#include &quot;LeafNode.h&quot;
++
++namespace OpenFDM {
++
++class ModelContext;
++class PortValueList;
++
++class AbstractModel : public LeafNode {
++  OPENFDM_OBJECT(AbstractModel, LeafNode);
++public:
++  AbstractModel(const std::string&amp; name);
++  virtual ~AbstractModel();
++
++  virtual void accept(NodeVisitor&amp; visitor);
++  virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
++  virtual ModelContext* newModelContext(PortValueList&amp;) const = 0;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-11-17 19:19:24 UTC (rev 741)
+@@ -10,7 +10,7 @@
+ #include &quot;LibraryNode.h&quot;
+ #include &quot;LeafNode.h&quot;
+ #include &quot;MechanicNode.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;AbstractModel.h&quot;
+ #include &quot;Input.h&quot;
+ #include &quot;Joint.h&quot;
+ #include &quot;Output.h&quot;
+@@ -56,7 +56,7 @@
+ }
+ 
+ void
+-ConstNodeVisitor::apply(const Model&amp; node)
++ConstNodeVisitor::apply(const AbstractModel&amp; node)
+ {
+   apply(static_cast&lt;const LeafNode&amp;&gt;(node));
+ }
+@@ -64,13 +64,13 @@
+ void
+ ConstNodeVisitor::apply(const Input&amp; node)
+ {
+-  apply(static_cast&lt;const Model&amp;&gt;(node));
++  apply(static_cast&lt;const AbstractModel&amp;&gt;(node));
+ }
+ 
+ void
+ ConstNodeVisitor::apply(const Output&amp; node)
+ {
+-  apply(static_cast&lt;const Model&amp;&gt;(node));
++  apply(static_cast&lt;const AbstractModel&amp;&gt;(node));
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-11-17 19:19:24 UTC (rev 741)
+@@ -15,7 +15,7 @@
+ class GroupInterfaceNode;
+ class LibraryNode;
+ class LeafNode;
+-class Model;
++class AbstractModel;
+ class Input;
+ class Joint;
+ class Output;
+@@ -40,7 +40,7 @@
+   virtual void apply(const LibraryNode&amp;);
+ 
+   virtual void apply(const LeafNode&amp;);
+-  virtual void apply(const Model&amp;);
++  virtual void apply(const AbstractModel&amp;);
+   virtual void apply(const Input&amp;);
+   virtual void apply(const Output&amp;);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-17 19:19:24 UTC (rev 741)
+@@ -12,6 +12,7 @@
+ endif
+ 
+ OpenFDMCoreHEADERS = \
++  AbstractModel.h \
+   AbstractNodeContext.h \
+   AbstractNodeInstance.h \
+   AbstractSystem.h \
+@@ -124,6 +125,7 @@
+   XMLDumpModelVisitor.h
+ 
+ OpenFDMCoreSOURCES = \
++  AbstractModel.cpp \
+   AbstractNodeContext.cpp \
+   AbstractNodeInstance.cpp \
+   Assert.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-17 19:19:24 UTC (rev 741)
+@@ -57,11 +57,11 @@
+   SharedPtr&lt;const Model&gt; mModel;
+ };
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(Model, LeafNode)
++BEGIN_OPENFDM_OBJECT_DEF(Model, AbstractModel)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Model::Model(const std::string&amp; name) :
+-  LeafNode(name)
++  AbstractModel(name)
+ {
+ }
+ 
+@@ -69,18 +69,6 @@
+ {
+ }
+ 
+-void
+-Model::accept(NodeVisitor&amp; visitor)
+-{
+-  visitor.handleNodePathAndApply(this);
+-}
+-
+-void
+-Model::accept(ConstNodeVisitor&amp; visitor) const
+-{
+-  visitor.handleNodePathAndApply(this);
+-}
+-
+ ModelContext*
+ Model::newModelContext(PortValueList&amp; portValueList) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-17 19:19:24 UTC (rev 741)
+@@ -9,7 +9,7 @@
+ 
+ #include &quot;OpenFDMConfig.h&quot;
+ #include &quot;Assert.h&quot;
+-#include &quot;LeafNode.h&quot;
++#include &quot;AbstractModel.h&quot;
+ #include &quot;MatrixInputPort.h&quot;
+ #include &quot;MatrixOutputPort.h&quot;
+ #include &quot;RealInputPort.h&quot;
+@@ -26,15 +26,12 @@
+ class Task;
+ class ModelContext;
+ 
+-class Model : public LeafNode {
+-  OPENFDM_OBJECT(Model, LeafNode);
++class Model : public AbstractModel {
++  OPENFDM_OBJECT(Model, AbstractModel);
+ public:
+   Model(const std::string&amp; name);
+   virtual ~Model();
+ 
+-  virtual void accept(NodeVisitor&amp; visitor);
+-  virtual void accept(ConstNodeVisitor&amp; visitor) const;
+-
+   virtual ModelContext* newModelContext(PortValueList&amp; portValueList) const;
+ 
+   // FIXME: May be we want to collapse all state values in one
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-11-17 19:19:24 UTC (rev 741)
+@@ -12,7 +12,7 @@
+ #include &quot;LibraryNode.h&quot;
+ #include &quot;LeafNode.h&quot;
+ #include &quot;MechanicNode.h&quot;
+-#include &quot;Model.h&quot;
++#include &quot;AbstractModel.h&quot;
+ #include &quot;Output.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;RootJoint.h&quot;
+@@ -56,7 +56,7 @@
+ }
+ 
+ void
+-NodeVisitor::apply(Model&amp; node)
++NodeVisitor::apply(AbstractModel&amp; node)
+ {
+   apply(static_cast&lt;LeafNode&amp;&gt;(node));
+ }
+@@ -64,13 +64,13 @@
+ void
+ NodeVisitor::apply(Input&amp; node)
+ {
+-  apply(static_cast&lt;Model&amp;&gt;(node));
++  apply(static_cast&lt;AbstractModel&amp;&gt;(node));
+ }
+ 
+ void
+ NodeVisitor::apply(Output&amp; node)
+ {
+-  apply(static_cast&lt;Model&amp;&gt;(node));
++  apply(static_cast&lt;AbstractModel&amp;&gt;(node));
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-11-17 19:19:24 UTC (rev 741)
+@@ -15,7 +15,7 @@
+ class GroupInterfaceNode;
+ class LibraryNode;
+ class LeafNode;
+-class Model;
++class AbstractModel;
+ class Input;
+ class Joint;
+ class Output;
+@@ -40,7 +40,7 @@
+   virtual void apply(LibraryNode&amp;);
+ 
+   virtual void apply(LeafNode&amp;);
+-  virtual void apply(Model&amp;);
++  virtual void apply(AbstractModel&amp;);
+   virtual void apply(Input&amp;);
+   virtual void apply(Output&amp;);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-17 18:42:58 UTC (rev 740)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-11-17 19:19:24 UTC (rev 741)
+@@ -515,12 +515,12 @@
+     SharedPtr&lt;const Node&gt; mNode;
+   };
+   struct ModelInstanceData : public InstanceData {
+-    ModelInstanceData(const Model&amp; model, const NodePath&amp; nodePath,
++    ModelInstanceData(const AbstractModel&amp; model, const NodePath&amp; nodePath,
+                       const SampleTime&amp; sampleTime) :
+       InstanceData(model, nodePath, sampleTime),
+       mModel(&amp;model)
+     { }
+-    virtual const Model* getNode() const { return mModel; }
++    virtual const AbstractModel* getNode() const { return mModel; }
+ 
+     bool createModelContext()
+     {
+@@ -543,7 +543,7 @@
+     { return mModelContext; }
+ 
+   private:
+-    SharedPtr&lt;const Model&gt; mModel;
++    SharedPtr&lt;const AbstractModel&gt; mModel;
+     SharedPtr&lt;ModelContext&gt; mModelContext;
+   };
+   struct MechanicInstanceData : public InstanceData {
+@@ -763,7 +763,7 @@
+     addInstanceData(instanceData);
+     mJointInstanceDataList.push_back(instanceData);
+   }
+-  virtual void apply(const Model&amp; node)
++  virtual void apply(const AbstractModel&amp; node)
+   {
+     SharedPtr&lt;ModelInstanceData&gt; instanceData;
+     instanceData = new ModelInstanceData(node, getNodePath(), mSampleTime);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000709.html">[OpenFDM-svn] r740 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000711.html">[OpenFDM-svn] r742 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#710">[ date ]</a>
+              <a href="thread.html#710">[ thread ]</a>
+              <a href="subject.html#710">[ subject ]</a>
+              <a href="author.html#710">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

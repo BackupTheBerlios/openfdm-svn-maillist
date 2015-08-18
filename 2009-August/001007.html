@@ -1,0 +1,217 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1047 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1047%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908011819.n71IJmWe006632%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001006.html">
+   <LINK REL="Next"  HREF="001008.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1047 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1047%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200908011819.n71IJmWe006632%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1047 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Aug  1 20:19:48 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001006.html">[OpenFDM-svn] r1046 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001008.html">[OpenFDM-svn] r1048 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1007">[ date ]</a>
+              <a href="thread.html#1007">[ thread ]</a>
+              <a href="subject.html#1007">[ subject ]</a>
+              <a href="author.html#1007">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-01 20:19:48 +0200 (Sat, 01 Aug 2009)
+New Revision: 1047
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/XMLDumpModelVisitor.h
+Log:
+Dump a complete xml file. Fix problems with matrices.
+
+M    XMLDumpModelVisitor.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/XMLDumpModelVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/XMLDumpModelVisitor.h	2009-08-01 13:14:49 UTC (rev 1046)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/XMLDumpModelVisitor.h	2009-08-01 18:19:48 UTC (rev 1047)
+@@ -10,9 +10,10 @@
+ #include &lt;sstream&gt;
+ #include &lt;iomanip&gt;
+ 
++#include &quot;Group.h&quot;
++#include &quot;Node.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+-#include &quot;Node.h&quot;
+-#include &quot;Group.h&quot;
++#include &quot;System.h&quot;
+ #include &quot;TypeInfo.h&quot;
+ 
+ namespace OpenFDM {
+@@ -28,39 +29,38 @@
+   virtual ~XMLDumpModelVisitor(void)
+   { }
+ 
+-  virtual void apply(Node&amp; model)
++  virtual void apply(Node&amp; node)
+   {
+-    indent() &lt;&lt; &quot;&lt;model type=\&quot;&quot; &lt;&lt; model.getTypeName() &lt;&lt; &quot;\&quot;&gt;\n&quot;;
++    indent() &lt;&lt; &quot;&lt;node type=\&quot;&quot; &lt;&lt; node.getTypeName() &lt;&lt; &quot;\&quot;&gt;\n&quot;;
+     ++mIndent;
+-    dumpProperties(model);
++    dumpProperties(node);
+     --mIndent;
+-    indent() &lt;&lt; &quot;&lt;/model&gt;\n&quot;;
++    indent() &lt;&lt; &quot;&lt;/node&gt;\n&quot;;
+   }
+-  virtual void apply(Group&amp; modelGroup)
++  virtual void apply(Group&amp; group)
+   {
+-    indent() &lt;&lt; &quot;&lt;model type=\&quot;ModelGroup\&quot;&gt;\n&quot;;
++    indent() &lt;&lt; &quot;&lt;node type=\&quot;NodeGroup\&quot;&gt;\n&quot;;
+     ++mIndent;
+-    dumpProperties(modelGroup);
+-    modelGroup.traverse(*this);
+-    dumpConnections(modelGroup);
++    dumpProperties(group);
++    group.traverse(*this);
++    dumpConnections(group);
+     --mIndent;
+-    indent() &lt;&lt; &quot;&lt;/model&gt;\n&quot;;
++    indent() &lt;&lt; &quot;&lt;/node&gt;\n&quot;;
+   }
+-//   virtual void apply(System&amp; system)
+-//   {
+-//     indent() &lt;&lt; &quot;&lt;?xml version=\&quot;1.0\&quot;?&gt;\n&quot;;
+-//     indent() &lt;&lt; &quot;&lt;OpenFDM&gt;\n&quot;;
+-//     ++mIndent;
+-//     indent() &lt;&lt; &quot;&lt;model type=\&quot;System\&quot;&gt;\n&quot;;
+-//     ++mIndent;
+-//     dumpProperties(system);
+-//     traverse(system);
+-//     dumpConnections(system);
+-//     --mIndent;
+-//     indent() &lt;&lt; &quot;&lt;/model&gt;\n&quot;;
+-//     --mIndent;
+-//     indent() &lt;&lt; &quot;&lt;/OpenFDM&gt;\n&quot;;
+-//   }
++  void apply(System&amp; system)
++  {
++    indent() &lt;&lt; &quot;&lt;?xml version=\&quot;1.0\&quot;?&gt;\n&quot;;
++    indent() &lt;&lt; &quot;&lt;OpenFDM&gt;\n&quot;;
++    ++mIndent;
++    indent() &lt;&lt; &quot;&lt;System&gt;\n&quot;;
++    ++mIndent;
++    dumpProperties(system);
++    system.getNode()-&gt;accept(*this);
++    --mIndent;
++    indent() &lt;&lt; &quot;&lt;/System&gt;\n&quot;;
++    --mIndent;
++    indent() &lt;&lt; &quot;&lt;/OpenFDM&gt;\n&quot;;
++  }
+ private:
+   void dumpPort(const Port* port)
+   {
+@@ -69,15 +69,15 @@
+     SharedPtr&lt;const Node&gt; node = port-&gt;getNode();
+     if (!node)
+       return;
+-    indent() &lt;&lt; &quot;&lt;Port ModelName=\&quot;&quot; &lt;&lt; node-&gt;getName()
+-             &lt;&lt; &quot;\&quot; PortName=\&quot;&quot; &lt;&lt; port-&gt;getName()
++    indent() &lt;&lt; &quot;&lt;port nodeName=\&quot;&quot; &lt;&lt; node-&gt;getName()
++             &lt;&lt; &quot;\&quot; portName=\&quot;&quot; &lt;&lt; port-&gt;getName()
+              &lt;&lt; &quot;\&quot;/&gt;\n&quot;;
+   }
+-  void dumpConnections(const Group&amp; modelGroup)
++  void dumpConnections(const Group&amp; group)
+   {
+-    unsigned numConnections = modelGroup.getNumConnects();
++    unsigned numConnections = group.getNumConnects();
+     for (unsigned i = 0; i &lt; numConnections; ++i) {
+-      const Connect* connection = modelGroup.getConnect(i);
++      const Connect* connection = group.getConnect(i);
+       indent() &lt;&lt; &quot;&lt;connect&gt;\n&quot;;
+       ++mIndent;
+       dumpPort(connection-&gt;getPort0());
+@@ -122,24 +122,28 @@
+             valStr.precision(mPrecision);
+             if (cols(mVal) == 1) {
+               // A pure vector is written transposed
+-              for (unsigned i = 1; i &lt; rows(mVal); ++i)
+-                valStr &lt;&lt; mVal(i, 1) &lt;&lt; &quot;; &quot;;
+-              valStr &lt;&lt; mVal(rows(mVal), 1);
++              for (unsigned i = 0; i &lt; rows(mVal) - 1; ++i)
++                valStr &lt;&lt; mVal(i, 0) &lt;&lt; &quot;; &quot;;
++              valStr &lt;&lt; mVal(rows(mVal) - 1, 0);
++
++              indent() &lt;&lt; &quot;&lt;property name=\&quot;&quot; &lt;&lt; it-&gt;getName()
++                       &lt;&lt; &quot;\&quot; type=\&quot;matrix\&quot;&gt;&quot;
++                       &lt;&lt; valStr.str()
++                       &lt;&lt; &quot;&lt;/property&gt;\n&quot;;
+             } else {
+               valStr &lt;&lt; '\n';
+-              for (unsigned i = 1; i &lt; rows(mVal); ++i) {
++              for (unsigned i = 0; i &lt; rows(mVal); ++i) {
+                 // Indent too??
+                 valStr &lt;&lt; std::setw((mIndent+1)*mIndentWidth) &lt;&lt; ' ';
+-                valStr &lt;&lt; mVal(cols(mVal), i) &lt;&lt; '\n';
+-                for (unsigned j = 1; j &lt; cols(mVal); ++j)
+-                  valStr &lt;&lt; mVal(i, 1) &lt;&lt; ' ';
+-                valStr &lt;&lt; mVal(cols(mVal), i) &lt;&lt; '\n';
++                for (unsigned j = 0; j &lt; cols(mVal) - 1; ++j)
++                  valStr &lt;&lt; mVal(i, j) &lt;&lt; ' ';
++                valStr &lt;&lt; mVal(i, cols(mVal) - 1) &lt;&lt; '\n';
+               }
++              indent() &lt;&lt; &quot;&lt;property name=\&quot;&quot; &lt;&lt; it-&gt;getName()
++                       &lt;&lt; &quot;\&quot; type=\&quot;matrix\&quot;&gt;&quot;
++                       &lt;&lt; valStr.str();
++              indent() &lt;&lt; &quot;&lt;/property&gt;\n&quot;;
+             }
+-            indent() &lt;&lt; &quot;&lt;property name=\&quot;&quot; &lt;&lt; it-&gt;getName()
+-                     &lt;&lt; &quot;\&quot; type=\&quot;matrix\&quot;&gt;&quot;
+-                     &lt;&lt; valStr.str()
+-                     &lt;&lt; &quot;&lt;/property&gt;\n&quot;;
+           }
+         } else if (value.isString()) {
+           std::string stringValue = value.toString();
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001006.html">[OpenFDM-svn] r1046 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001008.html">[OpenFDM-svn] r1048 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1007">[ date ]</a>
+              <a href="thread.html#1007">[ thread ]</a>
+              <a href="subject.html#1007">[ subject ]</a>
+              <a href="author.html#1007">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

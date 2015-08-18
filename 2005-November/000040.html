@@ -1,0 +1,970 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r52 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r52%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511022213.jA2MD7ou002456%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000038.html">
+   <LINK REL="Next"  HREF="000039.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r52 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r52%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511022213.jA2MD7ou002456%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r52 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Nov  2 23:13:07 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000038.html">[OpenFDM-svn] r51 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000039.html">[OpenFDM-svn] r53 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#40">[ date ]</a>
+              <a href="thread.html#40">[ thread ]</a>
+              <a href="subject.html#40">[ subject ]</a>
+              <a href="author.html#40">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-02 23:12:53 +0100 (Wed, 02 Nov 2005)
+New Revision: 52
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/AirSpring.h
+   trunk/OpenFDM/src/OpenFDM/LineForce.cpp
+   trunk/OpenFDM/src/OpenFDM/LineForce.h
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+Log:
+Add some 1d forces.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -21,7 +21,11 @@
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/LinearSpring.h&gt;
++#include &lt;OpenFDM/AirSpring.h&gt;
++#include &lt;OpenFDM/PrismaticJoint.h&gt;
+ #include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/RevoluteJoint.h&gt;
+ #include &lt;OpenFDM/Saturation.h&gt;
+ #include &lt;OpenFDM/Sensor.h&gt;
+ #include &lt;OpenFDM/SimpleContact.h&gt;
+@@ -681,6 +685,12 @@
+     std::string uctype;
+     datastr &gt;&gt; uctype;
+     
++    std::stringstream sstr;
++    sstr &lt;&lt; gearNumber;
++    std::string numStr = sstr.str();
++    // Increment the gear number
++    ++gearNumber;
++
+     if (uctype == &quot;AC_GEAR&quot;) {
+       std::string name, type, brake, retract;
+       real_type x, y, z, k, d, fs, fd, rr, sa;
+@@ -719,10 +729,6 @@
+         
+         // Connect apprioriate input and output models
+ 
+-        std::stringstream sstr;
+-        sstr &lt;&lt; gearNumber;
+-        std::string numStr = sstr.str();
+-
+         // FIXME
+         // missing output properties are &quot;wow&quot; and &quot;tire-pressure-norm&quot;
+ 
+@@ -785,6 +791,179 @@
+       std::string d;
+       datastr &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d &gt;&gt; d;
+ 
++    } else if (uctype == &quot;AC_F18MLG&quot;) { 
++      /// Well, that here is exactly how it should not be,
++      /// but for initial testing of a new unfinished fdm ...
++      std::string name, brake;
++      Vector3 compressJointPos;
++      real_type pullPress;
++      real_type pushPress;
++      real_type area;
++      real_type minCompr;
++      real_type maxCompr;
++      real_type minDamp;
++      real_type maxDamp;
++      real_type armLength;
++      real_type wheelDiam;
++      real_type tireSpring, tireDamp;
++
++
++      datastr &gt;&gt; name &gt;&gt; brake
++              &gt;&gt; compressJointPos(1)
++              &gt;&gt; compressJointPos(2)
++              &gt;&gt; compressJointPos(3)
++              &gt;&gt; pullPress &gt;&gt; pushPress
++              &gt;&gt; area
++              &gt;&gt; minCompr
++              &gt;&gt; maxCompr
++              &gt;&gt; minDamp
++              &gt;&gt; maxDamp
++              &gt;&gt; armLength
++              &gt;&gt; wheelDiam
++              &gt;&gt; tireSpring &gt;&gt; tireDamp;
++
++
++      RigidBody* arm = new RigidBody(name + &quot; Arm&quot;);
++      mVehicle-&gt;getTopBody()-&gt;addChildFrame(arm);
++      arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(-1, 0, 0), SpatialInertia(200))));
++
++      RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
++      mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(rj, 0);
++      arm-&gt;addMultiBodyModel(rj, 1);
++      rj-&gt;setJointAxis(Vector3(0, 1, 0));
++      rj-&gt;setJointPos(0);
++      rj-&gt;setJointVel(0);
++      rj-&gt;setPosition(structToBody(compressJointPos)
++                      + Vector3(0, 0, 0.5*wheelDiam));
++      rj-&gt;setOrientation(Quaternion::unit());
++
++      AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
++      aoDamp-&gt;setPullPressure(pullPress);
++      aoDamp-&gt;setPushPressure(pushPress);
++      aoDamp-&gt;setArea(area);
++      aoDamp-&gt;setMinCompression(minCompr);
++      aoDamp-&gt;setMaxCompression(maxCompr);
++      aoDamp-&gt;setMinDamperConstant(minDamp);
++      aoDamp-&gt;setMaxDamperConstant(maxDamp);
++      rj-&gt;setLineForce(aoDamp);
++
++      SimpleGear* sg = new SimpleGear(name, mVehicle-&gt;getEnvironment());
++      arm-&gt;addMultiBodyModel(sg);
++//       sg-&gt;setPosition(Vector3(-armLength, 0, 0.5*wheelDiam));
++      sg-&gt;setPosition(Vector3(-armLength, 0, 0));
++      sg-&gt;setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
++      sg-&gt;setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
++      sg-&gt;setFrictionCoeficient(0.9);
++
++      if (brake == &quot;LEFT&quot;) {
++        MaxExpressionImpl* mex = new MaxExpressionImpl;
++        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-left&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-left&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++        mex-&gt;addInputProperty(prop);
++        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++      } else if (brake == &quot;RIGHT&quot;) {
++        MaxExpressionImpl* mex = new MaxExpressionImpl;
++        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-right&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-right&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++        mex-&gt;addInputProperty(prop);
++        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++      }
++
++      Property prop = rj-&gt;getOutputPort(0);
++      addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
++                     &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
++
++      prop = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
++      addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Position&quot;,
++                     &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++
++    } else if (uctype == &quot;AC_CLG&quot;) { 
++      std::string name, brake;
++      Vector3 compressJointPos;
++      real_type pullPress;
++      real_type pushPress;
++      real_type area;
++      real_type minCompr;
++      real_type maxCompr;
++      real_type minDamp;
++      real_type maxDamp;
++      real_type wheelDiam;
++      real_type tireSpring, tireDamp;
++
++      datastr &gt;&gt; name &gt;&gt; brake
++              &gt;&gt; compressJointPos(1)
++              &gt;&gt; compressJointPos(2)
++              &gt;&gt; compressJointPos(3)
++              &gt;&gt; pullPress &gt;&gt; pushPress
++              &gt;&gt; area
++              &gt;&gt; minCompr
++              &gt;&gt; maxCompr
++              &gt;&gt; minDamp
++              &gt;&gt; maxDamp
++              &gt;&gt; wheelDiam
++              &gt;&gt; tireSpring &gt;&gt; tireDamp;
++
++      RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
++      mVehicle-&gt;getTopBody()-&gt;addChildFrame(arm);
++      arm-&gt;addMultiBodyModel(new Mass(inertiaFrom(Vector3(0, 0, 1), SpatialInertia(200))));
++
++      PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
++      mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(pj, 0);
++      arm-&gt;addMultiBodyModel(pj, 1);
++      pj-&gt;setJointAxis(Vector3(0, 0, -1));
++      pj-&gt;setPosition(structToBody(compressJointPos) + Vector3(0, 0, 0.5*wheelDiam));
++
++      AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
++      aoDamp-&gt;setPullPressure(pullPress);
++      aoDamp-&gt;setPushPressure(pushPress);
++      aoDamp-&gt;setArea(area);
++      aoDamp-&gt;setMinCompression(minCompr);
++      aoDamp-&gt;setMaxCompression(maxCompr);
++      aoDamp-&gt;setMinDamperConstant(minDamp);
++      aoDamp-&gt;setMaxDamperConstant(maxDamp);
++      pj-&gt;setLineForce(aoDamp);
++
++      SimpleGear* sg = new SimpleGear(name, mVehicle-&gt;getEnvironment());
++      arm-&gt;addMultiBodyModel(sg);
++      sg-&gt;setPosition(Vector3(0, 0, 0));
++      sg-&gt;setSpringConstant(convertFrom(uPoundForcePFt, tireSpring));
++      sg-&gt;setSpringDamping(convertFrom(uPoundForcePFt, tireDamp));
++      sg-&gt;setFrictionCoeficient(0.9);
++
++      if (brake == &quot;LEFT&quot;) {
++        MaxExpressionImpl* mex = new MaxExpressionImpl;
++        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-left&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-left&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++        mex-&gt;addInputProperty(prop);
++        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++      } else if (brake == &quot;RIGHT&quot;) {
++        MaxExpressionImpl* mex = new MaxExpressionImpl;
++        Property prop = lookupJSBExpression(&quot;/controls/gear/brake-right&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/copilot-brake-right&quot;);
++        mex-&gt;addInputProperty(prop);
++        prop = lookupJSBExpression(&quot;/controls/gear/brake-parking&quot;);
++        mex-&gt;addInputProperty(prop);
++        sg-&gt;setInputPort(&quot;brakeCommand&quot;, Property(mex));
++      }
++
++      Property prop = pj-&gt;getOutputPort(0);
++      addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
++                     &quot;/gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
++
++      prop = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
++      addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Position&quot;,
++                     &quot;/gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
++
+     } else if (uctype == &quot;AC_CONTACT&quot;) {
+       std::string name, type, brake, retract;
+       real_type x, y, z, k, d, fs, fd, rr, sa;
+@@ -804,9 +983,6 @@
+ 
+       mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(sc);
+     }
+-
+-    // Increment the gear number
+-    ++gearNumber;
+   }
+ 
+   return true;
+
+Added: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,150 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;AirSpring.h&quot;
++
++namespace OpenFDM {
++
++AirSpring::AirSpring(const std::string&amp; name) :
++  LineForce(name),
++  mPushPressure(2e5),
++  mPullPressure(1e5),
++  mArea(0),
++  mMinCompression(0),
++  mMaxCompression(0),
++  mMinDamperConstant(0),
++  mMaxDamperConstant(0),
++  mGamma(1.3)
++{
++}
++
++AirSpring::~AirSpring(void)
++{
++}
++
++void
++AirSpring::output(const TaskInfo&amp; taskInfo)
++{
++  real_type maxDisp = mMaxCompression - mMinCompression;
++  real_type pullDisp = mMaxCompression - getPosition();
++  real_type pushDisp = getPosition() - mMinCompression;
++  
++  real_type pullDispRatio = pullDisp/maxDisp;
++  real_type pushDispRatio = pushDisp/maxDisp;
++  
++  
++  pullDispRatio = max(min(pullDispRatio, 0.99), 0.0);
++  pushDispRatio = max(min(pushDispRatio, 0.99), 0.0);
++  
++  real_type pullPressure = mPullPressure/(1-pow(pullDispRatio, mGamma));
++  real_type pushPressure = mPushPressure/(1-pow(pushDispRatio, mGamma));
++  
++  real_type force = sign(maxDisp)*mArea*(pullPressure - pushPressure);
++  // Add a position dependent damping force
++  force += getVel()*interpolate(getPosition(),
++                                mMinCompression, mMinDamperConstant,
++                                mMaxCompression, mMaxDamperConstant);
++  
++  setForce(force);
++}
++
++real_type
++AirSpring::getPushPressure(void) const
++{
++  return mPushPressure;
++}
++
++void
++AirSpring::setPushPressure(real_type pushPressure)
++{
++  mPushPressure = pushPressure;
++}
++
++real_type
++AirSpring::getPullPressure(void) const
++{
++  return mPullPressure;
++}
++
++void
++AirSpring::setPullPressure(real_type pullPressure)
++{
++  mPullPressure = pullPressure;
++}
++
++real_type
++AirSpring::getArea(void) const
++{
++  return mArea;
++}
++
++void
++AirSpring::setArea(real_type area)
++{
++  mArea = area;
++}
++
++real_type
++AirSpring::getMaxCompression(void) const
++{
++  return mMaxCompression;
++}
++
++void
++AirSpring::setMaxCompression(real_type maxCompression)
++{
++  mMaxCompression = maxCompression;
++}
++
++real_type
++AirSpring::getMinCompression(void) const
++{
++  return mMinCompression;
++}
++
++void
++AirSpring::setMinCompression(real_type minCompression)
++{
++  mMinCompression = minCompression;
++}
++
++real_type
++AirSpring::getMaxDamperConstant(void) const
++{
++  return mMaxDamperConstant;
++}
++
++void
++AirSpring::setMaxDamperConstant(real_type maxDamperConstant)
++{
++  mMaxDamperConstant = maxDamperConstant;
++}
++
++real_type
++AirSpring::getMinDamperConstant(void) const
++{
++  return mMinDamperConstant;
++}
++
++void
++AirSpring::setMinDamperConstant(real_type minDamperConstant)
++{
++  mMinDamperConstant = minDamperConstant;
++}
++
++real_type
++AirSpring::getGamma(void) const
++{
++  return mGamma;
++}
++
++void
++AirSpring::setGamma(real_type gamma)
++{
++  mGamma = gamma;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/AirSpring.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.h	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.h	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,64 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_AirSpring_H
++#define OpenFDM_AirSpring_H
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineForce.h&quot;
++
++namespace OpenFDM {
++
++/// AirSpring
++class AirSpring :
++    public LineForce {
++public:
++  AirSpring(const std::string&amp; name);
++  virtual ~AirSpring(void);
++
++  virtual void output(const TaskInfo&amp; taskInfo);
++
++  real_type getPushPressure(void) const;
++  void setPushPressure(real_type pushPressure);
++
++  real_type getPullPressure(void) const;
++  void setPullPressure(real_type pullPressure);
++
++  real_type getArea(void) const;
++  void setArea(real_type area);
++
++  real_type getMaxCompression(void) const;
++  void setMaxCompression(real_type maxCompression);
++
++  real_type getMinCompression(void) const;
++  void setMinCompression(real_type minCompression);
++
++  real_type getMaxDamperConstant(void) const;
++  void setMaxDamperConstant(real_type maxDamperConstant);
++
++  real_type getMinDamperConstant(void) const;
++  void setMinDamperConstant(real_type minDamperConstant);
++
++  real_type getGamma(void) const;
++  void setGamma(real_type gamma);
++
++private:
++  real_type mPushPressure;
++  real_type mPullPressure;
++
++  real_type mArea;
++
++  real_type mMaxCompression;
++  real_type mMinCompression;
++
++  real_type mMaxDamperConstant;
++  real_type mMinDamperConstant;
++
++  real_type mGamma;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/AirSpring.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/LineForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineForce.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/LineForce.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,32 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineForce.h&quot;
++
++namespace OpenFDM {
++
++LineForce::LineForce(const std::string&amp; name) :
++  Model(name)
++{
++}
++
++LineForce::~LineForce(void)
++{
++}
++
++void
++LineForce::computeForce(real_type position, real_type vel)
++{
++  // Set the position and velocity
++  mPosition = position;
++  mVel = vel;
++  // call the output function
++  TaskInfo taskInfo;
++  taskInfo.addSampleTime(SampleTime::Continous);
++  output(taskInfo);
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LineForce.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/LineForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineForce.h	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/LineForce.h	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,41 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LineForce_H
++#define OpenFDM_LineForce_H
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++
++namespace OpenFDM {
++
++class LineForce :
++    public Model {
++public:
++  LineForce(const std::string&amp; name);
++  virtual ~LineForce(void);
++
++  void computeForce(real_type position, real_type vel);
++
++  real_type getPosition(void) const
++  { return mPosition; }
++  real_type getVel(void) const
++  { return mVel; }
++
++  real_type getForce(void) const
++  { return mForce; }
++
++protected:
++  void setForce(real_type force)
++  { mForce = force; }
++
++private:
++  real_type mPosition;
++  real_type mVel;
++  real_type mForce;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LineForce.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,66 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LinearSpring.h&quot;
++
++namespace OpenFDM {
++
++LinearSpring::LinearSpring(const std::string&amp; name) :
++  LineForce(name),
++  mSpringReference(0),
++  mSpringConstant(0),
++  mDamperConstant(0)
++{
++}
++
++LinearSpring::~LinearSpring(void)
++{
++}
++
++void
++LinearSpring::output(const TaskInfo&amp; taskInfo)
++{
++  real_type displacement = getPosition() - mSpringReference;
++  setForce(mSpringConstant*displacement + getVel()*mDamperConstant);
++}
++
++real_type
++LinearSpring::getSpringReference(void) const
++{
++  return mSpringReference;
++}
++
++void
++LinearSpring::setSpringReference(real_type springReference)
++{
++  mSpringReference = springReference;
++}
++
++real_type
++LinearSpring::getSpringConstant(void) const
++{
++  return mSpringConstant;
++}
++
++void
++LinearSpring::setSpringConstant(real_type springConstant)
++{
++  mSpringConstant = springConstant;
++}
++
++real_type
++LinearSpring::getDamperConstant(void) const
++{
++  return mDamperConstant;
++}
++
++void
++LinearSpring::setDamperConstant(real_type damperConstant)
++{
++  mDamperConstant = damperConstant;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2005-11-02 22:12:53 UTC (rev 52)
+@@ -0,0 +1,40 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LinearSpring_H
++#define OpenFDM_LinearSpring_H
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LineForce.h&quot;
++
++namespace OpenFDM {
++
++/// Linear spring damper model
++class LinearSpring :
++    public LineForce {
++public:
++  LinearSpring(const std::string&amp; name);
++  virtual ~LinearSpring(void);
++
++  virtual void output(const TaskInfo&amp; taskInfo);
++
++  real_type getSpringReference(void) const;
++  void setSpringReference(real_type springReference);
++
++  real_type getSpringConstant(void) const;
++  void setSpringConstant(real_type springConstant);
++
++  real_type getDamperConstant(void) const;
++  void setDamperConstant(real_type damperConstant);
++
++private:
++  real_type mSpringReference;
++  real_type mSpringConstant;
++  real_type mDamperConstant;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-11-02 22:12:53 UTC (rev 52)
+@@ -25,6 +25,7 @@
+ libOpenFDM_la_LIBADD = -lsgxml -lsgstructure
+ nobase_OpenFDMinclude_HEADERS = \
+   AeroForce.h \
++  AirSpring.h \
+   Assert.h \
+   Atmosphere.h \
+   AtmosphereSTD1976.h \
+@@ -68,6 +69,8 @@
+   LinAlg/IO.h \
+   LinAlg/Misc.h \
+   LinAlg/Proxy.h \
++  LinearSpring.h \
++  LineForce.h \
+   LogStream.h \
+   Mass.h \
+   Math.h \
+@@ -118,6 +121,7 @@
+ 
+ libOpenFDM_la_SOURCES = \
+   AeroForce.cpp \
++  AirSpring.cpp \
+   Assert.cpp \
+   Atmosphere.cpp \
+   AtmosphereSTD1976.cpp \
+@@ -148,6 +152,8 @@
+   Input.cpp \
+   Integrator.cpp \
+   ImplicitEuler.cpp \
++  LineForce.cpp \
++  LinearSpring.cpp \
+   Logger.cpp \
+   Mass.cpp \
+   MidpointRule.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -25,8 +25,6 @@
+   mJointAcceleration = 0;
+   mJointAxis = Vector3::unit(1);
+   mPosition = Vector3::zeros();
+-  mSpringCoef = 0;
+-  mDampCoef = 0;
+ 
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;PrismaticJoint::getJointPos));
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-11-02 22:12:53 UTC (rev 52)
+@@ -15,6 +15,7 @@
+ #include &quot;RigidBody.h&quot;
+ #include &quot;JointT.h&quot;
+ #include &quot;Joint.h&quot;
++#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -59,23 +60,20 @@
+    */
+   void setPosition(const Vector3&amp; position);
+ 
+-  void setSpringConstant(real_type springConstant)
+-  { mSpringCoef = springConstant; }
+-  real_type getSpringConstant(void) const
+-  { return mSpringCoef; }
+-  void setDampConstant(real_type dampConstant)
+-  { mDampCoef = dampConstant; }
+-  real_type getDampConstant(void) const
+-  { return mDampCoef; }
++  const LineForce* getLineForce(void) const
++  { return mLineForce; }
++  LineForce* getLineForce(void)
++  { return mLineForce; }
++  void setLineForce(LineForce* lineForce)
++  { mLineForce = lineForce; }
+ 
+-  virtual real_type getJointForce(void) const
++  real_type getJointForce(void)
+   {
+-    Log(ArtBody, Debug) &lt;&lt; &quot;RevoluteJoint &quot; &lt;&lt; getName()
+-                        &lt;&lt; &quot; pos &quot; &lt;&lt; convertTo(uDegree, mJointPosition)
+-                        &lt;&lt; &quot; vel &quot; &lt;&lt; mJointVelocity
+-                        &lt;&lt; &quot; torque &quot; &lt;&lt; mSpringCoef*mJointPosition + mDampCoef*mJointVelocity
+-                        &lt;&lt; endl;
+-    return mSpringCoef*mJointPosition + mDampCoef*mJointVelocity;
++    if (!mLineForce)
++      return 0;
++    
++    mLineForce-&gt;computeForce(mJointPosition, mJointVelocity);
++    return mLineForce-&gt;getForce();
+   }
+ 
+ private:
+@@ -116,10 +114,9 @@
+    */
+   Vector3 mPosition;
+ 
+-  /** Well, for now, just to test. Include these here
++  /** The direct joint interaction force
+    */
+-  real_type mSpringCoef;
+-  real_type mDampCoef;
++  shared_ptr&lt;LineForce&gt; mLineForce;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-11-02 22:12:53 UTC (rev 52)
+@@ -26,8 +26,6 @@
+   mJointAcceleration = 0;
+   mJointAxis = Vector3::unit(1);
+   mOrientation = Quaternion::unit();
+-  mSpringCoef = 0;
+-  mDampCoef = 0;
+ 
+   setNumOutputPorts(2);
+   setOutputPort(0, &quot;jointPos&quot;, Property(this, &amp;RevoluteJoint::getJointPos));
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-01 11:31:30 UTC (rev 51)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-11-02 22:12:53 UTC (rev 52)
+@@ -15,6 +15,7 @@
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
+ #include &quot;JointT.h&quot;
++#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -59,23 +60,20 @@
+    */
+   void setOrientation(const Quaternion&amp; orientation);
+ 
+-  void setSpringConstant(real_type springConstant)
+-  { mSpringCoef = springConstant; }
+-  real_type getSpringConstant(void) const
+-  { return mSpringCoef; }
+-  void setDampConstant(real_type dampConstant)
+-  { mDampCoef = dampConstant; }
+-  real_type getDampConstant(void) const
+-  { return mDampCoef; }
++  const LineForce* getLineForce(void) const
++  { return mLineForce; }
++  LineForce* getLineForce(void)
++  { return mLineForce; }
++  void setLineForce(LineForce* lineForce)
++  { mLineForce = lineForce; }
+ 
+-  virtual real_type getJointForce(void) const
++  real_type getJointForce(void)
+   {
+-    Log(ArtBody, Debug) &lt;&lt; &quot;RevoluteJoint &quot; &lt;&lt; getName()
+-                        &lt;&lt; &quot; pos &quot; &lt;&lt; convertTo(uDegree, mJointPosition)
+-                        &lt;&lt; &quot; vel &quot; &lt;&lt; mJointVelocity
+-                        &lt;&lt; &quot; torque &quot; &lt;&lt; mSpringCoef*mJointPosition + mDampCoef*mJointVelocity
+-                        &lt;&lt; endl;
+-    return mSpringCoef*mJointPosition + mDampCoef*mJointVelocity;
++    if (!mLineForce)
++      return 0;
++    
++    mLineForce-&gt;computeForce(mJointPosition, mJointVelocity);
++    return mLineForce-&gt;getForce();
+   }
+ 
+ private:
+@@ -123,10 +121,9 @@
+    */
+   bool mTrackPosition;
+ 
+-  /** Well, for now, just to test. Include these here
++  /** The direct joint interaction force
+    */
+-  real_type mSpringCoef;
+-  real_type mDampCoef;
++  shared_ptr&lt;LineForce&gt; mLineForce;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000038.html">[OpenFDM-svn] r51 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000039.html">[OpenFDM-svn] r53 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#40">[ date ]</a>
+              <a href="thread.html#40">[ thread ]</a>
+              <a href="subject.html#40">[ subject ]</a>
+              <a href="author.html#40">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

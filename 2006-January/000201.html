@@ -1,0 +1,253 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r220 - in trunk/OpenFDM: . src/OpenFDM src/OpenFDM/XML
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r220%20-%20in%20trunk/OpenFDM%3A%20.%20src/OpenFDM%20src/OpenFDM/XML&In-Reply-To=%3C200601272003.k0RK3BQH002436%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000200.html">
+   <LINK REL="Next"  HREF="000202.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r220 - in trunk/OpenFDM: . src/OpenFDM src/OpenFDM/XML</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r220%20-%20in%20trunk/OpenFDM%3A%20.%20src/OpenFDM%20src/OpenFDM/XML&In-Reply-To=%3C200601272003.k0RK3BQH002436%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r220 - in trunk/OpenFDM: . src/OpenFDM src/OpenFDM/XML">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Jan 27 21:03:11 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000200.html">[OpenFDM-svn] r219 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000202.html">[OpenFDM-svn] r221 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#201">[ date ]</a>
+              <a href="thread.html#201">[ thread ]</a>
+              <a href="subject.html#201">[ subject ]</a>
+              <a href="author.html#201">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-27 21:02:44 +0100 (Fri, 27 Jan 2006)
+New Revision: 220
+
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+   trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+   trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp
+Log:
+Various small updates
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/configure.ac	2006-01-27 20:02:44 UTC (rev 220)
+@@ -53,21 +53,44 @@
+ dnl Check for expat
+ AC_CHECK_HEADERS([expat.h],
+   [AC_CHECK_LIB([expat],[XML_ExpatVersion],
+-     [openfdm_expat_enabled=&quot;1&quot;])
++     [openfdm_expat_enabled=&quot;yes&quot;])
+   ])
+-AC_CHECK_FUNC([XML_SetSkippedEntityHandler])
+-AM_CONDITIONAL([ENABLE_EXPAT], [test &quot;x$openfdm_expat_enabled&quot; = &quot;x1&quot;])
+-AC_SUBST(openfdm_expat_enabled)
++save_LIBS=$LIBS
++LIBS=-lexpat
++AC_CHECK_FUNC([XML_SetSkippedEntityHandler],
++              AC_DEFINE([HAVE_XML_SETSKIPPEDENTITYHANDLER], [1],
++                        [Define if expat provides XML_SetSkippedEntityHandler]))
++LIBS=$save_LIBS
++AM_CONDITIONAL([ENABLE_EXPAT], [test &quot;x$openfdm_expat_enabled&quot; = &quot;xyes&quot;])
++if test &quot;x$openfdm_expat_enabled&quot; = &quot;xyes&quot;
++then
++  OpenFDM_HAVE_EXPAT_XMLREADER=1
++else
++  OpenFDM_HAVE_EXPAT_XMLREADER=0
++fi
++AC_SUBST(OpenFDM_HAVE_EXPAT_XMLREADER)
+ 
+ dnl Check for SimGear and easyxml
+-AC_CHECK_HEADERS([simgear/xml/easyxml.hxx],[openfdm_easyxml_enabled=&quot;1&quot;])
+-AM_CONDITIONAL([ENABLE_EASYXML], [test &quot;x$openfdm_easyxml_enabled&quot; = &quot;x1&quot;])
+-AC_SUBST(openfdm_easyxml_enabled)
++AC_CHECK_HEADERS([simgear/xml/easyxml.hxx],[openfdm_easyxml_enabled=&quot;yes&quot;])
++AM_CONDITIONAL([ENABLE_EASYXML], [test &quot;x$openfdm_easyxml_enabled&quot; = &quot;xyes&quot;])
++if test &quot;x$openfdm_easyxml_enabled&quot; = &quot;xyes&quot;
++then
++  OpenFDM_HAVE_EASYXML_XMLREADER=1
++else
++  OpenFDM_HAVE_EASYXML_XMLREADER=0
++fi
++AC_SUBST(OpenFDM_HAVE_EASYXML_XMLREADER)
+ 
+ dnl Check for libxml2 - this is the prefered one, since it does validation
+ dnl not yet implemented
+-AM_CONDITIONAL([ENABLE_LIBXML2], [test &quot;x$openfdm_libxml2_enabled&quot; = &quot;x1&quot;])
+-AC_SUBST(openfdm_libxml2_enabled)
++AM_CONDITIONAL([ENABLE_LIBXML2], [test &quot;x$openfdm_libxml2_enabled&quot; = &quot;xyes&quot;])
++if test &quot;x$openfdm_libxml2_enabled&quot; = &quot;xyes&quot;
++then
++  OpenFDM_HAVE_LIBXML2_XMLREADER=1
++else
++  OpenFDM_HAVE_LIBXML2_XMLREADER=0
++fi
++AC_SUBST(OpenFDM_HAVE_LIBXML2_XMLREADER)
+ 
+ dnl simple check for qt4
+ AC_CHECK_HEADERS([Qt/QtGlobal],[openfdm_have_qt4=&quot;yes&quot;])
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-01-27 20:02:44 UTC (rev 220)
+@@ -135,6 +135,9 @@
+   Port* getOutputPort(const std::string&amp; name);
+   const std::string&amp; getOutputPortName(unsigned i) const;
+ 
++  const Model* getParent(void) const { return mParentModel; }
++  Model* getParent(void) { return mParentModel; }
++
+ protected:
+   void setNumContinousStates(unsigned numContinousStates);
+   void setNumDiscreteStates(unsigned numDiscreteStates);
+@@ -186,8 +189,6 @@
+ private:
+   // Sets the parent model.
+   // That is the one which is informed if the number of states changes.
+-  const Model* getParent(void) const { return mParentModel; }
+-  Model* getParent(void) { return mParentModel; }
+   void setParent(Model* model);
+   void adjustNumContinousStates(unsigned newCount, unsigned oldCount);
+   void adjustNumDiscreteStates(unsigned newCount, unsigned oldCount);
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2006-01-27 20:02:44 UTC (rev 220)
+@@ -93,6 +93,20 @@
+ }
+ 
+ unsigned
++ModelGroup::getModelIndex(const Model* model) const
++{
++  unsigned idx = 0u;
++  ModelList::const_iterator it = mModels.begin();
++  while (it != mModels.end()) {
++    if ((*it) == model)
++      return idx;
++    ++it;
++    ++idx;
++  }
++  return idx;
++}
++
++unsigned
+ ModelGroup::addModel(Model* model)
+ {
+   // cannot add no model ...
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2006-01-27 20:02:44 UTC (rev 220)
+@@ -45,6 +45,7 @@
+   const Model* getModel(const std::string&amp; name) const;
+   Model* getModel(const std::string&amp; name);
+   unsigned getModelIndex(const std::string&amp; name) const;
++  unsigned getModelIndex(const Model* model) const;
+   unsigned addModel(Model* model);
+   void removeModel(Model* model);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/OpenFDMConfig.h.in	2006-01-27 20:02:44 UTC (rev 220)
+@@ -18,16 +18,16 @@
+ #ifdef OpenFDM_HAVE_EXPAT_XMLREADER
+ #undef OpenFDM_HAVE_EXPAT_XMLREADER
+ #endif
+-#define OpenFDM_HAVE_EXPAT_XMLREADER @openfdm_expat_enabled@
++#define OpenFDM_HAVE_EXPAT_XMLREADER @OpenFDM_HAVE_EXPAT_XMLREADER@
+ 
+ #ifdef OpenFDM_HAVE_EASYXML_XMLREADER
+ #undef OpenFDM_HAVE_EASYXML_XMLREADER
+ #endif
+-#define OpenFDM_HAVE_EASYXML_XMLREADER @openfdm_easyxml_enabled@
++#define OpenFDM_HAVE_EASYXML_XMLREADER @OpenFDM_HAVE_EASYXML_XMLREADER@
+ 
+ #ifdef OpenFDM_HAVE_LIBXML2_XMLREADER
+ #undef OpenFDM_HAVE_LIBXML2_XMLREADER
+ #endif
+-#define OpenFDM_HAVE_LIBXML2_XMLREADER @openfdm_libxml2_enabled@
++#define OpenFDM_HAVE_LIBXML2_XMLREADER @OpenFDM_HAVE_LIBXML2_XMLREADER@
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/XML/ExpatXMLReader.cpp	2006-01-27 20:02:44 UTC (rev 220)
+@@ -5,6 +5,7 @@
+ #include &lt;iostream&gt;
+ #include &lt;expat.h&gt;
+ #include &quot;ExpatXMLReader.h&quot;
++#include &quot;config.h&quot;
+ 
+ namespace OpenFDM {
+ namespace XML {
+
+Modified: trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp	2006-01-24 19:17:07 UTC (rev 219)
++++ trunk/OpenFDM/src/OpenFDM/XML/XMLReader.cpp	2006-01-27 20:02:44 UTC (rev 220)
+@@ -7,10 +7,6 @@
+ namespace OpenFDM {
+ namespace XML {
+ 
+-Attributes::~Attributes(void)
+-{
+-}
+-
+ XMLReader::~XMLReader(void)
+ {
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000200.html">[OpenFDM-svn] r219 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000202.html">[OpenFDM-svn] r221 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#201">[ date ]</a>
+              <a href="thread.html#201">[ thread ]</a>
+              <a href="subject.html#201">[ subject ]</a>
+              <a href="author.html#201">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

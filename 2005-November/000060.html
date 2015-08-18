@@ -1,0 +1,417 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r76 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r76%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200511271039.jARAd3Dv007524%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000059.html">
+   <LINK REL="Next"  HREF="000061.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r76 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r76%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200511271039.jARAd3Dv007524%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r76 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Nov 27 11:39:03 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000059.html">[OpenFDM-svn] r75 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000061.html">[OpenFDM-svn] r77 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#60">[ date ]</a>
+              <a href="thread.html#60">[ thread ]</a>
+              <a href="subject.html#60">[ subject ]</a>
+              <a href="author.html#60">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-27 11:38:51 +0100 (Sun, 27 Nov 2005)
+New Revision: 76
+
+Added:
+   trunk/OpenFDM/src/JSBSim/LegacyKinemat.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyKinemat.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/Makefile.am
+Log:
+Factor out some subcomponent.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-27 10:38:14 UTC (rev 75)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-27 10:38:51 UTC (rev 76)
+@@ -43,6 +43,8 @@
+ #include &lt;OpenFDM/XML/Tablereader.h&gt;
+ #include &lt;OpenFDM/XML/XMLReader.h&gt;
+ 
++#include &quot;LegacyKinemat.h&quot;
++
+ #include &quot;LegacyJSBSimReader.h&quot;
+ 
+ namespace OpenFDM {
+@@ -1123,7 +1125,7 @@
+   shared_ptr&lt;Gain&gt; gain;
+   shared_ptr&lt;DiscreteTransferFunction&gt; discreteTransfFunc;
+   shared_ptr&lt;Table1D&gt; table1D;
+-  shared_ptr&lt;Saturation&gt; kinematRateLimit;
++  shared_ptr&lt;LegacyKinemat&gt; kinemat;
+   shared_ptr&lt;Saturation&gt; inputSaturation;
+ 
+   // The final output property.
+@@ -1160,49 +1162,13 @@
+     std::cout &lt;&lt; &quot;Ignoring SWITCH&quot; &lt;&lt; std::endl;
+ 
+   } else if (type == &quot;KINEMAT&quot;) {
+-    // A KINEMAT is done as a first order ODE packed into a discrete system
+-    // The derivative is limited to match the avarage movement speed of the
+-    // KINEMAT. This is not exactly like JSBSim does that, but it is
+-    // sufficient for now.
+-    gain = new Gain(name + &quot; Input Gain&quot;);
+-    addFCSModel(gain);
+-    gain-&gt;setGain(1);
+-    model = gain;
+ 
+-    inputSaturation = new Saturation(name + &quot; Input Saturation&quot;);
+-    addFCSModel(inputSaturation);
+-    inputSaturation-&gt;getInputPort(0)-&gt;connect(gain-&gt;getOutputPort(0));
++    // Use that special proxy class
++    kinemat = new LegacyKinemat(name);
++    model = kinemat;
++    addFCSModel(model);
++    out = kinemat-&gt;getOutputPort(0);
+ 
+-    Summer* inputError = new Summer(name + &quot; Input Sum&quot;);
+-    addFCSModel(inputError);
+-    inputError-&gt;getInputPort(0)-&gt;connect(inputSaturation-&gt;getOutputPort(0));
+-    inputError-&gt;setNumSummands(2);
+-
+-    Gain* errorGain = new Gain(name + &quot; Error Gain&quot;);
+-    addFCSModel(errorGain);
+-    errorGain-&gt;setGain(100);
+-    errorGain-&gt;getInputPort(0)-&gt;connect(inputError-&gt;getOutputPort(0));
+-
+-    kinematRateLimit = new Saturation(name + &quot; Rate Limit&quot;);
+-    addFCSModel(kinematRateLimit);
+-    kinematRateLimit-&gt;getInputPort(0)-&gt;connect(errorGain-&gt;getOutputPort(0));
+-
+-    DiscreteIntegrator* integrator
+-      = new DiscreteIntegrator(name + &quot; Integrator&quot;);
+-    addFCSModel(integrator);
+-    integrator-&gt;getInputPort(0)-&gt;connect(kinematRateLimit-&gt;getOutputPort(0));
+-    Matrix tmp(1, 1);
+-    tmp(1, 1) = 1;
+-//     tmp.clear();
+-    integrator-&gt;setInitialValue(tmp);
+-    out = integrator-&gt;getOutputPort(0);
+-
+-    Gain* feedbackGain = new Gain(name + &quot; Feedback Gain&quot;);
+-    addFCSModel(feedbackGain);
+-    feedbackGain-&gt;setGain(-1);
+-    feedbackGain-&gt;getInputPort(0)-&gt;connect(integrator-&gt;getOutputPort(0));
+-    inputError-&gt;getInputPort(1)-&gt;connect(feedbackGain-&gt;getOutputPort(0));
+-
+   } else if (type == &quot;PURE_GAIN&quot;) {
+     gain = new Gain(name);
+     gain-&gt;setGain(1);
+@@ -1328,7 +1294,6 @@
+   shared_ptr&lt;Bias&gt; outbias;
+   shared_ptr&lt;Gain&gt; outgain;
+   bool outInvert = false;
+-  bool noScale = false;
+ 
+   for (;;) {
+     std::string token;
+@@ -1526,20 +1491,13 @@
+           minVal = min(minVal, val);
+           maxVal = max(maxVal, val);
+         }
+-        Matrix tmp(1, 1);
+-        if (allTime != 0) {
+-          real_type avgTransRate = abs((maxVal-minVal)/allTime);
+-          tmp(1, 1) = -avgTransRate;
+-          kinematRateLimit-&gt;setMinSaturation(tmp);
+-          tmp(1, 1) = avgTransRate;
+-          kinematRateLimit-&gt;setMaxSaturation(tmp);
+-        }
+-        tmp(1, 1) = minVal;
+-        inputSaturation-&gt;setMinSaturation(tmp);
+-        tmp(1, 1) = maxVal;
+-        inputSaturation-&gt;setMaxSaturation(tmp);
++        if (allTime != 0)
++          kinemat-&gt;setRateLimit(fabs((maxVal-minVal)/allTime));
++        else
++          kinemat-&gt;setRateLimit(Limits&lt;real_type&gt;::max());
++        kinemat-&gt;setMinValue(minVal);
++        kinemat-&gt;setMaxValue(maxVal);
+ 
+-        gain-&gt;setGain(maxVal);
+       } else
+         return error(&quot;No DETENTS parameter allowed for \&quot;&quot; + type + &quot;\&quot;&quot;);
+ 
+@@ -1611,7 +1569,7 @@
+     } else if (token == &quot;NOSCALE&quot;) {
+ 
+       if (type == &quot;KINEMAT&quot;) {
+-        noScale = true;
++        kinemat-&gt;setNoScale(true);
+       } else
+         return error(&quot;No NOSCALE parameter allowed for \&quot;&quot; + type + &quot;\&quot;&quot;);
+       
+@@ -1701,20 +1659,6 @@
+   // FIXME put in here a normalized out property, or at least a gain to
+   // normalize
+ 
+-  // For KINEMATS ...
+-  if (type == &quot;KINEMAT&quot;) {
+-    if (noScale) {
+-      gain-&gt;setGain(1);
+-      normOut = out;
+-    } else {
+-      Gain* normGain = new Gain(name + &quot; Normalize Gain&quot;);
+-      normGain-&gt;setGain(1/gain-&gt;getGain());
+-      addFCSModel(normGain);
+-      normGain-&gt;getInputPort(0)-&gt;connect(out);
+-      normOut = normGain-&gt;getOutputPort(0);
+-    }
+-  }
+-
+   if (!normOut || !normOut-&gt;isConnected())
+     normOut = inputs.front();
+ 
+
+Added: trunk/OpenFDM/src/JSBSim/LegacyKinemat.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyKinemat.cpp	2005-11-27 10:38:14 UTC (rev 75)
++++ trunk/OpenFDM/src/JSBSim/LegacyKinemat.cpp	2005-11-27 10:38:51 UTC (rev 76)
+@@ -0,0 +1,122 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/Saturation.h&gt;
++#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
++#include &lt;OpenFDM/Gain.h&gt;
++
++#include &quot;LegacyKinemat.h&quot;
++
++namespace OpenFDM {
++
++LegacyKinemat::LegacyKinemat(const std::string&amp; name) :
++  ModelGroup(name),
++  mNoScale(false)
++{
++  // A KINEMAT is done as a first order ODE packed into a discrete system
++  // The derivative is limited to match the avarage movement speed of the
++  // KINEMAT. This is not exactly like JSBSim does that, but it is
++  // sufficient for now.
++  // FIXME: simplify
++  // FIXME: implement tables
++  // FIXME: implement triggers for initialization of the integrator at the
++  // first time
++  mInputGain = new Gain(&quot;Input Gain&quot;);
++  addModel(mInputGain);
++  mInputGain-&gt;setGain(1);
++  
++  mInputSaturation = new Saturation(&quot;Input Saturation&quot;);
++  addModel(mInputSaturation);
++  mInputSaturation-&gt;getInputPort(0)-&gt;connect(mInputGain-&gt;getOutputPort(0));
++  
++  Summer* inputError = new Summer(&quot;Input Sum&quot;);
++  addModel(inputError);
++  inputError-&gt;getInputPort(0)-&gt;connect(mInputSaturation-&gt;getOutputPort(0));
++  inputError-&gt;setNumSummands(2);
++  
++  Gain* errorGain = new Gain(&quot;Error Gain&quot;);
++  addModel(errorGain);
++  errorGain-&gt;setGain(100);
++  errorGain-&gt;getInputPort(0)-&gt;connect(inputError-&gt;getOutputPort(0));
++  
++  mKinematRateLimit = new Saturation(&quot;Rate Limit&quot;);
++  addModel(mKinematRateLimit);
++  mKinematRateLimit-&gt;getInputPort(0)-&gt;connect(errorGain-&gt;getOutputPort(0));
++  
++  DiscreteIntegrator* integrator = new DiscreteIntegrator(&quot;Integrator&quot;);
++  addModel(integrator);
++  integrator-&gt;getInputPort(0)-&gt;connect(mKinematRateLimit-&gt;getOutputPort(0));
++  Matrix tmp(1, 1);
++  tmp(1, 1) = 1;
++  integrator-&gt;setInitialValue(tmp);
++  
++  Gain* feedbackGain = new Gain(&quot;Feedback Gain&quot;);
++  addModel(feedbackGain);
++  feedbackGain-&gt;setGain(-1);
++  feedbackGain-&gt;getInputPort(0)-&gt;connect(integrator-&gt;getOutputPort(0));
++  inputError-&gt;getInputPort(1)-&gt;connect(feedbackGain-&gt;getOutputPort(0));
++
++  mOutputGain = new Gain(&quot;Normalize Gain&quot;);
++  addModel(mOutputGain);
++  mOutputGain-&gt;setGain(1);
++  mOutputGain-&gt;getInputPort(0)-&gt;connect(integrator-&gt;getOutputPort(0));
++
++
++  // Now connect the input and the output to this groups in and outputs
++  setNumInputPorts(1);
++  getInputPort(0)-&gt;setName(&quot;Input&quot;);
++  mInputGain-&gt;getInputPort(0)-&gt;connect(getInputPort(0));
++
++  setNumOutputPorts(1);
++  getOutputPort(0)-&gt;setName(&quot;Output&quot;);
++  getOutputPort(0)-&gt;connect(mOutputGain-&gt;getOutputPort(0));
++}
++
++LegacyKinemat::~LegacyKinemat(void)
++{
++}
++
++void
++LegacyKinemat::setRateLimit(real_type rateLimit)
++{
++  rateLimit = fabs(rateLimit);
++  Matrix tmp(1, 1);
++  tmp(1, 1) = -rateLimit;
++  mKinematRateLimit-&gt;setMinSaturation(tmp);
++  tmp(1, 1) = rateLimit;
++  mKinematRateLimit-&gt;setMaxSaturation(tmp);
++}
++
++void
++LegacyKinemat::setMinValue(real_type minValue)
++{
++  Matrix tmp(1, 1);
++  tmp(1, 1) = minValue;
++  mInputSaturation-&gt;setMinSaturation(tmp);
++}
++
++void
++LegacyKinemat::setMaxValue(real_type maxValue)
++{
++  mInputGain-&gt;setGain(maxValue);
++  if (!mNoScale)
++    mOutputGain-&gt;setGain(1/maxValue);
++
++  Matrix tmp(1, 1);
++  tmp(1, 1) = maxValue;
++  mInputSaturation-&gt;setMaxSaturation(tmp);
++}
++
++void
++LegacyKinemat::setNoScale(bool noScale)
++{
++  mNoScale = noScale;
++  if (mNoScale)
++    mOutputGain-&gt;setGain(1);
++  else
++    mOutputGain-&gt;setGain(1/mInputGain-&gt;getGain());
++}
++
++} //namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/JSBSim/LegacyKinemat.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/JSBSim/LegacyKinemat.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyKinemat.h	2005-11-27 10:38:14 UTC (rev 75)
++++ trunk/OpenFDM/src/JSBSim/LegacyKinemat.h	2005-11-27 10:38:51 UTC (rev 76)
+@@ -0,0 +1,35 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LegacyKinemat_H
++#define OpenFDM_LegacyKinemat_H
++
++#include &lt;OpenFDM/ModelGroup.h&gt;
++
++namespace OpenFDM {
++
++/// Just a small container mapping the JSBSim Kinemat parameters to
++/// the OpenFDM models.
++class LegacyKinemat :
++    public ModelGroup {
++public:
++  LegacyKinemat(const std::string&amp; name);
++  virtual ~LegacyKinemat(void);
++
++  void setRateLimit(real_type rateLimit);
++  void setMinValue(real_type minValue);
++  void setMaxValue(real_type maxValue);
++  void setNoScale(bool noScale);
++
++private:
++  bool mNoScale;
++  shared_ptr&lt;Gain&gt; mInputGain;
++  shared_ptr&lt;Saturation&gt; mInputSaturation;
++  shared_ptr&lt;Saturation&gt; mKinematRateLimit;
++  shared_ptr&lt;Gain&gt; mOutputGain;
++};
++
++} //namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/JSBSim/LegacyKinemat.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/JSBSim/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/Makefile.am	2005-11-27 10:38:14 UTC (rev 75)
++++ trunk/OpenFDM/src/JSBSim/Makefile.am	2005-11-27 10:38:51 UTC (rev 76)
+@@ -9,8 +9,10 @@
+ OpenFDMincludedir = $(includedir)/JSBSim
+ 
+ OpenFDMinclude_HEADERS = \
+-  LegacyJSBSimReader.h
++  LegacyJSBSimReader.h \
++  LegacyKinemat.h
+ 
+ lib_LTLIBRARIES = libJSBReader.la
+ libJSBReader_la_SOURCES = \
+-  LegacyJSBSimReader.cpp
++  LegacyJSBSimReader.cpp \
++  LegacyKinemat.cpp
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000059.html">[OpenFDM-svn] r75 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000061.html">[OpenFDM-svn] r77 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#60">[ date ]</a>
+              <a href="thread.html#60">[ thread ]</a>
+              <a href="subject.html#60">[ subject ]</a>
+              <a href="author.html#60">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

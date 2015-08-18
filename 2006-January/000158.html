@@ -1,0 +1,618 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r174 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r174%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031336.k03DaP5U007675%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000157.html">
+   <LINK REL="Next"  HREF="000159.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r174 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r174%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031336.k03DaP5U007675%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r174 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Jan  3 14:36:25 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000157.html">[OpenFDM-svn] r173 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000159.html">[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#158">[ date ]</a>
+              <a href="thread.html#158">[ thread ]</a>
+              <a href="subject.html#158">[ subject ]</a>
+              <a href="author.html#158">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-03 14:36:18 +0100 (Tue, 03 Jan 2006)
+New Revision: 174
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Newton.cpp
+   trunk/OpenFDM/src/OpenFDM/Newton.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Some beginning of trimming
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-03 11:25:40 UTC (rev 173)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2006-01-03 13:36:18 UTC (rev 174)
+@@ -197,6 +197,24 @@
+   return inverse(hlOr)*getRefOrientation();
+ }
+ 
++Vector4
++MobileRootJoint::getQDot(void) const
++{
++  // Compute the derivative term originating from the angular velocity.
++  // Correction term to keep the quaternion normalized.
++  // That is if |q| &lt; 1 add a little radial component outward,
++  // if |q| &gt; 1 add a little radial component inward
++  Quaternion q = mFrame-&gt;getOrientation();
++  Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
++  Vector4 qderiv = derivative(q, angVel) + 0.1*(normalize(q) - q);
++  return qderiv;
++}
++
++Vector3 MobileRootJoint::getPosDot(void) const
++{
++  return mFrame-&gt;rotToParent(mFrame-&gt;getRelVel().getLinear());
++}
++
+ void
+ MobileRootJoint::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+                              const SpatialInertia&amp; outI,
+@@ -234,18 +252,9 @@
+ void
+ MobileRootJoint::getStateDeriv(StateStream&amp; stateDeriv)
+ {
+-  Quaternion q = mFrame-&gt;getOrientation();
+-  Vector3 angVel = mFrame-&gt;getRelVel().getAngular();
+-  Vector3 vel = mFrame-&gt;rotToParent(mFrame-&gt;getRelVel().getLinear());
+-
+-  // Compute the derivative term originating from the angular velocity.
+-  // Correction term to keep the quaternion normalized.
+-  // That is if |q| &lt; 1 add a little radial component outward,
+-  // if |q| &gt; 1 add a little radial component inward
+-  Vector4 qderiv = derivative(q, angVel) + 0.1*(normalize(q) - q);
+-  stateDeriv.writeSubState(qderiv);
+-  stateDeriv.writeSubState(vel);
+-  stateDeriv.writeSubState(mFrame-&gt;getRelVelDot());
++  stateDeriv.writeSubState(getQDot());
++  stateDeriv.writeSubState(getPosDot());
++  stateDeriv.writeSubState(getRelVelDot());
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-01-03 11:25:40 UTC (rev 173)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2006-01-03 13:36:18 UTC (rev 174)
+@@ -70,7 +70,9 @@
+   /// Get orientation wrt the geodetic hl frame.
+   Quaternion getGeodOrientation(void) const;
+ 
+-private:
++  Vector4 getQDot(void) const;
++  Vector3 getPosDot(void) const;
++
+   /** Plugin function for the articulated body algorithm.
+    */
+   virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+@@ -88,6 +90,7 @@
+    */
+   virtual void getStateDeriv(StateStream&amp; state);
+ 
++private:
+   /// The commonly used gravity model from the environment class
+   /// It is initialized at the init() call
+   SharedPtr&lt;const Gravity&gt; mGravity;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Newton.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Newton.cpp	2006-01-03 11:25:40 UTC (rev 173)
++++ trunk/OpenFDM/src/OpenFDM/Newton.cpp	2006-01-03 13:36:18 UTC (rev 174)
+@@ -2,6 +2,8 @@
+  *
+  */
+ 
++#undef NDEBUG
++
+ #include &quot;Assert.h&quot;
+ #include &quot;LogStream.h&quot;
+ #include &quot;Object.h&quot;
+@@ -192,7 +194,6 @@
+                       itCount, maxit, maxjac, lambdamin);
+ }
+ 
+-static
+ Vector
+ LineSearch(Function&amp; f, real_type t, const Vector&amp; xk, const Vector&amp; dk,
+            real_type maxWide, real_type thresh)
+@@ -202,33 +203,29 @@
+ 
+   thresh = fabs(maxWide)*thresh;
+ 
++  Vector fx;
++
+   Vector v = xk;
++  f.eval(t, v, fx);
++  real_type fv = norm(fx);
++
+   Vector w = xk + maxWide*dk;
++  f.eval(t, w, fx);
++  real_type fw = norm(fx);
+ 
+-  Vector fx;
+   while (norm1(v - w) &gt; thresh) {
+-    f.eval(t, v, fx);
+-    real_type fv = dot(fx, fx);
+-    f.eval(t, w, fx);
+-    real_type fw = dot(fx, fx);
+     Log(NewtonMethod, Debug2) &lt;&lt; &quot; Line Search: errv = &quot; &lt;&lt; fv
+-                             &lt;&lt; &quot;, errw = &quot; &lt;&lt; fw &lt;&lt; endl;
+-  
++                              &lt;&lt; &quot;, errw = &quot; &lt;&lt; fw &lt;&lt; endl;
+     // check for isfinite ...
+-//   if failv
+-//     v = v + vfac*(w-v);
+-//   elseif failw
+-//     w = v + wfac*(w-v);
+-//   elseif fv &gt; fw
+-//     v = v + vfac*(w-v);
+-//   else
+-//     w = v + wfac*(w-v);
+-//   end
+-
+-    if (fv &gt; fw)
++    if (fv &gt; fw) {
+       v = v + vfac*(w-v);
+-    else
++      f.eval(t, v, fx);
++      fv = norm(fx);
++    } else {
+       w = v + wfac*(w-v);
++      f.eval(t, w, fx);
++      fw = norm(fx);
++    }
+   }
+ 
+   return 0.5*(v+w);
+@@ -246,28 +243,49 @@
+ {
+   Vector err, dx;
+   Matrix J;
++#define USE_QR
++#ifdef USE_QR
++  LinAlg::MatrixFactors&lt;real_type,0,0,LinAlg::QRTag&gt; jacFactors;
++#else
+   LinAlg::MatrixFactors&lt;real_type,0,0,LinAlg::LUTag&gt; jacFactors;
+-//   LinAlg::MatrixFactors&lt;real_type,0,0,LinAlg::QRTag&gt; jacFactors;
++#endif
+ 
+   bool converged;
+   do {
+     // Compute in each step a new jacobian
+     f.jac(t, x, J);
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Jacobian is:\n&quot; &lt;&lt; J &lt;&lt; endl;
++#ifdef USE_QR
++    jacFactors = J;
++#else
+     jacFactors = trans(J)*J;
+-    
++#endif
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Jacobian is &quot;
++                             &lt;&lt; (jacFactors.singular() ? &quot;singular&quot; : &quot;ok&quot;)
++                             &lt;&lt; endl;
++   
+     // Compute the actual error
+     f.eval(t, x, err);
+ 
+     // Compute the search direction
++#ifdef USE_QR
++    dx = jacFactors.solve(err);
++#else
+     dx = jacFactors.solve(trans(J)*err);
++#endif
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;dx residual &quot;
++                             &lt;&lt; trans(J*dx - err) &lt;&lt; endl
++                             &lt;&lt; trans(J*dx - err)*J
++                             &lt;&lt; endl;
+ 
+     // Get a better search guess
+-//     if (1 &lt; norm(dx))
+-//       dx = normalize(dx);
++    if (1 &lt; norm(dx))
++      dx = normalize(dx);
+     Vector xnew = LineSearch(f, t, x, -dx, 1.0, atol);
+ 
+     // check convergence
+     converged = norm1(xnew - x) &lt; atol;
++    
+ 
+     Log(NewtonMethod, Debug) &lt;&lt; &quot;Convergence test: |dx| = &quot; &lt;&lt; norm(xnew - x)
+                              &lt;&lt; &quot;, converged = &quot; &lt;&lt; converged &lt;&lt; endl;
+@@ -278,4 +296,82 @@
+   return converged;
+ }
+ 
++bool
++LevenbergMarquart(Function&amp; f,
++                  real_type t,
++                  Vector&amp; x,
++                  real_type atol, real_type rtol,
++                  unsigned *itCount,
++                  unsigned maxit)
++{
++  Matrix J;
++  LinAlg::MatrixFactors&lt;real_type,0,0,LinAlg::LUTag&gt; jacFactors;
++
++  bool converged;
++  real_type tau = 1e-3;
++  real_type nu = 2;
++
++  // Compute in each step a new jacobian
++  f.jac(t, x, J);
++  Log(NewtonMethod, Debug3) &lt;&lt; &quot;Jacobian is:\n&quot; &lt;&lt; J &lt;&lt; endl;
++  real_type mu = tau*norm1(J);
++
++  Vector fx;
++  // Compute the actual error
++  f.eval(t, x, fx);
++  Vector g = trans(J)*fx;
++
++  do {
++    jacFactors = trans(J)*J + mu*LinAlg::Eye&lt;real_type,0,0&gt;(rows(x), rows(x));
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Jacobian is &quot;
++                             &lt;&lt; (jacFactors.singular() ? &quot;singular&quot; : &quot;ok&quot;)
++                             &lt;&lt; endl;
++   
++    // Compute the search direction
++    Vector h = jacFactors.solve(-g);
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Solve Residual &quot;
++                             &lt;&lt; norm(trans(J)*J*h + mu*h + g)/norm(g) &lt;&lt; endl;
++
++    // check convergence
++    converged = norm1(h) &lt; atol;
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Convergence test: ||h||_1 = &quot; &lt;&lt; norm1(h)
++                             &lt;&lt; &quot;, converged = &quot; &lt;&lt; converged &lt;&lt; endl;
++    if (converged)
++      break;
++
++    // Get a better search guess
++    Vector xnew = x + h;
++    f.eval(t, x, fx);
++    real_type Fx = norm(fx);
++    f.eval(t, xnew, fx);
++    real_type Fxnew = norm(fx);
++    real_type rho = (Fx - Fxnew)/(0.5*dot(h, mu*h - g));
++    Log(NewtonMethod, Debug) &lt;&lt; &quot;Rho = &quot; &lt;&lt; rho
++                             &lt;&lt; &quot;, Fxnew = &quot; &lt;&lt; Fxnew 
++                             &lt;&lt; &quot;, Fx = &quot; &lt;&lt; Fx
++                             &lt;&lt; endl;
++    if (0 &lt; rho) {
++      // New guess is the better one
++      x = xnew;
++
++      f.jac(t, x, J);
++      Log(NewtonMethod, Debug3) &lt;&lt; &quot;Jacobian is:\n&quot; &lt;&lt; J &lt;&lt; endl;
++      // Compute the actual error
++      f.eval(t, x, fx);
++      g = trans(J)*fx;
++      converged = norm1(g) &lt; atol;
++      Log(NewtonMethod, Debug) &lt;&lt; &quot;||g||_1 = &quot; &lt;&lt; norm1(g) &lt;&lt; endl;
++
++      mu = mu * max(1.0/3, 1-pow(2*rho-1, 3));
++      mu = 2;
++
++    } else {
++      mu = mu * nu;
++      nu = 2 * nu;
++    }
++  } while (!converged);
++
++  return converged;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Newton.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Newton.h	2006-01-03 11:25:40 UTC (rev 173)
++++ trunk/OpenFDM/src/OpenFDM/Newton.h	2006-01-03 13:36:18 UTC (rev 174)
+@@ -22,6 +22,10 @@
+        unsigned maxjac = 2,
+        real_type lambdamin = 1e-3);
+ 
++Vector
++LineSearch(Function&amp; f, real_type t, const Vector&amp; xk, const Vector&amp; dk,
++           real_type maxWide, real_type thresh);
++
+ bool
+ GaussNewton(Function&amp; f,
+             real_type t,
+@@ -32,6 +36,14 @@
+             unsigned maxjac = 20,
+             real_type lambdamin = 1e-5);
+ 
++bool
++LevenbergMarquart(Function&amp; f,
++                  real_type t,
++                  Vector&amp; x,
++                  real_type atol, real_type rtol,
++                  unsigned *itCount = 0,
++                  unsigned maxit = 50);
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2006-01-03 11:25:40 UTC (rev 173)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2006-01-03 13:36:18 UTC (rev 174)
+@@ -12,6 +12,7 @@
+ #include &quot;ExplicitEuler.h&quot;
+ #include &quot;Function.h&quot;
+ #include &quot;Newton.h&quot;
++#include &quot;ModelVisitor.h&quot;
+ #include &quot;System.h&quot;
+ 
+ namespace OpenFDM {
+@@ -235,48 +236,183 @@
+   return true;
+ }
+ 
+-class TrimFunction
+-  : public Function {
++class TrimCollectorVisitor :
++    public ModelVisitor {
+ public:
+-  TrimFunction(System&amp; system, const Vector&amp; state)
+-    : mSystem(system), mState(state) {}
++  TrimCollectorVisitor(unsigned nStates) :
++    mStateStream(nStates)
++  { }
++  virtual ~TrimCollectorVisitor(void)
++  { }
++  virtual void apply(Model&amp; model)
++  { model.getStateDeriv(mStateStream); }
++  virtual void apply(ModelGroup&amp; modelGroup)
++  { traverse(modelGroup); }
++  virtual void apply(MobileRootJoint&amp; mobileRootJoint)
++  {
++    mGeodPos = mobileRootJoint.getGeodPosition();
++    mGeodOr = mobileRootJoint.getGeodOrientation();
++    mVel = mobileRootJoint.getRelVel();
++    mVelDot = mobileRootJoint.getRelVelDot();
++    mPosDot = mobileRootJoint.getPosDot();
++    mQDot = mobileRootJoint.getQDot();
++    mMobileRootJoint = &mobileRootJoint;
++  }
++  Geodetic mGeodPos;
++  Quaternion mGeodOr;
++  Vector6 mVel;
++  Vector6 mVelDot;
++  Vector3 mPosDot;
++  Vector4 mQDot;
++  StateStream mStateStream;
++  MobileRootJoint* mMobileRootJoint;
++};
++
++class TrimFunction :
++    public Function {
++public:
++  TrimFunction(System&amp; system) :
++    mSystem(system)
++  {
++    unsigned nStates = mSystem.getNumContinousStates();
++    TrimCollectorVisitor tcv(nStates);
++    mSystem.accept(tcv);
++    mGeodPos = tcv.mGeodPos;
++    mGeodOr = tcv.mGeodOr;
++    mVel = tcv.mVel;
++    mVelDot = tcv.mVelDot;
++    mPosDot = tcv.mPosDot;
++    mQDot = tcv.mQDot;
++  }
+   virtual unsigned inSize(void) const
+   { return mSystem.getNumContinousStates(); }
+-#if 1
+   virtual unsigned outSize(void) const
+-  { return 2*mSystem.getNumContinousStates(); }
++  { return mSystem.getNumContinousStates(); }
+   virtual void eval(real_type t, const Vector&amp; v, Vector&amp; out)
+   {
+     unsigned nStates = mSystem.getNumContinousStates();
+     Vector deriv(nStates);
+     mSystem.evalFunction(t, v, deriv);
+ 
+-    out.resize(2*nStates);
+-    out(Range(1, nStates)) = 1e-1*(mState - v);
+-    out(Range(nStates + 1, 2*nStates)) = deriv;
++    TrimCollectorVisitor tcv(nStates);
++    mSystem.accept(tcv);
++    Vector3 eo = mGeodOr.getEuler();
++    Vector3 en = tcv.mGeodOr.getEuler();
++
++    /// 3 dof for the position
++    real_type tmp = 1e6*(mGeodPos.longitude - tcv.mGeodPos.longitude);
++    tcv.mStateStream.writeSubState(tmp);
++    tmp = 1e6*(mGeodPos.latitude - tcv.mGeodPos.latitude);
++    tcv.mStateStream.writeSubState(tmp);
++    tmp = smoothDeadBand(mGeodPos.altitude - tcv.mGeodPos.altitude, 10.0);
++    tcv.mStateStream.writeSubState(tmp);
++
++    // The orientation
++    tmp = 1e2*smoothDeadBand(eo(1) - en(1), 20*deg2rad);
++    tcv.mStateStream.writeSubState(tmp);
++    tmp = 1e2*smoothDeadBand(eo(2) - en(2), 20*deg2rad);
++    tcv.mStateStream.writeSubState(tmp);
++    tmp = 1e2*(eo(3) - en(3));
++    tcv.mStateStream.writeSubState(tmp);
++
++    tcv.mStateStream.writeSubState(1e2*norm(tcv.mQDot) + norm(tcv.mPosDot - mPosDot));
++//     tcv.mStateStream.writeSubState(1e2*tcv.mQDot);
++//     tcv.mStateStream.writeSubState(tcv.mPosDot);
++    tcv.mStateStream.writeSubState(1e6*tcv.mVelDot);
++
++    out = tcv.mStateStream.getState();
+   }
+-#else
++private:
++  System&amp; mSystem;
++  Geodetic mGeodPos;
++  Quaternion mGeodOr;
++  Vector6 mVel;
++  Vector6 mVelDot;
++  Vector3 mPosDot;
++  Vector4 mQDot;
++};
++
++class AltitudeFinderTrimFunction :
++    public Function {
++public:
++  AltitudeFinderTrimFunction(System&amp; system, real_type range) :
++    mSystem(system),
++    mRange(range)
++  {
++    unsigned nStates = mSystem.getNumContinousStates();
++    TrimCollectorVisitor tcv(nStates);
++    mSystem.accept(tcv);
++    mGeodPos = tcv.mGeodPos;
++    mGeodOr = tcv.mGeodOr;
++    mVel = tcv.mVel;
++    mVelDot = tcv.mVelDot;
++    mMobileRootJoint = tcv.mMobileRootJoint;
++  }
++  virtual unsigned inSize(void) const
++  { return 1; }
+   virtual unsigned outSize(void) const
+-  { return mSystem.getNumContinousStates(); }
++  { return 7; }
+   virtual void eval(real_type t, const Vector&amp; v, Vector&amp; out)
+   {
+-    mSystem.evalFunction(t, v, out);
++    Geodetic geod = mGeodPos;
++    geod.altitude = mGeodPos.altitude - mRange*0.5 + v(1);
++    mMobileRootJoint-&gt;setGeodPosition(geod);
++    
++    unsigned nStates = mSystem.getNumContinousStates();
++    StateStream vv(nStates);
++    mSystem.getState(vv);
++    Vector deriv(nStates);
++    mSystem.evalFunction(t, vv.getState(), deriv);
++
++    TrimCollectorVisitor tcv(nStates + 6);
++    mSystem.accept(tcv);
++
++    /// The line search algorithm sees that the gravitation
++    /// is less in higher regions, thus we need to add a 'minimum altitude'
++    /// criterion
++    out.resize(7, 1);
++    out(Range(1, 6)) = tcv.mVelDot;
++//     out(7) = 1e-1*v(1);
++    out(7) = smoothDeadBand(v(1), mRange);
++    
++//     Log(Model,Error) &lt;&lt; trans(v) &lt;&lt; endl;
++//     Log(Model,Error) &lt;&lt; trans(out) &lt;&lt; endl;
++//     Log(Model,Error) &lt;&lt; mGeodPos &lt;&lt; geod &lt;&lt; endl &lt;&lt; endl;
+   }
+-#endif
+ private:
+   System&amp; mSystem;
+-  Vector mState;
++  real_type mRange;
++  Geodetic mGeodPos;
++  Quaternion mGeodOr;
++  Vector6 mVel;
++  Vector6 mVelDot;
++  MobileRootJoint* mMobileRootJoint;
+ };
+ 
+ bool
+ System::trim(void)
+ {
+   // need to prepare the System especially for the per step tasks
+-  TaskInfo taskInfo;
++  TaskInfo taskInfo = mDiscreteTaskList[0];
++//   taskInfo.setTime(getTime());
+   taskInfo.addSampleTime(SampleTime::Continous);
+   taskInfo.addSampleTime(SampleTime::PerTimestep);
+   output(taskInfo);
+ 
++  /// First try to find an altitude where the acceleration is minimal,
++  /// this is most likely a good starting point for the subsequent total trim
++  real_type range = 20;
++  AltitudeFinderTrimFunction altTrim(*this, range);
++
++  Vector altV(1);
++  altV(1) = 0;
++  Vector dk(1);
++  dk(1) = 1;
++  Vector res = LineSearch(altTrim, getTime(), altV, dk, range, 1e-3);
++  altTrim.eval(getTime(), res, dk /*dummy*/);
++  output(taskInfo);
++
++
+   // Get the current state
+   StateStream stateStream(getNumContinousStates());
+   getState(stateStream);
+@@ -284,12 +420,13 @@
+ 
+   Vector trimState = stateStream.getState();
+   // Buld up the trim function
+-  TrimFunction trimFunction(*this, trimState);
++  TrimFunction trimFunction(*this);
+ 
+   // Try to find a minimum
+-  real_type atol = 1e-3;
++  real_type atol = 1e-7;
+   real_type rtol = 1e-8;
+   bool ret = GaussNewton(trimFunction, getTime(), trimState, atol, rtol);
++//   bool ret = LevenbergMarquart(trimFunction, getTime(), trimState, atol, rtol);
+   if (ret) {
+     stateStream.setState(trimState);
+     setState(stateStream);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000157.html">[OpenFDM-svn] r173 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000159.html">[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#158">[ date ]</a>
+              <a href="thread.html#158">[ thread ]</a>
+              <a href="subject.html#158">[ subject ]</a>
+              <a href="author.html#158">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

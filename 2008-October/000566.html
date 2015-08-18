@@ -1,0 +1,254 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r596 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r596%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810110757.m9B7vWEr004493%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000565.html">
+   <LINK REL="Next"  HREF="000567.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r596 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r596%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810110757.m9B7vWEr004493%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r596 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Oct 11 09:57:32 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000565.html">[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000567.html">[OpenFDM-svn] r597 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#566">[ date ]</a>
+              <a href="thread.html#566">[ thread ]</a>
+              <a href="subject.html#566">[ subject ]</a>
+              <a href="author.html#566">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-11 09:57:31 +0200 (Sat, 11 Oct 2008)
+New Revision: 596
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+Log:
+Improove sample time handling in the model collection step.
+
+M    src/OpenFDM/System.h
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/SampleTime.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h	2008-10-10 20:07:42 UTC (rev 595)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SampleTime.h	2008-10-11 07:57:31 UTC (rev 596)
+@@ -44,13 +44,28 @@
+   /// Returns true if the task is a per timestep task
+   bool isPerTimestep(void) const
+   { return mSampleTime == -2; }
++  /// Returns true if the task is a per basic sample time task
++  bool isPerBasicSampleTime(void) const
++  { return mSampleTime == -3; }
+   /// Returns the actual sample time
+   const Fraction&amp; getSampleTime(void) const
+   { return mSampleTime; }
+ 
+-  /// Returns true if th sample time is valid
++  /// Returns true if the sample time is valid
+   bool isValid(void) const
+-  { return isContinous() || isDiscrete() || isInherited() || isPerTimestep(); }
++  {
++    if (isContinous())
++      return true;
++    if (isDiscrete())
++      return true;
++    if (isInherited())
++      return true;
++    if (isPerTimestep())
++      return true;
++    if (isPerBasicSampleTime())
++      return true;
++    return false;
++  }
+ 
+   bool operator==(const SampleTime&amp; st) const
+   { return mSampleTime == st.mSampleTime; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-10 20:07:42 UTC (rev 595)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-11 07:57:31 UTC (rev 596)
+@@ -212,6 +212,10 @@
+ 
+ class System::NodeInstanceCollector : public ConstNodeVisitor {
+ public:
++  NodeInstanceCollector(const SampleTime&amp; sampleTime) :
++    mSampleTime(sampleTime),
++    mBasicSampleTime(SampleTime::getContinous())
++  { }
+ 
+   struct PortData : public WeakReferenced {
+   public:
+@@ -444,9 +448,21 @@
+       SharedPtr&lt;const Node&gt; node = group.getChild(i);
+ 
+       SampleTime sampleTime = mSampleTime;
+-      if (node-&gt;getSampleTime().isInherited())
+-        mSampleTime = node-&gt;getSampleTime();
+ 
++      mSampleTime = node-&gt;getSampleTime();
++      if (mSampleTime.isInherited())
++        mSampleTime = sampleTime;
++      else if (mSampleTime.isDiscrete()) {
++        if (!mBasicSampleTime.isDiscrete())
++          mBasicSampleTime = mSampleTime;
++        else {
++          Fraction a = mBasicSampleTime.getSampleTime();
++          Fraction b = mSampleTime.getSampleTime();
++          mBasicSampleTime = SampleTime(greatestCommonDivisor(a, b));
++          OpenFDMAssert(mBasicSampleTime.isDiscrete());
++        }
++      }
++
+       node-&gt;accept(*this);
+ 
+       mSampleTime = sampleTime;
+@@ -546,6 +562,10 @@
+ 
+   // Current nodes sample time
+   SampleTime mSampleTime;
++  // past all the traversal, this contains the basic sample time of the
++  // whole system. It is built up during traversal and has almost no meaning
++  // until all models have be traversed.
++  SampleTime mBasicSampleTime;
+ 
+   // Here the miracle occurs.
+   // The collected simulation nodes are packed into something that can be used
+@@ -564,12 +584,18 @@
+     if (!allocModels())
+       return 0;
+ 
++    real_type basicSampleTime = 0.01; // FIXME in this case just continous
++    if (mBasicSampleTime.isDiscrete())
++      basicSampleTime = mBasicSampleTime.getSampleTime().getRealValue();
++
++    Log(Model, Info) &lt;&lt; &quot;Basic sample time is &quot; &lt;&lt; basicSampleTime &lt;&lt; std::endl;
++
+     // Now the system is ready for state initialization and execution
+     // Build up te abstract system and return that
+ 
+     // For the first cut, assume many things like basic step size and such ...
+     SharedPtr&lt;DiscreteSystem&gt; discreteSystem;
+-    discreteSystem = new DiscreteSystem(0.01, 1);
++    discreteSystem = new DiscreteSystem(basicSampleTime, 1);
+ 
+     ModelInstanceList::const_iterator i;
+     for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
+@@ -689,7 +715,8 @@
+ 
+ System::System(const std::string&amp; name, Node* node) :
+   Object(name),
+-  mNode(node)
++  mNode(node),
++  mSampleTime(SampleTime::getContinous())
+ {
+ }
+ 
+@@ -705,13 +732,24 @@
+ }
+ 
+ bool
++System::setSampleTime(const SampleTime&amp; sampleTime)
++{
++  if (!sampleTime.isContinous() &amp;&amp; !sampleTime.isDiscrete()) {
++    Log(Model, Warning) &lt;&lt; &quot;Ignoring attemp to set invalid sample time for &quot;
++                        &lt;&lt; &quot; System \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  mSampleTime = sampleTime;
++}
++
++bool
+ System::init()
+ {
+   if (!mNode)
+     return false;
+   
+   // Build up the lists required to run the model.
+-  NodeInstanceCollector nodeInstanceCollector;
++  NodeInstanceCollector nodeInstanceCollector(mSampleTime);
+   mNode-&gt;accept(nodeInstanceCollector);
+   
+   mAbstractSystem = nodeInstanceCollector.buildSystem();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-10 20:07:42 UTC (rev 595)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.h	2008-10-11 07:57:31 UTC (rev 596)
+@@ -10,6 +10,7 @@
+ #include &quot;AbstractNodeInstance.h&quot;
+ #include &quot;Node.h&quot;
+ #include &quot;Object.h&quot;
++#include &quot;SampleTime.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -29,6 +30,12 @@
+   SharedPtr&lt;const Node&gt; getNode() const { return mNode; }
+   void setNode(Node* node);
+ 
++  /// The toplevel sample time of the system. Defaults to continous.
++  /// Allowed values are dontinous and discrete sample times.
++  /// Attemps to set an invalid value are ignored.
++  const SampleTime&amp; getSampleTime(void) const { return mSampleTime; }
++  bool setSampleTime(const SampleTime&amp; sampleTime);
++
+   bool init();
+   void clear();
+ 
+@@ -56,6 +63,7 @@
+   class NodeInstanceCollector;
+ 
+   SharedPtr&lt;Node&gt; mNode;
++  SampleTime mSampleTime;
+ 
+   SharedPtr&lt;AbstractSystem&gt; mAbstractSystem;
+   ConstNodeInstanceList mNodeInstanceList;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000565.html">[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000567.html">[OpenFDM-svn] r597 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#566">[ date ]</a>
+              <a href="thread.html#566">[ thread ]</a>
+              <a href="subject.html#566">[ subject ]</a>
+              <a href="author.html#566">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

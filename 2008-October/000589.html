@@ -1,0 +1,254 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r619 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r619%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810152144.m9FLi9LR029915%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000588.html">
+   <LINK REL="Next"  HREF="000590.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r619 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r619%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810152144.m9FLi9LR029915%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r619 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct 15 23:44:09 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000588.html">[OpenFDM-svn] r618 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000590.html">[OpenFDM-svn] r620 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#589">[ date ]</a>
+              <a href="thread.html#589">[ thread ]</a>
+              <a href="subject.html#589">[ subject ]</a>
+              <a href="author.html#589">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-15 23:44:08 +0200 (Wed, 15 Oct 2008)
+New Revision: 619
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+First attempt to include the mechanic system stuff.
+
+M    OpenFDM/MechanicInstance.h
+M    OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-10-15 19:06:03 UTC (rev 618)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-10-15 21:44:08 UTC (rev 619)
+@@ -20,7 +20,7 @@
+ 
+   bool isConnectedTo(const MechanicInstance&amp; mechanicInstance) const;
+ 
+-protected:
++// protected:
+   virtual MechanicContext&amp; getNodeContext();
+   virtual const MechanicContext&amp; getNodeContext() const;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-15 19:06:03 UTC (rev 618)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-15 21:44:08 UTC (rev 619)
+@@ -116,6 +116,20 @@
+     }
+   }
+ 
++  void appendMechanicInstance(MechanicInstance* mechanicInstance)
++  {
++    MechanicContext* mechanicContext = &amp;mechanicInstance-&gt;getNodeContext();
++    // FIXME???
++//     SampleTime sampleTime = modelInstance-&gt;getSampleTime();
++
++    // The init task contains them all
++    mInitTask-&gt;mMechanicContextList.push_back(mechanicContext);
++    
++    // for now continous tasks take also all of them
++    mContinousTask-&gt;appendStateValuesFromLeafContext(*mechanicContext);
++    mContinousTask-&gt;mMechanicContextList.push_back(mechanicContext);
++  }
++
+ protected:
+   virtual void initImplementation(const real_type&amp; t)
+   {
+@@ -405,8 +419,10 @@
+     // mechanical system here.
+     MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+-//     _mechanicInstanceList.push_back(mechanicInstance);
+-    _rootJointInstanceList.push_back(mechanicInstance);
++    if (node.getNumPorts() == 1)
++      _rootJointInstanceList.push_back(mechanicInstance);
++    else
++      _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(const MechanicNode&amp; node)
+@@ -585,6 +601,9 @@
+     // steps below
+     if (!allocPortValues())
+       return 0;
++    // The MechanicNode instances are sorted to match the direct input property
++    if (!sortMechanicList())
++      return 0;
+     // The model instances are sorted to match the direct input property
+     if (!sortModelList())
+       return 0;
+@@ -611,11 +630,90 @@
+       discreteSystem-&gt;appendModelInstance(*i);
+     }
+ 
++    MechanicInstanceList::const_iterator j;
++    for (j = _mechanicInstanceList.begin();
++         j != _mechanicInstanceList.end(); ++j) {
++      discreteSystem-&gt;appendMechanicInstance(*j);
++    }
++
+     return discreteSystem.release();
+   }
+ 
+ protected:
+   // method to sort the leafs according to their dependency
++  bool sortMechanicList()
++  {
++    MechanicInstanceList sortedMechanicInstanceList;
++    // Start with all the roots in front of the list ...
++    // FIXME: ensure that there is no loop here?
++    sortedMechanicInstanceList.swap(_rootJointInstanceList);
++
++    // Not the best algorithm, but for a first cut ...
++    while (!_mechanicInstanceList.empty()) {
++      MechanicInstanceList nextLevelList;
++
++      MechanicInstanceList::iterator j;
++      for (j = sortedMechanicInstanceList.begin();
++           j != sortedMechanicInstanceList.end(); ++j) {
++        MechanicInstanceList::iterator i;
++        for (i = _mechanicInstanceList.begin();
++             i != _mechanicInstanceList.end();) {
++        
++          if ((*j)-&gt;isConnectedTo(*(*i))) {
++            nextLevelList.push_back(*i);
++            i = _mechanicInstanceList.erase(i);
++
++            // Check if this current mechanic node does not reference
++            // back into the already sorted models
++            MechanicInstanceList::iterator k;
++            for (k = sortedMechanicInstanceList.begin();
++                 k != sortedMechanicInstanceList.end(); ++k) {
++              if (*k == *j)
++                continue;
++              if ((*i)-&gt;isConnectedTo(*(*k))) {
++                Log(Schedule,Error)
++                  &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
++                  &lt;&lt; (*i)-&gt;getNodeNamePath()
++                  &lt;&lt; &quot;\&quot; is linked to MechanicNode \&quot;&quot;
++                  &lt;&lt; (*k)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++                return false;
++              }
++            }
++          } else {
++            ++i;
++          }
++        }
++      }
++
++      // Check if we have connects in this next level.
++      // Since every mechanic node in this list already has a parent,
++      // if we have a connection in between them, there must be a
++      // closed kinematic loop.
++      for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
++        MechanicInstanceList::iterator i = j;
++        for (++i; i != nextLevelList.end(); ++i) {
++          if ((*j)-&gt;isConnectedTo(*(*i))) {
++            Log(Schedule,Error)
++              &lt;&lt; &quot;Detected closed kinematic loop: MechanicNode \&quot;&quot;
++              &lt;&lt; (*j)-&gt;getNodeNamePath()
++              &lt;&lt; &quot;\&quot; is linked to MechanicNode \&quot;&quot;
++              &lt;&lt; (*i)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++            return false;
++          }
++        }
++      }
++      
++
++      for (j = nextLevelList.begin(); j != nextLevelList.end(); ++j) {
++        sortedMechanicInstanceList.push_back(*j);
++      }
++    }
++    
++    _mechanicInstanceList.swap(sortedMechanicInstanceList);
++    return true;
++  }
++
++  // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+     ModelInstanceList sortedModelInstanceList;
+@@ -711,6 +809,24 @@
+         return false;
+       }
+     }
++
++    MechanicInstanceList::const_iterator j;
++    for (j = _rootJointInstanceList.begin();
++         j != _rootJointInstanceList.end(); ++j) {
++      if (!(*j)-&gt;getNodeContext().alloc()) {
++        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for MechanicNode \&quot;&quot;
++                             &lt;&lt; (*j)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
++    for (j = _mechanicInstanceList.begin();
++         j != _mechanicInstanceList.end(); ++j) {
++      if (!(*j)-&gt;getNodeContext().alloc()) {
++        Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for MechanicNode \&quot;&quot;
++                             &lt;&lt; (*j)-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        return false;
++      }
++    }
+     return true;
+   }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000588.html">[OpenFDM-svn] r618 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000590.html">[OpenFDM-svn] r620 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#589">[ date ]</a>
+              <a href="thread.html#589">[ thread ]</a>
+              <a href="subject.html#589">[ subject ]</a>
+              <a href="author.html#589">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

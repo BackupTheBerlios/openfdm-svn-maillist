@@ -1,0 +1,776 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1031%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907270510.n6R5Akp9009004%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000993.html">
+   <LINK REL="Next"  HREF="000995.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1031%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907270510.n6R5Akp9009004%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1031 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jul 27 07:10:46 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000993.html">[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000995.html">[OpenFDM-svn] r1032 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#994">[ date ]</a>
+              <a href="thread.html#994">[ thread ]</a>
+              <a href="subject.html#994">[ subject ]</a>
+              <a href="author.html#994">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-27 07:10:43 +0200 (Mon, 27 Jul 2009)
+New Revision: 1031
+
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Remove old AeroForce implementation.
+
+M    Makefile.am
+D    AeroForce.h
+D    AeroForce.cpp
+
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.cpp	2009-07-26 21:42:48 UTC (rev 1030)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.cpp	2009-07-27 05:10:43 UTC (rev 1031)
+@@ -1,512 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;AeroForce.h&quot;
+-
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Force.h&quot;
+-#include &quot;Atmosphere.h&quot;
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(AeroForce, ExternalForce)
+-  DEF_OPENFDM_PROPERTY(Real, WingSpan, Serialized)
+-  DEF_OPENFDM_PROPERTY(Real, WingArea, Serialized)
+-  DEF_OPENFDM_PROPERTY(Real, Coord, Serialized)
+-  END_OPENFDM_OBJECT_DEF
+-
+-AeroForce::AeroForce(const std::string&amp; name)
+-  : ExternalForce(name)
+-{
+-  mWingSpan = 0.0;
+-  mWingArea = 0.0;
+-  mCoord = 0.0;
+-
+-  dirtyAll();
+-
+-  addOutputPort(&quot;wingSpan&quot;, this, &amp;AeroForce::getWingSpan);
+-  addOutputPort(&quot;wingArea&quot;, this, &amp;AeroForce::getWingArea);
+-  addOutputPort(&quot;coord&quot;, this, &amp;AeroForce::getCoord);
+-
+-  addOutputPort(&quot;trueSpeed&quot;, this, &amp;AeroForce::getTrueSpeed);
+-  addOutputPort(&quot;dynamicPressure&quot;, this, &amp;AeroForce::getDynamicPressure);
+-  addOutputPort(&quot;alpha&quot;, this, &amp;AeroForce::getAlpha);
+-  addOutputPort(&quot;alphaDot&quot;, this, &amp;AeroForce::getAlphaDot);
+-  addOutputPort(&quot;beta&quot;, this, &amp;AeroForce::getBeta);
+-  addOutputPort(&quot;betaDot&quot;, this, &amp;AeroForce::getBetaDot);
+-//   addOutputPort(&quot;mach&quot;, this, &amp;AeroForce::getMach);
+-  addOutputPort(&quot;machNumber&quot;, this, &amp;AeroForce::getMachNumber);
+-  addOutputPort(&quot;trueSpeedUW&quot;, this, &amp;AeroForce::getTrueSpeedUW);
+-
+-  addOutputPort(&quot;wingSpanOver2Speed&quot;, this, &amp;AeroForce::getWingSpanOver2Speed);
+-  addOutputPort(&quot;coordOver2Speed&quot;, this, &amp;AeroForce::getCoordOver2Speed);
+-  addOutputPort(&quot;hOverWingSpan&quot;, this, &amp;AeroForce::getHOverWingSpan);
+-
+-//   addOutputPort(&quot;equivalentAirSpeed&quot;, this, &amp;AeroForce::getEquivalentAirSpeed);
+-//   addOutputPort(&quot;calibratedAirSpeed&quot;, this, &amp;AeroForce::getCalibratedAirSpeed);
+-
+-  addOutputPort(&quot;u&quot;, this, &amp;AeroForce::getBodyU);
+-  addOutputPort(&quot;v&quot;, this, &amp;AeroForce::getBodyV);
+-  addOutputPort(&quot;w&quot;, this, &amp;AeroForce::getBodyW);
+-  addOutputPort(&quot;p&quot;, this, &amp;AeroForce::getBodyP);
+-  addOutputPort(&quot;q&quot;, this, &amp;AeroForce::getBodyQ);
+-  addOutputPort(&quot;r&quot;, this, &amp;AeroForce::getBodyR);
+-
+-  setNumInputPorts(6);
+-  setInputPortName(0, &quot;roll&quot;);
+-  setInputPortName(1, &quot;pitch&quot;);
+-  setInputPortName(2, &quot;yaw&quot;);
+-  setInputPortName(3, &quot;drag&quot;);
+-  setInputPortName(4, &quot;side&quot;);
+-  setInputPortName(5, &quot;lift&quot;);
+-}
+-
+-AeroForce::~AeroForce(void)
+-{
+-}
+-
+-bool
+-AeroForce::init(void)
+-{
+-  if (getInputPort(&quot;roll&quot;))
+-    mBodyAxisTorque[0] = getInputPort(&quot;roll&quot;)-&gt;toRealPortHandle();
+-  else
+-    mBodyAxisTorque[0] = 0;
+-  if (getInputPort(&quot;pitch&quot;))
+-    mBodyAxisTorque[1] = getInputPort(&quot;pitch&quot;)-&gt;toRealPortHandle();
+-  else
+-    mBodyAxisTorque[1] = 0;
+-  if (getInputPort(&quot;yaw&quot;))
+-    mBodyAxisTorque[2] = getInputPort(&quot;yaw&quot;)-&gt;toRealPortHandle();
+-  else
+-    mBodyAxisTorque[2] = 0;
+-
+-  if (getInputPort(&quot;drag&quot;))
+-    mStabilityAxisForce[0] = getInputPort(&quot;drag&quot;)-&gt;toRealPortHandle();
+-  else
+-    mStabilityAxisForce[0] = 0;
+-  if (getInputPort(&quot;side&quot;))
+-    mStabilityAxisForce[1] = getInputPort(&quot;side&quot;)-&gt;toRealPortHandle();
+-  else
+-    mStabilityAxisForce[1] = 0;
+-  if (getInputPort(&quot;lift&quot;))
+-    mStabilityAxisForce[2] = getInputPort(&quot;lift&quot;)-&gt;toRealPortHandle();
+-  else
+-    mStabilityAxisForce[2] = 0;
+-
+-  return ExternalForce::init();
+-}
+-
+-void
+-AeroForce::output(const TaskInfo&amp; taskInfo)
+-{
+-  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
+-                          SampleTime::PerTimestep)) {
+-    Log(Model, Debug) &lt;&lt; &quot;AeroForce::output(): \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+-    real_type t = taskInfo.getTime();
+-    mGroundVal = getGround()-&gt;getGroundPlane(t, getRefPosition());
+-  }
+-  dirtyAll();
+-
+-  // FIXME: they can be computed cheaper ...
+-  real_type ca = cos(getAlpha());
+-  real_type sa = sin(getAlpha());
+-  real_type cb = cos(getBeta());
+-  real_type sb = sin(getBeta());
+-  Matrix33 Ts2b(-ca*cb, -ca*sb,  sa,
+-                   -sb,     cb,   0,
+-                -sa*cb, -sa*sb, -ca);
+-
+-  // This is simple here. Just collect all summands ...
+-  Vector3 stabilityForce = Vector3::zeros();
+-  /// Lift points upward
+-  /// Drag points backward
+-  for (int i = 0; i &lt; 3; ++i)
+-    if (mStabilityAxisForce[i].isConnected())
+-      stabilityForce(i) = mStabilityAxisForce[i].getRealValue();
+-
+-  Vector3 bodyTorque = Vector3::zeros();
+-  for (int i = 0; i &lt; 3; ++i)
+-    if (mBodyAxisTorque[i].isConnected())
+-      bodyTorque(i) = mBodyAxisTorque[i].getRealValue();
+-
+-  Vector6 force(bodyTorque, Ts2b*stabilityForce);
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::output() &quot;
+-                       &lt;&lt; trans(force) &lt;&lt; endl;
+-  setForce(force);
+-}
+-
+-void
+-AeroForce::setWingSpan(const real_type&amp; winSpan)
+-{
+-  mWingSpan = winSpan;
+-}
+-
+-const real_type&amp;
+-AeroForce::getWingSpan(void) const
+-{
+-  return mWingSpan;
+-}
+-
+-void
+-AeroForce::setWingArea(const real_type&amp; winArea)
+-{
+-  mWingArea = winArea;
+-}
+-
+-const real_type&amp;
+-AeroForce::getWingArea(void) const
+-{
+-  return mWingArea;
+-}
+-
+-void
+-AeroForce::setCoord(const real_type&amp; coord)
+-{
+-  mCoord = coord;
+-}
+-
+-const real_type&amp;
+-AeroForce::getCoord(void) const
+-{
+-  return mCoord;
+-}
+-
+-const Vector6&amp;
+-AeroForce::getAirSpeed(void) const
+-{
+-  if (mDirtyAirSpeed) {
+-    // Get the position in the earth centered coordinate frame.
+-    Vector3 windVel = getWind()-&gt;getWindVel(getRefPosition());
+-    windVel = mMountFrame-&gt;rotFromRef(windVel);
+-    mAirSpeed = Vector6(Vector3::zeros(), windVel) + mMountFrame-&gt;getRefVel();
+-    mDirtyAirSpeed = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getAirSpeed()&quot;
+-                       &lt;&lt; trans(mAirSpeed) &lt;&lt; endl;
+-  return mAirSpeed;
+-}
+-
+-const Vector3&amp;
+-AeroForce::getMach(void) const
+-{
+-  if (mDirtyMach) {
+-    mMach = (1/getSoundSpeed())*getAirSpeed().getLinear();
+-    mDirtyMach = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getMach()&quot;
+-                       &lt;&lt; trans(mMach) &lt;&lt; endl;
+-  return mMach;
+-}
+-
+-const real_type&amp;
+-AeroForce::getTrueSpeed(void) const
+-{
+-  if (mDirtyTrueSpeed) {
+-    mTrueSpeed = norm(getAirSpeed().getLinear());
+-    mDirtyTrueSpeed = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getTrueSpeed()&quot;
+-                       &lt;&lt; mTrueSpeed &lt;&lt; endl;
+-  return mTrueSpeed;
+-}
+-
+-// const real_type&amp;
+-// AeroForce::getEquivalentAirSpeed(void) const
+-// {
+-//   if (mDirtyEquivalentAirSpeed)
+-//     computeCalEquAirspeed();
+-//   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getEquivalentAirSpeed()&quot;
+-//                        &lt;&lt; mEquivalentAirSpeed &lt;&lt; endl;
+-//   return mEquivalentAirSpeed;
+-// }
+-
+-// const real_type&amp;
+-// AeroForce::getCalibratedAirSpeed(void) const
+-// {
+-//   if (mDirtyCalibratedAirSpeed)
+-//     computeCalEquAirspeed();
+-//   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getCalibratedAirSpeed()&quot;
+-//                        &lt;&lt; mCalibratedAirSpeed &lt;&lt; endl;
+-//   return mCalibratedAirSpeed;
+-// }
+-
+-const real_type&amp;
+-AeroForce::getDynamicPressure(void) const
+-{
+-  if (mDirtyDynamicPressure) {
+-    real_type V = getTrueSpeed();
+-    real_type rho = getDensity();
+-    mDynamicPressure = 0.5*rho*V*V;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getDynamicPressure()&quot;
+-                       &lt;&lt; mDynamicPressure &lt;&lt; endl;
+-  return mDynamicPressure;
+-}
+-
+-const real_type&amp;
+-AeroForce::getAlpha(void) const
+-{
+-  if (mDirtyAlpha) {
+-    Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(V(0)) &lt;= Limits&lt;real_type&gt;::min())
+-      mAlpha = 0;
+-    else
+-      mAlpha = atan2(V(2), V(0));
+-    mDirtyAlpha = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getAlpha()&quot; &lt;&lt; mAlpha &lt;&lt; endl;
+-  return mAlpha;
+-}
+-
+-const real_type&amp;
+-AeroForce::getAlphaDot(void) const
+-{
+-  if (mDirtyAlphaDot) {
+-  // The timederivative of alpha.
+-  // Here it is getting difficult. The acceleration is not well defined
+-  // at this time. But we just take the past one ...
+-//   real_type alphadot = 0;
+-//   if (airSpeedUW2 != 0)
+-//     alphadot = (airSpeed(0)*stabAccel(2)-airSpeed(2)*stabAccel(0))/airSpeedUW2;
+-
+-    mAlphaDot = 0;
+-    mDirtyAlphaDot = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getAlphaDot() &quot; &lt;&lt; mAlphaDot &lt;&lt; endl;
+-  return mAlphaDot;
+-}
+-
+-const real_type&amp;
+-AeroForce::getBeta(void) const
+-{
+-  if (mDirtyBeta) {
+-    real_type Vuw = getTrueSpeedUW();
+-    Vector3 V = getAirSpeed().getLinear();
+-    if (fabs(Vuw) &lt;= Limits&lt;real_type&gt;::min())
+-      mBeta = 0;
+-    else
+-      mBeta = atan2(V(1), Vuw);
+-    
+-    mDirtyBeta = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getBeta() &quot; &lt;&lt; mBeta &lt;&lt; endl;
+-  return mBeta;
+-}
+-
+-const real_type&amp;
+-AeroForce::getBetaDot(void) const
+-{
+-  if (mDirtyBetaDot) {
+-    mBetaDot = 0;
+-//   // The timederivative of beta.
+-//   // The same implicit dependency like with alphadot.
+-//   real_type betadot = 0;
+-//   if (airSpeedUW != 0 &amp;&amp; trueSpeed != 0) {
+-//     real_type trueSpeedDot = dot(airSpeed, stabAccel)/trueSpeed;
+-//     betadot = (trueSpeed*stabAccel(2) - airSpeed(2)*trueSpeedDot);
+-//     betadot /= trueSpeed*airSpeedUW;
+-//   }
+-
+-    mDirtyBetaDot = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getBetaDot() &quot; &lt;&lt; mBetaDot &lt;&lt; endl;
+-  return mBetaDot;
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyU(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(3);
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyV(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(4);
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyW(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(5);
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyP(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(0);
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyQ(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(1);
+-}
+-
+-const real_type&amp;
+-AeroForce::getBodyR(void) const
+-{
+-  const Vector6&amp; speed = getAirSpeed();
+-  return speed(2);
+-}
+-
+-const real_type&amp;
+-AeroForce::getMachNumber(void) const
+-{
+-  if (mDirtyMachNumber) {
+-    mMachNumber = norm(getMach());
+-    mDirtyMachNumber = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getMachNumber()&quot;
+-                       &lt;&lt; mMachNumber &lt;&lt; endl;
+-  return mMachNumber;
+-}
+-
+-const real_type&amp;
+-AeroForce::getTrueSpeedUW(void) const
+-{
+-  if (mDirtyTrueSpeedUW) {
+-    const Vector6&amp; speed = getAirSpeed();
+-    mTrueSpeedUW = sqrt(speed(3)*speed(3)+speed(5)*speed(5));
+-    mDirtyTrueSpeedUW = false;
+-  }
+-  Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getTrueSpeedUW()&quot;
+-                       &lt;&lt; mTrueSpeedUW &lt;&lt; endl;
+-  return mTrueSpeedUW;
+-}
+-
+-const real_type&amp;
+-AeroForce::getWingSpanOver2Speed(void) const
+-{
+-  if (mDirtyWingSpanOver2Speed) {
+-    real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) &lt;= Limits&lt;real_type&gt;::min())
+-      mWingSpanOver2Speed = 0;
+-    else
+-      mWingSpanOver2Speed = getWingSpan()/Vt2;
+-    mDirtyWingSpanOver2Speed = false;
+-  }
+-  return mWingSpanOver2Speed;
+-}
+-
+-const real_type&amp;
+-AeroForce::getCoordOver2Speed(void) const
+-{
+-  if (mDirtyCoordOver2Speed) {
+-    real_type Vt2 = 2*getTrueSpeed();
+-    if (fabs(Vt2) &lt;= Limits&lt;real_type&gt;::min())
+-      mCoordOver2Speed = 0;
+-    else
+-      mCoordOver2Speed = getCoord()/Vt2;
+-    mDirtyCoordOver2Speed = false;
+-  }
+-  return mCoordOver2Speed;
+-}
+-
+-const real_type&amp;
+-AeroForce::getHOverWingSpan(void) const
+-{
+-  if (mDirtyHOverWingSpan) {
+-    mHOverWingSpan = getAboveGroundLevel()/getWingSpan();
+-    mDirtyHOverWingSpan = false;
+-  }
+-  return mHOverWingSpan;
+-}
+-
+-void
+-AeroForce::setEnvironment(Environment* environment)
+-{
+-  mEnvironment = environment;
+-}
+-
+-void
+-AeroForce::dirtyAll(void)
+-{
+-  // Dirty everything.
+-  mDirtyRefPosition = true;
+-  mDirtyUnitDown = true;
+-  mDirtyLocalGroundPlane = true;
+-  mDirtyAtmosphere = true;
+-  mDirtyAltitude = true;
+-  mDirtyAboveGroundLevel = true;
+-  mDirtyWingSpanOver2Speed = true;
+-  mDirtyCoordOver2Speed = true;
+-  mDirtyHOverWingSpan = true;
+-  mDirtySLAtmosphere = true;
+-  mDirtyAirSpeed = true;
+-  mDirtyMach = true;
+-  mDirtyMachNumber = true;
+-  mDirtyTrueSpeed = true;
+-  mDirtyTrueSpeedUW = true;
+-  mDirtyCalibratedAirSpeed = true;
+-  mDirtyEquivalentAirSpeed = true;
+-  mDirtyDynamicPressure = true;
+-  mDirtyAlpha = true;
+-  mDirtyAlphaDot = true;
+-  mDirtyBeta = true;
+-  mDirtyBetaDot = true;
+-}
+-
+-void
+-AeroForce::computeAtmosphere(void) const
+-{
+-  if (mDirtyAtmosphere) {
+-    // Get the Athmosphere information at this position and the given time.
+-    mAtmos = getAtmosphere()-&gt;getData(getAltitude());
+-    mSoundSpeed = getAtmosphere()-&gt;getSoundSpeed(mAtmos.temperature);
+-    mDirtyAtmosphere = false;
+-  }
+-}
+-
+-void
+-AeroForce::computeSLAtmosphere(void) const
+-{
+-  if (mDirtySLAtmosphere) {
+-    // Hmm, may be this does not need to be computed each time???
+-    mSLAtmos = getAtmosphere()-&gt;getData(0);
+-    mSLSoundSpeed = getAtmosphere()-&gt;getSoundSpeed(mSLAtmos.temperature);
+-    mDirtySLAtmosphere = false;
+-  }
+-}
+-
+-void
+-AeroForce::computeCalEquAirspeed(void) const
+-{
+-  real_type p = getPressure();
+-  real_type psl = getPressureSeaLevel();
+-  real_type rhosl = getDensitySeaLevel();
+-  Vector3 mach = getMach();
+-  real_type qbar = getDynamicPressure();
+-  // Calibrated Airspeed
+-  real_type tube_press;
+-  if (mach(0) &lt; 1) {   // Calculate total pressure assuming isentropic flow
+-    tube_press = p*pow((1 + 0.2*mach(0)*mach(0)), real_type(3.5));
+-  } else {
+-    // Use Rayleigh pitot tube formula for normal shock in front of pitot tube
+-    real_type B = 5.76*mach(0)*mach(0)/(5.6*mach(0)*mach(0) - 0.8);
+-    real_type D = 0.4167*(2.8*mach(0)*mach(0) - 0.4);
+-    tube_press = p*pow(B, real_type(3.5))*D;
+-  }
+-  real_type A = pow(((tube_press-p)/psl+1), real_type(0.28571));
+-  if (mach(0) &gt; 0) {
+-    mCalibratedAirSpeed = sqrt(7*psl/rhosl*(A-1));
+-    mEquivalentAirSpeed = sqrt(2*qbar/rhosl);
+-  } else {
+-    mCalibratedAirSpeed = 0;
+-    mEquivalentAirSpeed = 0;
+-  }
+-  
+-  mDirtyCalibratedAirSpeed = false;
+-  mDirtyEquivalentAirSpeed = false;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.h	2009-07-26 21:42:48 UTC (rev 1030)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AeroForce.h	2009-07-27 05:10:43 UTC (rev 1031)
+@@ -1,146 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_AeroForce_H
+-#define OpenFDM_AeroForce_H
+-
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Force.h&quot;
+-#include &quot;Atmosphere.h&quot;
+-#include &quot;Ground.h&quot;
+-#include &quot;Wind.h&quot;
+-#include &quot;Planet.h&quot;
+-#include &quot;Environment.h&quot;
+-
+-namespace OpenFDM {
+-
+-class AeroForce : public ExternalForce {
+-  OPENFDM_OBJECT(AeroForce, ExternalForce);
+-public:
+-  AeroForce(const std::string&amp;);
+-  virtual ~AeroForce(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+-  void setWingSpan(const real_type&amp; winSpan);
+-  const real_type&amp; getWingSpan(void) const;
+-
+-  void setWingArea(const real_type&amp; winArea);
+-  const real_type&amp; getWingArea(void) const;
+-
+-  void setCoord(const real_type&amp; coord);
+-  const real_type&amp; getCoord(void) const;
+-
+-  const Vector6&amp; getAirSpeed(void) const;
+-  const Vector3&amp; getMach(void) const;
+-  const real_type&amp; getTrueSpeed(void) const;
+-//   const real_type&amp; getEquivalentAirSpeed(void) const;
+-//   const real_type&amp; getCalibratedAirSpeed(void) const;
+-  const real_type&amp; getDynamicPressure(void) const;
+-  const real_type&amp; getAlpha(void) const;
+-  const real_type&amp; getAlphaDot(void) const;
+-  const real_type&amp; getBeta(void) const;
+-  const real_type&amp; getBetaDot(void) const;
+-
+-  const real_type&amp; getBodyU(void) const;
+-  const real_type&amp; getBodyV(void) const;
+-  const real_type&amp; getBodyW(void) const;
+-
+-  const real_type&amp; getBodyP(void) const;
+-  const real_type&amp; getBodyQ(void) const;
+-  const real_type&amp; getBodyR(void) const;
+-
+-  const real_type&amp; getMachNumber(void) const;
+-  const real_type&amp; getTrueSpeedUW(void) const;
+-
+-  /// FIXME, may be just provide 1/(2Vt)???
+-  /// Or provide the whole set of nondimentionalized values ...
+-  /// May be better since we can throw out the singularities ...
+-  const real_type&amp; getWingSpanOver2Speed(void) const;
+-  const real_type&amp; getCoordOver2Speed(void) const;
+-  const real_type&amp; getHOverWingSpan(void) const;
+-
+-protected:
+-  virtual void setEnvironment(Environment* environment);
+-
+-private:
+-  void dirtyAll(void);
+-  void computeAtmosphere(void) const;
+-  void computeSLAtmosphere(void) const;
+-  void computeCalEquAirspeed(void) const;
+-
+-  RealPortHandle mStabilityAxisForce[3];
+-  RealPortHandle mBodyAxisTorque[3];
+-
+-  const Atmosphere* getAtmosphere(void) const
+-  { return mEnvironment-&gt;getAtmosphere(); }
+-  const Planet* getPlanet(void) const
+-  { return mEnvironment-&gt;getPlanet(); }
+-  const Ground* getGround(void) const
+-  { return mEnvironment-&gt;getGround(); }
+-  const Wind* getWind(void) const
+-  { return mEnvironment-&gt;getWind(); }
+-
+-  SharedPtr&lt;const Environment&gt; mEnvironment;
+-
+-  real_type mWingSpan;
+-  real_type mWingArea;
+-  real_type mCoord;
+-
+-  mutable bool mDirtyRefPosition:1;
+-  mutable bool mDirtyUnitDown:1;
+-  mutable bool mDirtyLocalGroundPlane:1;
+-  mutable bool mDirtyAltitude:1;
+-  mutable bool mDirtyAboveGroundLevel:1;
+-  mutable bool mDirtyWingSpanOver2Speed:1;
+-  mutable bool mDirtyCoordOver2Speed:1;
+-  mutable bool mDirtyHOverWingSpan:1;
+-  mutable bool mDirtyAtmosphere:1;
+-  mutable bool mDirtySLAtmosphere:1;
+-  mutable bool mDirtyAirSpeed:1;
+-  mutable bool mDirtyMach:1;
+-  mutable bool mDirtyMachNumber:1;
+-  mutable bool mDirtyTrueSpeed:1;
+-  mutable bool mDirtyTrueSpeedUW:1;
+-  mutable bool mDirtyCalibratedAirSpeed:1;
+-  mutable bool mDirtyEquivalentAirSpeed:1;
+-  mutable bool mDirtyDynamicPressure:1;
+-  mutable bool mDirtyAlpha:1;
+-  mutable bool mDirtyAlphaDot:1;
+-  mutable bool mDirtyBeta:1;
+-  mutable bool mDirtyBetaDot:1;
+-  mutable Vector3 mRefPosition;
+-  mutable Vector3 mUnitDown;
+-  mutable Plane mLocalGroundPlane;
+-  mutable AtmosphereData mAtmos;
+-  mutable real_type mSoundSpeed;
+-  mutable AtmosphereData mSLAtmos;
+-  mutable real_type mSLSoundSpeed;
+-  mutable Vector6 mAirSpeed;
+-  mutable Vector3 mMach;
+-  mutable real_type mMachNumber;
+-  mutable real_type mAltitude;
+-  mutable real_type mAboveGroundLevel;
+-  mutable real_type mWingSpanOver2Speed;
+-  mutable real_type mCoordOver2Speed;
+-  mutable real_type mHOverWingSpan;
+-  mutable real_type mTrueSpeed;
+-  mutable real_type mTrueSpeedUW;
+-  mutable real_type mCalibratedAirSpeed;
+-  mutable real_type mEquivalentAirSpeed;
+-  mutable real_type mDynamicPressure;
+-  mutable real_type mAlpha;
+-  mutable real_type mAlphaDot;
+-  mutable real_type mBeta;
+-  mutable real_type mBetaDot;
+-
+-  GroundValues mGroundVal;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 21:42:48 UTC (rev 1030)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-27 05:10:43 UTC (rev 1031)
+@@ -264,7 +264,6 @@
+   WindAxisForce.cpp
+ 
+ OpenFDMMechanicHEADERS = \
+-  AeroForce.h \
+   CartesianJoint.h \
+   Contact.h \
+   ExternalInteract.h \
+@@ -313,12 +312,10 @@
+   WheelContact.cpp
+ 
+ 
+-#   AeroForce.cpp \
+ #   Tank.cpp
+ 
+-#   Launchbar.cpp \
+-#   Tailhook.cpp \
+-#
++#   Launchbar.cpp
++#   Tailhook.cpp
+ 
+ nobase_OpenFDMinclude_HEADERS = \
+   $(OpenFDMCoreHEADERS) \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000993.html">[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000995.html">[OpenFDM-svn] r1032 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#994">[ date ]</a>
+              <a href="thread.html#994">[ thread ]</a>
+              <a href="subject.html#994">[ subject ]</a>
+              <a href="author.html#994">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

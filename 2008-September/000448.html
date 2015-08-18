@@ -1,0 +1,522 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r476 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r476%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809141728.m8EHSSZT022649%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000447.html">
+   <LINK REL="Next"  HREF="000449.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r476 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r476%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809141728.m8EHSSZT022649%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r476 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 14 19:28:28 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000447.html">[OpenFDM-svn] r475 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000449.html">[OpenFDM-svn] r477 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#448">[ date ]</a>
+              <a href="thread.html#448">[ thread ]</a>
+              <a href="subject.html#448">[ subject ]</a>
+              <a href="author.html#448">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-14 19:28:28 +0200 (Sun, 14 Sep 2008)
+New Revision: 476
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Step in refactoring port connections.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-13 15:25:18 UTC (rev 475)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-14 17:28:28 UTC (rev 476)
+@@ -129,6 +129,7 @@
+ protected:
+   NodeInstance() {}
+ 
++public: // FIXME????
+   /// The node context that belongs to this instance.
+   virtual NodeContext&amp; getNodeContext() = 0;
+   virtual const NodeContext&amp; getNodeContext() const = 0;
+@@ -230,6 +231,9 @@
+ 
+ class LeafInstance : public NodeInstance {
+ public:
++
++  class PortDataList;
++
+   struct LeafPortData;
+   struct AcceptorPortData;
+   struct ProviderPortData;
+@@ -237,6 +241,7 @@
+ 
+   class PortData : public WeakReferenced {
+   public:
++    PortData(PortDataList* portDataList) : mParentPortDataList(portDataList) { }
+     virtual ~PortData() {}
+     virtual LeafPortData* toLeafPortData()
+     { return 0; }
+@@ -247,12 +252,28 @@
+     virtual ProviderPortData* toProviderPortData()
+     { return 0; }
+     virtual bool connect(PortData*) = 0;
++
++    SharedPtr&lt;PortDataList&gt; getParentPortDataList() const
++    { return mParentPortDataList.lock(); }
++
++    std::string getNodeName() const
++    {
++      SharedPtr&lt;PortDataList&gt; portDataList = getParentPortDataList();
++      if (!portDataList)
++        return std::string();
++      SharedPtr&lt;NodeInstance&gt; nodeInstance = portDataList-&gt;mNodeInstance.lock();
++      if (!nodeInstance)
++        return std::string();
++      return nodeInstance-&gt;getNode().getName();
++    }
++
++    WeakPtr&lt;PortDataList&gt; mParentPortDataList;
+   };
+ 
+   class LeafPortData : public PortData {
+   public:
+-    LeafPortData(LeafInstance* leafInstance, const PortInfo* portInfo) :
+-      mLeafInstance(leafInstance),
++    LeafPortData(PortDataList* portDataList, const PortInfo* portInfo) :
++      PortData(portDataList),
+       mPortInfo(portInfo)
+     { }
+     virtual ~LeafPortData() {}
+@@ -260,10 +281,6 @@
+     virtual LeafPortData* toLeafPortData()
+     { return this; }
+     
+-    /// Return the LeafInstance this LeafPortData belongs to.
+-    SharedPtr&lt;LeafInstance&gt; getLeafInstance() const
+-    { return mLeafInstance.lock(); }
+-
+     const SharedPtr&lt;const PortInfo&gt;&amp; getPortInfo() const
+     { return mPortInfo; }
+ 
+@@ -274,14 +291,13 @@
+     { }
+ 
+   private:
+-    WeakPtr&lt;LeafInstance&gt; mLeafInstance;
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+   };
+ 
+   struct ProviderPortData : public LeafPortData {
+-    ProviderPortData(LeafInstance* leafInstance,
++    ProviderPortData(PortDataList* portDataList,
+                      const ProviderPortInfo* providerPort) :
+-      LeafPortData(leafInstance, providerPort),
++      LeafPortData(portDataList, providerPort),
+       _providerPort(providerPort)
+     { }
+     virtual ProviderPortData* toProviderPortData()
+@@ -319,9 +335,7 @@
+         acceptorPortData = _acceptorPortDataList[i].lock();
+         if (!acceptorPortData)
+           continue;
+-        SharedPtr&lt;LeafInstance&gt; leafInstance;
+-        leafInstance = acceptorPortData-&gt;getLeafInstance();
+-        std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; leafInstance-&gt;getLeafNode()-&gt;getName()
++        std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; acceptorPortData-&gt;getNodeName()
+                   &lt;&lt; &quot;\&quot; Port \&quot;&quot; &lt;&lt; acceptorPortData-&gt;getPortInfo()-&gt;getName()
+                   &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+       }
+@@ -331,9 +345,9 @@
+     std::vector&lt;WeakPtr&lt;AcceptorPortData&gt; &gt; _acceptorPortDataList;
+   };
+   struct AcceptorPortData : public LeafPortData {
+-    AcceptorPortData(LeafInstance* leafInstance,
++    AcceptorPortData(PortDataList* portDataList,
+                      const AcceptorPortInfo* acceptorPort) :
+-      LeafPortData(leafInstance, acceptorPort),
++      LeafPortData(portDataList, acceptorPort),
+       _acceptorPort(acceptorPort)
+     { }
+     virtual AcceptorPortData* toAcceptorPortData()
+@@ -390,9 +404,7 @@
+       if (!providerPortData)
+         return;
+  
+-      SharedPtr&lt;LeafInstance&gt; leafInstance;
+-      leafInstance = providerPortData-&gt;getLeafInstance();
+-      std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; leafInstance-&gt;getLeafNode()-&gt;getName()
++      std::cout &lt;&lt; &quot;    Node \&quot;&quot; &lt;&lt; providerPortData-&gt;getNodeName()
+                 &lt;&lt; &quot;\&quot; Port \&quot;&quot; &lt;&lt; providerPortData-&gt;getPortInfo()-&gt;getName()
+                 &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     }
+@@ -409,7 +421,8 @@
+ 
+   class ProxyPortData : public PortData {
+   public:
+-    ProxyPortData(PortData* portData)
++    ProxyPortData(PortData* portData) :
++      PortData(0 /*FIXME*/)
+     {
+       if (!portData)
+         return;
+@@ -439,102 +452,132 @@
+   };
+ 
+   LeafInstance(const LeafNode* leaf)
+-  { allocPorts(leaf); }
++  { }
+   virtual ~LeafInstance()
+   { }
+ 
+-  LeafPortData* getPortData(const PortId&amp; portId)
++  void print()
+   {
+-    OpenFDMAssert(getLeafNode());
+-    unsigned index = getLeafNode()-&gt;getPortIndex(portId);
+-    // FIXME, is an error condition, not an assert???
+-    OpenFDMAssert(index &lt; mPortData.size());
+-    return mPortData[index];
++    std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; getNode().getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    for (unsigned i = 0; i &lt; getPortData().size(); ++i) {
++      getPortData()[i]-&gt;print();
++    }
+   }
+ 
+-  virtual const LeafNode* getLeafNode() const = 0;
+-
+-  void setPortValue(unsigned i, PortValue* portValue)
+-  { getNodeContext().getPortValueList().setPortValue(i, portValue); }
+-
+   // Return true if this leaf directly depends on one of leafInstance outputs
+   bool dependsOn(LeafInstance* leafInstance)
+   {
+-    for (unsigned i = 0; i &lt; mPortData.size(); ++i) {
+-      for (unsigned j = 0; j &lt; leafInstance-&gt;mPortData.size(); ++j) {
+-        if (!mPortData[i]-&gt;isConnected(leafInstance-&gt;mPortData[j]))
++    return getPortDataList()-&gt;dependsOn(leafInstance-&gt;getPortDataList());
++  }
++
++  class PortDataList : public WeakReferenced {
++  public:
++    PortDataList(NodeInstance* nodeInstance) :
++      mNodeInstance(nodeInstance)
++    { }
++    
++    AcceptorPortData* newAcceptorPortData(const AcceptorPortInfo* acceptorPort)
++    {
++      AcceptorPortData* acceptorPortData;
++      acceptorPortData = new AcceptorPortData(this, acceptorPort);
++      mPortDataVector.push_back(acceptorPortData);
++      return acceptorPortData;
++    }
++    ProviderPortData* newProviderPortData(const ProviderPortInfo* providerPort)
++    {
++      ProviderPortData* providerPortData;
++      providerPortData = new ProviderPortData(this, providerPort);
++      mPortDataVector.push_back(providerPortData);
++      return providerPortData;
++    }
++    
++    const Node&amp; getNode() const
++    { return mNodeInstance.lock()-&gt;getNode(); }
++    
++    bool allocAndConnectProviderPortValues()
++    {
++      for (unsigned i = 0; i &lt; getNode().getNumPorts(); ++i) {
++        const ProviderPortInfo* providerPortInfo;
++        providerPortInfo = getNode().getPort(i)-&gt;toProviderPortInfo();
++        if (!providerPortInfo)
+           continue;
+-        PortId inPortId = getLeafNode()-&gt;getPortId(i);
+-
+-        // FIXME, may be other concept:
+-        // make Model return a list of 'direct feedthrough ports'?
+-        for (unsigned k = 0; k &lt; mPortData.size(); ++k) {
+-          PortId outPortId = getLeafNode()-&gt;getPortId(k);
+-          if (getLeafNode()-&gt;dependsOn(inPortId, outPortId))
+-            return true;
++        
++        PortValue* portValue = providerPortInfo-&gt;newValue();
++        setPortValue(i, portValue);
++        
++        // Also set the port value to all connected ports
++        ProviderPortData* providerPortData = mPortDataVector[i]-&gt;toProviderPortData();
++        OpenFDMAssert(providerPortData);
++        
++        for (unsigned j = 0; j &lt; providerPortData-&gt;_acceptorPortDataList.size(); ++j) {
++          SharedPtr&lt;AcceptorPortData&gt; acceptorPortData;
++          acceptorPortData = providerPortData-&gt;_acceptorPortDataList[j].lock();
++          // Ok, happens for proxy ports, these still show up here
++          if (!acceptorPortData)
++            continue;
++          
++          SharedPtr&lt;PortDataList&gt; portDataList;
++          portDataList = acceptorPortData-&gt;getParentPortDataList();
++          OpenFDMAssert(portDataList);
++          
++          OpenFDMAssert(acceptorPortData-&gt;getPortInfo());
++          unsigned index = acceptorPortData-&gt;getPortInfo()-&gt;getIndex();
++          portDataList-&gt;setPortValue(index, portValue);
+         }
+       }
+     }
+-    return false;
+-  }
+-
+-  void print()
+-  {
+-    std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; getLeafNode()-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+-    for (unsigned i = 0; i &lt; mPortData.size(); ++i) {
+-      mPortData[i]-&gt;print();
+-    }
+-  }
+-
+-  bool allocAndConnectProviderPortValues()
+-  {
+-    for (unsigned i = 0; i &lt; getLeafNode()-&gt;getNumPorts(); ++i) {
+-      const ProviderPortInfo* providerPortInfo;
+-      providerPortInfo = getLeafNode()-&gt;getPort(i)-&gt;toProviderPortInfo();
+-      if (!providerPortInfo)
+-        continue;
+-
+-      PortValue* portValue = providerPortInfo-&gt;newValue();
+-      setPortValue(i, portValue);
++    void setPortValue(unsigned i, PortValue* portValue)
++    { mNodeInstance.lock()-&gt;getNodeContext().getPortValueList().setPortValue(i, portValue); }
+       
+-      // Also set the port value to all connected ports
+-      ProviderPortData* providerPortData = mPortData[i]-&gt;toProviderPortData();
+-      OpenFDMAssert(providerPortData);
+       
+-      for (unsigned j = 0; j &lt; providerPortData-&gt;_acceptorPortDataList.size(); ++j) {
+-        SharedPtr&lt;AcceptorPortData&gt; acceptorPortData;
+-        acceptorPortData = providerPortData-&gt;_acceptorPortDataList[j].lock();
+-        // Ok, happens for proxy ports, these still show up here
+-        if (!acceptorPortData)
+-          continue;
+-        SharedPtr&lt;LeafInstance&gt; leafInstance;
+-        leafInstance = acceptorPortData-&gt;getLeafInstance();
+-        OpenFDMAssert(leafInstance);
+-        
+-        OpenFDMAssert(acceptorPortData-&gt;getPortInfo());
+-        unsigned index = acceptorPortData-&gt;getPortInfo()-&gt;getIndex();
+-        leafInstance-&gt;setPortValue(index, portValue);
++    // Return true if this leaf directly depends on one of leafInstance outputs
++    bool dependsOn(PortDataList* portDataList)
++    {
++      for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
++        for (unsigned j = 0; j &lt; portDataList-&gt;mPortDataVector.size(); ++j) {
++          if (!mPortDataVector[i]-&gt;isConnected(portDataList-&gt;mPortDataVector[j]))
++            continue;
++          PortId inPortId = getNode().getPortId(i);
++          
++          // FIXME, may be other concept:
++          // make Model return a list of 'direct feedthrough ports'?
++          for (unsigned k = 0; k &lt; mPortDataVector.size(); ++k) {
++            PortId outPortId = getNode().getPortId(k);
++            // FIXME ugly
++            const Node* node = &amp;(mNodeInstance.lock()-&gt;getNode());
++            const LeafNode* leafNode = dynamic_cast&lt;const LeafNode*&gt;(node);
++            if (leafNode &amp;&amp; leafNode-&gt;dependsOn(inPortId, outPortId))
++              return true;
++          }
++        }
+       }
++      return false;
+     }
+-  }
+ 
+-private:
+-  void allocPorts(const Node* node)
++    /// The vector of per port connect information
++    typedef std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt; PortDataVector;
++    PortDataVector mPortDataVector;
++    
++    /// The NodeInstance having some way to reference the
++    /// PortValues to the current connect information.
++    // FIXME: can only be weak so far ...
++    //   SharedPtr&lt;NodeInstance&gt; mNodeInstance;
++    WeakPtr&lt;NodeInstance&gt; mNodeInstance;
++  };
++
++  SharedPtr&lt;PortDataList&gt; getPortDataList()
+   {
+-    for (unsigned i = 0; i &lt; node-&gt;getNumPorts(); ++i) {
+-      SharedPtr&lt;const PortInfo&gt; port = node-&gt;getPort(i);
+-      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
+-      if (providerPort)
+-        mPortData.push_back(new ProviderPortData(this, providerPort));
+-      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
+-      if (acceptorPort)
+-        mPortData.push_back(new AcceptorPortData(this, acceptorPort));
+-    }
++    if (!mPortDataList)
++      mPortDataList = new PortDataList(this);
++    return mPortDataList;
+   }
++  
++  std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt;&amp; getPortData()
++  { return getPortDataList()-&gt;mPortDataVector; }
+ 
+   // List of port dependent info used to build up the connect info and
+   // the sorted list of leafs.
+-  std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt; mPortData;
++  SharedPtr&lt;PortDataList&gt; mPortDataList;
+ };
+ 
+ class ModelInstance : public LeafInstance {
+@@ -549,9 +592,6 @@
+   virtual const ModelContext&amp; getNodeContext() const
+   { return *mModelContext; }
+ 
+-  virtual const Model* getLeafNode() const
+-  { return mModelContext-&gt;mModel; }
+-
+   SharedPtr&lt;ModelContext&gt; mModelContext;
+ };
+ 
+@@ -567,9 +607,6 @@
+   virtual const MechanicContext&amp; getNodeContext() const
+   { return *mMechanicContext; }
+ 
+-  virtual const MechanicNode* getLeafNode() const
+-  { return mMechanicContext-&gt;mMechanicNode; }
+-
+   SharedPtr&lt;MechanicContext&gt; mMechanicContext;
+ };
+ 
+@@ -607,9 +644,25 @@
+   {
+     // FIXME: move to LeafInstance??
+     for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+-      PortId portId = leaf.getPortId(i);
+-      LeafInstance::LeafPortData* portData = leafInstance-&gt;getPortData(portId);
+-      _leafPortDataMap[getCurrentNodeId()][portId] = portData;
++      SharedPtr&lt;const PortInfo&gt; port = leaf.getPort(i);
++      const ProviderPortInfo* providerPort = port-&gt;toProviderPortInfo();
++      if (providerPort) {
++        LeafInstance::ProviderPortData* providerPortData;
++        providerPortData =
++          leafInstance-&gt;getPortDataList()-&gt;newProviderPortData(providerPort);
++
++        PortId portId = leaf.getPortId(i);
++        _leafPortDataMap[getCurrentNodeId()][portId] = providerPortData;
++      }
++      const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
++      if (acceptorPort) {
++        LeafInstance::AcceptorPortData* acceptorPortData;
++        acceptorPortData =
++          leafInstance-&gt;getPortDataList()-&gt;newAcceptorPortData(acceptorPort);
++
++        PortId portId = leaf.getPortId(i);
++        _leafPortDataMap[getCurrentNodeId()][portId] = acceptorPortData;
++      }
+     }
+   }
+ 
+@@ -618,7 +671,7 @@
+     // Need to stor the root nodes to build up the spanning tree for the
+     // mechanical system here.
+     MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
+-    _leafInstanceList.push_back(mechanicInstance);
++    _nodeInstanceList.push_back(mechanicInstance);
+ //     _mechanicInstanceList.push_back(mechanicInstance);
+     _rootJointInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+@@ -626,14 +679,14 @@
+   virtual void apply(const MechanicNode&amp; node)
+   {
+     MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
+-    _leafInstanceList.push_back(mechanicInstance);
++    _nodeInstanceList.push_back(mechanicInstance);
+     _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(const Model&amp; node)
+   {
+     ModelInstance* modelInstance = new ModelInstance(&amp;node);
+-    _leafInstanceList.push_back(modelInstance);
++    _nodeInstanceList.push_back(modelInstance);
+     _modelInstanceList.push_back(modelInstance);
+     allocPortData(modelInstance, node);
+   }
+@@ -717,10 +770,12 @@
+   }
+ 
+   ////////////////////////////////////////////////////////////////////////////
+-  // The final list of leafs we have in the system
+-  typedef std::list&lt;SharedPtr&lt;LeafInstance&gt; &gt; LeafInstanceList;
+-  LeafInstanceList _leafInstanceList;
++  // The final list of Nodes we have in the simulation system
++  typedef std::list&lt;SharedPtr&lt;NodeInstance&gt; &gt; NodeInstanceList;
++  NodeInstanceList _nodeInstanceList;
+ 
++
++  // The Models list, worthwhile for sorting
+   typedef std::list&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelInstanceList;
+   ModelInstanceList _modelInstanceList;
+   typedef std::list&lt;SharedPtr&lt;MechanicInstance&gt; &gt; MechanicInstanceList;
+@@ -735,7 +790,10 @@
+   typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; LeafPortDataMap;
+   LeafPortDataMap _leafPortDataMap;
+ 
++  /// Used to alloc ports
++//   typedef std::list&lt;SharedPtr&lt;LeafInstance::ProviderPortData&gt; &gt; ProviderPortDataList;
+ 
++
+   // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+@@ -774,7 +832,7 @@
+ 
+     ModelContextList::const_iterator j;
+     for (j = modelContextList.begin(); j != modelContextList.end(); ++j) {
+-      if (!(*j)-&gt;allocAndConnectProviderPortValues()) {
++      if (!(*j)-&gt;getPortDataList()-&gt;allocAndConnectProviderPortValues()) {
+         Log(Schedule, Error) &lt;&lt; &quot;Could not alloc for model ... FIXME&quot; &lt;&lt; endl;
+         return false;
+       }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000447.html">[OpenFDM-svn] r475 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000449.html">[OpenFDM-svn] r477 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#448">[ date ]</a>
+              <a href="thread.html#448">[ thread ]</a>
+              <a href="subject.html#448">[ subject ]</a>
+              <a href="author.html#448">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

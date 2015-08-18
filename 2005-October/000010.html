@@ -1,0 +1,178 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r21 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r21%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200510111956.j9BJu1nq012847%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000009.html">
+   <LINK REL="Next"  HREF="000011.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r21 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r21%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200510111956.j9BJu1nq012847%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r21 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Oct 11 21:56:01 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000009.html">[OpenFDM-svn] r20 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000011.html">[OpenFDM-svn] r22 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#10">[ date ]</a>
+              <a href="thread.html#10">[ thread ]</a>
+              <a href="subject.html#10">[ subject ]</a>
+              <a href="author.html#10">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-11 21:56:00 +0200 (Tue, 11 Oct 2005)
+New Revision: 21
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+Log:
+Improove kinemat elements somewhat.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-10-11 19:32:25 UTC (rev 20)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-10-11 19:56:00 UTC (rev 21)
+@@ -482,6 +482,18 @@
+   if (!convertMetrics(metricsElem-&gt;getData()))
+     return error(&quot;Cannot convert METRICS data&quot;);
+ 
++  // Convert all the flight control system elements.
++  const XMLElement* fcsElem = topElem-&gt;getElement(&quot;FLIGHT_CONTROL&quot;);
++  if (fcsElem) {
++    if (!convertFCSList(fcsElem))
++      return error(&quot;Cannot convert FLIGHT_CONTROL data&quot;);
++  }
++  const XMLElement* autopilotElem = topElem-&gt;getElement(&quot;AUTOPILOT&quot;);
++  if (autopilotElem) {
++    if (!convertFCSList(autopilotElem))
++      return error(&quot;Cannot convert AUTOPILOT data&quot;);
++  }
++
+   // Parse the undercarriage section
+   const XMLElement* undercarriageElem = topElem-&gt;getElement(&quot;UNDERCARRIAGE&quot;);
+   if (undercarriageElem) {
+@@ -496,19 +508,6 @@
+       return error(&quot;Cannot convert PROPULSION data&quot;);
+   }
+   
+-  // Convert all the flight control system elements.
+-  const XMLElement* fcsElem = topElem-&gt;getElement(&quot;FLIGHT_CONTROL&quot;);
+-  if (fcsElem) {
+-    if (!convertFCSList(fcsElem))
+-      return error(&quot;Cannot convert FLIGHT_CONTROL data&quot;);
+-  }
+-  const XMLElement* autopilotElem = topElem-&gt;getElement(&quot;AUTOPILOT&quot;);
+-  if (autopilotElem) {
+-    if (!convertFCSList(autopilotElem))
+-      return error(&quot;Cannot convert AUTOPILOT data&quot;);
+-  }
+-
+-
+   // Convert the aerodynamic force.
+   const XMLElement* aeroElem = topElem-&gt;getElement(&quot;AERODYNAMICS&quot;);
+   if (aeroElem) {
+@@ -875,7 +874,7 @@
+     gain-&gt;setGain(1);
+     model = gain;
+ 
+-    inputSaturation = new Saturation(name + &quot;Input Saturation&quot;);
++    inputSaturation = new Saturation(name + &quot; Input Saturation&quot;);
+     addFCSModel(inputSaturation);
+     inputSaturation-&gt;setInputPort(0, gain-&gt;getOutputPort(0));
+ 
+@@ -898,7 +897,8 @@
+     addFCSModel(integrator);
+     integrator-&gt;setInputPort(0, kinematRateLimit-&gt;getOutputPort(0));
+     Matrix tmp(1, 1);
+-    tmp.clear();
++    tmp(1, 1) = 1;
++//     tmp.clear();
+     integrator-&gt;setInitialValue(tmp);
+     out = integrator-&gt;getOutputPort(0);
+ 
+@@ -1385,11 +1385,6 @@
+                  &quot;Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot;);
+   }
+ 
+-  // For KINEMATS ...
+-  if (type == &quot;KINEMAT&quot; &amp;&amp; noScale) {
+-    gain-&gt;setGain(1);
+-  }
+-
+   // Now put the expressions for the output chain together.
+   // Doing that now will put them together in a well defined order.
+   if (outbias) {
+@@ -1410,14 +1405,29 @@
+   // FIXME put in here a normalized out property, or at least a gain to
+   // normalize
+ 
++  // For KINEMATS ...
++  if (type == &quot;KINEMAT&quot;) {
++    if (noScale) {
++      gain-&gt;setGain(1);
++      normOut = out;
++    } else {
++      Gain* normGain = new Gain(name + &quot; Normalize Gain&quot;);
++      normGain-&gt;setGain(1/gain-&gt;getGain());
++      addFCSModel(normGain);
++      normGain-&gt;setInputPort(0, out);
++      normOut = normGain-&gt;getOutputPort(0);
++    }
++  }
++
++  if (!normOut.isValid())
++    normOut = inputs.front();
++
+   // Register all output property names.
+   std::list&lt;std::string&gt;::iterator it;
+   for (it = outlist.begin(); it != outlist.end(); ++it) {
+     std::string propName = *it;
+     registerJSBExpression(propName, out);
+ 
+-    if (!normOut.isValid())
+-      normOut = inputs.front();
+     // Well, just an other kind of black magic ...
+     if (propName == &quot;fcs/elevator-pos-rad&quot;) {
+       registerJSBExpression(&quot;fcs/elevator-pos-norm&quot;, normOut);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000009.html">[OpenFDM-svn] r20 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000011.html">[OpenFDM-svn] r22 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#10">[ date ]</a>
+              <a href="thread.html#10">[ thread ]</a>
+              <a href="subject.html#10">[ subject ]</a>
+              <a href="author.html#10">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

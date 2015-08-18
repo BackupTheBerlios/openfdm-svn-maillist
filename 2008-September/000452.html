@@ -1,0 +1,187 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r480 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r480%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809151954.m8FJstic025086%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000451.html">
+   <LINK REL="Next"  HREF="000453.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r480 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r480%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809151954.m8FJstic025086%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r480 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 15 21:54:55 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000451.html">[OpenFDM-svn] r479 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000453.html">[OpenFDM-svn] r481 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#452">[ date ]</a>
+              <a href="thread.html#452">[ thread ]</a>
+              <a href="subject.html#452">[ subject ]</a>
+              <a href="author.html#452">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-15 21:54:55 +0200 (Mon, 15 Sep 2008)
+New Revision: 480
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Move insitialization to a System class.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-15 19:44:16 UTC (rev 479)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-15 19:54:55 UTC (rev 480)
+@@ -853,6 +853,7 @@
+         return false;
+       }
+     }
++    return true;
+   }
+ 
+   bool
+@@ -912,6 +913,80 @@
+   NodeIdStack _nodeIdStack;
+ };
+ 
++class System : public Object {
++public:
++  System(const std::string&amp; name, Node* node = 0) :
++    Object(name),
++    mNode(node)
++  { }
++
++  SharedPtr&lt;Node&gt; getNode()
++  { return mNode; }
++  SharedPtr&lt;const Node&gt; getNode() const
++  { return mNode; }
++  void setNode(Node* node)
++  {
++    clear();
++    mNode = node;
++  }
++
++  bool init()
++  {
++    if (!mNode)
++      return true;
++
++    // Build up the lists required to run the model.
++    LeafInstanceCollector nodeInstanceCollector;
++    mNode-&gt;accept(nodeInstanceCollector);
++    
++    // Allocates and distributes the PortValues, is required for the sort
++    // steps below
++    if (!nodeInstanceCollector.allocPortData())
++      return false;
++    // The model instances are sorted to match the direct input property
++    if (!nodeInstanceCollector.sortModelList())
++      return false;
++
++    // Just to play :)
++    nodeInstanceCollector.print();
++    
++    LeafInstanceCollector::ModelContextList modelContextList;
++    nodeInstanceCollector.getModelContextList(modelContextList);
++    // ...
++
++    // Ok, all successful so far, get the lists from the visitor
++    mNodeInstanceList.swap(nodeInstanceCollector._nodeInstanceList);
++
++    return true;
++  }
++
++  void clear()
++  {
++  }
++
++  /// Simulate the system until the time tEnd
++  bool simulate(real_type tEnd)
++  {
++    return false;
++  }
++
++  /// Bring the system in an equilibrum state near the current state ...
++  bool trim(void)
++  {
++    return false;
++  }
++
++  /// Return the current simulation time, convenience function
++//   const real_type&amp; getTime(void) const
++//   { return mTime; }
++
++private:
++  SharedPtr&lt;Node&gt; mNode;
++
++  typedef std::list&lt;SharedPtr&lt;NodeInstance&gt; &gt; NodeInstanceList;
++  NodeInstanceList mNodeInstanceList;
++};
++
+ } // namespace OpenFDM
+ 
+ using namespace OpenFDM;
+@@ -955,18 +1030,11 @@
+ 
+   /////////////////////////////////////////////////
+ 
+-  LeafInstanceCollector nodeInstanceCollector;
+-  topGroup-&gt;accept(nodeInstanceCollector);
+-  
+-  nodeInstanceCollector.allocPortData();
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, topGroup);
+ 
+-  nodeInstanceCollector.sortModelList();
++  if (!system-&gt;init())
++    return 1;
+ 
+-  nodeInstanceCollector.print();
+-
+-  LeafInstanceCollector::ModelContextList modelContextList;
+-  nodeInstanceCollector.getModelContextList(modelContextList);
+-
+   return 0;
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000451.html">[OpenFDM-svn] r479 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000453.html">[OpenFDM-svn] r481 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#452">[ date ]</a>
+              <a href="thread.html#452">[ thread ]</a>
+              <a href="subject.html#452">[ subject ]</a>
+              <a href="author.html#452">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

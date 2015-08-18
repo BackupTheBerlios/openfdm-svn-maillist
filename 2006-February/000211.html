@@ -1,0 +1,133 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r231 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r231%20-%20trunk/flightgear&In-Reply-To=%3C200602022018.k12KIu6D019080%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000210.html">
+   <LINK REL="Next"  HREF="000212.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r231 - trunk/flightgear</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r231%20-%20trunk/flightgear&In-Reply-To=%3C200602022018.k12KIu6D019080%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r231 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Feb  2 21:18:56 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000210.html">[OpenFDM-svn] r229 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000212.html">[OpenFDM-svn] r232 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#211">[ date ]</a>
+              <a href="thread.html#211">[ thread ]</a>
+              <a href="subject.html#211">[ subject ]</a>
+              <a href="author.html#211">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-02 21:18:45 +0100 (Thu, 02 Feb 2006)
+New Revision: 231
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Make use of the jsbsim 2 reader
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2006-02-02 20:17:30 UTC (rev 230)
++++ trunk/flightgear/FGOpenFDM.cpp	2006-02-02 20:18:45 UTC (rev 231)
+@@ -11,6 +11,7 @@
+ #include &lt;Main/fg_props.hxx&gt;
+ 
+ #include &lt;JSBSim/LegacyJSBSimReader.h&gt;
++#include &lt;JSBSim/JSBSimReader.h&gt;
+ #include &lt;OpenFDM/Units.h&gt;
+ #include &lt;OpenFDM/Vehicle.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+@@ -182,23 +183,34 @@
+ {
+   SG_LOG(SG_FLIGHT, SG_INFO, &quot;FGOpenFDM::init()&quot;);
+ 
+-  // Try to read JSBSim legacy files.
+-  LegacyJSBSimReader reader;
+-  reader.addAircraftPath(fgGetString(&quot;/sim/aircraft-dir&quot;));
+-  reader.addEnginePath(std::string(fgGetString(&quot;/sim/aircraft-dir&quot;))
+-                       + &quot;/Engines&quot;);
+-  reader.loadAircraft(std::string(fgGetString(&quot;/sim/aero&quot;)) + &quot;.xml&quot;);
+-  if (reader.getErrorState()) {
+-    SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() cannot read aircraft!&quot;);
+-    const ReaderWriter::StringList errors = reader.getErrors();
+-    ReaderWriter::StringList::const_iterator it;
+-    for (it = errors.begin(); it != errors.end(); ++it) {
+-      SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++  std::string aircraftDir = fgGetString(&quot;/sim/aircraft-dir&quot;);
++  std::string engineDir = aircraftDir + &quot;/Engines&quot;;
++  std::string aircraftFile = std::string(fgGetString(&quot;/sim/aero&quot;)) + &quot;.xml&quot;;
++
++  JSBSimReader reader;
++  reader.addAircraftPath(aircraftDir);
++  reader.addEnginePath(engineDir);
++  reader.loadAircraft(aircraftFile);
++  if (!reader.getErrorState()) {
++    mData-&gt;vehicle = reader.getVehicle();
++  } else {
++    // Try to read JSBSim legacy files.
++    LegacyJSBSimReader legReader;
++    legReader.addAircraftPath(aircraftDir);
++    legReader.addEnginePath(engineDir);
++    legReader.loadAircraft(aircraftFile);
++    if (legReader.getErrorState()) {
++      SG_LOG(SG_FLIGHT, SG_ALERT, &quot;FGOpenFDM::init() cannot read aircraft!&quot;);
++      const ReaderWriter::StringList errors = legReader.getErrors();
++      ReaderWriter::StringList::const_iterator it;
++      for (it = errors.begin(); it != errors.end(); ++it) {
++        SG_LOG(SG_FLIGHT, SG_ALERT, (*it));
++      }
++      return;
+     }
+-    return;
++    mData-&gt;vehicle = legReader.getVehicle();
+   }
+ 
+-  mData-&gt;vehicle = reader.getVehicle();
+   Vehicle* vehicle = mData-&gt;vehicle;
+   mData-&gt;ground = new FGGround(this);
+   vehicle-&gt;setGround(mData-&gt;ground);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000210.html">[OpenFDM-svn] r229 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000212.html">[OpenFDM-svn] r232 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#211">[ date ]</a>
+              <a href="thread.html#211">[ thread ]</a>
+              <a href="subject.html#211">[ subject ]</a>
+              <a href="author.html#211">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

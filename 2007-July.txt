@@ -1,0 +1,234 @@
+From frohlich at mail.berlios.de  Fri Jul 27 20:08:44 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 27 Jul 2007 20:08:44 +0200
+Subject: [OpenFDM-svn] r313 - trunk/OpenFDM
+Message-ID: <200707271808.l6RI8iuG003432@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-07-27 20:08:44 +0200 (Fri, 27 Jul 2007)
+New Revision: 313
+
+Modified:
+   trunk/OpenFDM/autogen.sh
+Log:
+use autoreconf
+
+
+Modified: trunk/OpenFDM/autogen.sh
+===================================================================
+--- trunk/OpenFDM/autogen.sh	2007-04-06 06:10:12 UTC (rev 312)
++++ trunk/OpenFDM/autogen.sh	2007-07-27 18:08:44 UTC (rev 313)
+@@ -1,7 +1,18 @@
+-rm -rf autom4te.cache
+-rm -f src/OpenFDM/OpenFDMConfig.h.in src/OpenFDM/config.h.in
+-touch src/OpenFDM/OpenFDMConfig.h.in src/OpenFDM/config.h.in
+-libtoolize
+-aclocal
+-autoconf
+-automake --add-missing
++#! /bin/sh
++
++srcdir=`dirname $0`
++test -z "$srcdir" && srcdir=.
++
++ORIGDIR=`pwd`
++cd $srcdir
++
++rm -f $srcdir/src/OpenFDM/OpenFDMConfig.h.in $srcdir/src/OpenFDM/config.h.in
++touch $srcdir/src/OpenFDM/OpenFDMConfig.h.in $srcdir/src/OpenFDM/config.h.in
++# libtoolize
++# aclocal
++# autoconf
++# automake --add-missing
++autoreconf -v --install || exit 1
++cd $ORIGDIR || exit $?
++
++$srcdir/configure --enable-maintainer-mode "$@"
+
+
+
+From frohlich at mail.berlios.de  Sat Jul 28 07:22:08 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 28 Jul 2007 07:22:08 +0200
+Subject: [OpenFDM-svn] r314 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200707280522.l6S5M8cx001297@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-07-28 07:22:08 +0200 (Sat, 28 Jul 2007)
+New Revision: 314
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+Log:
+Use visitors for path collection.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-27 18:08:44 UTC (rev 313)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 05:22:08 UTC (rev 314)
+@@ -217,36 +217,48 @@
+   return mOutputPorts[i]->getName();
+ }
+ 
+-class ModelPathCollector :
++class ModelPathStringCollector :
+     public ModelVisitor {
+ public:
+-  virtual ~ModelPathCollector(void)
+-  { }
+   virtual void apply(Model& model)
+-  { ascend(model); path += "/"; path += model.getName(); }
++  {
++    // First go up and collect the path above when back here append the own one
++    ascend(model);
++    path += "/";
++    path += model.getName();
++  }
+   std::string path;
+ };
+ 
+ std::string
+ Model::getPathString(void)
+ {
+-  ModelPathCollector modelPathCollector;
+-  accept(modelPathCollector);
+-  return modelPathCollector.path;
++  ModelPathStringCollector modelPathStringCollector;
++  accept(modelPathStringCollector);
++  return modelPathStringCollector.path;
+ }
+ 
++class ModelPathCollector :
++    public ModelVisitor {
++public:
++  virtual void apply(Model& model)
++  {
++    // First go up and collect the path above when back here append the own one
++    ascend(model);
++    ModelGroup* modelGroup = model.toModelGroup();
++    if (!modelGroup)
++      return;
++    path.push_back(modelGroup);
++  }
++  Model::Path path;
++};
++
+ Model::Path
+ Model::getPath()
+ {
+-  Path path;
+-
+-  SharedPtr<ModelGroup> model = getParent();
+-  while(model) {
+-    path.push_front(model);
+-    model = model->getParent();
+-  }
+-
+-  return path;
++  ModelPathCollector modelPathCollector;
++  accept(modelPathCollector);
++  return modelPathCollector.path;
+ }
+ 
+ const ModelGroup*
+
+
+
+From frohlich at mail.berlios.de  Sat Jul 28 08:20:51 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 28 Jul 2007 08:20:51 +0200
+Subject: [OpenFDM-svn] r315 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200707280620.l6S6Kp0b003324@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-07-28 08:20:50 +0200 (Sat, 28 Jul 2007)
+New Revision: 315
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+Log:
+Allways exclude this in path computation.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 05:22:08 UTC (rev 314)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 06:20:50 UTC (rev 315)
+@@ -222,7 +222,8 @@
+ public:
+   virtual void apply(Model& model)
+   {
+-    // First go up and collect the path above when back here append the own one
++    // First go up and collect the path above.
++    // When we are back here append this.
+     ascend(model);
+     path += "/";
+     path += model.getName();
+@@ -242,13 +243,13 @@
+     public ModelVisitor {
+ public:
+   virtual void apply(Model& model)
++  { ascend(model); }
++  virtual void apply(ModelGroup& modelGroup)
+   {
+-    // First go up and collect the path above when back here append the own one
+-    ascend(model);
+-    ModelGroup* modelGroup = model.toModelGroup();
+-    if (!modelGroup)
+-      return;
+-    path.push_back(modelGroup);
++    // First go up and collect the path above.
++    // When we are back here append this.
++    ascend(modelGroup);
++    path.push_back(&modelGroup);
+   }
+   Model::Path path;
+ };
+@@ -257,7 +258,7 @@
+ Model::getPath()
+ {
+   ModelPathCollector modelPathCollector;
+-  accept(modelPathCollector);
++  ascend(modelPathCollector);
+   return modelPathCollector.path;
+ }
+ 
+
+
+
+From frohlich at mail.berlios.de  Sat Jul 28 08:21:33 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 28 Jul 2007 08:21:33 +0200
+Subject: [OpenFDM-svn] r316 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200707280621.l6S6LXRC003382@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-07-28 08:21:33 +0200 (Sat, 28 Jul 2007)
+New Revision: 316
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+Log:
+Reformat
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 06:20:50 UTC (rev 315)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 06:21:33 UTC (rev 316)
+@@ -41,8 +41,9 @@
+ Model::ascend(ModelVisitor& visitor)
+ {
+   SharedPtr<ModelGroup> parentGroup = mParentModel.lock();
+-  if (parentGroup)
+-    parentGroup->accept(visitor);
++  if (!parentGroup)
++    return;
++  parentGroup->accept(visitor);
+ }
+ 
+ const ModelGroup*
+
+
+

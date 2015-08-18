@@ -1,0 +1,134 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1082%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091044.n79AiZdL027383%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001040.html">
+   <LINK REL="Next"  HREF="001042.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1082%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091044.n79AiZdL027383%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug  9 12:44:35 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001040.html">[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001042.html">[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1041">[ date ]</a>
+              <a href="thread.html#1041">[ thread ]</a>
+              <a href="subject.html#1041">[ subject ]</a>
+              <a href="author.html#1041">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-09 12:44:30 +0200 (Sun, 09 Aug 2009)
+New Revision: 1082
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Add property tag handling.
+
+M    src/JSBSim/JSBSimReader.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-09 10:43:16 UTC (rev 1081)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-09 10:44:30 UTC (rev 1082)
+@@ -55,11 +55,9 @@
+ namespace OpenFDM {
+ 
+ static real_type
+-realData(const XMLElement* element, real_type def = 0)
++asciiToReal(const std::string&amp; s, const real_type&amp; def = 0)
+ {
+-  if (!element)
+-    return def;
+-  std::stringstream stream(element-&gt;getData());
++  std::stringstream stream(s);
+   real_type value;
+   stream &gt;&gt; value;
+   if (!stream)
+@@ -67,6 +65,14 @@
+   return value;
+ }
+ 
++static real_type
++realData(const XMLElement* element, real_type def = 0)
++{
++  if (!element)
++    return def;
++  return asciiToReal(element-&gt;getData(), def);
++}
++
+ static Vector3
+ locationData(const XMLElement* element, const Vector3&amp; def = Vector3(0, 0, 0))
+ {
+@@ -1547,7 +1553,13 @@
+     std::cout &lt;&lt; &quot;Ignoring PID&quot; &lt;&lt; std::endl;
+ 
+   } else if (type == &quot;PROPERTY&quot; || type == &quot;property&quot;) {
+-    std::cout &lt;&lt; &quot;Ignoring PROPERTY&quot; &lt;&lt; std::endl;
++    name = fcsComponent-&gt;getData();
++    real_type value = asciiToReal(fcsComponent-&gt;getAttribute(&quot;value&quot;), 0);
++    SharedPtr&lt;ConstModel&gt; constModel;
++    constModel = new ConstModel(&quot;Property &quot; + name, value);
++    addFCSModel(constModel);
++    model = constModel;
++    out = constModel-&gt;getPort(&quot;output&quot;);
+ 
+   } else if (type == &quot;SENSOR&quot; || type == &quot;sensor&quot;) {
+     std::cout &lt;&lt; &quot;Ignoring SENSOR&quot; &lt;&lt; std::endl;
+@@ -1563,8 +1575,9 @@
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+ 
+   // Register all output property names.
+-  std::string implicitOutname = normalizeComponentName(name);
+-  registerJSBExpression(std::string(&quot;fcs/&quot;) + implicitOutname, out);
++  std::string implicitOutname = std::string(&quot;fcs/&quot;)
++    + normalizeComponentName(name);
++  registerJSBExpression(implicitOutname, out);
+   if (fcsComponent-&gt;getElement(&quot;output&quot;)) {
+     std::string outname = stringData(fcsComponent-&gt;getElement(&quot;output&quot;));
+     if (outname != implicitOutname)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001040.html">[OpenFDM-svn] r1081 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001042.html">[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1041">[ date ]</a>
+              <a href="thread.html#1041">[ thread ]</a>
+              <a href="subject.html#1041">[ subject ]</a>
+              <a href="author.html#1041">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

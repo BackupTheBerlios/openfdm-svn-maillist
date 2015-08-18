@@ -1,0 +1,528 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r627 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r627%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810170515.m9H5Fkoa000878%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000595.html">
+   <LINK REL="Next"  HREF="000597.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r627 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r627%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810170515.m9H5Fkoa000878%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r627 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct 17 07:15:46 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000595.html">[OpenFDM-svn] r626 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000597.html">[OpenFDM-svn] r628 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#596">[ date ]</a>
+              <a href="thread.html#596">[ thread ]</a>
+              <a href="subject.html#596">[ subject ]</a>
+              <a href="author.html#596">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-17 07:15:43 +0200 (Fri, 17 Oct 2008)
+New Revision: 627
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.h
+Log:
+Include ports into the visitor system.
+Make use of that in the SystemOutput class.
+
+M    src/OpenFDM/Node.h
+M    src/OpenFDM/NodeVisitor.h
+M    src/OpenFDM/PortInfo.cpp
+M    src/OpenFDM/ConstNodeVisitor.h
+M    src/OpenFDM/PortValueList.h
+M    src/OpenFDM/Node.cpp
+M    src/OpenFDM/NodeVisitor.cpp
+M    src/OpenFDM/ConstNodeVisitor.cpp
+M    src/OpenFDM/SystemOutput.h
+M    src/OpenFDM/HDF5SystemOutput.h
+M    src/OpenFDM/PortInfo.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.cpp	2008-10-17 05:15:43 UTC (rev 627)
+@@ -16,6 +16,8 @@
+ #include &quot;RootJoint.h&quot;
+ #include &quot;Interact.h&quot;
+ 
++#include &quot;PortInfo.h&quot;
++
+ namespace OpenFDM {
+ 
+ ConstNodeVisitor::~ConstNodeVisitor()
+@@ -93,4 +95,21 @@
+   apply(static_cast&lt;const Interact&amp;&gt;(node));
+ }
+ 
++void
++ConstNodeVisitor::apply(const PortInfo&amp; portInfo)
++{
++}
++
++void
++ConstNodeVisitor::apply(const NumericPortInfo&amp; portInfo)
++{
++  apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo));
++}
++
++void
++ConstNodeVisitor::apply(const MechanicLinkInfo&amp; portInfo)
++{
++  apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ConstNodeVisitor.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -24,6 +24,10 @@
+ class RootJoint;
+ class Interact;
+ 
++class PortInfo;
++class NumericPortInfo;
++class MechanicLinkInfo;
++
+ class ConstNodeVisitor : public Referenced {
+ public:
+   virtual ~ConstNodeVisitor();
+@@ -47,6 +51,10 @@
+   virtual void apply(const Interact&amp;);
+   virtual void apply(const RootJoint&amp;);
+ 
++  virtual void apply(const PortInfo&amp;);
++  virtual void apply(const NumericPortInfo&amp;);
++  virtual void apply(const MechanicLinkInfo&amp;);
++
+   const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+   template&lt;typename T&gt;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -282,11 +282,11 @@
+       (*i)-&gt;append();
+   }
+ 
+-  virtual void apply(const PortInfo* portInfo,
++  virtual void apply(const NumericPortInfo&amp; portInfo,
+                      const NumericPortValue* numericPortValue)
+   {
+     OpenFDMAssert(mCurrentPortValuesGroup.valid());
+-    std::string name = portInfo-&gt;getName();
++    std::string name = portInfo.getName();
+     name = mCurrentPortValuesUniqueStringSet.makeUnique(name);
+ 
+     if (mPortValueMap.find(numericPortValue) == mPortValueMap.end()) {
+@@ -299,11 +299,11 @@
+       mCurrentPortValuesGroup.link(mPortValueMap.find(numericPortValue)-&gt;second-&gt;getObject(), name);
+     }
+   }
+-  virtual void apply(const PortInfo* portInfo,
++  virtual void apply(const MechanicLinkInfo&amp; portInfo,
+                      const MechanicLinkValue* mechanicLinkValue)
+   {
+     OpenFDMAssert(mCurrentPortValuesGroup.valid());
+-    std::string name = portInfo-&gt;getName();
++    std::string name = portInfo.getName();
+     name = mCurrentPortValuesUniqueStringSet.makeUnique(name);
+ 
+     if (mPortValueMap.find(mechanicLinkValue) == mPortValueMap.end()) {
+@@ -319,9 +319,11 @@
+ 
+   void appendPortValues(const Node&amp; node)
+   {
++    if (!node.getNumPorts())
++      return;
+     OpenFDMAssert(mCurrentGroup.valid());
+     mCurrentPortValuesGroup = HDF5Group(mCurrentGroup, &quot;portValues&quot;);
+-    SystemOutput::appendPortValues(node);
++    node.traversePorts(*this);
+     mCurrentPortValuesGroup = HDF5Group();
+     mCurrentPortValuesUniqueStringSet = UniqueStringSet();
+   }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-17 05:15:43 UTC (rev 627)
+@@ -58,6 +58,22 @@
+   }
+ }
+ 
++void
++Node::traversePorts(NodeVisitor&amp; visitor) const
++{
++  PortList::const_iterator i;
++  for (i = mPortList.begin(); i != mPortList.end(); ++i)
++    (*i)-&gt;accept(visitor);
++}
++
++void
++Node::traversePorts(ConstNodeVisitor&amp; visitor) const
++{
++  PortList::const_iterator i;
++  for (i = mPortList.begin(); i != mPortList.end(); ++i)
++    (*i)-&gt;accept(visitor);
++}
++
+ WeakPtr&lt;const Node&gt;
+ Node::getParent(unsigned i) const
+ {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -34,6 +34,9 @@
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+   void ascend(NodeVisitor&amp; visitor);
+   void ascend(ConstNodeVisitor&amp; visitor) const;
++  // Note the const in this method. only the nodes can change them
++  void traversePorts(NodeVisitor&amp; visitor) const;
++  void traversePorts(ConstNodeVisitor&amp; visitor) const;
+ 
+   unsigned getNumParents() const
+   { return mParentList.size(); }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.cpp	2008-10-17 05:15:43 UTC (rev 627)
+@@ -16,6 +16,8 @@
+ #include &quot;RootJoint.h&quot;
+ #include &quot;Interact.h&quot;
+ 
++#include &quot;PortInfo.h&quot;
++
+ namespace OpenFDM {
+ 
+ NodeVisitor::~NodeVisitor()
+@@ -93,4 +95,21 @@
+   apply(static_cast&lt;Interact&amp;&gt;(node));
+ }
+ 
++void
++NodeVisitor::apply(const PortInfo&amp; portInfo)
++{
++}
++
++void
++NodeVisitor::apply(const NumericPortInfo&amp; portInfo)
++{
++  apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo));
++}
++
++void
++NodeVisitor::apply(const MechanicLinkInfo&amp; portInfo)
++{
++  apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo));
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeVisitor.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -24,6 +24,10 @@
+ class RootJoint;
+ class Interact;
+ 
++class PortInfo;
++class NumericPortInfo;
++class MechanicLinkInfo;
++
+ class NodeVisitor : public Referenced {
+ public:
+   virtual ~NodeVisitor();
+@@ -47,6 +51,10 @@
+   virtual void apply(Interact&amp;);
+   virtual void apply(RootJoint&amp;);
+ 
++  virtual void apply(const PortInfo&amp;);
++  virtual void apply(const NumericPortInfo&amp;);
++  virtual void apply(const MechanicLinkInfo&amp;);
++
+   const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+   template&lt;typename T&gt;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.cpp	2008-10-17 05:15:43 UTC (rev 627)
+@@ -3,7 +3,10 @@
+  */
+ 
+ #include &quot;PortInfo.h&quot;
++
++#include &quot;ConstNodeVisitor.h&quot;
+ #include &quot;Node.h&quot;
++#include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -23,6 +26,18 @@
+ }
+ 
+ void
++PortInfo::accept(NodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++PortInfo::accept(ConstNodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
+ PortInfo::setName(const std::string&amp; name)
+ {
+   mName = name;
+@@ -37,4 +52,30 @@
+   node-&gt;removePort(this);
+ }
+ 
++
++
++void
++NumericPortInfo::accept(NodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++NumericPortInfo::accept(ConstNodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++MechanicLinkInfo::accept(NodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
++void
++MechanicLinkInfo::accept(ConstNodeVisitor&amp; visitor) const
++{
++  visitor.apply(*this);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortInfo.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -23,7 +23,9 @@
+ // PortHandle?? Hmmm??
+ // Port : NodeId, PortId ???
+ 
++class ConstNodeVisitor;
+ class Node;
++class NodeVisitor;
+ 
+ class NumericPortInfo;
+ class InputPortInfo;
+@@ -38,6 +40,11 @@
+   const std::string&amp; getName() const { return mName; }
+   void setName(const std::string&amp; name);
+ 
++  // Note that both are const methods.
++  // That is only the owner nodes can modify them.
++  virtual void accept(NodeVisitor&amp; visitor) const;
++  virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
+   bool getOptional() const { return mOptional; }
+   void setOptional(bool optional) { mOptional = optional; }
+ 
+@@ -94,6 +101,9 @@
+   virtual ~NumericPortInfo()
+   { }
+ 
++  virtual void accept(NodeVisitor&amp; visitor) const;
++  virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
+   virtual const NumericPortInfo* toNumericPortInfo() const
+   { return this; }
+ 
+@@ -178,6 +188,9 @@
+   virtual ~MechanicLinkInfo()
+   { }
+ 
++  virtual void accept(NodeVisitor&amp; visitor) const;
++  virtual void accept(ConstNodeVisitor&amp; visitor) const;
++
+   virtual const MechanicLinkInfo* toMechanicLinkInfo() const
+   { return this; }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PortValueList.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -107,7 +107,11 @@
+   {
+     if (!portInfo)
+       return 0;
+-    const PortValue* portValue = getPortValue(portInfo-&gt;getIndex());
++    return getPortValue(*portInfo);
++  }
++  const NumericPortValue* getPortValue(const NumericPortInfo&amp; portInfo) const
++  {
++    const PortValue* portValue = getPortValue(portInfo.getIndex());
+     if (!portValue)
+       return 0;
+     return portValue-&gt;toNumericPortValue();
+@@ -117,7 +121,11 @@
+   {
+     if (!portInfo)
+       return 0;
+-    const PortValue* portValue = getPortValue(portInfo-&gt;getIndex());
++    return getPortValue(*portInfo);
++  }
++  const MechanicLinkValue* getPortValue(const MechanicLinkInfo&amp; portInfo) const
++  {
++    const PortValue* portValue = getPortValue(portInfo.getIndex());
+     if (!portValue)
+       return 0;
+     return portValue-&gt;toMechanicLinkValue();
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.h	2008-10-17 04:33:52 UTC (rev 626)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.h	2008-10-17 05:15:43 UTC (rev 627)
+@@ -25,14 +25,14 @@
+     system-&gt;getNode()-&gt;accept(*this);
+   }
+ 
+-  virtual void apply(const PortInfo* portInfo, const PortValue* portValue)
++  virtual void apply(const PortInfo&amp; portInfo, const PortValue* portValue)
+   { }
+-  virtual void apply(const PortInfo* portInfo,
++  virtual void apply(const NumericPortInfo&amp; portInfo,
+                      const NumericPortValue* numericPortValue)
+-  { apply(portInfo, static_cast&lt;const PortValue*&gt;(numericPortValue)); }
+-  virtual void apply(const PortInfo* portInfo,
++  { apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo), static_cast&lt;const PortValue*&gt;(numericPortValue)); }
++  virtual void apply(const MechanicLinkInfo&amp; portInfo,
+                      const MechanicLinkValue* mechanicPortValue)
+-  { apply(portInfo, static_cast&lt;const PortValue*&gt;(mechanicPortValue)); }
++  { apply(static_cast&lt;const PortInfo&amp;&gt;(portInfo), static_cast&lt;const PortValue*&gt;(mechanicPortValue)); }
+ 
+   static SystemOutput* newDefaultSystemOutput(const std::string&amp; filename);
+ 
+@@ -44,34 +44,28 @@
+       return 0;
+     return system-&gt;getNodeInstance(nodePath);
+   }
+-  void appendPortValues(const Node&amp;)
++  virtual void apply(const NumericPortInfo&amp; portInfo)
+   {
+     const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
+     if (!nodeInstance)
+       return;
+-    appendPortValues(*nodeInstance);
++    apply(portInfo, nodeInstance-&gt;getPortValueList().getPortValue(portInfo));
+   }
+-  void appendPortValues(const AbstractNodeInstance&amp; nodeInstance)
++  virtual void apply(const MechanicLinkInfo&amp; portInfo)
+   {
+-    unsigned numPorts = nodeInstance.getNode().getNumPorts();
+-    for (unsigned i = 0; i &lt; numPorts; ++i) {
+-      const PortValue* portValue;
+-      portValue = nodeInstance.getPortValueList().getPortValue(i);
+-      const NumericPortValue* npv = portValue-&gt;toNumericPortValue();
+-      if (npv) {
+-        apply(nodeInstance.getNode().getPort(i), npv);
+-        continue;
+-      }
+-
+-      const MechanicLinkValue* mpv = portValue-&gt;toMechanicLinkValue();
+-      if (mpv) {
+-        apply(nodeInstance.getNode().getPort(i), mpv);
+-        continue;
+-      }
+-
+-      apply(nodeInstance.getNode().getPort(i), portValue);
+-    }
++    const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
++    if (!nodeInstance)
++      return;
++    apply(portInfo, nodeInstance-&gt;getPortValueList().getPortValue(portInfo));
+   }
++  virtual void apply(const PortInfo&amp; portInfo)
++  {
++    const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
++    if (!nodeInstance)
++      return;
++    unsigned i = portInfo.getIndex();
++    apply(portInfo, nodeInstance-&gt;getPortValueList().getPortValue(i));
++  }
+ 
+ private:
+   WeakPtr&lt;const System&gt; mSystem;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000595.html">[OpenFDM-svn] r626 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000597.html">[OpenFDM-svn] r628 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#596">[ date ]</a>
+              <a href="thread.html#596">[ thread ]</a>
+              <a href="subject.html#596">[ subject ]</a>
+              <a href="author.html#596">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

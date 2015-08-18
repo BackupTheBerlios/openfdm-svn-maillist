@@ -1,0 +1,428 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r539 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r539%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809292143.m8TLhOiv015960%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000510.html">
+   <LINK REL="Next"  HREF="000512.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r539 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r539%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809292143.m8TLhOiv015960%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r539 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 29 23:43:24 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000510.html">[OpenFDM-svn] r538 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000512.html">[OpenFDM-svn] r540 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#511">[ date ]</a>
+              <a href="thread.html#511">[ thread ]</a>
+              <a href="subject.html#511">[ subject ]</a>
+              <a href="author.html#511">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-29 23:43:24 +0200 (Mon, 29 Sep 2008)
+New Revision: 539
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+More implementation files.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2008-09-29 21:43:24 UTC (rev 539)
+@@ -0,0 +1,40 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;AbstractNodeInstance.h&quot;
++
++#include &quot;Assert.h&quot;
++#include &quot;Node.h&quot;
++#include &quot;SharedPtr.h&quot;
++#include &quot;WeakReferenced.h&quot;
++
++namespace OpenFDM {
++
++AbstractNodeInstance::AbstractNodeInstance(const NodePath&amp; nodePath) :
++  mNodePath(nodePath)
++{
++  OpenFDMAssert(!nodePath.empty());
++}
++
++AbstractNodeInstance::~AbstractNodeInstance()
++{
++}
++
++std::string
++AbstractNodeInstance::getNodeNamePath() const
++{
++  if (mNodePath.empty())
++    return std::string();
++  std::string path = mNodePath.front()-&gt;getName();
++  NodePath::const_iterator i = mNodePath.begin();
++  if (i != mNodePath.end()) {
++    for (++i; i != mNodePath.end(); ++i) {
++      path += '/';
++      path += (*i)-&gt;getName();
++    }
++  }
++  return path;
++}
++
++} // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-09-29 21:43:24 UTC (rev 539)
+@@ -19,11 +19,8 @@
+ /// This class is meant to show up in the user interface of this simulation.
+ class AbstractNodeInstance : public WeakReferenced {
+ public:
+-  AbstractNodeInstance(const NodePath&amp; nodePath) :
+-    mNodePath(nodePath)
+-  { OpenFDMAssert(!nodePath.empty()); }
+-  virtual ~AbstractNodeInstance()
+-  { }
++  AbstractNodeInstance(const NodePath&amp; nodePath);
++  virtual ~AbstractNodeInstance();
+ 
+   /// The actual Node this AbstractNodeInstance stems from
+   const Node&amp; getNode() const
+@@ -43,24 +40,9 @@
+   const PortValueList&amp; getPortValueList() const
+   { return getNodeContext().getPortValueList(); }
+ 
+-  std::string getNodeNamePath() const
+-  {
+-    if (mNodePath.empty())
+-      return std::string();
+-    std::string path = mNodePath.front()-&gt;getName();
+-    NodePath::const_iterator i = mNodePath.begin();
+-    if (i != mNodePath.end()) {
+-      for (++i; i != mNodePath.end(); ++i) {
+-        path += '/';
+-        path += (*i)-&gt;getName();
+-      }
+-    }
+-    return path;
+-  }
++  std::string getNodeNamePath() const;
+ 
+ protected:
+-  AbstractNodeInstance() {}
+-
+   /// The node context that belongs to this instance.
+   virtual AbstractNodeContext&amp; getNodeContext() = 0;
+   virtual const AbstractNodeContext&amp; getNodeContext() const = 0;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-29 21:43:24 UTC (rev 539)
+@@ -65,11 +65,13 @@
+   MechanicProviderPortInfo.h \
+   Model.h \
+   ModelContext.h \
++  ModelInstance.h \
+   Mutex.h \
+   MPFRFloat.h \
+   Newton.h \
+   Node.h \
+   NodeContext.h \
++  NodeInstance.h \
+   NodeVisitor.h \
+   NumericPortValue.h \
+   NumericAcceptorPortInfo.h \
+@@ -123,6 +125,7 @@
+ 
+ OpenFDMCoreSOURCES = \
+   AbstractNodeContext.cpp \
++  AbstractNodeInstance.cpp \
+   AcceptorPortInfo.cpp \
+   Assert.cpp \
+   Atomic.cpp \
+@@ -145,8 +148,10 @@
+   MidpointRule.cpp \
+   Model.cpp \
+   ModelContext.cpp \
++  ModelInstance.cpp \
+   Node.cpp \
+   NodeContext.cpp \
++  NodeInstance.cpp \
+   NodeVisitor.cpp \
+   NumericAcceptorPortInfo.cpp \
+   NumericPortValue.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-09-29 21:43:24 UTC (rev 539)
+@@ -0,0 +1,31 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;ModelInstance.h&quot;
++
++namespace OpenFDM {
++
++ModelInstance::ModelInstance(const NodePath&amp; nodePath, const Model* model) :
++  AbstractNodeInstance(nodePath),
++  mModelContext(new ModelContext(model))
++{
++}
++
++ModelInstance::~ModelInstance()
++{
++}
++
++ModelContext&amp;
++ModelInstance::getNodeContext()
++{
++  return *mModelContext;
++}
++
++const ModelContext&amp;
++ModelInstance::getNodeContext() const
++{
++  return *mModelContext;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-09-29 21:43:24 UTC (rev 539)
+@@ -0,0 +1,34 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ModelInstance_H
++#define OpenFDM_ModelInstance_H
++
++#include &quot;AbstractNodeInstance.h&quot;
++#include &quot;ModelContext.h&quot;
++
++namespace OpenFDM {
++
++class ModelInstance : public AbstractNodeInstance {
++public:
++  ModelInstance(const NodePath&amp; nodePath, const Model* model);
++  virtual ~ModelInstance();
++
++  // Return true if this leaf directly depends on one of leafInstance outputs
++  bool dependsOn(const ModelInstance&amp; modelInstance) const
++  { return mModelContext-&gt;dependsOn(*modelInstance.mModelContext); }
++
++  // FIXME
++// protected:
++  /// The node context that belongs to this instance.
++  virtual ModelContext&amp; getNodeContext();
++  virtual const ModelContext&amp; getNodeContext() const;
++
++private:
++  SharedPtr&lt;ModelContext&gt; mModelContext;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp	2008-09-29 21:43:24 UTC (rev 539)
+@@ -0,0 +1,31 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;NodeInstance.h&quot;
++
++namespace OpenFDM {
++
++NodeInstance::NodeInstance(const NodePath&amp; nodePath, const Node* node) :
++  AbstractNodeInstance(nodePath),
++  mNodeContext(new NodeContext(node))
++{
++}
++
++NodeInstance::~NodeInstance()
++{
++}
++
++NodeContext&amp;
++NodeInstance::getNodeContext()
++{
++  return *mNodeContext;
++}
++
++const NodeContext&amp;
++NodeInstance::getNodeContext() const
++{
++  return *mNodeContext;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2008-09-29 21:43:24 UTC (rev 539)
+@@ -0,0 +1,29 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_NodeInstance_H
++#define OpenFDM_NodeInstance_H
++
++#include &quot;AbstractNodeInstance.h&quot;
++#include &quot;NodeContext.h&quot;
++
++namespace OpenFDM {
++
++class NodeInstance : public AbstractNodeInstance {
++public:
++  NodeInstance(const NodePath&amp; nodePath, const Node* node);
++  virtual ~NodeInstance();
++
++protected:
++  /// The node context that belongs to this instance.
++  virtual NodeContext&amp; getNodeContext();
++  virtual const NodeContext&amp; getNodeContext() const;
++
++private:
++  SharedPtr&lt;NodeContext&gt; mNodeContext;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-29 21:25:33 UTC (rev 538)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-29 21:43:24 UTC (rev 539)
+@@ -35,6 +35,9 @@
+ #include &lt;OpenFDM/SampleTime.h&gt;
+ #include &lt;OpenFDM/Interval.h&gt;
+ 
++#include &lt;OpenFDM/NodeInstance.h&gt;
++#include &lt;OpenFDM/ModelInstance.h&gt;
++
+ #include &lt;OpenFDM/AbstractSystem.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ 
+@@ -117,27 +120,6 @@
+ /// there must be a PortData like structure that is only built during simulation
+ /// model initialization.
+ 
+-class NodeInstance : public AbstractNodeInstance {
+-public:
+-  NodeInstance(const NodePath&amp; nodePath, const Node* node) :
+-    AbstractNodeInstance(nodePath),
+-    mNodeContext(new NodeContext(node))
+-  { }
+-
+-protected:
+-  /// The node context that belongs to this instance.
+-  virtual NodeContext&amp; getNodeContext()
+-  { return *mNodeContext; }
+-  virtual const NodeContext&amp; getNodeContext() const
+-  { return *mNodeContext; }
+-
+-private:
+-  SharedPtr&lt;NodeContext&gt; mNodeContext;
+-};
+-
+-class ContinousTask;
+-
+-
+ class ModelContextList : public std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; {
+ public:
+   typedef std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; list_type;
+@@ -168,27 +150,6 @@
+   }
+ };
+ 
+-class ModelInstance : public AbstractNodeInstance {
+-public:
+-  ModelInstance(const NodePath&amp; nodePath, const Model* model) :
+-    AbstractNodeInstance(nodePath),
+-    mModelContext(new ModelContext(model))
+-  { }
+-
+-  // Return true if this leaf directly depends on one of leafInstance outputs
+-  bool dependsOn(const ModelInstance&amp; modelInstance) const
+-  { return mModelContext-&gt;dependsOn(*modelInstance.mModelContext); }
+-
+-// protected: // FIXME
+-  virtual ModelContext&amp; getNodeContext()
+-  { return *mModelContext; }
+-  virtual const ModelContext&amp; getNodeContext() const
+-  { return *mModelContext; }
+-
+-private:
+-  SharedPtr&lt;ModelContext&gt; mModelContext;
+-};
+-
+ typedef std::list&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelInstanceList;
+ 
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000510.html">[OpenFDM-svn] r538 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000512.html">[OpenFDM-svn] r540 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#511">[ date ]</a>
+              <a href="thread.html#511">[ thread ]</a>
+              <a href="subject.html#511">[ subject ]</a>
+              <a href="author.html#511">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,210 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r344%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200712081014.lB8AE8Xc019817%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000317.html">
+   <LINK REL="Next"  HREF="000319.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r344%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200712081014.lB8AE8Xc019817%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r344 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Dec  8 11:14:08 CET 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000317.html">[OpenFDM-svn] r343 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000319.html">[OpenFDM-svn] r345 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#318">[ date ]</a>
+              <a href="thread.html#318">[ thread ]</a>
+              <a href="subject.html#318">[ subject ]</a>
+              <a href="author.html#318">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-12-08 11:14:07 +0100 (Sat, 08 Dec 2007)
+New Revision: 344
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/Output.cpp
+   trunk/OpenFDM/src/OpenFDM/Output.h
+Log:
+Add Input and Output models to the visitors.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2007-12-08 10:14:07 UTC (rev 344)
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include &quot;Input.h&quot;
++#include &quot;ModelVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -27,6 +28,12 @@
+ {
+ }
+ 
++void
++Input::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
+ const Input*
+ Input::toInput(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Input.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -15,6 +15,11 @@
+   Input(const std::string&amp; name);
+   virtual ~Input(void);
+ 
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
+   virtual const Input* toInput(void) const;
+   virtual Input* toInput(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -6,6 +6,8 @@
+ #define OpenFDM_ModelVisitor_H
+ 
+ #include &quot;Model.h&quot;
++#include &quot;Output.h&quot;
++#include &quot;Input.h&quot;
+ #include &quot;ModelGroup.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;MobileRootJoint.h&quot;
+@@ -17,21 +19,32 @@
+ public:
+   virtual ~ModelVisitor(void)
+   { }
++
+   virtual void apply(Node&amp; node)
+   { }
++
+   virtual void apply(Model&amp; model)
+   { apply(static_cast&lt;Node&amp;&gt;(model)); }
+   virtual void apply(ModelGroup&amp; modelGroup)
+   { apply(static_cast&lt;Node&amp;&gt;(modelGroup)); }
++
++  virtual void apply(Output&amp; output)
++  { apply(static_cast&lt;Model&amp;&gt;(output)); }
++  virtual void apply(Input&amp; input)
++  { apply(static_cast&lt;Model&amp;&gt;(input)); }
++  virtual void apply(Interact&amp; interact)
++  { apply(static_cast&lt;Model&amp;&gt;(interact)); }
++
+   virtual void apply(System&amp; system)
+   { apply(static_cast&lt;ModelGroup&amp;&gt;(system)); }
+-  virtual void apply(Interact&amp; interact)
+-  { apply(static_cast&lt;Model&amp;&gt;(interact)); }
++
+   virtual void apply(Joint&amp; joint)
+   { apply(static_cast&lt;Interact&amp;&gt;(joint)); }
++
+   virtual void apply(MobileRootJoint&amp; mobileRootJoint)
+   { apply(static_cast&lt;Joint&amp;&gt;(mobileRootJoint)); }
+ 
++
+   const Node::Path&amp; getNodePath() const
+   { return mNodePath; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Output.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.cpp	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Output.cpp	2007-12-08 10:14:07 UTC (rev 344)
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include &quot;Output.h&quot;
++#include &quot;ModelVisitor.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -27,6 +28,12 @@
+ {
+ }
+ 
++void
++Output::accept(ModelVisitor&amp; visitor)
++{
++  visitor.apply(*this);
++}
++
+ bool
+ Output::init(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Output.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Output.h	2007-12-08 08:29:01 UTC (rev 343)
++++ trunk/OpenFDM/src/OpenFDM/Output.h	2007-12-08 10:14:07 UTC (rev 344)
+@@ -15,6 +15,11 @@
+   Output(const std::string&amp; name);
+   virtual ~Output(void);
+   
++  /// Double dispatch helper for the system visitor
++  virtual void accept(ModelVisitor&amp; visitor);
++  /// Double dispatch helper for the system visitor
++//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++
+   virtual const Output* toOutput(void) const;
+   virtual Output* toOutput(void);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000317.html">[OpenFDM-svn] r343 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000319.html">[OpenFDM-svn] r345 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#318">[ date ]</a>
+              <a href="thread.html#318">[ thread ]</a>
+              <a href="subject.html#318">[ subject ]</a>
+              <a href="author.html#318">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

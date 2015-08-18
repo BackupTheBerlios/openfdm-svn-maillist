@@ -1,0 +1,216 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r594 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r594%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810101932.m9AJWHUK026699%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000563.html">
+   <LINK REL="Next"  HREF="000565.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r594 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r594%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810101932.m9AJWHUK026699%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r594 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct 10 21:32:17 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000563.html">[OpenFDM-svn] r593 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000565.html">[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#564">[ date ]</a>
+              <a href="thread.html#564">[ thread ]</a>
+              <a href="subject.html#564">[ subject ]</a>
+              <a href="author.html#564">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-10 21:32:17 +0200 (Fri, 10 Oct 2008)
+New Revision: 594
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Input.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Reactivate Input model.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp	2008-10-10 18:46:33 UTC (rev 593)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Input.cpp	2008-10-10 19:32:17 UTC (rev 594)
+@@ -3,7 +3,7 @@
+  */
+ 
+ #include &quot;Input.h&quot;
+-#include &quot;ModelVisitor.h&quot;
++#include &quot;PortValueList.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -18,10 +18,9 @@
+ 
+ Input::Input(const std::string&amp; name) :
+   Model(name),
++  mOutputPort(newRealOutputPort(&quot;output&quot;)),
+   mInputGain(1)
+ {
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Input::getOutputValue);
+ }
+ 
+ Input::~Input(void)
+@@ -29,41 +28,13 @@
+ }
+ 
+ void
+-Input::accept(ModelVisitor&amp; visitor)
++Input::output(const Task&amp; ,const DiscreteStateValueVector&amp;,
++              const ContinousStateValueVector&amp;,
++              PortValueList&amp; portValues) const
+ {
+-  visitor.handleNodePathAndApply(*this);
++  portValues[mOutputPort] = mInputGain*mCallback-&gt;getValue();
+ }
+ 
+-const Input*
+-Input::toInput(void) const
+-{
+-  return this;
+-}
+-
+-Input*
+-Input::toInput(void)
+-{
+-  return this;
+-}
+-
+-bool
+-Input::init(void)
+-{
+-  if (!mCallback) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of Input model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input Callback not set!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  return Model::init();
+-}
+-
+-void
+-Input::output(const TaskInfo&amp;)
+-{
+-  mOutputValue = mInputGain*mCallback-&gt;getValue();
+-}
+-
+ Input::Callback*
+ Input::getCallback(void) const
+ {
+@@ -100,10 +71,4 @@
+   mInputName = inputName;
+ }
+ 
+-const real_type&amp;
+-Input::getOutputValue(void) const
+-{
+-  return mOutputValue;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Input.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Input.h	2008-10-10 18:46:33 UTC (rev 593)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Input.h	2008-10-10 19:32:17 UTC (rev 594)
+@@ -15,17 +15,10 @@
+   Input(const std::string&amp; name);
+   virtual ~Input(void);
+ 
+-  /// Double dispatch helper for the system visitor
+-  virtual void accept(ModelVisitor&amp; visitor);
+-  /// Double dispatch helper for the system visitor
+-//   virtual void accept(ConstModelVisitor&amp; visitor) const;
++  virtual void output(const Task&amp;,const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp; continousState,
++                      PortValueList&amp; portValues) const;
+ 
+-  virtual const Input* toInput(void) const;
+-  virtual Input* toInput(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-
+   class Callback : public WeakReferenced {
+   public:
+     virtual ~Callback();
+@@ -41,11 +34,9 @@
+   const std::string&amp; getInputName(void) const;
+   void setInputName(const std::string&amp; inputName);
+ 
+-  const real_type&amp; getOutputValue(void) const;
+-
+ private:
++  RealOutputPort mOutputPort;
+   SharedPtr&lt;Callback&gt; mCallback;
+-  real_type mOutputValue;
+   real_type mInputGain;
+   std::string mInputName;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-10 18:46:33 UTC (rev 593)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-10 19:32:17 UTC (rev 594)
+@@ -235,6 +235,7 @@
+   Delay.cpp \
+   DiscreteIntegrator.cpp \
+   Gain.cpp \
++  Input.cpp \
+   Integrator.cpp \
+   Output.cpp \
+   SimulationTime.cpp
+@@ -256,7 +257,6 @@
+ #   Force.cpp \
+ #   Gravity.cpp \
+ #   Ground.cpp \
+-#   Input.cpp \
+ #   Joint.cpp \
+ #   Launchbar.cpp \
+ #   LinearSpringDamper.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000563.html">[OpenFDM-svn] r593 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000565.html">[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#564">[ date ]</a>
+              <a href="thread.html#564">[ thread ]</a>
+              <a href="subject.html#564">[ subject ]</a>
+              <a href="author.html#564">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

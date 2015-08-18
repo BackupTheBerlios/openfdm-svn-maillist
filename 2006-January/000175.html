@@ -1,0 +1,333 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r192 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r192%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051652.k05Gqll7010235%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000174.html">
+   <LINK REL="Next"  HREF="000176.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r192 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r192%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601051652.k05Gqll7010235%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r192 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Jan  5 17:52:47 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000174.html">[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000176.html">[OpenFDM-svn] r193 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#175">[ date ]</a>
+              <a href="thread.html#175">[ thread ]</a>
+              <a href="subject.html#175">[ subject ]</a>
+              <a href="author.html#175">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-05 17:52:41 +0100 (Thu, 05 Jan 2006)
+New Revision: 192
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Tank.cpp
+   trunk/OpenFDM/src/OpenFDM/Tank.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/Mass.cpp
+   trunk/OpenFDM/src/OpenFDM/Mass.h
+Log:
+Add a first cut of a Tank
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-05 15:35:57 UTC (rev 191)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-05 16:52:41 UTC (rev 192)
+@@ -117,6 +117,7 @@
+   Summer.h \
+   System.h \
+   Table.h \
++  Tank.h \
+   TaskInfo.h \
+   TimeDerivative.h \
+   TransferFunction.h \
+@@ -195,6 +196,7 @@
+   SimpleGear.cpp \
+   Summer.cpp \
+   System.cpp \
++  Tank.cpp \
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+   UnaryFunctionModel.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/Mass.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mass.cpp	2006-01-05 15:35:57 UTC (rev 191)
++++ trunk/OpenFDM/src/OpenFDM/Mass.cpp	2006-01-05 16:52:41 UTC (rev 192)
+@@ -8,8 +8,11 @@
+ 
+ Mass::Mass(const std::string&amp; name, const SpatialInertia&amp; inertia) :
+   Interact(name, 1),
+-  mInertia(inertia)
++  mInertia(inertia),
++  mUntransformedInertia(inertia),
++  mPosition(Vector3::zeros())
+ {
++  addProperty(&quot;posoition&quot;, Property(this, &amp;Mass::getPosition, &amp;Mass::setPosition));
+ }
+ 
+ Mass::~Mass(void)
+@@ -25,19 +28,33 @@
+ void
+ Mass::setInertia(real_type mass)
+ {
+-  mInertia = SpatialInertia(mass);
++  setInertia(SpatialInertia(mass));
+ }
+ 
+ void
+ Mass::setInertia(real_type mass, const InertiaMatrix&amp; inertia)
+ {
+-  mInertia = SpatialInertia(inertia, mass);
++  setInertia(SpatialInertia(inertia, mass));
+ }
+ 
+ void
+ Mass::setInertia(const SpatialInertia&amp; I)
+ {
+-  mInertia = I;
++  mUntransformedInertia = I;
++  mInertia = inertiaFrom(mPosition, mUntransformedInertia);
+ }
+ 
++const Vector3&amp;
++Mass::getPosition(void) const
++{
++  return mPosition;
++}
++
++void
++Mass::setPosition(const Vector3&amp; position)
++{
++  mPosition = position;
++  mInertia = inertiaFrom(mPosition, mUntransformedInertia);
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Mass.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mass.h	2006-01-05 15:35:57 UTC (rev 191)
++++ trunk/OpenFDM/src/OpenFDM/Mass.h	2006-01-05 16:52:41 UTC (rev 192)
+@@ -46,8 +46,13 @@
+    */
+   void setInertia(const SpatialInertia&amp; I);
+ 
++  const Vector3&amp; getPosition(void) const;
++  void setPosition(const Vector3&amp; position);
++
+ private:
+   SpatialInertia mInertia;
++  SpatialInertia mUntransformedInertia;
++  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/Tank.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-01-05 15:35:57 UTC (rev 191)
++++ trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-01-05 16:52:41 UTC (rev 192)
+@@ -0,0 +1,90 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Tank.h&quot;
++
++namespace OpenFDM {
++
++Tank::Tank(const std::string&amp; name) :
++  Mass(name),
++  mContent(0),
++  mNextContent(0),
++  mCapacity(0),
++  mIsEmpty(true)
++{
++  setNumInputPorts(1);
++  setInputPortName(0, &quot;fuelFlow&quot;);
++
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;content&quot;, this, &amp;Tank::getContent);
++
++  addProperty(&quot;content&quot;, Property(this, &amp;Tank::getContent, &amp;Tank::setContent));
++  addProperty(&quot;capacity&quot;, Property(this, &amp;Tank::getCapacity, &amp;Tank::setCapacity));
++}
++
++Tank::~Tank(void)
++{
++}
++
++bool
++Tank::init(void)
++{
++  mInputPort = getInputPort(0)-&gt;toRealPortHandle();
++  return true;
++}
++
++void
++Tank::output(const TaskInfo&amp; taskInfo)
++{
++  if (!nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                           SampleTime::PerTimestep))
++    return;
++  mContent = mNextContent;
++  setInertia(mContent);
++  mIsEmpty = (mContent == 0);
++}
++
++void
++Tank::update(const TaskInfo&amp; taskInfo)
++{
++  if (!nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                           SampleTime::PerTimestep))
++    return;
++
++  if (!mInputPort.isConnected())
++    return;
++
++  // Modify the tank's content by the requested fluel flow (kg/s)
++  // FIXME
++  real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
++  mNextContent = mContent + dt*mInputPort.getRealValue();
++  mNextContent = min(mNextContent, mCapacity);
++  mNextContent = max(mNextContent, real_type(0));
++}
++
++void
++Tank::setDiscreteState(const StateStream&amp; state)
++{
++  state.readSubState(mContent);
++}
++
++void
++Tank::getDiscreteState(StateStream&amp; state) const
++{
++  state.writeSubState(mContent);
++}
++
++const real_type&amp;
++Tank::getContent(void) const
++{
++  return mContent;
++}
++
++void
++Tank::setContent(const real_type&amp; content)
++{
++  mContent = content;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tank.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Tank.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tank.h	2006-01-05 15:35:57 UTC (rev 191)
++++ trunk/OpenFDM/src/OpenFDM/Tank.h	2006-01-05 16:52:41 UTC (rev 192)
+@@ -0,0 +1,48 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Tank_H
++#define OpenFDM_Tank_H
++
++#include &quot;Mass.h&quot;
++
++namespace OpenFDM {
++
++class Tank :
++    public Mass {
++public:
++  Tank(const std::string&amp; name);
++  virtual ~Tank(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp;);
++  virtual void update(const TaskInfo&amp;);
++
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
++
++  /// get the actual content of the tank in kg
++  const real_type&amp; getContent(void) const;
++  /// set the actual content of the tank in kg
++  void setContent(const real_type&amp; content);
++
++  /// get the capacity of the tank in kg(FIXME:use m^3 and fiddle wiht density)
++  const real_type&amp; getCapacity(void) const;
++  /// set the capacity of the tank in kg(FIXME:use m^3 and fiddle wiht density)
++  void setCapacity(const real_type&amp; capacity);
++
++  /// return nonzero if the tank is empty
++  const unsigned&amp; getIsEmpty(void) const;
++
++private:
++  real_type mContent;
++  real_type mNextContent;
++  real_type mCapacity;
++  unsigned mIsEmpty;
++  RealPortHandle mInputPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Tank.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000174.html">[OpenFDM-svn] r191 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000176.html">[OpenFDM-svn] r193 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#175">[ date ]</a>
+              <a href="thread.html#175">[ thread ]</a>
+              <a href="subject.html#175">[ subject ]</a>
+              <a href="author.html#175">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

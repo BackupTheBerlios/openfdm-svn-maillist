@@ -1,0 +1,541 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r913%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901031309.n03D9UPD029240%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000880.html">
+   <LINK REL="Next"  HREF="000882.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r913%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901031309.n03D9UPD029240%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan  3 14:09:30 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000880.html">[OpenFDM-svn] r912 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000882.html">[OpenFDM-svn] r914 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#881">[ date ]</a>
+              <a href="thread.html#881">[ thread ]</a>
+              <a href="subject.html#881">[ subject ]</a>
+              <a href="author.html#881">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-03 14:09:28 +0100 (Sat, 03 Jan 2009)
+New Revision: 913
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h
+   branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+Log:
+Move the position property into the SingleLinkInteract class.
+Factor out some common functionality.
+
+M    test/inertianav.cpp
+M    OpenFDM/WheelContact.cpp
+M    OpenFDM/Mass.h
+M    OpenFDM/Mass.cpp
+M    OpenFDM/SingleLinkInteract.cpp
+M    OpenFDM/WheelContact.h
+M    OpenFDM/SingleLinkInteract.h
+M    OpenFDM/Sensor.cpp
+M    OpenFDM/Sensor.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2009-01-03 13:09:28 UTC (rev 913)
+@@ -10,7 +10,6 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Mass, SingleLinkInteract)
+-  DEF_OPENFDM_PROPERTY(Vector3, Position, Serialized)
+   DEF_OPENFDM_PROPERTY(Inertia, Inertia, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, Mass, Serialized)
+   END_OPENFDM_OBJECT_DEF
+@@ -21,7 +20,6 @@
+           const Environment* environment, PortValueList&amp; portValueList) :
+     SingleLinkInteract::Context(mass, environment, portValueList),
+     mMass(mass),
+-    mLinkRelPos(Vector3::zeros()),
+     mSpatialInertia(SpatialInertia::zeros())
+   { }
+   virtual ~Context() {}
+@@ -31,9 +29,9 @@
+ 
+   virtual void initDesignPosition()
+   {
+-    mLinkRelPos = mMass-&gt;getPosition() - getLink().getDesignPosition();
++    SingleLinkInteract::Context::initDesignPosition();
+     mSpatialInertia = SpatialInertia(mMass-&gt;getInertia(), mMass-&gt;getMass());
+-    mSpatialInertia = inertiaFrom(mLinkRelPos, mSpatialInertia);
++    mSpatialInertia = inertiaFrom(getLinkRelPos(), mSpatialInertia);
+   }
+   virtual void articulation(const Task&amp;)
+   {
+@@ -50,16 +48,15 @@
+     getLink().addForce(vIv);
+ 
+     // Now the gravity part
+-    Vector3 refPos = getLink().getCoordinateSystem().toReference(mLinkRelPos);
++    Vector3 refPos = getLink().getCoordinateSystem().toReference(getLinkRelPos());
+     Vector3 gravity = getEnvironment().getGravityAcceleration(refPos);
+     gravity = getLink().getCoordinateSystem().rotToLocal(gravity);
+     gravity *= mMass-&gt;getMass();
+-    getLink().applyForce(mLinkRelPos, gravity);
++    applyBodyForce(gravity);
+   }
+ 
+ private:
+   SharedPtr&lt;const Mass&gt; mMass;
+-  Vector3 mLinkRelPos;
+   SpatialInertia mSpatialInertia;
+ };
+ 
+@@ -67,8 +64,7 @@
+            const InertiaMatrix&amp; inertia, const Vector3&amp; position) :
+   SingleLinkInteract(name),
+   mMass(mass),
+-  mInertia(inertia),
+-  mPosition(position)
++  mInertia(inertia)
+ {
+ }
+ 
+@@ -107,16 +103,4 @@
+   mMass = mass;
+ }
+ 
+-const Vector3&amp;
+-Mass::getPosition(void) const
+-{
+-  return mPosition;
+-}
+-
+-void
+-Mass::setPosition(const Vector3&amp; position)
+-{
+-  mPosition = position;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2009-01-03 13:09:28 UTC (rev 913)
+@@ -38,16 +38,10 @@
+   const real_type&amp; getMass() const;
+   void setMass(const real_type&amp; mass);
+ 
+-  /** Set a position offset for the inertia given.
+-   */
+-  const Vector3&amp; getPosition(void) const;
+-  void setPosition(const Vector3&amp; position);
+-
+ private:
+   /// The paremeters that can be set from outside
+   real_type mMass;
+   InertiaMatrix mInertia;
+-  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-03 13:09:28 UTC (rev 913)
+@@ -12,7 +12,6 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Sensor, SingleLinkInteract)
+-  DEF_OPENFDM_PROPERTY(Vector3, Position, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnablePosition, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableOrientation, Serialized)
+   DEF_OPENFDM_PROPERTY(Bool, EnableEulerAngles, Serialized)
+@@ -33,19 +32,13 @@
+   Context(const Sensor* sensor,
+           const Environment* environment, PortValueList&amp; portValueList) :
+     SingleLinkInteract::Context(sensor, environment, portValueList),
+-    mSensor(sensor),
+-    mLinkRelPos(Vector3::zeros())
++    mSensor(sensor)
+   { }
+   virtual ~Context() {}
+     
+   virtual const Sensor&amp; getNode() const
+   { return *mSensor; }
+   
+-  virtual void initDesignPosition()
+-  {
+-    mLinkRelPos = mSensor-&gt;getPosition() - getLink().getDesignPosition();
+-  }
+-  
+   virtual void velocities(const Task&amp; task)
+   {
+     mSensor-&gt;velocity(task, getEnvironment(), mContinousState, mPortValueList);
+@@ -61,12 +54,10 @@
+   
+ private:
+   SharedPtr&lt;const Sensor&gt; mSensor;
+-  Vector3 mLinkRelPos;
+ };
+ 
+ Sensor::Sensor(const std::string&amp; name) :
+-  SingleLinkInteract(name),
+-  mPosition(0, 0, 0)
++  SingleLinkInteract(name)
+ {
+ }
+ 
+@@ -194,18 +185,6 @@
+ }
+ 
+ void
+-Sensor::setPosition(const Vector3&amp; position)
+-{
+-  mPosition = position;
+-}
+-
+-const Vector3&amp;
+-Sensor::getPosition() const
+-{
+-  return mPosition;
+-}
+-
+-void
+ Sensor::setEnablePosition(bool enable)
+ {
+   if (enable == getEnablePosition())
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-03 13:09:28 UTC (rev 913)
+@@ -34,11 +34,6 @@
+                             const ContinousStateValueVector&amp;,
+                             PortValueList&amp;) const;
+ 
+-  /// Set the position of the sensor in design coordinates
+-  void setPosition(const Vector3&amp; position);
+-  /// Get the position of the sensor in design coordinates
+-  const Vector3&amp; getPosition() const;
+-
+   /// Set availabilty of the position output port
+   void setEnablePosition(bool enable);
+   /// Get availabilty of the position output port
+@@ -118,8 +113,6 @@
+   void setEnableAllOutputs(bool enable);
+ 
+ protected:
+-  Vector3 mPosition;
+-
+   MatrixOutputPort mPositionPort;
+   MatrixOutputPort mOrientationPort;
+   MatrixOutputPort mEulerAnglesPort;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.cpp	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.cpp	2009-01-03 13:09:28 UTC (rev 913)
+@@ -7,11 +7,13 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(SingleLinkInteract, Interact)
++  DEF_OPENFDM_PROPERTY(Vector3, Position, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ SingleLinkInteract::SingleLinkInteract(const std::string&amp; name) :
+   Interact(name),
+-  mMechanicLink(this, &quot;link&quot;)
++  mMechanicLink(this, &quot;link&quot;),
++  mPosition(0, 0, 0)
+ {
+ }
+ 
+@@ -19,4 +21,16 @@
+ {
+ }
+ 
++void
++SingleLinkInteract::setPosition(const Vector3&amp; position)
++{
++  mPosition = position;
++}
++
++const Vector3&amp;
++SingleLinkInteract::getPosition() const
++{
++  return mPosition;
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-01-03 13:09:28 UTC (rev 913)
+@@ -30,13 +30,19 @@
+     Context(const SingleLinkInteract* interact, const Environment* environment,
+             PortValueList&amp; portValueList) :
+       MechanicContext(environment),
+-      mPortValueList(portValueList)
++      mPortValueList(portValueList),
++      mLinkRelPos(Vector3::zeros())
+     {
+       mMechanicLinkValue = portValueList.getPortValue(interact-&gt;mMechanicLink);
+       OpenFDMAssert(mMechanicLinkValue);
+     }
+     virtual ~Context() {}
+     
++    virtual const SingleLinkInteract&amp; getNode() const = 0;
++
++    virtual void initDesignPosition()
++    { mLinkRelPos = getNode().getPosition() - getLink().getDesignPosition(); }
++  
+     bool alloc()
+     {
+       unsigned numContinousStates = getNode().getNumContinousStateValues();
+@@ -67,6 +73,28 @@
+     MechanicLinkValue&amp; getLink() const
+     { return *mMechanicLinkValue; }
+ 
++    const Vector3&amp; getLinkRelPos() const
++    { return mLinkRelPos; }
++
++    /// FIXME: Hmm, may be some kind of MechanicLinkHandle class that has a
++    /// link value and these methods???
++    void applyBodyForce(const Vector6&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(mLinkRelPos, force); }
++    void applyBodyForce(const Vector3&amp; bodyPosition, const Vector6&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(bodyPosition + mLinkRelPos, force); }
++    void applyBodyForceAtLink(const Vector6&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(force); }
++
++    void applyBodyForce(const Vector3&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(mLinkRelPos, force); }
++    void applyBodyForce(const Vector3&amp; bodyPosition, const Vector3&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(bodyPosition + mLinkRelPos, force); }
++    void applyBodyForceAtLink(const Vector3&amp; force)
++    { mMechanicLinkValue-&gt;applyForce(force); }
++
++    void applyBodyTorque(const Vector3&amp; torque)
++    { mMechanicLinkValue-&gt;applyTorque(torque); }
++
+   protected:
+     // PortValues
+     PortValueList mPortValueList;
+@@ -79,11 +107,18 @@
+     
+   private:
+     SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
++    Vector3 mLinkRelPos;
+   };
+   
++  /// Set the position of the sensor in design coordinates
++  void setPosition(const Vector3&amp; position);
++  /// Get the position of the sensor in design coordinates
++  const Vector3&amp; getPosition() const;
+ 
+ protected:
+   MechanicLink mMechanicLink;
++
++  Vector3 mPosition;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.cpp	2009-01-03 13:09:28 UTC (rev 913)
+@@ -11,7 +11,6 @@
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(WheelContact, SingleLinkInteract)
+-  DEF_OPENFDM_PROPERTY(Vector3, Position, Serialized)
+   DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, WheelRadius, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
+@@ -25,24 +24,19 @@
+   Context(const WheelContact* wheelContact,
+           const Environment* environment, PortValueList&amp; portValueList) :
+     SingleLinkInteract::Context(wheelContact, environment, portValueList),
+-    mWheelContact(wheelContact),
+-    mLinkRelPos(Vector3::zeros())
++    mWheelContact(wheelContact)
+   { }
+   virtual ~Context() {}
+     
+   virtual const WheelContact&amp; getNode() const
+   { return *mWheelContact; }
+ 
+-  virtual void initDesignPosition()
+-  {
+-    mLinkRelPos = mWheelContact-&gt;getPosition() - getLink().getDesignPosition();
+-  }
+   virtual void articulation(const Task&amp; task)
+   {
+     const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
+ 
+     // The coordinate system at the hub.
+-    CoordinateSystem hubCoordinateSystem(cs.getRelative(mLinkRelPos));
++    CoordinateSystem hubCoordinateSystem(cs.getRelative(getLinkRelPos()));
+     
+     // Get the ground values in the hub coordinate system.
+     GroundValues groundValues =
+@@ -65,7 +59,7 @@
+     // The velocity of the ground patch in the current frame.
+     Vector6 groundVel = groundValues.vel;
+     // Now get the relative velocity of the ground wrt the hub
+-    Vector6 relVel = getLink().getReferenceVelocity(mLinkRelPos) - groundVel;
++    Vector6 relVel = getLink().getReferenceVelocity(getLinkRelPos()) - groundVel;
+     
+     
+     // The velocity perpandicular to the plane.
+@@ -111,17 +105,15 @@
+     Vector3 force = fricForce(0)*forward + fricForce(1)*side - normForce*down;
+     
+     // We don't have an angular moment.
+-    getLink().applyForce(contactPoint, force);
++    applyBodyForce(contactPoint, force);
+   }
+ 
+ private:
+   SharedPtr&lt;const WheelContact&gt; mWheelContact;
+-  Vector3 mLinkRelPos;
+ };
+ 
+ WheelContact::WheelContact(const std::string&amp; name) :
+   SingleLinkInteract(name),
+-  mPosition(0, 0, 0),
+   mAxis(0, 1, 0)
+ {
+   mWheelRadius = 0.3;
+@@ -172,18 +164,6 @@
+ }
+ 
+ const Vector3&amp;
+-WheelContact::getPosition(void) const
+-{
+-  return mPosition;
+-}
+-
+-void
+-WheelContact::setPosition(const Vector3&amp; position)
+-{
+-  mPosition = position;
+-}
+-
+-const Vector3&amp;
+ WheelContact::getAxis(void) const
+ {
+   return mAxis;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WheelContact.h	2009-01-03 13:09:28 UTC (rev 913)
+@@ -28,11 +28,6 @@
+   computeFrictionForce(real_type normForce, const Vector2&amp; vel,
+                        real_type omegaR, real_type friction) const;
+ 
+-  /** Set a position for the wheel axis position.
+-   */
+-  const Vector3&amp; getPosition(void) const;
+-  void setPosition(const Vector3&amp; position);
+-
+   /** Set wheel axis direction.
+    */
+   const Vector3&amp; getAxis(void) const;
+@@ -63,7 +58,6 @@
+   { return mFrictionCoeficient; }
+ 
+ private:
+-  Vector3 mPosition;
+   Vector3 mAxis;
+   real_type mWheelRadius;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2009-01-03 11:26:51 UTC (rev 912)
++++ branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2009-01-03 13:09:28 UTC (rev 913)
+@@ -27,19 +27,13 @@
+   Context(const AccelerationTracking* accelerationTracking,
+           const Environment* environment, PortValueList&amp; portValueList) :
+     SingleLinkInteract::Context(accelerationTracking, environment, portValueList),
+-    mAccelerationTracking(accelerationTracking),
+-    mLinkRelPos(Vector3::zeros())
++    mAccelerationTracking(accelerationTracking)
+   { }
+   virtual ~Context() {}
+     
+   virtual const AccelerationTracking&amp; getNode() const
+   { return *mAccelerationTracking; }
+   
+-  virtual void initDesignPosition()
+-  {
+-//     mLinkRelPos = mAccelerationTracking-&gt;getPosition() - getLink().getDesignPosition();
+-  }
+-  
+   virtual void velocities(const Task&amp; task)
+   {
+     mAccelerationTracking-&gt;velocity(task, getEnvironment(), mContinousState, mPortValueList);
+@@ -55,7 +49,6 @@
+   
+ private:
+   SharedPtr&lt;const AccelerationTracking&gt; mAccelerationTracking;
+-  Vector3 mLinkRelPos;
+ };
+ 
+   virtual MechanicContext* newMechanicContext(const Environment* environment,
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000880.html">[OpenFDM-svn] r912 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000882.html">[OpenFDM-svn] r914 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#881">[ date ]</a>
+              <a href="thread.html#881">[ thread ]</a>
+              <a href="subject.html#881">[ subject ]</a>
+              <a href="author.html#881">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

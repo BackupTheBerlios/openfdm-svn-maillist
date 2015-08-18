@@ -1,0 +1,356 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r722 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r722%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811112042.mABKgQU6000469%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000690.html">
+   <LINK REL="Next"  HREF="000692.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r722 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r722%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811112042.mABKgQU6000469%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r722 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov 11 21:42:26 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000690.html">[OpenFDM-svn] r721 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000692.html">[OpenFDM-svn] r723 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#691">[ date ]</a>
+              <a href="thread.html#691">[ thread ]</a>
+              <a href="subject.html#691">[ subject ]</a>
+              <a href="author.html#691">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-11 21:42:26 +0100 (Tue, 11 Nov 2008)
+New Revision: 722
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+Log:
+Remove the alloc virtual function.
+Make ModelContext a virtual base.
+
+M    src/OpenFDM/Joint.cpp
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/ModelContext.cpp
+M    src/OpenFDM/Model.h
+M    src/OpenFDM/Interact.cpp
+M    src/OpenFDM/RootJoint.cpp
+M    src/OpenFDM/Model.cpp
+M    src/OpenFDM/ModelContext.h
+M    src/OpenFDM/MechanicContext.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-11 20:42:26 UTC (rev 722)
+@@ -28,7 +28,7 @@
+ 
+   virtual MechanicContext* newMechanicContext(PortValueList&amp; portValueList) const
+   {
+-    SharedPtr&lt;MechanicContext&gt; context = new Context(this);
++    SharedPtr&lt;Context&gt; context = new Context(this);
+     for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+       PortValue* portValue = portValueList.getPortValue(i);
+       if (!portValue) {
+@@ -184,7 +184,7 @@
+     virtual const CartesianJoint&amp; getNode() const
+     { return *mCartesianJoint; }
+     
+-    virtual bool alloc()
++    bool alloc()
+     {
+       if (!allocStates())
+         return false;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Interact.cpp	2008-11-11 20:42:26 UTC (rev 722)
+@@ -83,7 +83,7 @@
+ MechanicContext*
+ Interact::newMechanicContext(PortValueList&amp; portValueList) const
+ {
+-  SharedPtr&lt;MechanicContext&gt; context = new Context(this);
++  SharedPtr&lt;Context&gt; context = new Context(this);
+   for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+     PortValue* portValue = portValueList.getPortValue(i);
+     if (!portValue) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Joint.cpp	2008-11-11 20:42:26 UTC (rev 722)
+@@ -14,7 +14,6 @@
+ #include &quot;Interact.h&quot;
+ #include &quot;LogStream.h&quot;
+ #include &quot;PortValueList.h&quot;
+-#include &quot;MechanicContext.h&quot;
+ #include &quot;NodeVisitor.h&quot;
+ 
+ namespace OpenFDM {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-11-11 20:42:26 UTC (rev 722)
+@@ -25,7 +25,6 @@
+ 
+   virtual const MechanicNode&amp; getNode() const = 0;
+ 
+-  virtual bool alloc() = 0;
+   virtual void initVelocities(const /*Init*/Task&amp; task) = 0;
+   virtual void velocities(const Task&amp; task) = 0;
+   virtual void articulation(const Task&amp; task) = 0;
+@@ -42,13 +41,6 @@
+ public:
+   typedef std::list&lt;SharedPtr&lt;MechanicContext&gt; &gt; list_type;
+ 
+-  bool alloc() const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      if (!(*i)-&gt;alloc())
+-        return false;
+-    return true;
+-  }
+   void initVelocities(const /*Init*/Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.cpp	2008-11-11 20:42:26 UTC (rev 722)
+@@ -11,6 +11,52 @@
+ 
+ namespace OpenFDM {
+ 
++class Model::Context : public ModelContext {
++public:
++  Context(const Model* model) :
++    mModel(model)
++  {
++  }
++  virtual ~Context()
++  { }
++
++  virtual const Model&amp; getNode() const
++  { return *mModel; }
++
++  bool alloc()
++  {
++    if (!allocStates())
++      return false;
++    return mModel-&gt;alloc(*this);
++  }
++  virtual void initOutput(const /*Init*/Task&amp; task)
++  {
++    mModel-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
++    mModel-&gt;output(task, mDiscreteState, mContinousState, mPortValueList);
++  }
++  virtual void output(const Task&amp; task)
++  {
++    mModel-&gt;output(task, mDiscreteState, mContinousState, mPortValueList);
++  }
++  virtual void update(const DiscreteTask&amp; discreteTask)
++  {
++    mModel-&gt;update(discreteTask, mDiscreteState, mContinousState, mPortValueList);
++  }
++
++  virtual void derivative(const Task&amp;)
++  {
++    mModel-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
++                       mContinousStateDerivative);
++  }
++
++private:
++  Context();
++  Context(const Context&amp;);
++  Context&amp; operator=(const Context&amp;);
++
++  SharedPtr&lt;const Model&gt; mModel;
++};
++
+ BEGIN_OPENFDM_OBJECT_DEF(Model, LeafNode)
+   END_OPENFDM_OBJECT_DEF
+ 
+@@ -38,7 +84,7 @@
+ ModelContext*
+ Model::newModelContext(PortValueList&amp; portValueList) const
+ {
+-  SharedPtr&lt;ModelContext&gt; context = new ModelContext(this);
++  SharedPtr&lt;Context&gt; context = new Context(this);
+   for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+     PortValue* portValue = portValueList.getPortValue(i);
+     if (!portValue) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Model.h	2008-11-11 20:42:26 UTC (rev 722)
+@@ -66,6 +66,9 @@
+   RealInputPort
+   newRealInputPort(const std::string&amp; name, bool directInput)
+   { return RealInputPort(this, name, directInput); }
++
++private:
++  class Context;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.cpp	2008-11-11 20:42:26 UTC (rev 722)
+@@ -7,20 +7,8 @@
+ 
+ namespace OpenFDM {
+ 
+-ModelContext::ModelContext(const Model* model) :
+-  mModel(model)
+-{
+-  OpenFDMAssert(mModel);
+-}
+-
+ ModelContext::~ModelContext()
+ {
+ }
+ 
+-const Model&amp;
+-ModelContext::getNode() const
+-{
+-  return *mModel;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-11-11 20:42:26 UTC (rev 722)
+@@ -20,46 +20,25 @@
+ //// This one is used to execute the simulation system
+ class ModelContext : public LeafContext {
+ public:
+-  ModelContext(const Model* model);
++  ModelContext() {}
+   virtual ~ModelContext();
+ 
+-  virtual const Model&amp; getNode() const;
++  virtual const Model&amp; getNode() const = 0;
+ 
+-  bool alloc()
+-  { if (!allocStates()) return false; return mModel-&gt;alloc(*this); }
+-  void initOutput(const /*Init*/Task&amp; task)
+-  {
+-    mModel-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+-    mModel-&gt;output(task, mDiscreteState, mContinousState, mPortValueList);
+-  }
+-  void output(const Task&amp; task)
+-  { mModel-&gt;output(task, mDiscreteState, mContinousState, mPortValueList); }
+-  void update(const DiscreteTask&amp; discreteTask)
+-  { mModel-&gt;update(discreteTask, mDiscreteState, mContinousState, mPortValueList); }
++  virtual void initOutput(const /*Init*/Task&amp; task) = 0;
++  virtual void output(const Task&amp; task) = 0;
++  virtual void update(const DiscreteTask&amp; discreteTask) = 0;
++  virtual void derivative(const Task&amp;) = 0;
+ 
+-  void derivative(const Task&amp;)
+-  { mModel-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+-                       mContinousStateDerivative); }
+-
+ private:
+-  ModelContext();
+   ModelContext(const ModelContext&amp;);
+   ModelContext&amp; operator=(const ModelContext&amp;);
+-
+-  SharedPtr&lt;const Model&gt; mModel;
+ };
+ 
+ class ModelContextList : public std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; {
+ public:
+   typedef std::list&lt;SharedPtr&lt;ModelContext&gt; &gt; list_type;
+ 
+-  bool alloc() const
+-  {
+-    for (list_type::const_iterator i = begin(); i != end(); ++i)
+-      if (!(*i)-&gt;alloc())
+-        return false;
+-    return true;
+-  }
+   void initOutput(const /*Init*/Task&amp; task) const
+   {
+     for (list_type::const_iterator i = begin(); i != end(); ++i)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-11 20:21:11 UTC (rev 721)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RootJoint.cpp	2008-11-11 20:42:26 UTC (rev 722)
+@@ -18,7 +18,7 @@
+   virtual const RootJoint&amp; getNode() const
+   { return *mRootJoint; }
+   
+-  virtual bool alloc()
++  bool alloc()
+   { if (!allocStates()) return false; return mRootJoint-&gt;alloc(*this); }
+   virtual void initVelocities(const /*Init*/Task&amp; task)
+   {
+@@ -69,7 +69,7 @@
+ MechanicContext*
+ RootJoint::newMechanicContext(PortValueList&amp; portValueList) const
+ {
+-  SharedPtr&lt;MechanicContext&gt; context = new Context(this);
++  SharedPtr&lt;Context&gt; context = new Context(this);
+   for (unsigned i = 0; i &lt; getNumPorts(); ++i) {
+     PortValue* portValue = portValueList.getPortValue(i);
+     if (!portValue) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000690.html">[OpenFDM-svn] r721 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000692.html">[OpenFDM-svn] r723 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#691">[ date ]</a>
+              <a href="thread.html#691">[ thread ]</a>
+              <a href="subject.html#691">[ subject ]</a>
+              <a href="author.html#691">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

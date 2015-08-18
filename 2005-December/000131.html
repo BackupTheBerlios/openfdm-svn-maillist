@@ -1,0 +1,606 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r147 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r147%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512311022.jBVAMjPH022500%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000130.html">
+   <LINK REL="Next"  HREF="000132.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r147 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r147%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512311022.jBVAMjPH022500%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r147 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Dec 31 11:22:45 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000130.html">[OpenFDM-svn] r146 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000132.html">[OpenFDM-svn] r148 - trunk/OpenFDM/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#131">[ date ]</a>
+              <a href="thread.html#131">[ thread ]</a>
+              <a href="subject.html#131">[ subject ]</a>
+              <a href="author.html#131">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-31 11:22:33 +0100 (Sat, 31 Dec 2005)
+New Revision: 147
+
+Removed:
+   trunk/OpenFDM/src/OpenFDM/LineForce.cpp
+   trunk/OpenFDM/src/OpenFDM/LineForce.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+   trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+   trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteActuatorFrame.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+   trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h
+Log:
+Convert the remaining LineForces to ordinary Model's
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-31 10:22:33 UTC (rev 147)
+@@ -751,16 +751,30 @@
+   wj-&gt;setJointVel(0);
+ 
+   // Add an brake force
+-  DiscBrake* brakeF = new DiscBrake(name + &quot; Brake Force&quot;);
+-  brakeF-&gt;setFrictionConstant(-1e4);
+-  if (brake == &quot;LEFT&quot;) {
+-    Port* port = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
+-    brakeF-&gt;getInputPort(0)-&gt;connect(port);
+-  } else if (brake == &quot;RIGHT&quot;) {
+-    Port* port = lookupJSBExpression(&quot;gear/right-brake-pos-norm&quot;);
+-    brakeF-&gt;getInputPort(0)-&gt;connect(port);
++  if (brake == &quot;LEFT&quot; || brake == &quot;RIGHT&quot;) {
++    DiscBrake* brakeF = new DiscBrake(name + &quot; Brake Force&quot;);
++    brakeF-&gt;setFrictionConstant(-1e4);
++    if (brake == &quot;LEFT&quot;) {
++      Port* port = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
++      brakeF-&gt;getInputPort(0)-&gt;connect(port);
++    } else if (brake == &quot;RIGHT&quot;) {
++      Port* port = lookupJSBExpression(&quot;gear/right-brake-pos-norm&quot;);
++      brakeF-&gt;getInputPort(0)-&gt;connect(port);
++    }
++    // That one reads the joint position and velocity ...
++    brakeF-&gt;getInputPort(1)-&gt;connect(wj-&gt;getOutputPort(1));
++    // ... and provides an output force
++    wj-&gt;getInputPort(0)-&gt;connect(brakeF-&gt;getOutputPort(0));
++    mVehicle-&gt;getMultiBodySystem()-&gt;addModel(brakeF);
++  } else {
++    // Just some 'rolloing friction' FIXME: does this belong here?
++    Gain* rollingFric = new Gain(name + &quot; Rolling Friction Force&quot;);
++    rollingFric-&gt;setGain(-10);
++    rollingFric-&gt;getInputPort(0)-&gt;connect(wj-&gt;getOutputPort(1));
++    // ... and provides an output force
++    wj-&gt;getInputPort(0)-&gt;connect(rollingFric-&gt;getOutputPort(0));
++    mVehicle-&gt;getMultiBodySystem()-&gt;addModel(rollingFric);
+   }
+-  wj-&gt;setLineForce(brakeF);
+   
+   WheelContact* wc = new WheelContact(name + &quot; Wheel Contact&quot;);
+   wc-&gt;setWheelRadius(0.5*wheelDiam);
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2005-12-31 10:22:33 UTC (rev 147)
+@@ -9,29 +9,60 @@
+ namespace OpenFDM {
+ 
+ DiscBrake::DiscBrake(const std::string&amp; name) :
+-  LineForce(name),
++  Model(name),
+   mFrictionConstant(-1)
+ {
+-  setNumInputPorts(1);
++  setDirectFeedThrough(true);
++
++  setNumInputPorts(2);
+   setInputPortName(0, &quot;brakePressure&quot;);
++  setInputPortName(1, &quot;velocity&quot;);
++  
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;force&quot;, this, &amp;DiscBrake::getForce);
+ }
+ 
+ DiscBrake::~DiscBrake(void)
+ {
+ }
+ 
++bool
++DiscBrake::init(void)
++{
++  if (!getInputPort(0)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of DiscBrake model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mBrakePressurePort = getInputPort(0)-&gt;toRealPortHandle();
++
++  if (!getInputPort(1)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of DiscBrake model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
++
++  return true;
++}
++
+ void
+ DiscBrake::output(const TaskInfo&amp; taskInfo)
+ {
+-  Port* port = getInputPort(0);
+-  real_type brakeInput = 0;
+-  if (port-&gt;isConnected()) {
+-    RealPortHandle rh = port-&gt;toRealPortHandle();
+-    brakeInput = rh.getRealValue();
+-  }
+-  setForce(getVel()*(-1e1 + brakeInput*mFrictionConstant));
++  real_type brakeInput = mBrakePressurePort.getRealValue();
++  real_type vel = mVelocityPort.getRealValue();
++  /// Hmm, this seems to be an intermediate model for a disc brake ...
++  mForce = vel*(-1e1 + brakeInput*mFrictionConstant);
+ }
+ 
++const real_type&amp;
++DiscBrake::getForce(void) const
++{
++  return mForce;
++}
++
+ real_type
+ DiscBrake::getFrictionConstant(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -5,26 +5,39 @@
+ #ifndef OpenFDM_DiscBrake_H
+ #define OpenFDM_DiscBrake_H
+ 
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /// Linear spring damper model
+ class DiscBrake :
+-    public LineForce {
++    public Model {
+ public:
+   DiscBrake(const std::string&amp; name);
+   virtual ~DiscBrake(void);
+ 
++  virtual bool init(void);
+   virtual void output(const TaskInfo&amp; taskInfo);
+ 
++  const real_type&amp; getForce(void) const;
++
+   real_type getFrictionConstant(void) const;
+   void setFrictionConstant(real_type frictionConstant);
+ 
+ private:
++  /// The friction constant for that viscosous friction model
+   real_type mFrictionConstant;
++
++  /// The output brake force
++  real_type mForce;
++
++  /// The intput port which must provide the position
++  RealPortHandle mBrakePressurePort;
++  /// The intput port which must provide the velocity
++  RealPortHandle mVelocityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/LineForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineForce.cpp	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/LineForce.cpp	2005-12-31 10:22:33 UTC (rev 147)
+@@ -1,32 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;LineForce.h&quot;
+-
+-namespace OpenFDM {
+-
+-LineForce::LineForce(const std::string&amp; name) :
+-  Model(name)
+-{
+-}
+-
+-LineForce::~LineForce(void)
+-{
+-}
+-
+-void
+-LineForce::computeForce(real_type position, real_type vel)
+-{
+-  // Set the position and velocity
+-  mPosition = position;
+-  mVel = vel;
+-  // call the output function
+-  TaskInfo taskInfo;
+-  taskInfo.addSampleTime(SampleTime::Continous);
+-  output(taskInfo);
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/LineForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LineForce.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/LineForce.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -1,41 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_LineForce_H
+-#define OpenFDM_LineForce_H
+-
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-
+-namespace OpenFDM {
+-
+-class LineForce :
+-    public Model {
+-public:
+-  LineForce(const std::string&amp; name);
+-  virtual ~LineForce(void);
+-
+-  void computeForce(real_type position, real_type vel);
+-
+-  real_type getPosition(void) const
+-  { return mPosition; }
+-  real_type getVel(void) const
+-  { return mVel; }
+-
+-  real_type getForce(void) const
+-  { return mForce; }
+-
+-protected:
+-  void setForce(real_type force)
+-  { mForce = force; }
+-
+-private:
+-  real_type mPosition;
+-  real_type mVel;
+-  real_type mForce;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2005-12-31 10:22:33 UTC (rev 147)
+@@ -9,7 +9,7 @@
+ namespace OpenFDM {
+ 
+ LinearSpring::LinearSpring(const std::string&amp; name) :
+-  LineForce(name),
++  Model(name),
+   mSpringReference(0),
+   mSpringConstant(0),
+   mDamperConstant(0)
+@@ -20,13 +20,43 @@
+ {
+ }
+ 
++bool
++LinearSpring::init(void)
++{
++  if (!getInputPort(0)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
++
++  if (!getInputPort(1)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
++
++  return true;
++}
++
+ void
+ LinearSpring::output(const TaskInfo&amp; taskInfo)
+ {
+-  real_type displacement = getPosition() - mSpringReference;
+-  setForce(mSpringConstant*displacement + getVel()*mDamperConstant);
++  real_type position = mPositionPort.getRealValue();
++  real_type vel = mVelocityPort.getRealValue();
++  real_type displacement = position - mSpringReference;
++  mForce = mSpringConstant*displacement + vel*mDamperConstant;
+ }
+ 
++const real_type&amp;
++LinearSpring::getForce(void) const
++{
++  return mForce;
++}
++
+ real_type
+ LinearSpring::getSpringReference(void) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -5,21 +5,25 @@
+ #ifndef OpenFDM_LinearSpring_H
+ #define OpenFDM_LinearSpring_H
+ 
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ /// Linear spring damper model
+ class LinearSpring :
+-    public LineForce {
++    public Model {
+ public:
+   LinearSpring(const std::string&amp; name);
+   virtual ~LinearSpring(void);
+ 
++  virtual bool init(void);
+   virtual void output(const TaskInfo&amp; taskInfo);
+ 
++  const real_type&amp; getForce(void) const;
++
+   real_type getSpringReference(void) const;
+   void setSpringReference(real_type springReference);
+ 
+@@ -33,6 +37,13 @@
+   real_type mSpringReference;
+   real_type mSpringConstant;
+   real_type mDamperConstant;
++
++  real_type mForce;
++
++  /// The intput port which must provide the position
++  RealPortHandle mPositionPort;
++  /// The intput port which must provide the velocity
++  RealPortHandle mVelocityPort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2005-12-31 10:22:33 UTC (rev 147)
+@@ -74,7 +74,6 @@
+   LinAlg/Misc.h \
+   LinAlg/Proxy.h \
+   LinearSpring.h \
+-  LineForce.h \
+   LogStream.h \
+   Mass.h \
+   Math.h \
+@@ -172,7 +171,6 @@
+   ImplicitEuler.cpp \
+   Joint.cpp \
+   LinearSpring.cpp \
+-  LineForce.cpp \
+   Logger.cpp \
+   Mass.cpp \
+   MaxModel.cpp \
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJoint.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -14,7 +14,6 @@
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
+-#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/PrismaticJointFrame.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -5,16 +5,6 @@
+ #ifndef OpenFDM_PrismaticJointFrame_H
+ #define OpenFDM_PrismaticJointFrame_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;LineForce.h&quot;
+ #include &quot;CartesianJointFrame.h&quot;
+ 
+ namespace OpenFDM {
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteActuatorFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteActuatorFrame.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteActuatorFrame.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -5,15 +5,6 @@
+ #ifndef OpenFDM_RevoluteActuatorFrame_H
+ #define OpenFDM_RevoluteActuatorFrame_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;LineForce.h&quot;
+ #include &quot;CartesianActuatorFrame.h&quot;
+ 
+ namespace OpenFDM {
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.cpp	2005-12-31 10:22:33 UTC (rev 147)
+@@ -127,8 +127,6 @@
+     tau(1) = mJointForcePort.getRealValue();
+   } else
+     tau.clear();
+-  /// FIXME the old obsolete joint force computation
+-  tau(1) += getJointForce();
+   mRevoluteJointFrame-&gt;jointArticulation(artI, artF, outF, outI, tau);
+ }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJoint.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -14,7 +14,6 @@
+ #include &quot;Frame.h&quot;
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
+-#include &quot;LineForce.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -58,22 +57,6 @@
+    */
+   void setOrientation(const Quaternion&amp; orientation);
+ 
+-  const LineForce* getLineForce(void) const
+-  { return mLineForce; }
+-  LineForce* getLineForce(void)
+-  { return mLineForce; }
+-  void setLineForce(LineForce* lineForce)
+-  { mLineForce = lineForce; }
+-
+-  real_type getJointForce(void)
+-  {
+-    if (!mLineForce)
+-      return 0;
+-    
+-    mLineForce-&gt;computeForce(getJointPos(), getJointVel());
+-    return mLineForce-&gt;getForce();
+-  }
+-
+ private:
+   /** Computes the inboard articulated inertia and force for
+       this articulated body. It is part of the articulated body algorithm.
+@@ -88,10 +71,6 @@
+   virtual void getState(StateStream&amp; state) const;
+   virtual void getStateDeriv(StateStream&amp; stateDeriv);
+ 
+-  /** The direct joint interaction force
+-   */
+-  SharedPtr&lt;LineForce&gt; mLineForce;
+-
+   /// The intput port which might provide some joint internal force
+   RealPortHandle mJointForcePort;
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h	2005-12-31 09:56:49 UTC (rev 146)
++++ trunk/OpenFDM/src/OpenFDM/RevoluteJointFrame.h	2005-12-31 10:22:33 UTC (rev 147)
+@@ -5,16 +5,6 @@
+ #ifndef OpenFDM_RevoluteJointFrame_H
+ #define OpenFDM_RevoluteJointFrame_H
+ 
+-#include &quot;Assert.h&quot;
+-#include &quot;Object.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;Matrix.h&quot;
+-#include &quot;Quaternion.h&quot;
+-#include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;Joint.h&quot;
+-#include &quot;LineForce.h&quot;
+ #include &quot;CartesianJointFrame.h&quot;
+ 
+ namespace OpenFDM {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000130.html">[OpenFDM-svn] r146 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000132.html">[OpenFDM-svn] r148 - trunk/OpenFDM/src/OpenFDM/LinAlg
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#131">[ date ]</a>
+              <a href="thread.html#131">[ thread ]</a>
+              <a href="subject.html#131">[ subject ]</a>
+              <a href="author.html#131">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

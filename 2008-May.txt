@@ -1,0 +1,1096 @@
+From frohlich at mail.berlios.de  Mon May 19 07:16:00 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Mon, 19 May 2008 07:16:00 +0200
+Subject: [OpenFDM-svn] r386 - trunk/OpenFDM/src/test
+Message-ID: <200805190516.m4J5G0XF011769@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-19 07:15:59 +0200 (Mon, 19 May 2008)
+New Revision: 386
+
+Modified:
+   trunk/OpenFDM/src/test/HDF5Writer.h
+Log:
+Make it compile with hdf 1.8.0
+
+
+Modified: trunk/OpenFDM/src/test/HDF5Writer.h
+===================================================================
+--- trunk/OpenFDM/src/test/HDF5Writer.h	2008-04-20 10:52:11 UTC (rev 385)
++++ trunk/OpenFDM/src/test/HDF5Writer.h	2008-05-19 05:15:59 UTC (rev 386)
+@@ -78,7 +78,11 @@
+ 
+   bool create(const HDF5Object& parent, const std::string& name)
+   {
++#if (1 < H5_VERS_MAJOR || (1 == H5_VERS_MAJOR && 8 <= H5_VERS_MINOR))
++    _id = H5Gcreate(parent.getId(), name.c_str(),  H5P_DEFAULT,  H5P_DEFAULT,  H5P_DEFAULT);
++#else
+     _id = H5Gcreate(parent.getId(), name.c_str(), 0);
++#endif
+     if (_id < 0)
+       return false;
+     return true;
+@@ -133,8 +137,13 @@
+ 
+       hid_t cparms = H5Pcreate(H5P_DATASET_CREATE);
+       status = H5Pset_chunk(cparms, rank, chunk_dims);
++#if (1 < H5_VERS_MAJOR || (1 == H5_VERS_MAJOR && 8 <= H5_VERS_MINOR))
+       _id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
++                      _dataspace.getId(), H5P_DEFAULT, cparms, H5P_DEFAULT);
++#else
++      _id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
+                       _dataspace.getId(), cparms);
++#endif
+       H5Pclose(cparms);
+     } else {
+       // increment size
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 10:01:34 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 10:01:34 +0200
+Subject: [OpenFDM-svn] r387 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805230801.m4N81YLJ024306@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 10:01:34 +0200 (Fri, 23 May 2008)
+New Revision: 387
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h
+Log:
+Lock weak pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h	2008-05-19 05:15:59 UTC (rev 386)
++++ trunk/OpenFDM/src/OpenFDM/XMLDumpModelVisitor.h	2008-05-23 08:01:34 UTC (rev 387)
+@@ -72,7 +72,8 @@
+         indent() << "<connect name=\"" << connection->getName() << "\">\n";
+       ++mIndent;
+       dumpProperties(*connection);
+-      const PortProvider* portProvider = connection->getPortProvider();
++      SharedPtr<const PortProvider> portProvider;
++      portProvider = connection->getPortProvider().lock();
+       if (portProvider) {
+         SharedPtr<Node> node = portProvider->getModel().lock();
+         if (node) {
+@@ -81,7 +82,8 @@
+                    << "\"/>\n";
+         }
+       }
+-      const PortAcceptor* portAcceptor = connection->getPortAcceptor();
++      SharedPtr<const PortAcceptor> portAcceptor;
++      portAcceptor = connection->getPortAcceptor().lock();
+       if (portAcceptor) {
+         SharedPtr<Node> node = portAcceptor->getModel().lock();
+         if (node) {
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 10:07:29 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 10:07:29 +0200
+Subject: [OpenFDM-svn] r388 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805230807.m4N87TnE024947@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 10:07:29 +0200 (Fri, 23 May 2008)
+New Revision: 388
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ODESolver.h
+Log:
+Lock weak pointer.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ODESolver.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ODESolver.h	2008-05-23 08:01:34 UTC (rev 387)
++++ trunk/OpenFDM/src/OpenFDM/ODESolver.h	2008-05-23 08:07:29 UTC (rev 388)
+@@ -53,9 +53,15 @@
+   { return mStats; }
+ 
+   void evalFunction(real_type t, const Vector& v, Vector& out)
+-  { mSystem->evalFunction(t, v, out); }
++  {
++    SharedPtr<System> system = mSystem.lock();
++    system->evalFunction(t, v, out);
++  }
+   void evalJacobian(real_type t, const Vector& v, Matrix& jac)
+-  { mSystem->evalJacobian(t, v, jac); }
++  {
++    SharedPtr<System> system = mSystem.lock();
++    system->evalJacobian(t, v, jac);
++  }
+ 
+   void setSystem(System* model)
+   { mSystem = model; }
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 10:08:49 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 10:08:49 +0200
+Subject: [OpenFDM-svn] r389 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805230808.m4N88nMx025118@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 10:08:49 +0200 (Fri, 23 May 2008)
+New Revision: 389
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp
+Log:
+Lock weak pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp	2008-05-23 08:07:29 UTC (rev 388)
++++ trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp	2008-05-23 08:08:49 UTC (rev 389)
+@@ -38,7 +38,8 @@
+   Vector fState(mState.size());
+   fState.clear();
+ 
+-  unsigned dim = mSystem->getNumContinousStates();
++  SharedPtr<System> system = mSystem.lock();
++  unsigned dim = system->getNumContinousStates();
+ 
+   real_type h = 0;
+   while (!reached(toTEnd)) {
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 14:20:05 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 14:20:05 +0200
+Subject: [OpenFDM-svn] r390 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231220.m4NCK5Nc007932@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 14:20:04 +0200 (Fri, 23 May 2008)
+New Revision: 390
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+Log:
+Add a compare and swap method.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2008-05-23 08:08:49 UTC (rev 389)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2008-05-23 12:20:04 UTC (rev 390)
+@@ -37,6 +37,18 @@
+   return result + value;
+ }
+ 
++unsigned __sync_bool_compare_and_swap_4(volatile void *ptr,
++                                        unsigned oldValue, unsigned newValue)
++{
++  register volatile unsigned* mem = reinterpret_cast<volatile unsigned*>(ptr);
++  unsigned before;
++  __asm__ __volatile__("lock; cmpxchg{l} {%1,%2|%1,%2}"
++                       : "=a"(before)
++                       : "q"(newValue), "m"(*mem), "0"(oldValue)
++                       : "memory");
++  return before == oldValue;
++}
++
+ void __sync_synchronize()
+ {
+   __asm__ __volatile__("": : : "memory");
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-05-23 08:08:49 UTC (rev 389)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2008-05-23 12:20:04 UTC (rev 390)
+@@ -68,6 +68,29 @@
+ #endif
+  }
+ 
++  bool compareAndExchange(unsigned oldValue, unsigned newValue)
++  {
++#if defined(OpenFDM_USE_GCC4_BUILTINS)
++    return __sync_bool_compare_and_swap(&mValue, oldValue, newValue);
++#elif defined(OpenFDM_USE_MIPOSPRO_BUILTINS)
++    return __compare_and_swap(&mValue, oldValue, newValue);
++#elif defined(OpenFDM_USE_WIN32_INTERLOCKED)
++    long volatile* lvPtr = reinterpret_cast<long volatile*>(&mValue);
++    return oldValue == InterlockedCompareExchange(lvPtr, newValue, oldValue);
++#elif defined(OpenFDM_USE_MUTEX)
++    ScopeLock lock(mMutex);
++    if (mValue != oldValue)
++      return false;
++    mValue = newValue;
++    return true;
++#else
++    if (mValue != oldValue)
++      return false;
++    mValue = newValue;
++    return true;
++#endif
++  }
++
+ private:
+   Atomic(const Atomic&);
+   Atomic& operator=(const Atomic&);
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 14:23:31 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 14:23:31 +0200
+Subject: [OpenFDM-svn] r391 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231223.m4NCNVx9008430@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 14:23:31 +0200 (Fri, 23 May 2008)
+New Revision: 391
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+Log:
+Use lock and return shared ptr.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2008-05-23 12:20:04 UTC (rev 390)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2008-05-23 12:23:31 UTC (rev 391)
+@@ -40,15 +40,15 @@
+ 
+   virtual bool dependsDirectOn(Model* model);
+ 
+-  const RigidBody* getParentRigidBody(unsigned id = 0) const
++  SharedPtr<const RigidBody> getParentRigidBody(unsigned id = 0) const
+   {
+     OpenFDMAssert(id < mParents.size());
+-    return mParents[id];
++    return mParents[id].lock();
+   }
+-  RigidBody* getParentRigidBody(unsigned id = 0)
++  SharedPtr<RigidBody> getParentRigidBody(unsigned id = 0)
+   {
+     OpenFDMAssert(id < mParents.size());
+-    return mParents[id];
++    return mParents[id].lock();
+   }
+   bool isChildOf(const RigidBody* const rigidBody) const;
+ 
+@@ -65,9 +65,7 @@
+   void swapParents(void)
+   {
+     OpenFDMAssert(2 == mParents.size());
+-    RigidBody* rigidBody = mParents[0];
+-    mParents[0] = mParents[1];
+-    mParents[1] = rigidBody;
++    mParents[0].swap(mParents[1]);
+   }
+ 
+ private:
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 14:24:01 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 14:24:01 +0200
+Subject: [OpenFDM-svn] r392 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231224.m4NCO0as008516@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 14:24:00 +0200 (Fri, 23 May 2008)
+New Revision: 392
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+Log:
+Use lock.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2008-05-23 12:23:31 UTC (rev 391)
++++ trunk/OpenFDM/src/OpenFDM/NumericPortAcceptor.h	2008-05-23 12:24:00 UTC (rev 392)
+@@ -57,7 +57,7 @@
+     mSourceModel(sourceModel), mGetter(getter)
+   { }
+   virtual void evaluate(void)
+-  { mValue(0, 0) = (mSourceModel->*mGetter)(); }
++  { mValue(0, 0) = (mSourceModel.lock()->*mGetter)(); }
+ private:
+   WeakPtr<M> mSourceModel;
+   Getter mGetter;
+@@ -70,7 +70,7 @@
+     mSourceModel(sourceModel), mGetter(getter)
+   { }
+   virtual void evaluate(void)
+-  { mValue = (mSourceModel->*mGetter)(); }
++  { mValue = (mSourceModel.lock()->*mGetter)(); }
+ private:
+   WeakPtr<M> mSourceModel;
+   Getter mGetter;
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 14:24:50 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 14:24:50 +0200
+Subject: [OpenFDM-svn] r393 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231224.m4NCOosQ008631@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 14:24:49 +0200 (Fri, 23 May 2008)
+New Revision: 393
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+Log:
+New function getNonZero()
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-05-23 12:24:00 UTC (rev 392)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-05-23 12:24:49 UTC (rev 393)
+@@ -29,6 +29,18 @@
+   { if (ref) return ref->_refcount; else return 0u; }
+   static bool shared(const Referenced* ref)
+   { if (ref) return 1u < ref->_refcount; else return false; }
++  static unsigned getNonZero(const Referenced* ref)
++  {
++    if (!ref)
++      return 0u;
++    unsigned count;
++    do {
++      count = ref->_refcount;
++      if (count == 0)
++        return 0u;
++    } while (!ref->_refcount.compareAndExchange(count, count+1));
++    return count + 1;
++  }
+ 
+   template<typename T>
+   static void destroy(T* ref)
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:11:17 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:11:17 +0200
+Subject: [OpenFDM-svn] r394 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231311.m4NDBH6v012607@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:11:17 +0200 (Fri, 23 May 2008)
+New Revision: 394
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+Log:
+Use lock and shared pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2008-05-23 12:24:49 UTC (rev 393)
++++ trunk/OpenFDM/src/OpenFDM/EnvironmentObject.h	2008-05-23 13:11:17 UTC (rev 394)
+@@ -17,10 +17,10 @@
+   EnvironmentObject(void);
+   virtual ~EnvironmentObject(void);
+ 
+-  Environment* getEnvironment(void)
+-  { return mEnvironment; }
+-  const Environment* getEnvironment(void) const
+-  { return mEnvironment; }
++  SharedPtr<Environment> getEnvironment(void)
++  { return mEnvironment.lock(); }
++  SharedPtr<const Environment> getEnvironment(void) const
++  { return mEnvironment.lock(); }
+ 
+ private:
+   void attachToEnvironment(Environment* environment);
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:11:43 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:11:43 +0200
+Subject: [OpenFDM-svn] r395 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231311.m4NDBhw3012643@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:11:42 +0200 (Fri, 23 May 2008)
+New Revision: 395
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+Log:
+Use lock and shared pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2008-05-23 13:11:17 UTC (rev 394)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2008-05-23 13:11:42 UTC (rev 395)
+@@ -74,7 +74,7 @@
+     return false;
+   ParentList::const_iterator it = mParents.begin();
+   while (it != mParents.end()) {
+-    if ((*it) == rigidBody)
++    if ((*it).lock() == rigidBody)
+       return true;
+     ++it;
+   }
+@@ -90,7 +90,7 @@
+   }
+   ParentList::iterator it;
+   for (it = mParents.begin(); it != mParents.end(); ++it) {
+-    if ((*it) == 0) {
++    if ((*it).lock() == 0) {
+       (*it) = rigidBody;
+       if (upstream && it != mParents.begin())
+         swapParents();
+@@ -115,8 +115,8 @@
+   }
+   ParentList::iterator it;
+   for (it = mParents.begin(); it != mParents.end(); ++it) {
+-    if ((*it) == rigidBody) {
+-      (*it) = 0;
++    if ((*it).lock() == rigidBody) {
++      (*it).clear();
+       recheckTopology();
+       return true;
+     }
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:12:03 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:12:03 +0200
+Subject: [OpenFDM-svn] r396 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231312.m4NDC3jh012724@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:12:03 +0200 (Fri, 23 May 2008)
+New Revision: 396
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Connection.cpp
+Log:
+Use lock and shared pointers.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Connection.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Connection.cpp	2008-05-23 13:11:42 UTC (rev 395)
++++ trunk/OpenFDM/src/OpenFDM/Connection.cpp	2008-05-23 13:12:03 UTC (rev 396)
+@@ -25,91 +25,93 @@
+ Port::ConnectResult
+ Connection::setPortProvider(PortProvider* portProvider)
+ {
+-  if (mPortProvider && portProvider)
++  if (mPortProvider.lock() && portProvider)
+     return Port::AlreadyConnected;
+ 
+   if (!portProvider) {
+-    if (mPortAcceptor && mPortProvider) {
+-      mPortAcceptor->disconnect(mPortProvider);
++    if (mPortAcceptor.lock() && mPortProvider.lock()) {
++      mPortAcceptor.lock()->disconnect(mPortProvider.lock());
+     } else {
+       // FIXME
+ //       modelGroup->removeConnection(this);
+     }
+-    mPortProvider = 0;
++    mPortProvider.clear();
+     return Port::Success;
+   }
+ 
+   SharedPtr<Node> providerModel = portProvider->getModel().lock();
+   if (!providerModel)
+     return Port::StalePort;
+-  if (!providerModel->getParent(0))
++  if (!providerModel->getParent(0).lock())
+     return Port::IsolatedModel;
+ 
+   // if the other side is not yet connected, we are ok here
+-  if (!mPortAcceptor) {
++  if (!mPortAcceptor.lock()) {
+     mPortProvider = portProvider;
+-    ModelGroup* modelGroup = providerModel->getParent(0);
++    SharedPtr<ModelGroup> modelGroup = providerModel->getParent(0).lock();
+     modelGroup->addConnection(this);
+     return Port::Success;
+   }
+ 
+-  SharedPtr<Node> acceptorModel = mPortAcceptor->getModel().lock();
+-  if (acceptorModel->getParent(0) != providerModel->getParent(0)) {
+-    mPortProvider = 0;
++  SharedPtr<Node> acceptorModel = mPortAcceptor.lock()->getModel().lock();
++  if (acceptorModel->getParent(0).lock() != providerModel->getParent(0).lock()) {
++    mPortProvider.clear();
+     return Port::DifferentGroups;
+   }
+ 
+   mPortProvider = portProvider;
+-  Port::ConnectResult result = mPortAcceptor->connect(mPortProvider);
++  Port::ConnectResult result = mPortAcceptor.lock()->connect(mPortProvider.lock());
+   if (result == Port::Success)
+     return result;
+-  mPortProvider = 0;
++  mPortProvider.clear();
+   return result;
+ }
+ 
+ Port::ConnectResult
+ Connection::setPortAcceptor(PortAcceptor* portAcceptor)
+ {
+-  if (mPortAcceptor && portAcceptor)
++  if (mPortAcceptor.lock() && portAcceptor)
+     return Port::AlreadyConnected;
+ 
+   if (!portAcceptor) {
+-    if (mPortAcceptor && mPortProvider) {
+-      mPortAcceptor->disconnect(mPortProvider);
++    if (mPortAcceptor.lock() && mPortProvider.lock()) {
++      mPortAcceptor.lock()->disconnect(mPortProvider.lock());
+     } else {
+       // FIXME
+ //       modelGroup->removeConnection(this);
+     }
+-    mPortAcceptor = 0;
++    mPortAcceptor.clear();
+     return Port::Success;
+   }
+     
+   SharedPtr<Node> acceptorModel = portAcceptor->getModel().lock();
+   if (!acceptorModel)
+     return Port::StalePort;
+-  if (!acceptorModel->getParent(0))
++  SharedPtr<Node> acceptorParent = acceptorModel->getParent(0).lock(); 
++  if (!acceptorParent)
+     return Port::IsolatedModel;
+ 
+   // if the other side is not yet connected, we are ok here
+-  if (!mPortProvider) {
++  if (!mPortProvider.lock()) {
+     mPortAcceptor = portAcceptor;
+-    ModelGroup* modelGroup = acceptorModel->getParent(0);
++    SharedPtr<ModelGroup> modelGroup = acceptorModel->getParent(0).lock();
+     modelGroup->addConnection(this);
+ 
+     return Port::Success;
+   }
+ 
+-  SharedPtr<Node> providerModel = mPortProvider->getModel().lock();
+-  if (acceptorModel->getParent(0) != providerModel->getParent(0)) {
+-    mPortAcceptor = 0;
++  SharedPtr<Node> providerModel = mPortProvider.lock()->getModel().lock();
++  SharedPtr<Node> providerParent = providerModel->getParent(0).lock(); 
++  if (acceptorParent != providerParent) {
++    mPortAcceptor.clear();
+     return Port::DifferentGroups;
+   }
+ 
+   mPortAcceptor = portAcceptor;
+-  Port::ConnectResult result = mPortAcceptor->connect(mPortProvider);
++  Port::ConnectResult result = portAcceptor->connect(mPortProvider.lock());
+   if (result == Port::Success)
+     return result;
+-  mPortAcceptor = 0;
++  mPortAcceptor.clear();
+   return result;
+ }
+ 
+@@ -181,8 +183,8 @@
+   SharedPtr<PortAcceptor> portAcceptor = mPortAcceptor.lock();
+   if (portProvider && portAcceptor)
+     portAcceptor->disconnect(portProvider);
+-  mPortProvider = 0;
+-  mPortAcceptor = 0;
++  mPortProvider.clear();
++  mPortAcceptor.clear();
+ }
+ 
+ } // namespace OpenFDM
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:12:23 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:12:23 +0200
+Subject: [OpenFDM-svn] r397 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231312.m4NDCNqg012862@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:12:22 +0200 (Fri, 23 May 2008)
+New Revision: 397
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Frame.cpp
+   trunk/OpenFDM/src/OpenFDM/Frame.h
+Log:
+Use lock and shared pointers
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.cpp	2008-05-23 13:12:03 UTC (rev 396)
++++ trunk/OpenFDM/src/OpenFDM/Frame.cpp	2008-05-23 13:12:22 UTC (rev 397)
+@@ -86,14 +86,15 @@
+ Frame::isParentFrameOf(const Frame* const frame) const
+ {
+   return isDirectParentFrameOf(frame) ||
+-    (frame && isParentFrameOf(frame->mParentFrame));
++    (frame && isParentFrameOf(frame->mParentFrame.lock()));
+ }
+ 
+ bool
+ Frame::isChildFrameOf(const Frame* const frame) const
+ {
++  SharedPtr<Frame> parent = mParentFrame.lock();
+   return isDirectChildFrameOf(frame) ||
+-    (mParentFrame && mParentFrame->isChildFrameOf(frame));
++    (parent && parent->isChildFrameOf(frame));
+ }
+ 
+ bool
+
+Modified: trunk/OpenFDM/src/OpenFDM/Frame.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Frame.h	2008-05-23 13:12:03 UTC (rev 396)
++++ trunk/OpenFDM/src/OpenFDM/Frame.h	2008-05-23 13:12:22 UTC (rev 397)
+@@ -67,10 +67,10 @@
+ 
+   /// Return the parent frame.
+   Frame* getParentFrame(void)
+-  { return mParentFrame; }
++  { return mParentFrame.lock(); }
+   /// Return the parent frame.
+   const Frame* getParentFrame(void) const
+-  { return mParentFrame; }
++  { return mParentFrame.lock(); }
+   /// True if the current frame has a parent frame.
+   bool hasParent(void) const
+   { return getParentFrame(); }
+@@ -80,7 +80,7 @@
+   /// That means it reads:
+   ///  this->isDirectParentFrameOf(frame)
+   bool isDirectParentFrameOf(const Frame* const frame) const
+-  { return frame && this == frame->mParentFrame; }
++  { return frame && this == frame->mParentFrame.lock(); }
+   /// Return true if this Frame is a parent Frame of the Frame given
+   /// in the argument frame. It does not need to be the direct parent.
+   /// That means it reads:
+@@ -92,7 +92,7 @@
+   /// That means it reads:
+   ///  this->isDirectChildFrameOf(frame)
+   bool isDirectChildFrameOf(const Frame* const frame) const
+-  { return frame && frame == mParentFrame; }
++  { return frame && frame == mParentFrame.lock(); }
+   /// Return true if this Frame is a child Frame of the Frame given
+   /// in the argument frame. It does not need to be a direct child.
+   /// That means it reads:
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:12:55 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:12:55 +0200
+Subject: [OpenFDM-svn] r398 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231312.m4NDCtdS012974@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:12:55 +0200 (Fri, 23 May 2008)
+New Revision: 398
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h
+Log:
+Use lock and shared ponters.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h	2008-05-23 13:12:22 UTC (rev 397)
++++ trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h	2008-05-23 13:12:55 UTC (rev 398)
+@@ -29,9 +29,9 @@
+     IEFunction(ImplicitEuler* i) : ie(i) {}
+ 
+     virtual size_type inSize(void) const
+-    { return ie->mSystem->getNumContinousStates(); }
++    { return ie->mSystem.lock()->getNumContinousStates(); }
+     virtual size_type outSize(void) const
+-    { return ie->mSystem->getNumContinousStates(); }
++    { return ie->mSystem.lock()->getNumContinousStates(); }
+     virtual void eval(real_type t, const invector_type& v,
+                       outvector_type& out)
+     {
+@@ -43,7 +43,7 @@
+     {
+       real_type h = ie->mCurrentStepsize;
+       ie->evalJacobian(ie->getTime() + h, ie->getState() + v, jac);
+-      size_type dim = ie->mSystem->getNumContinousStates();
++      size_type dim = ie->mSystem.lock()->getNumContinousStates();
+       jac -= (1/h)*LinAlg::Eye<real_type,0,0>(dim, dim);
+     }
+   private:
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:33:02 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:33:02 +0200
+Subject: [OpenFDM-svn] r399 - trunk/flightgear
+Message-ID: <200805231333.m4NDX2W9014369@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:33:01 +0200 (Fri, 23 May 2008)
+New Revision: 399
+
+Modified:
+   trunk/flightgear/FGPropertyAdapter.h
+Log:
+Use lock and shared pointer.
+
+
+Modified: trunk/flightgear/FGPropertyAdapter.h
+===================================================================
+--- trunk/flightgear/FGPropertyAdapter.h	2008-05-23 13:12:55 UTC (rev 398)
++++ trunk/flightgear/FGPropertyAdapter.h	2008-05-23 13:33:01 UTC (rev 399)
+@@ -22,16 +22,17 @@
+ protected:
+   bool getPropertyValue(Variant& value) const
+   {
+-    if (!mObject)
++    SharedPtr<Object> object = mObject.lock();
++    if (!object)
+       return false;
+-    return mObject->getPropertyValue(mPropertyName, value);
++    return object->getPropertyValue(mPropertyName, value);
+   }
+   bool setPropertyValue(const Variant& value)
+   {
+-    if (!mObject)
++    SharedPtr<Object> object = mObject.lock();
++    if (!object)
+       return false;
+-
+-    return mObject->setPropertyValue(mPropertyName, value);
++    return object->setPropertyValue(mPropertyName, value);
+   }
+ 
+ private:
+@@ -207,17 +208,16 @@
+   /// Implements the SimGear property interface.
+   virtual double getValue(void) const
+   {
+-    if (!mPort)
++    SharedPtr<NumericPortProvider> port = mPort.lock();
++    if (!port)
+       return 0;
+     if (mIndex == 1) {
+-      NumericPortProvider* port = mPort;
+       RealPortHandle realPortHandle = port->getPortInterface()->toRealPortInterface();
+       if (realPortHandle.isConnected())
+         return realPortHandle.getRealValue();
+       else
+         return 0;
+     } else {
+-      NumericPortProvider* port = mPort;
+       MatrixPortHandle matrixPortHandle = port->getPortInterface()->toMatrixPortInterface();
+       if (matrixPortHandle.isConnected()) {
+         Matrix m = matrixPortHandle.getMatrixValue();
+
+
+
+From frohlich at mail.berlios.de  Fri May 23 15:33:57 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 23 May 2008 15:33:57 +0200
+Subject: [OpenFDM-svn] r400 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200805231333.m4NDXvve014410@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-23 15:33:57 +0200 (Fri, 23 May 2008)
+New Revision: 400
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Fix a race condition in the weak pointer code.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/SharedPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/SharedPtr.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -5,6 +5,7 @@
+ #ifndef OpenFDM_SharedPtr_H
+ #define OpenFDM_SharedPtr_H
+ 
++#include "OpenFDMConfig.h"
+ #include "Referenced.h"
+ 
+ namespace OpenFDM {
+@@ -19,28 +20,22 @@
+   {}
+   SharedPtr(T* ptr) : _ptr(ptr)
+   { Referenced::get(_ptr); }
+-  SharedPtr(const SharedPtr& p) : _ptr(p._ptr)
++  SharedPtr(const SharedPtr& p) : _ptr(p.get())
+   { Referenced::get(_ptr); }
+   template<typename U>
+-  SharedPtr(const SharedPtr<U>& p) : _ptr(p._ptr)
++  SharedPtr(const SharedPtr<U>& p) : _ptr(p.get())
+   { Referenced::get(_ptr); }
+-  template<typename U>
+-  SharedPtr(const WeakPtr<U>& p) : _ptr(p.ptr())
+-  { Referenced::get(_ptr); }
+   ~SharedPtr(void)
+   { put(); }
+   
+   SharedPtr& operator=(const SharedPtr& p)
+-  { assign(p._ptr); return *this; }
++  { assign(p.get()); return *this; }
+   template<typename U>
+   SharedPtr& operator=(const SharedPtr<U>& p)
+-  { assign(p._ptr); return *this; }
++  { assign(p.get()); return *this; }
+   template<typename U>
+   SharedPtr& operator=(U* p)
+   { assign(p); return *this; }
+-  template<typename U>
+-  SharedPtr& operator=(const WeakPtr<U>& p)
+-  { assign(p.ptr()); return *this; }
+ 
+   T* operator->(void) const
+   { return _ptr; }
+@@ -51,6 +46,8 @@
+   operator T*(void) const
+   { return _ptr; }
+ 
++  T* get() const
++  { return _ptr; }
+   T* release()
+   { T* tmp = _ptr; _ptr = 0; Referenced::put(tmp); return tmp; }
+ 
+@@ -59,22 +56,24 @@
+   unsigned getNumRefs(void) const
+   { return Referenced::count(_ptr); }
+ 
+-private:
+-  T* ptr(void) const
+-  { return _ptr; }
++  void clear()
++  { put(); }
++  void swap(SharedPtr& sharedPtr)
++  { T* tmp = _ptr; _ptr = sharedPtr._ptr; sharedPtr._ptr = tmp; }
+ 
++private:
+   void assign(T* p)
+   { Referenced::get(p); put(); _ptr = p; }
++  void assignNonRef(T* p)
++  { put(); _ptr = p; }
+ 
+   void put(void)
+-  { if (!Referenced::put(_ptr)) { T::destroy(_ptr); _ptr = 0; } }
++  { if (!Referenced::put(_ptr)) T::destroy(_ptr); _ptr = 0; }
+   
+   // The reference itself.
+   T* _ptr;
+ 
+   template<typename U>
+-  friend class SharedPtr;
+-  template<typename U>
+   friend class WeakPtr;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -10,61 +10,48 @@
+ 
+ namespace OpenFDM {
+ 
+-/// FIXME: remove the direct accessors, only copy to a SharedPtr
+-/// where you can access then, may be similar to the std::tr2::weak_ptr::lock()
+-/// function. That is to avoid deletion of a currently used object
+ template<typename T>
+ class WeakPtr {
+ public:
+   WeakPtr(void)
+   { }
+-  WeakPtr(T* ptr) // OpenFDM_DEPRECATED
+-  { assign(ptr); }
+   WeakPtr(const WeakPtr& p) : mWeakDataPtr(p.mWeakDataPtr)
+   { }
+   template<typename U>
+   WeakPtr(const SharedPtr<U>& p)
+-  { assign(p.ptr()); }
++  { SharedPtr<T> sharedPtr = p; assign(sharedPtr.get()); }
+   template<typename U>
+   WeakPtr(const WeakPtr<U>& p)
+-  { assign(p.ptr()); }
++  { SharedPtr<T> sharedPtr = p.lock(); assign(sharedPtr.get()); }
++  WeakPtr(T* ptr) // OpenFDM_DEPRECATED // Hmm, shall we??
++  { assign(ptr); }
+   ~WeakPtr(void)
+   { }
+   
+   template<typename U>
+   WeakPtr& operator=(const SharedPtr<U>& p)
+-  { assign(p.ptr()); return *this; }
++  { SharedPtr<T> sharedPtr = p; assign(sharedPtr.get()); return *this; }
+   template<typename U>
+   WeakPtr& operator=(const WeakPtr<U>& p)
+-  { assign(p.ptr()); return *this; }
+-  WeakPtr& operator=(T* p) // OpenFDM_DEPRECATED
+-  { assign(p); return *this; }
++  { SharedPtr<T> sharedPtr = p.lock(); assign(sharedPtr.get()); return *this; }
+   WeakPtr& operator=(const WeakPtr& p)
+   { mWeakDataPtr = p.mWeakDataPtr; return *this; }
+ 
+   SharedPtr<T> lock(void) const
+   {
++    if (!mWeakDataPtr)
++      return SharedPtr<T>();
+     SharedPtr<T> sharedPtr;
+-    if (mWeakDataPtr)
+-       mWeakDataPtr->get(sharedPtr);
++    sharedPtr.assignNonRef(mWeakDataPtr->get<T>());
+     return sharedPtr;
+   }
+ 
+-  T* operator->(void) const // OpenFDM_DEPRECATED
+-  { return ptr(); }
++  void clear()
++  { mWeakDataPtr = 0; }
++  void swap(WeakPtr& weakPtr)
++  { mWeakDataPtr.swap(weakPtr.mWeakDataPtr); }
+ 
+-  T& operator*(void) const // OpenFDM_DEPRECATED
+-  { return *ptr(); }
+-
+-  operator T*(void) const // OpenFDM_DEPRECATED
+-  { return ptr(); }
+-
+ private:
+-  T* ptr(void) const // OpenFDM_DEPRECATED
+-  {
+-    return lock().release();
+-  }
+-
+   void assign(T* p)
+   {
+     if (p)
+@@ -75,11 +62,6 @@
+   
+   // The indirect reference itself.
+   SharedPtr<WeakReferenced::WeakData> mWeakDataPtr;
+-
+-  template<typename U>
+-  friend class SharedPtr;
+-  template<typename U>
+-  friend class WeakPtr;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-05-23 13:33:01 UTC (rev 399)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-05-23 13:33:57 UTC (rev 400)
+@@ -22,14 +22,15 @@
+   WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
+   {}
+   // Do not copy the weak backward references ...
+-  WeakReferenced(const WeakReferenced&) : mWeakDataPtr(new WeakData(this))
++  WeakReferenced(const WeakReferenced& weakReferenced) :
++    Referenced(weakReferenced), mWeakDataPtr(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+   { mWeakDataPtr->clear(); }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced& operator=(const WeakReferenced&)
+-  { return *this; }
++  { Referenced::operator=(*this); return *this; }
+ 
+ private:
+   /// Support for weak references, not increasing the reference count
+@@ -39,14 +40,14 @@
+   public:
+     WeakData(WeakReferenced* object) : mObject(object) {}
+     template<typename T>
+-    void get(SharedPtr<T>& sharedPtr)
++    T* get()
+     {
++      // This lock guarantees that the object is not deleted in between.
+       ScopeLock scopeLock(mMutex);
+-      if (Referenced::count(mObject)) {
+-        sharedPtr = static_cast<T*>(mObject);
+-      } else {
+-        sharedPtr = 0;
+-      }
++      if (WeakReferenced::getNonZero(mObject) == 0)
++        return 0;
++      else
++        return static_cast<T*>(mObject);
+     }
+     void clear()
+     {
+@@ -58,6 +59,9 @@
+     WeakData(const WeakData&);
+     WeakData& operator=(const WeakData&);
+ 
++    // Mutex to protect the non atomic pointer assignment and that avoids
++    // access to an object that is not yet zeroed out but deletion is in
++    // progress.
+     Mutex mMutex;
+     WeakReferenced* mObject;
+   };
+
+
+
+From frohlich at mail.berlios.de  Fri May 30 11:27:41 2008
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Fri, 30 May 2008 11:27:41 +0200
+Subject: [OpenFDM-svn] r401 - trunk/flightgear
+Message-ID: <200805300927.m4U9Rf7i021200@sheep.berlios.de>
+
+Author: frohlich
+Date: 2008-05-30 11:27:41 +0200 (Fri, 30 May 2008)
+New Revision: 401
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Do not assume that init is ever called.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2008-05-23 13:33:57 UTC (rev 400)
++++ trunk/flightgear/FGOpenFDM.cpp	2008-05-30 09:27:41 UTC (rev 401)
+@@ -396,7 +396,8 @@
+ FGOpenFDM::~FGOpenFDM(void)
+ {
+   SG_LOG(SG_FLIGHT, SG_INFO, "FGOpenFDM::~FGOpenFDM()");
+-  mData->ground->setInterface(0);
++  if (mData->ground)
++    mData->ground->setInterface(0);
+   delete mData;
+ }
+ 
+
+
+

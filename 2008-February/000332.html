@@ -1,0 +1,136 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r358 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r358%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200802201942.m1KJgc6O031671%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000331.html">
+   <LINK REL="Next"  HREF="000333.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r358 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r358%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200802201942.m1KJgc6O031671%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r358 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Feb 20 20:42:38 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000331.html">[OpenFDM-svn] r357 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000333.html">[OpenFDM-svn] r359 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#332">[ date ]</a>
+              <a href="thread.html#332">[ thread ]</a>
+              <a href="subject.html#332">[ subject ]</a>
+              <a href="author.html#332">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-02-20 20:42:38 +0100 (Wed, 20 Feb 2008)
+New Revision: 358
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+System scheduling updates.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 18:07:24 UTC (rev 357)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2008-02-20 19:42:38 UTC (rev 358)
+@@ -82,6 +82,7 @@
+ {
+   setTimestepper(new ExplicitEuler);
+   mEnvironment = new Environment;
++  addSampleTime(SampleTime::Continous);
+ }
+ 
+ System::~System(void)
+@@ -124,6 +125,16 @@
+  
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
++  // build up the lists of stateful models and
++  mit = modelCollectVisitor.modelList.begin();
++  while (mit != modelCollectVisitor.modelList.end()) {
++    if (mit-&gt;model-&gt;getNumContinousStates())
++      mContinousModelList.push_back(mit-&gt;model);
++    if (mit-&gt;model-&gt;getNumDiscreteStates())
++      mDiscreteModelList.push_back(mit-&gt;model);
++    ++mit;
++  }
++
+   // Compute the basic time slice, that is the greatest time that hits all
+   // discrete sample times boundaries we have in this system
+   real_type gcd = 0;
+@@ -212,19 +223,15 @@
+     ++mit;
+   }
+ 
+-  // build up the lists of stateful models and count the number of states
++  // count the number of states
+   unsigned numContinousStates = 0;
+   unsigned numDiscreteStates = 0;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+-    if (mit-&gt;model-&gt;getNumContinousStates()) {
+-      mContinousModelList.push_back(mit-&gt;model);
++    if (mit-&gt;model-&gt;getNumContinousStates())
+       numContinousStates += mit-&gt;model-&gt;getNumContinousStates();
+-    }
+-    if (mit-&gt;model-&gt;getNumDiscreteStates()) {
+-      mDiscreteModelList.push_back(mit-&gt;model);
++    if (mit-&gt;model-&gt;getNumDiscreteStates())
+       numDiscreteStates += mit-&gt;model-&gt;getNumDiscreteStates();
+-    }
+     ++mit;
+   }
+   setNumContinousStates(numContinousStates);
+@@ -370,6 +377,11 @@
+ 
+     if (!continousStates) {
+       mTime = loopTEnd;
++
++      Log(Schedule, Info) &lt;&lt; &quot;Preparing Models: continous output step&quot; &lt;&lt; endl;
++      mContinousTask.setTime(getTime());
++      output(mContinousTask);
++
+     } else {
+       // Do the pre integration output round
+       Log(Schedule, Info) &lt;&lt; &quot;Preparing Models: pre integration step&quot; &lt;&lt; endl;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000331.html">[OpenFDM-svn] r357 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000333.html">[OpenFDM-svn] r359 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#332">[ date ]</a>
+              <a href="thread.html#332">[ thread ]</a>
+              <a href="subject.html#332">[ subject ]</a>
+              <a href="author.html#332">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

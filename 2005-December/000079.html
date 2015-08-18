@@ -1,0 +1,224 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r95 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r95%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512091927.jB9JRDgl012262%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000078.html">
+   <LINK REL="Next"  HREF="000080.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r95 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r95%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512091927.jB9JRDgl012262%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r95 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Dec  9 20:27:13 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000078.html">[OpenFDM-svn] r94 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000080.html">[OpenFDM-svn] r96 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#79">[ date ]</a>
+              <a href="thread.html#79">[ thread ]</a>
+              <a href="subject.html#79">[ subject ]</a>
+              <a href="author.html#79">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-09 20:27:08 +0100 (Fri, 09 Dec 2005)
+New Revision: 95
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Table.h
+Log:
+Preliminary multimensional tables
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-09 18:32:38 UTC (rev 94)
++++ trunk/OpenFDM/src/OpenFDM/Table.h	2005-12-09 19:27:08 UTC (rev 95)
+@@ -297,24 +297,15 @@
+   const real_type&amp; getOutput(void) const
+   { return mOutput; }
+ 
+-  void setTable(const TableData&lt;1&gt;&amp; table)
+-  { mTableData = table; }
+   void setTableData(const TableData&lt;1&gt;&amp; table)
+   { mTableData = table; }
+-
+-  const TableData&lt;1&gt;&amp; getTable(void) const 
+-  { return mTableData; }
+   const TableData&lt;1&gt;&amp; getTableData(void) const 
+   { return mTableData; }
+-  TableData&lt;1&gt;&amp; getTable(void)
+-  { return mTableData; }
+   TableData&lt;1&gt;&amp; getTableData(void)
+   { return mTableData; }
+ 
+   void setTableLookup(const TableLookup&amp; tl)
+-  {
+-    mTableLookup = tl;
+-  }
++  { mTableLookup = tl; }
+ 
+ private:
+   real_type mOutput;
+@@ -322,6 +313,121 @@
+   TableLookup mTableLookup;
+ };
+ 
++class Table2D : public Model {
++public:
++  Table2D(const std::string&amp; name) :
++    Model(name)
++  {
++    setDirectFeedThrough(true);
++    
++    setNumInputPorts(2);
++    setInputPortName(0, &quot;input 0&quot;);
++    setInputPortName(1, &quot;input 1&quot;);
++    
++    setNumOutputPorts(1);
++    setOutputPort(0, &quot;output&quot;, this, &amp;Table2D::getOutput);
++
++    addProperty(&quot;output&quot;, Property(this, &amp;Table2D::getOutput));
++  }
++  virtual ~Table2D(void) {}
++  
++  virtual bool init(void)
++  {
++    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    OpenFDMAssert(getInputPort(1)-&gt;isConnected());
++    return getInputPort(0)-&gt;isConnected() &amp;&amp; getInputPort(1)-&gt;isConnected();
++  }
++
++  virtual void output(const TaskInfo&amp;)
++  {
++    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    TableData&lt;2&gt;::InterpVector interpVec;
++    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++    interpVec(1) = mTableLookup[0].lookup(rh.getRealValue());
++    rh = getInputPort(1)-&gt;toRealPortHandle();
++    interpVec(2) = mTableLookup[1].lookup(rh.getRealValue());
++    mOutput = mTableData.interpolate(interpVec);
++  }
++
++  const real_type&amp; getOutput(void) const
++  { return mOutput; }
++
++  void setTableData(const TableData&lt;2&gt;&amp; table)
++  { mTableData = table; }
++  const TableData&lt;2&gt;&amp; getTableData(void) const 
++  { return mTableData; }
++  TableData&lt;2&gt;&amp; getTableData(void)
++  { return mTableData; }
++
++  void setTableLookup(unsigned idx, const TableLookup&amp; tl)
++  { mTableLookup[idx] = tl; }
++
++private:
++  real_type mOutput;
++  TableData&lt;2&gt; mTableData;
++  TableLookup mTableLookup[2];
++};
++
++class Table3D : public Model {
++public:
++  Table3D(const std::string&amp; name) :
++    Model(name)
++  {
++    setDirectFeedThrough(true);
++    
++    setNumInputPorts(3);
++    setInputPortName(0, &quot;input 0&quot;);
++    setInputPortName(1, &quot;input 1&quot;);
++    setInputPortName(2, &quot;input 2&quot;);
++    
++    setNumOutputPorts(1);
++    setOutputPort(0, &quot;output&quot;, this, &amp;Table3D::getOutput);
++
++    addProperty(&quot;output&quot;, Property(this, &amp;Table3D::getOutput));
++  }
++  virtual ~Table3D(void) {}
++  
++  virtual bool init(void)
++  {
++    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    OpenFDMAssert(getInputPort(1)-&gt;isConnected());
++    OpenFDMAssert(getInputPort(3)-&gt;isConnected());
++    return getInputPort(0)-&gt;isConnected() &amp;&amp; getInputPort(1)-&gt;isConnected()
++      &amp;&amp; getInputPort(2)-&gt;isConnected();
++  }
++
++  virtual void output(const TaskInfo&amp;)
++  {
++    OpenFDMAssert(getInputPort(0)-&gt;isConnected());
++    TableData&lt;3&gt;::InterpVector interpVec;
++    RealPortHandle rh = getInputPort(0)-&gt;toRealPortHandle();
++    interpVec(1) = mTableLookup[0].lookup(rh.getRealValue());
++    rh = getInputPort(1)-&gt;toRealPortHandle();
++    interpVec(2) = mTableLookup[1].lookup(rh.getRealValue());
++    rh = getInputPort(2)-&gt;toRealPortHandle();
++    interpVec(3) = mTableLookup[2].lookup(rh.getRealValue());
++    mOutput = mTableData.interpolate(interpVec);
++  }
++
++  const real_type&amp; getOutput(void) const
++  { return mOutput; }
++
++  void setTableData(const TableData&lt;3&gt;&amp; table)
++  { mTableData = table; }
++  const TableData&lt;3&gt;&amp; getTableData(void) const 
++  { return mTableData; }
++  TableData&lt;3&gt;&amp; getTableData(void)
++  { return mTableData; }
++
++  void setTableLookup(unsigned idx, const TableLookup&amp; tl)
++  { mTableLookup[idx] = tl; }
++
++private:
++  real_type mOutput;
++  TableData&lt;3&gt; mTableData;
++  TableLookup mTableLookup[3];
++};
++
+ } // namespace OpenFDM
+ 
+ #endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000078.html">[OpenFDM-svn] r94 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000080.html">[OpenFDM-svn] r96 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#79">[ date ]</a>
+              <a href="thread.html#79">[ thread ]</a>
+              <a href="subject.html#79">[ subject ]</a>
+              <a href="author.html#79">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

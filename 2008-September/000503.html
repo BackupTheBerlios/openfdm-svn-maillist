@@ -1,0 +1,389 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r531 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r531%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809281508.m8SF82ca013782%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000502.html">
+   <LINK REL="Next"  HREF="000504.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r531 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r531%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809281508.m8SF82ca013782%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r531 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 28 17:08:02 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000502.html">[OpenFDM-svn] r530 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000504.html">[OpenFDM-svn] r532 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#503">[ date ]</a>
+              <a href="thread.html#503">[ thread ]</a>
+              <a href="subject.html#503">[ subject ]</a>
+              <a href="author.html#503">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-28 17:08:01 +0200 (Sun, 28 Sep 2008)
+New Revision: 531
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Reinstantiate the DiscreteIntegrator ...
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp	2008-09-28 08:10:09 UTC (rev 530)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.cpp	2008-09-28 15:08:01 UTC (rev 531)
+@@ -4,6 +4,7 @@
+ 
+ #include &quot;DiscreteIntegrator.h&quot;
+ #include &quot;Assert.h&quot;
++#include &quot;LeafContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -14,14 +15,13 @@
+   END_OPENFDM_OBJECT_DEF
+ 
+ DiscreteIntegrator::DiscreteIntegrator(const std::string&amp; name) :
+-  Model(name)
++  Model(name),
++  mInputPort(newMatrixInputPort(&quot;input&quot;, false)),
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
++  mInitialValue(Matrix::zeros(1, 1))
+ {
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;derivative&quot;);
+-  setInputPortName(1, &quot;initialValue&quot;);
+-
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;DiscreteIntegrator::getIntegralOutput);
++  mMatrixStateInfo = new MatrixStateInfo;
++  addDiscreteStateInfo(mMatrixStateInfo);
+ }
+ 
+ DiscreteIntegrator::~DiscreteIntegrator(void)
+@@ -29,97 +29,79 @@
+ }
+ 
+ bool
+-DiscreteIntegrator::init(void)
++DiscreteIntegrator::alloc(LeafContext&amp; leafContext) const
+ {
+-  mDerivativePort = getInputPort(0)-&gt;toMatrixPortHandle();
+-  if (!mDerivativePort.isConnected()) {
+-    Log(Model,Error) &lt;&lt; &quot;Input port to DiscreteIntegrator Model \&quot;&quot;
+-                     &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  // The initial value defaults to zero
+-  mInitialValuePort = getInputPort(1)-&gt;toMatrixPortHandle();
+-  if (mInitialValuePort.isConnected()) {
+-    mIntegralState = mInitialValuePort.getMatrixValue();
++  Size sz;
++  if (getEnableInitialValuePort()) {
++    sz = size(leafContext.mPortValueList[mInitialValuePort]);
++    Log(Initialization, Debug)
++      &lt;&lt; &quot;Size for Integrator is detemined by the initial input &quot;
++      &lt;&lt; &quot;port with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+   } else {
+-    if (rows(mInitialValue) == 0 || cols(mInitialValue) == 0) {
+-      mInitialValue.resize(mDerivativePort.getMatrixValue());
+-      mInitialValue.clear();
+-    }
+-    mIntegralState = mInitialValue;
++    sz = size(mInitialValue);
++    Log(Initialization, Debug)
++      &lt;&lt; &quot;Size for Integrator is detemined by the static initial value &quot;
++      &lt;&lt; &quot;with size: &quot; &lt;&lt; trans(sz) &lt;&lt; std::endl;
+   }
+-  mIntegralOutput = mIntegralState;
+-
+-  if (size(mMinSaturation) != Size(0, 0)) {
+-    OpenFDMAssert(size(mMinSaturation) == size(mIntegralState));
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mInputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
++    return false;
+   }
+-  if (size(mMaxSaturation) != Size(0, 0)) {
+-    OpenFDMAssert(size(mMaxSaturation) == size(mIntegralState));
++  if (!leafContext.mPortValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Error)
++      &lt;&lt; &quot;Size for input port does not match!&quot; &lt;&lt; std::endl;
++    return false;
+   }
+-
+-  setNumDiscreteStates(rows(mIntegralState)*cols(mIntegralState));
+-  
+-  return Model::init();
++  leafContext.mDiscreteState.setValue(*mMatrixStateInfo, leafContext);
++  return true;
+ }
+ 
+ void
+-DiscreteIntegrator::output(const TaskInfo&amp;)
++DiscreteIntegrator::init(DiscreteStateValueVector&amp; discreteState,
++                         ContinousStateValueVector&amp;,
++                         const PortValueList&amp; portValues) const
+ {
+-  if (mInitialValuePort.isConnected()) {
+-    mIntegralState = mInitialValuePort.getMatrixValue();
+-    // FIXME: must have a reset slot or something like that
+-    mInitialValuePort = 0;
++  if (getEnableInitialValuePort()) {
++    // external initial condition
++    discreteState[*mMatrixStateInfo] = portValues[mInitialValuePort];
++  } else {
++    // internal initial condition
++    discreteState[*mMatrixStateInfo] = mInitialValue;
+   }
+-
+-  mIntegralOutput = mIntegralState;
+ }
+ 
+ void
+-DiscreteIntegrator::update(const TaskInfo&amp; taskInfo)
++DiscreteIntegrator::output(const DiscreteStateValueVector&amp; discreteState,
++                           const ContinousStateValueVector&amp;,
++                           PortValueList&amp; portValues) const
+ {
+-  OpenFDMAssert(mDerivativePort.isConnected());
+-
+-  // Just compute the integral.
+-  // FIXME: make sure this is the only dt ...
+-  real_type dt = (*taskInfo.getSampleTimeSet().begin()).getSampleTime();
+-  mIntegralState += dt*mDerivativePort.getMatrixValue();
+-
+-  // Hmm, should that be done on state setting too???
+-  if (size(mMaxSaturation) == size(mIntegralState))
+-    mIntegralState = LinAlg::min(mIntegralState, mMaxSaturation);
+-  if (size(mMinSaturation) == size(mIntegralState))
+-    mIntegralState = LinAlg::max(mIntegralState, mMinSaturation);
++  portValues[mOutputPort] = discreteState[*mMatrixStateInfo];
+ }
+ 
+ void
+-DiscreteIntegrator::setDiscreteState(const StateStream&amp; state)
++DiscreteIntegrator::doUpdate(Matrix&amp; integralValue, const Matrix&amp; derivative,
++                             const real_type&amp; dt) const
+ {
+-  state.readSubState(mIntegralState);
++  integralValue += dt*derivative;
++
++  if (size(mMaxSaturation) == size(integralValue))
++    integralValue = LinAlg::min(integralValue, mMaxSaturation);
++  if (size(mMinSaturation) == size(integralValue))
++    integralValue = LinAlg::max(integralValue, mMinSaturation);
+ }
+ 
+ void
+-DiscreteIntegrator::getDiscreteState(StateStream&amp; state) const
++DiscreteIntegrator::update(DiscreteStateValueVector&amp; discreteState,
++                           ContinousStateValueVector&amp;,
++                           const PortValueList&amp; portValues) const
+ {
+-  state.writeSubState(mIntegralState);
++  // Just compute the integral.
++  // FIXME: have no task info up to now !!!
++  real_type dt = 1;//(*taskInfo.getSampleTimeSet().begin()).getSampleTime();
++  doUpdate(discreteState[*mMatrixStateInfo], portValues[mInputPort], dt);
+ }
+ 
+-bool
+-DiscreteIntegrator::dependsDirectOn(Model* model)
+-{
+-  if (getInputPort(1)) {
+-    // return true if we find the one connected to the initial value port
+-    for (unsigned j = 0; j &lt; model-&gt;getNumOutputPorts(); ++j) {
+-      if (getInputPort(1)-&gt;getPortInterface() &amp;&amp;
+-          getInputPort(1)-&gt;getPortInterface() ==
+-          model-&gt;getOutputPort(j)-&gt;getPortInterface())
+-        return true;
+-    }
+-  }
+-
+-  return false;
+-}
+-
+ const Matrix&amp;
+ DiscreteIntegrator::getInitialValue(void) const
+ {
+@@ -132,6 +114,24 @@
+   mInitialValue = value;
+ }
+ 
++bool
++DiscreteIntegrator::getEnableInitialValuePort() const
++{
++  return mInitialValuePort.empty();
++}
++
++void
++DiscreteIntegrator::setEnableInitialValuePort(bool enable)
++{
++  if (enable == getEnableInitialValuePort())
++    return;
++
++  if (enable)
++    mInitialValuePort = newMatrixInputPort(&quot;initialValue&quot;, true);
++  else 
++    mInitialValuePort.clear();
++}
++
+ const Matrix&amp;
+ DiscreteIntegrator::getMinSaturation(void) const
+ {
+@@ -156,10 +156,4 @@
+   mMaxSaturation = value;
+ }
+ 
+-const Matrix&amp;
+-DiscreteIntegrator::getIntegralOutput(void) const
+-{
+-  return mIntegralOutput;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.h	2008-09-28 08:10:09 UTC (rev 530)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DiscreteIntegrator.h	2008-09-28 15:08:01 UTC (rev 531)
+@@ -7,6 +7,7 @@
+ 
+ #include &quot;Types.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;TemplateDiscreteStateInfo.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -16,41 +17,42 @@
+   DiscreteIntegrator(const std::string&amp; name);
+   virtual ~DiscreteIntegrator(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
+-  virtual void update(const TaskInfo&amp; taskInfo);
++  virtual bool alloc(LeafContext&amp; leafContext) const;
++  virtual void init(DiscreteStateValueVector&amp; discreteState,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const;
++  virtual void output(const DiscreteStateValueVector&amp; discreteState,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++  virtual void update(DiscreteStateValueVector&amp; discreteState,
++                      ContinousStateValueVector&amp;,
++                      const PortValueList&amp; portValues) const;
+ 
+-  virtual void setDiscreteState(const StateStream&amp; state);
+-  virtual void getDiscreteState(StateStream&amp; state) const;
++  /// The initial output values on the output until input values are available.
++  const Matrix&amp; getInitialValue() const;
++  void setInitialValue(const Matrix&amp; initialValue);
+ 
+-  virtual bool dependsDirectOn(Model* model);
++  bool getEnableInitialValuePort() const;
++  void setEnableInitialValuePort(bool enable);
+ 
+-  const Matrix&amp; getInitialValue(void) const;
+-  void setInitialValue(const Matrix&amp; value);
+-
+   const Matrix&amp; getMinSaturation(void) const;
+   void setMinSaturation(const Matrix&amp; value);
+ 
+   const Matrix&amp; getMaxSaturation(void) const;
+   void setMaxSaturation(const Matrix&amp; value);
+ 
+-  const Matrix&amp; getIntegralOutput(void) const;
++private:
++  void doUpdate(Matrix&amp; integralValue, const Matrix&amp; derivative,
++                const real_type&amp; dt) const;
+ 
+-private:
+-  /// Holds the current output.
+-  Matrix mIntegralOutput;
+-  /// Holds the current integral state.
+-  Matrix mIntegralState;
+-  /// Holds the current integral initial state.
++  typedef TemplateDiscreteStateInfo&lt;Matrix&gt; MatrixStateInfo;
++
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mOutputPort;
++  MatrixInputPort mInitialValuePort;
+   Matrix mInitialValue;
+-  /// Holds the minimum saturation
+   Matrix mMinSaturation;
+-  /// Holds the maximum saturation
+   Matrix mMaxSaturation;
+-  /// Holds a matrix handle to the integrators input
+-  MatrixPortHandle mDerivativePort;
+-  /// Holds a matrix handle to the integrators initial value input
+-  MatrixPortHandle mInitialValuePort;
++  SharedPtr&lt;MatrixStateInfo&gt; mMatrixStateInfo;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-28 08:10:09 UTC (rev 530)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-09-28 15:08:01 UTC (rev 531)
+@@ -231,6 +231,7 @@
+ 
+ OpenFDMModelsSOURCES = \
+   Delay.cpp \
++  DiscreteIntegrator.cpp \
+   Gain.cpp \
+   Integrator.cpp \
+   Output.cpp
+@@ -248,7 +249,6 @@
+ #   DefaultGround.cpp \
+ #   DefaultPlanet.cpp \
+ #   DiscBrake.cpp \
+-#   DiscreteIntegrator.cpp \
+ #   ExternalForceModel.cpp \
+ #   FixedRootJoint.cpp \
+ #   Force.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000502.html">[OpenFDM-svn] r530 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000504.html">[OpenFDM-svn] r532 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#503">[ date ]</a>
+              <a href="thread.html#503">[ thread ]</a>
+              <a href="subject.html#503">[ subject ]</a>
+              <a href="author.html#503">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

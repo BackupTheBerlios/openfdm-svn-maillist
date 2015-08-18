@@ -1,0 +1,132 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r930 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r930%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901091419.n09EJOav010435%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000895.html">
+   <LINK REL="Next"  HREF="000897.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r930 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r930%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901091419.n09EJOav010435%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r930 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Jan  9 15:19:24 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000895.html">[OpenFDM-svn] r929 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000897.html">[OpenFDM-svn] r931 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#896">[ date ]</a>
+              <a href="thread.html#896">[ thread ]</a>
+              <a href="subject.html#896">[ subject ]</a>
+              <a href="author.html#896">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-09 15:19:24 +0100 (Fri, 09 Jan 2009)
+New Revision: 930
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+Log:
+Use MechanicLinkInfo directly.
+
+M    RigidBody.h
+M    RigidBody.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2009-01-09 13:45:10 UTC (rev 929)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2009-01-09 14:19:24 UTC (rev 930)
+@@ -37,22 +37,20 @@
+   visitor.handleNodePathAndApply(this);
+ }
+ 
+-const PortInfo*
++const MechanicLinkInfo*
+ RigidBody::addLink(const std::string&amp; name)
+ {
+-  // FIXME: simplify
+-  MechanicLink mechanicLink = newMechanicLink(name);
+-  mMechanicLinks.push_back(mechanicLink);
+-  return getPort(mechanicLink.getPortIndex());
++  MechanicLinkInfo* mechanicLinkInfo = new MechanicLinkInfo(this, name);
++  mMechanicLinks.push_back(mechanicLinkInfo);
++  return mechanicLinkInfo;
+ }
+ 
+ void
+-RigidBody::removeLink(const PortInfo* portInfo)
++RigidBody::removeLink(const MechanicLinkInfo* mechanicLinkInfo)
+ {
+-  // FIXME: simplify
+-  MechanicLinkVector::iterator i = mMechanicLinks.begin();
++  MechanicLinkInfoVector::iterator i = mMechanicLinks.begin();
+   while (i != mMechanicLinks.end()) {
+-    if (getPort(i-&gt;getPortIndex()) == portInfo) {
++    if (i-&gt;get() == mechanicLinkInfo) {
+       i-&gt;clear();
+       i = mMechanicLinks.erase(i);
+     } else
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2009-01-09 13:45:10 UTC (rev 929)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2009-01-09 14:19:24 UTC (rev 930)
+@@ -19,12 +19,12 @@
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+-  const PortInfo* addLink(const std::string&amp; name);
+-  void removeLink(const PortInfo* portInfo);
++  const MechanicLinkInfo* addLink(const std::string&amp; name);
++  void removeLink(const MechanicLinkInfo* mechanicLinkInfo);
+ 
+ private:
+-  typedef std::vector&lt;MechanicLink&gt; MechanicLinkVector;
+-  MechanicLinkVector mMechanicLinks;
++  typedef std::vector&lt;SharedPtr&lt;MechanicLinkInfo&gt; &gt; MechanicLinkInfoVector;
++  MechanicLinkInfoVector mMechanicLinks;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000895.html">[OpenFDM-svn] r929 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000897.html">[OpenFDM-svn] r931 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#896">[ date ]</a>
+              <a href="thread.html#896">[ thread ]</a>
+              <a href="subject.html#896">[ subject ]</a>
+              <a href="author.html#896">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

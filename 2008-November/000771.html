@@ -1,0 +1,710 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r803 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r803%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200811271938.mARJcWsI029272%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000770.html">
+   <LINK REL="Next"  HREF="000772.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r803 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r803%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09JSBSim%20OpenFDM&In-Reply-To=%3C200811271938.mARJcWsI029272%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r803 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Nov 27 20:38:32 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000770.html">[OpenFDM-svn] r802 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000772.html">[OpenFDM-svn] r804 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#771">[ date ]</a>
+              <a href="thread.html#771">[ thread ]</a>
+              <a href="subject.html#771">[ subject ]</a>
+              <a href="author.html#771">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-27 20:38:31 +0100 (Thu, 27 Nov 2008)
+New Revision: 803
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Table.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Table.h
+Log:
+Reactivate table lookup models.
+
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/JSBSimScheduledGain.cpp
+M    src/JSBSim/JSBSimReaderBase.h
+M    src/JSBSim/JSBSimScheduledGain.h
+M    src/JSBSim/JSBSimAerosurfaceScale.cpp
+M    src/JSBSim/JSBSimAerosurfaceScale.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Table.h
+M    src/OpenFDM/Table.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.cpp	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.cpp	2008-11-27 19:38:31 UTC (rev 803)
+@@ -19,7 +19,7 @@
+ {
+   // Such a component is a simple table lookup
+   //
+-  // -|InputSaturation|-|TablePreLookup|-|Table1D|-
++  // -|InputSaturation|-|BreakPointLookup|-|Table1D|-
+   //
+ 
+   mInputSaturation = new Saturation(&quot;Input Saturation&quot;);
+@@ -30,14 +30,14 @@
+   tmp(0, 0) = 1;
+   mInputSaturation-&gt;setMaxSaturation(tmp);
+ 
+-  mTablePreLookup = new TablePreLookup(&quot;Table Lookup&quot;);
++  mBreakPointLookup = new BreakPointLookup(&quot;Table Lookup&quot;);
+   BreakPointVector tl;
+   tl.setAtIndex(0, -1);
+   tl.setAtIndex(1, 0);
+   tl.setAtIndex(2, 1);
+-  mTablePreLookup-&gt;setBreakPointVector(tl);
+-  getModelGroup()-&gt;addModel(mTablePreLookup);
+-  Connection::connect(mTablePreLookup-&gt;getInputPort(0),
++  mBreakPointLookup-&gt;setBreakPointVector(tl);
++  getModelGroup()-&gt;addModel(mBreakPointLookup);
++  Connection::connect(mBreakPointLookup-&gt;getInputPort(0),
+                       mInputSaturation-&gt;getOutputPort(0));
+ 
+   mTable = new Table1D(&quot;Table&quot;);
+@@ -54,7 +54,7 @@
+   mTable-&gt;setTableData(tableData);
+   getModelGroup()-&gt;addModel(mTable);
+   Connection::connect(mTable-&gt;getInputPort(0),
+-                      mTablePreLookup-&gt;getOutputPort(0));
++                      mBreakPointLookup-&gt;getOutputPort(0));
+ 
+   // Now connect the input and the output to this groups in and outputs
+   GroupInput* groupInput = new GroupInput(&quot;Input&quot;);
+@@ -80,9 +80,9 @@
+   Matrix tmp(1, 1);
+   tmp(0, 0) = minDomain;
+   mInputSaturation-&gt;setMinSaturation(tmp);
+-  BreakPointVector tl = mTablePreLookup-&gt;getBreakPointVector();
++  BreakPointVector tl = mBreakPointLookup-&gt;getBreakPointVector();
+   tl.setAtIndex(0, minDomain);
+-  mTablePreLookup-&gt;setBreakPointVector(tl);
++  mBreakPointLookup-&gt;setBreakPointVector(tl);
+ }
+ 
+ void
+@@ -91,15 +91,15 @@
+   Matrix tmp(1, 1);
+   tmp(0, 0) = maxDomain;
+   mInputSaturation-&gt;setMaxSaturation(tmp);
+-  BreakPointVector tl = mTablePreLookup-&gt;getBreakPointVector();
++  BreakPointVector tl = mBreakPointLookup-&gt;getBreakPointVector();
+   tl.setAtIndex(tl.size()-1, maxDomain);
+-  mTablePreLookup-&gt;setBreakPointVector(tl);
++  mBreakPointLookup-&gt;setBreakPointVector(tl);
+ }
+ 
+ void
+ JSBSimAerosurfaceScale::setCentered(bool centered)
+ {
+-  BreakPointVector tlOld = mTablePreLookup-&gt;getBreakPointVector();
++  BreakPointVector tlOld = mBreakPointLookup-&gt;getBreakPointVector();
+   BreakPointVector tl;
+ 
+   TableData&lt;1&gt; tableDataOld = mTable-&gt;getTableData();
+@@ -136,7 +136,7 @@
+     tableData(iv) = oldVal;
+   }
+ 
+-  mTablePreLookup-&gt;setBreakPointVector(tl);
++  mBreakPointLookup-&gt;setBreakPointVector(tl);
+   mTable-&gt;setTableData(tableData);
+ }
+ 
+@@ -153,7 +153,7 @@
+ void
+ JSBSimAerosurfaceScale::setMaxValue(real_type maxValue)
+ {
+-  BreakPointVector tl = mTablePreLookup-&gt;getBreakPointVector();
++  BreakPointVector tl = mBreakPointLookup-&gt;getBreakPointVector();
+   TableData&lt;1&gt; tableData = mTable-&gt;getTableData();
+   TableData&lt;1&gt;::Index iv;
+   iv(0) = tl.size()-1;
+@@ -164,7 +164,7 @@
+ void
+ JSBSimAerosurfaceScale::setGain(real_type gain)
+ {
+-  BreakPointVector tl = mTablePreLookup-&gt;getBreakPointVector();
++  BreakPointVector tl = mBreakPointLookup-&gt;getBreakPointVector();
+   TableData&lt;1&gt; tableData = mTable-&gt;getTableData();
+   TableData&lt;1&gt;::Index iv;
+   iv(0) = 0;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.h	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimAerosurfaceScale.h	2008-11-27 19:38:31 UTC (rev 803)
+@@ -32,7 +32,7 @@
+ 
+ private:
+   SharedPtr&lt;Saturation&gt; mInputSaturation;
+-  SharedPtr&lt;TablePreLookup&gt; mTablePreLookup;
++  SharedPtr&lt;BreakPointLookup&gt; mBreakPointLookup;
+   SharedPtr&lt;Table1D&gt; mTable;
+   real_type mGain;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2008-11-27 19:38:31 UTC (rev 803)
+@@ -840,7 +840,7 @@
+ 
+   // First check if we already have a table lookup for this port/brakepoint
+   // combination. If so return that output port
+-  std::vector&lt;SharedPtr&lt;TablePreLookup&gt; &gt;::iterator it;
++  std::vector&lt;SharedPtr&lt;BreakPointLookup&gt; &gt;::iterator it;
+   for (it = mBreakPointVectors.begin(); it != mBreakPointVectors.end(); ++it) {
+     if (tl == (*it)-&gt;getBreakPointVector() &amp;&amp;
+         nin-&gt;getPortInterface() == (*it)-&gt;getInputPort(0)-&gt;getPortInterface())
+@@ -848,8 +848,8 @@
+   }
+ 
+   // No sharable table lookup found, we need to create a new one
+-  TablePreLookup* tablePreLookup
+-    = new TablePreLookup(name + &quot; Table Prelookup&quot;);
++  BreakPointLookup* tablePreLookup
++    = new BreakPointLookup(name + &quot; Table Prelookup&quot;);
+   addMultiBodyModel(tablePreLookup);
+   tablePreLookup-&gt;setBreakPointVector(tl);
+   Connection::connect(in, tablePreLookup-&gt;getInputPort(0));
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2008-11-27 19:38:31 UTC (rev 803)
+@@ -271,7 +271,7 @@
+ 
+   PropertyMap mExpressionTable;
+   SharedPtr&lt;AeroForce&gt; mAeroForce;
+-  std::vector&lt;SharedPtr&lt;TablePreLookup&gt; &gt; mBreakPointVectors;
++  std::vector&lt;SharedPtr&lt;BreakPointLookup&gt; &gt; mBreakPointVectors;
+ 
+   // For now just copies from the prevous try ...
+   Vector3 structToBody(const Vector3&amp; v)
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.cpp	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.cpp	2008-11-27 19:38:31 UTC (rev 803)
+@@ -17,21 +17,21 @@
+   // Such a component is a simple product and a table lookup
+   //
+   // -------------------------------|
+-  // --|TablePreLookup|-|Table|-|Product|-
++  // --|BreakPointLookup|-|Table|-|Product|-
+   //
+ 
+   Product* product = new Product(&quot;Product&quot;);
+   getModelGroup()-&gt;addModel(product);
+ 
+-  mTablePreLookup = new TablePreLookup(&quot;Table Lookup&quot;);
+-  getModelGroup()-&gt;addModel(mTablePreLookup);
++  mBreakPointLookup = new BreakPointLookup(&quot;Table Lookup&quot;);
++  getModelGroup()-&gt;addModel(mBreakPointLookup);
+ 
+   mTable = new Table1D(&quot;Table&quot;);
+   getModelGroup()-&gt;addModel(mTable);
+   Connection::connect(product-&gt;getInputPort(0),
+                       mTable-&gt;getOutputPort(0));
+   Connection::connect(mTable-&gt;getInputPort(0),
+-                      mTablePreLookup-&gt;getOutputPort(0));
++                      mBreakPointLookup-&gt;getOutputPort(0));
+ 
+   // Now connect the input and the output to this groups in and outputs
+   GroupInput* groupInput = new GroupInput(&quot;Input&quot;);
+@@ -41,7 +41,7 @@
+  
+   groupInput = new GroupInput(&quot;Schedule Input&quot;);
+   getModelGroup()-&gt;addModel(groupInput);
+-  Connection::connect(mTablePreLookup-&gt;getInputPort(0),
++  Connection::connect(mBreakPointLookup-&gt;getInputPort(0),
+                       groupInput-&gt;getOutputPort(0));
+ 
+   // That single output port is this one
+@@ -58,7 +58,7 @@
+                                   const BreakPointVector&amp; lookup)
+ {
+   mTable-&gt;setTableData(tableData);
+-  mTablePreLookup-&gt;setBreakPointVector(lookup);
++  mBreakPointLookup-&gt;setBreakPointVector(lookup);
+ }
+ 
+ } //namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.h	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimScheduledGain.h	2008-11-27 19:38:31 UTC (rev 803)
+@@ -22,7 +22,7 @@
+   void setTableData(const TableData&lt;1&gt;&amp; tableData, const BreakPointVector&amp; lookup);
+ 
+ private:
+-  SharedPtr&lt;TablePreLookup&gt; mTablePreLookup;
++  SharedPtr&lt;BreakPointLookup&gt; mBreakPointLookup;
+   SharedPtr&lt;Table1D&gt; mTable;
+ };
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-27 19:38:31 UTC (rev 803)
+@@ -263,12 +263,12 @@
+   SimpleDirectModel.cpp \
+   SimulationTime.cpp \
+   Summer.cpp \
++  Table.cpp \
+   UnaryFunction.cpp \
+   UnaryModel.cpp \
+   UnitConversion.cpp
+ 
+ #   DiscBrake.cpp \
+-#   Table.cpp \
+ #   TimeDerivative.cpp \
+ #   TransferFunction.cpp \
+ #
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Table.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Table.cpp	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Table.cpp	2008-11-27 19:38:31 UTC (rev 803)
+@@ -11,211 +11,114 @@
+ 
+ namespace OpenFDM {
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(TablePreLookup, Model)
+-  DEF_OPENFDM_PROPERTY(TablePreLookup, BreakPointVector, Serialized)
++BEGIN_OPENFDM_OBJECT_DEF(BreakPointLookup, SimpleDirectModel)
++  DEF_OPENFDM_PROPERTY(BreakPointLookup, BreakPointVector, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-TablePreLookup::TablePreLookup(const std::string&amp; name) :
+-  Model(name)
++BreakPointLookup::BreakPointLookup(const std::string&amp; name) :
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-  
+   setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;TablePreLookup::getOutput);
+ }
+ 
+-TablePreLookup::~TablePreLookup(void)
++BreakPointLookup::~BreakPointLookup(void)
+ {
+ }
+ 
+-bool
+-TablePreLookup::init(void)
++void
++BreakPointLookup::output(Context&amp; context) const
+ {
+-  mInputPortHandle = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mInputPortHandle.isConnected()) {
+-    Log(Model,Error) &lt;&lt; &quot;Input port to TablePreLookup Model \&quot;&quot;
+-                     &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+-    return false;
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(0); ++j) {
++    for (unsigned k = 0; k &lt; sz(1); ++k) {
++      real_type input = context.getInputValue(0)(j, k);
++      context.getOutputValue()(j, k) = mBreakPointVector.lookup(input);
++    }
+   }
+-  return Model::init();
+ }
+ 
+-void
+-TablePreLookup::output(const TaskInfo&amp;)
+-{
+-  OpenFDMAssert(mInputPortHandle.isConnected());
+-  mOutput = mBreakPointVector.lookup(mInputPortHandle.getRealValue());
+-  Log(Model,Debug3) &lt;&lt; &quot;Output of TablePreLookup \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+-                    &lt;&lt; mOutput &lt;&lt; endl;
+-}
+-
+-const real_type&amp;
+-TablePreLookup::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+-BEGIN_OPENFDM_OBJECT_DEF(Table1D, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Table1D, SimpleDirectModel)
+   DEF_OPENFDM_PROPERTY(Table1D, TableData, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table1D::Table1D(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-  
+   setNumInputPorts(1);
+-  setInputPortName(0, &quot;input&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Table1D::getOutput);
+ }
+ 
+ Table1D::~Table1D(void)
+ {
+ }
+   
+-bool
+-Table1D::init(void)
++void
++Table1D::output(Context&amp; context) const
+ {
+-  mInputPortHandle = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mInputPortHandle.isConnected()) {
+-    Log(Model,Error) &lt;&lt; &quot;Input port to Table1D Model \&quot;&quot;
+-                     &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+-    return false;
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(0); ++j) {
++    for (unsigned k = 0; k &lt; sz(1); ++k) {
++      TableData&lt;1&gt;::InterpVector input;
++      input(0) = context.getInputValue(0)(j, k);
++      context.getOutputValue()(j, k) = mTableData.interpolate(input);
++    }
+   }
+-  return Model::init();
+ }
+ 
+-void
+-Table1D::output(const TaskInfo&amp;)
+-{
+-  OpenFDMAssert(mInputPortHandle.isConnected());
+-  TableData&lt;1&gt;::InterpVector interpVec;
+-  interpVec(0) = mInputPortHandle.getRealValue();
+-  mOutput = mTableData.interpolate(interpVec);
+-  Log(Model,Debug3) &lt;&lt; &quot;Output of Table1D \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+-                    &lt;&lt; mOutput &lt;&lt; endl;
+-}
+-
+-const real_type&amp;
+-Table1D::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+-BEGIN_OPENFDM_OBJECT_DEF(Table2D, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Table2D, SimpleDirectModel)
+   DEF_OPENFDM_PROPERTY(Table2D, TableData, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table2D::Table2D(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-  
+   setNumInputPorts(2);
+-  setInputPortName(0, &quot;input 0&quot;);
+-  setInputPortName(1, &quot;input 1&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Table2D::getOutput);
+ }
+ 
+ Table2D::~Table2D(void)
+ {
+ }
+ 
+-bool
+-Table2D::init(void)
++void
++Table2D::output(Context&amp; context) const
+ {
+-  for (unsigned idx = 0; idx &lt; 2; ++idx) {
+-    mInputPortHandle[idx] = getInputPort(idx)-&gt;toRealPortHandle();
+-    if (!mInputPortHandle[idx].isConnected()) {
+-      Log(Model,Error) &lt;&lt; &quot;Input port to Table2D Model \&quot;&quot;
+-                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+-      return false;
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(0); ++j) {
++    for (unsigned k = 0; k &lt; sz(1); ++k) {
++      TableData&lt;2&gt;::InterpVector input;
++      input(0) = context.getInputValue(0)(j, k);
++      input(1) = context.getInputValue(1)(j, k);
++      context.getOutputValue()(j, k) = mTableData.interpolate(input);
+     }
+   }
+-  return Model::init();
+ }
+ 
+-void
+-Table2D::output(const TaskInfo&amp;)
+-{
+-  OpenFDMAssert(mInputPortHandle[0].isConnected());
+-  OpenFDMAssert(mInputPortHandle[1].isConnected());
+-  TableData&lt;2&gt;::InterpVector interpVec;
+-  interpVec(0) = mInputPortHandle[0].getRealValue();
+-  interpVec(1) = mInputPortHandle[1].getRealValue();
+-  mOutput = mTableData.interpolate(interpVec);
+-  Log(Model, Debug3) &lt;&lt; &quot;Output of Table2D \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+-                     &lt;&lt; mOutput &lt;&lt; endl;
+-}
+-
+-const real_type&amp;
+-Table2D::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+-BEGIN_OPENFDM_OBJECT_DEF(Table3D, Model)
++BEGIN_OPENFDM_OBJECT_DEF(Table3D, SimpleDirectModel)
+   DEF_OPENFDM_PROPERTY(Table3D, TableData, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+ Table3D::Table3D(const std::string&amp; name) :
+-  Model(name)
++  SimpleDirectModel(name)
+ {
+-  setDirectFeedThrough(true);
+-  
+-  setNumInputPorts(3);
+-  setInputPortName(0, &quot;input 0&quot;);
+-  setInputPortName(1, &quot;input 1&quot;);
+-  setInputPortName(2, &quot;input 2&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Table3D::getOutput);
++  setNumInputPorts(2);
+ }
+ 
+ Table3D::~Table3D(void)
+ {
+ }
+   
+-bool
+-Table3D::init(void)
++void
++Table3D::output(Context&amp; context) const
+ {
+-  for (unsigned idx = 0; idx &lt; 3; ++idx) {
+-    mInputPortHandle[idx] = getInputPort(idx)-&gt;toRealPortHandle();
+-    if (!mInputPortHandle[idx].isConnected()) {
+-      Log(Model,Error) &lt;&lt; &quot;Input port to Table3D Model \&quot;&quot;
+-                       &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+-      return false;
++  Size sz = size(context.getInputValue(0));
++  for (unsigned j = 0; j &lt; sz(0); ++j) {
++    for (unsigned k = 0; k &lt; sz(1); ++k) {
++      TableData&lt;3&gt;::InterpVector input;
++      input(0) = context.getInputValue(0)(j, k);
++      input(1) = context.getInputValue(1)(j, k);
++      input(2) = context.getInputValue(2)(j, k);
++      context.getOutputValue()(j, k) = mTableData.interpolate(input);
+     }
+   }
+-  return Model::init();
+ }
+ 
+-void
+-Table3D::output(const TaskInfo&amp;)
+-{
+-  OpenFDMAssert(mInputPortHandle[0].isConnected());
+-  OpenFDMAssert(mInputPortHandle[1].isConnected());
+-  OpenFDMAssert(mInputPortHandle[2].isConnected());
+-  TableData&lt;3&gt;::InterpVector interpVec;
+-  interpVec(0) = mInputPortHandle[0].getRealValue();
+-  interpVec(1) = mInputPortHandle[1].getRealValue();
+-  interpVec(2) = mInputPortHandle[2].getRealValue();
+-  mOutput = mTableData.interpolate(interpVec);
+-  Log(Model, Debug3) &lt;&lt; &quot;Output of Table3D \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot; &quot;
+-                     &lt;&lt; mOutput &lt;&lt; endl;
+-}
+-
+-const real_type&amp;
+-Table3D::getOutput(void) const
+-{
+-  return mOutput;
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Table.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Table.h	2008-11-27 19:24:55 UTC (rev 802)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Table.h	2008-11-27 19:38:31 UTC (rev 803)
+@@ -7,42 +7,35 @@
+ 
+ #include &quot;TableData.h&quot;
+ #include &quot;Model.h&quot;
++#include &quot;SimpleDirectModel.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class TablePreLookup : public Model {
+-  OPENFDM_OBJECT(TablePreLookup, Model);
++class BreakPointLookup : public SimpleDirectModel {
++  OPENFDM_OBJECT(BreakPointLookup, SimpleDirectModel);
+ public:
+-  TablePreLookup(const std::string&amp; name);
+-  virtual ~TablePreLookup(void);
++  BreakPointLookup(const std::string&amp; name);
++  virtual ~BreakPointLookup(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const real_type&amp; getOutput(void) const;
+-
+-  void setBreakPointVector(const BreakPointVector&amp; tl)
+-  { mBreakPointVector = tl; }
++  void setBreakPointVector(const BreakPointVector&amp; breakPointVector)
++  { mBreakPointVector = breakPointVector; }
+   const BreakPointVector&amp; getBreakPointVector(void) const
+   { return mBreakPointVector; }
+ 
+ private:
+-  real_type mOutput;
+   BreakPointVector mBreakPointVector;
+-  RealPortHandle mInputPortHandle;
+ };
+ 
+-class Table1D : public Model {
+-  OPENFDM_OBJECT(Table1D, Model);
++class Table1D : public SimpleDirectModel {
++  OPENFDM_OBJECT(Table1D, SimpleDirectModel);
+ public:
+   Table1D(const std::string&amp; name);
+   virtual ~Table1D(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const real_type&amp; getOutput(void) const;
+-
+   void setTableData(const TableData&lt;1&gt;&amp; table)
+   { mTableData = table; }
+   const TableData&lt;1&gt;&amp; getTableData(void) const 
+@@ -51,22 +44,17 @@
+   { return mTableData; }
+ 
+ private:
+-  real_type mOutput;
+   TableData&lt;1&gt; mTableData;
+-  RealPortHandle mInputPortHandle;
+ };
+ 
+-class Table2D : public Model {
+-  OPENFDM_OBJECT(Table2D, Model);
++class Table2D : public SimpleDirectModel {
++  OPENFDM_OBJECT(Table2D, SimpleDirectModel);
+ public:
+   Table2D(const std::string&amp; name);
+   virtual ~Table2D(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const real_type&amp; getOutput(void) const;
+-
+   void setTableData(const TableData&lt;2&gt;&amp; table)
+   { mTableData = table; }
+   const TableData&lt;2&gt;&amp; getTableData(void) const 
+@@ -75,22 +63,17 @@
+   { return mTableData; }
+ 
+ private:
+-  real_type mOutput;
+   TableData&lt;2&gt; mTableData;
+-  RealPortHandle mInputPortHandle[2];
+ };
+ 
+-class Table3D : public Model {
+-  OPENFDM_OBJECT(Table3D, Model);
++class Table3D : public SimpleDirectModel {
++  OPENFDM_OBJECT(Table3D, SimpleDirectModel);
+ public:
+   Table3D(const std::string&amp; name);
+   virtual ~Table3D(void);
+   
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp;);
++  virtual void output(Context&amp; context) const;
+ 
+-  const real_type&amp; getOutput(void) const;
+-
+   void setTableData(const TableData&lt;3&gt;&amp; table)
+   { mTableData = table; }
+   const TableData&lt;3&gt;&amp; getTableData(void) const 
+@@ -99,9 +82,7 @@
+   { return mTableData; }
+ 
+ private:
+-  real_type mOutput;
+   TableData&lt;3&gt; mTableData;
+-  RealPortHandle mInputPortHandle[3];
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000770.html">[OpenFDM-svn] r802 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000772.html">[OpenFDM-svn] r804 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#771">[ date ]</a>
+              <a href="thread.html#771">[ thread ]</a>
+              <a href="subject.html#771">[ subject ]</a>
+              <a href="author.html#771">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

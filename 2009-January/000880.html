@@ -1,0 +1,334 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r912 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r912%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901031126.n03BQq2a031417%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000879.html">
+   <LINK REL="Next"  HREF="000881.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r912 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r912%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200901031126.n03BQq2a031417%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r912 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan  3 12:26:52 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000879.html">[OpenFDM-svn] r911 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000881.html">[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#880">[ date ]</a>
+              <a href="thread.html#880">[ thread ]</a>
+              <a href="subject.html#880">[ subject ]</a>
+              <a href="author.html#880">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-03 12:26:51 +0100 (Sat, 03 Jan 2009)
+New Revision: 912
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+   branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+Log:
+make Sensor use its own Context.
+
+M    test/inertianav.cpp
+M    OpenFDM/SingleLinkInteract.h
+M    OpenFDM/Sensor.cpp
+M    OpenFDM/Sensor.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-03 11:02:35 UTC (rev 911)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-03 11:26:51 UTC (rev 912)
+@@ -28,6 +28,42 @@
+   DEF_OPENFDM_PROPERTY(Bool, EnableAboveGroundLevel, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
++class Sensor::Context : public SingleLinkInteract::Context {
++public:
++  Context(const Sensor* sensor,
++          const Environment* environment, PortValueList&amp; portValueList) :
++    SingleLinkInteract::Context(sensor, environment, portValueList),
++    mSensor(sensor),
++    mLinkRelPos(Vector3::zeros())
++  { }
++  virtual ~Context() {}
++    
++  virtual const Sensor&amp; getNode() const
++  { return *mSensor; }
++  
++  virtual void initDesignPosition()
++  {
++    mLinkRelPos = mSensor-&gt;getPosition() - getLink().getDesignPosition();
++  }
++  
++  virtual void velocities(const Task&amp; task)
++  {
++    mSensor-&gt;velocity(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  virtual void articulation(const Task&amp; task)
++  {
++    mSensor-&gt;articulation(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  virtual void accelerations(const Task&amp; task)
++  {
++    mSensor-&gt;acceleration(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  
++private:
++  SharedPtr&lt;const Sensor&gt; mSensor;
++  Vector3 mLinkRelPos;
++};
++
+ Sensor::Sensor(const std::string&amp; name) :
+   SingleLinkInteract(name),
+   mPosition(0, 0, 0)
+@@ -38,9 +74,17 @@
+ {
+ }
+ 
+-void
+-Sensor::initDesignPosition(PortValueList&amp; portValues) const
++MechanicContext*
++Sensor::newMechanicContext(const Environment* environment,
++                           PortValueList&amp; portValueList) const
+ {
++  SharedPtr&lt;Context&gt; context = new Context(this, environment, portValueList);
++  if (!context-&gt;alloc()) {
++    Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++    return 0;
++  }
++  return context.release();
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-03 11:02:35 UTC (rev 911)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-03 11:26:51 UTC (rev 912)
+@@ -15,14 +15,21 @@
+ 
+ class Sensor : public SingleLinkInteract {
+   OPENFDM_OBJECT(Sensor, SingleLinkInteract);
++  class Context;
+ public:
+   Sensor(const std::string&amp; name);
+   virtual ~Sensor(void);
+ 
+-  virtual void initDesignPosition(PortValueList&amp;) const;
++  virtual MechanicContext*
++  newMechanicContext(const Environment*, PortValueList&amp;) const;
++
+   virtual void velocity(const Task&amp;, const Environment&amp;,
+                         const ContinousStateValueVector&amp;,
+                         PortValueList&amp;) const;
++  virtual void articulation(const Task&amp;, const Environment&amp; environment,
++                            const ContinousStateValueVector&amp;,
++                            PortValueList&amp;) const
++  { }
+   virtual void acceleration(const Task&amp;, const Environment&amp;,
+                             const ContinousStateValueVector&amp;,
+                             PortValueList&amp;) const;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-01-03 11:02:35 UTC (rev 911)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SingleLinkInteract.h	2009-01-03 11:26:51 UTC (rev 912)
+@@ -30,7 +30,6 @@
+     Context(const SingleLinkInteract* interact, const Environment* environment,
+             PortValueList&amp; portValueList) :
+       MechanicContext(environment),
+-      mInteract(interact),
+       mPortValueList(portValueList)
+     {
+       mMechanicLinkValue = portValueList.getPortValue(interact-&gt;mMechanicLink);
+@@ -38,38 +37,6 @@
+     }
+     virtual ~Context() {}
+     
+-    virtual const SingleLinkInteract&amp; getNode() const
+-    { return *mInteract; }
+-    
+-    virtual void initDesignPosition()
+-    {
+-      mInteract-&gt;initDesignPosition(mPortValueList);
+-    }
+-    
+-    virtual void init(const /*Init*/Task&amp; task)
+-    {
+-      mInteract-&gt;init(task, mDiscreteState, mContinousState, mPortValueList);
+-    }
+-    
+-    virtual void velocities(const Task&amp; task)
+-    {
+-      mInteract-&gt;velocity(task, getEnvironment(), mContinousState, mPortValueList);
+-    }
+-    virtual void articulation(const Task&amp; task)
+-    {
+-      mInteract-&gt;articulation(task, getEnvironment(), mContinousState, mPortValueList);
+-    }
+-    virtual void accelerations(const Task&amp; task)
+-    {
+-      mInteract-&gt;acceleration(task, getEnvironment(), mContinousState, mPortValueList);
+-    }
+-    
+-    virtual void derivative(const Task&amp; task)
+-    {
+-      mInteract-&gt;derivative(task, getEnvironment(), mDiscreteState, mContinousState, mPortValueList,
+-                            mContinousStateDerivative);
+-    }
+-    
+     bool alloc()
+     {
+       unsigned numContinousStates = getNode().getNumContinousStateValues();
+@@ -111,46 +78,10 @@
+     DiscreteStateValueVector mDiscreteState;
+     
+   private:
+-    SharedPtr&lt;const SingleLinkInteract&gt; mInteract;
+     SharedPtr&lt;MechanicLinkValue&gt; mMechanicLinkValue;
+   };
+   
+ 
+-  virtual MechanicContext* newMechanicContext(const Environment* environment,
+-                                              PortValueList&amp; portValueList) const
+-  {
+-    SharedPtr&lt;Context&gt; context = new Context(this, environment, portValueList);
+-    if (!context-&gt;alloc()) {
+-      Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
+-                          &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      return 0;
+-    }
+-    return context.release();
+-  }
+-  
+-  virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
+-                    ContinousStateValueVector&amp;, const PortValueList&amp;) const
+-  { }
+-  virtual void initDesignPosition(PortValueList&amp;) const
+-  { }
+-  virtual void velocity(const Task&amp;, const Environment&amp; environment,
+-                        const ContinousStateValueVector&amp;, PortValueList&amp;) const
+-  { }
+-  virtual void articulation(const Task&amp;, const Environment&amp; environment,
+-                            const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;) const
+-  { }
+-  virtual void acceleration(const Task&amp;, const Environment&amp; environment,
+-                            const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;) const
+-  { }
+-  virtual void derivative(const Task&amp;, const Environment&amp; environment,
+-                          const DiscreteStateValueVector&amp;,
+-                          const ContinousStateValueVector&amp;,
+-                          const PortValueList&amp;,
+-                          ContinousStateValueVector&amp;) const
+-  { }
+-
+ protected:
+   MechanicLink mMechanicLink;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2009-01-03 11:02:35 UTC (rev 911)
++++ branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2009-01-03 11:26:51 UTC (rev 912)
+@@ -22,6 +22,54 @@
+     mAccelerationPort(this, &quot;acceleration&quot;, Size(6, 1), true)
+   { }
+ 
++class Context : public SingleLinkInteract::Context {
++public:
++  Context(const AccelerationTracking* accelerationTracking,
++          const Environment* environment, PortValueList&amp; portValueList) :
++    SingleLinkInteract::Context(accelerationTracking, environment, portValueList),
++    mAccelerationTracking(accelerationTracking),
++    mLinkRelPos(Vector3::zeros())
++  { }
++  virtual ~Context() {}
++    
++  virtual const AccelerationTracking&amp; getNode() const
++  { return *mAccelerationTracking; }
++  
++  virtual void initDesignPosition()
++  {
++//     mLinkRelPos = mAccelerationTracking-&gt;getPosition() - getLink().getDesignPosition();
++  }
++  
++  virtual void velocities(const Task&amp; task)
++  {
++    mAccelerationTracking-&gt;velocity(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  virtual void articulation(const Task&amp; task)
++  {
++//     mAccelerationTracking-&gt;articulation(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  virtual void accelerations(const Task&amp; task)
++  {
++    mAccelerationTracking-&gt;acceleration(task, getEnvironment(), mContinousState, mPortValueList);
++  }
++  
++private:
++  SharedPtr&lt;const AccelerationTracking&gt; mAccelerationTracking;
++  Vector3 mLinkRelPos;
++};
++
++  virtual MechanicContext* newMechanicContext(const Environment* environment,
++                                              PortValueList&amp; portValueList) const
++  {
++    SharedPtr&lt;Context&gt; context = new Context(this, environment, portValueList);
++    if (!context-&gt;alloc()) {
++      Log(Model, Warning) &lt;&lt; &quot;Could not alloc for model \&quot;&quot;
++                          &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++      return 0;
++    }
++    return context.release();
++  }
++  
+   virtual void initDesignPosition(PortValueList&amp;) const
+   {
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000879.html">[OpenFDM-svn] r911 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000881.html">[OpenFDM-svn] r913 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#880">[ date ]</a>
+              <a href="thread.html#880">[ thread ]</a>
+              <a href="subject.html#880">[ subject ]</a>
+              <a href="author.html#880">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

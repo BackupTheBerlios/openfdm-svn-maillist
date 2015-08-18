@@ -1,0 +1,165 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r326 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r326%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200710061711.l96HBZdh002683%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000300.html">
+   <LINK REL="Next"  HREF="000302.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r326 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r326%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200710061711.l96HBZdh002683%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r326 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Oct  6 19:11:35 CEST 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000300.html">[OpenFDM-svn] r325 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000302.html">[OpenFDM-svn] r327 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#301">[ date ]</a>
+              <a href="thread.html#301">[ thread ]</a>
+              <a href="subject.html#301">[ subject ]</a>
+              <a href="author.html#301">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-10-06 19:11:34 +0200 (Sat, 06 Oct 2007)
+New Revision: 326
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+Log:
+Make the path available in the visitor.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-10-06 16:06:53 UTC (rev 325)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2007-10-06 17:11:34 UTC (rev 326)
+@@ -13,6 +13,8 @@
+ 
+ namespace OpenFDM {
+ 
++typedef std::list&lt;SharedPtr&lt;Node&gt; &gt; NodePath;
++
+ class ModelVisitor {
+ public:
+   virtual ~ModelVisitor(void)
+@@ -31,15 +33,30 @@
+   { apply(static_cast&lt;Interact&amp;&gt;(joint)); }
+   virtual void apply(MobileRootJoint&amp; mobileRootJoint)
+   { apply(static_cast&lt;Joint&amp;&gt;(mobileRootJoint)); }
++
++  const NodePath&amp; getNodePath() const
++  { return mNodePath; }
++
+ protected:
+   /// Call this in the apply(ModelGroup&amp;) method if you want to
+   /// traverse downward
+   inline void traverse(ModelGroup&amp; modelGroup)
+-  { modelGroup.traverse(*this); }
++  {
++    mNodePath.push_back(&amp;modelGroup);
++    modelGroup.traverse(*this);
++    mNodePath.pop_back();
++  }
+   /// Call this in the apply(ModelGroup&amp;) method if you want to
+   /// traverse upward
+   inline void ascend(Node&amp; node)
+-  { node.ascend(*this); }
++  {
++    mNodePath.push_back(&amp;node);
++    node.ascend(*this);
++    mNodePath.pop_back();
++  }
++private:
++  // The path that visitor has passed
++  NodePath mNodePath;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-10-06 16:06:53 UTC (rev 325)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-10-06 17:11:34 UTC (rev 326)
+@@ -24,6 +24,7 @@
+ 
+ struct ModelListEntry {
+   SharedPtr&lt;Model&gt; model;
++  NodePath nodePath;
+   SampleTimeSet sampleTimeSet;  
+ };
+ 
+@@ -38,6 +39,7 @@
+   {
+     ModelListEntry entry;
+     entry.model = &model;
++    entry.nodePath = getNodePath();
+     entry.sampleTimeSet = model.getSampleTimeSet();
+     if (entry.sampleTimeSet.isInherited()) {
+       SampleTimeSet::const_iterator it;
+@@ -748,13 +750,17 @@
+   mModels.swap(newList);
+ 
+   // print the schedule ...
+-//   ModelList2::const_iterator it;
+-//   it = mModels.begin();
+-//   while (it != mModels.end()) {
+-//     Log(Model,Error) &lt;&lt; it-&gt;model-&gt;getPathString() &lt;&lt; &quot; &quot;
+-//                      &lt;&lt; it-&gt;sampleTimeSet &lt;&lt; endl;
+-//     ++it;
+-//   }
++  Log(Schedule,Info) &lt;&lt; &quot;Model Schedule:&quot; &lt;&lt; endl;
++  ModelList2::const_iterator it;
++  it = mModels.begin();
++  while (it != mModels.end()) {
++    NodePath::const_iterator ni;
++    for (ni = it-&gt;nodePath.begin(); ni != it-&gt;nodePath.end(); ++ni)
++      Log(Schedule,Info) &lt;&lt; &quot;/&quot; &lt;&lt; (*ni)-&gt;getName();
++    Log(Schedule,Info) &lt;&lt; &quot;/&quot; &lt;&lt; it-&gt;model-&gt;getName() &lt;&lt; &quot; &quot;
++                       &lt;&lt; it-&gt;sampleTimeSet &lt;&lt; endl;
++    ++it;
++  }
+ 
+   return true;
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000300.html">[OpenFDM-svn] r325 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000302.html">[OpenFDM-svn] r327 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#301">[ date ]</a>
+              <a href="thread.html#301">[ thread ]</a>
+              <a href="subject.html#301">[ subject ]</a>
+              <a href="author.html#301">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

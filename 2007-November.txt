@@ -1,0 +1,103 @@
+From frohlich at mail.berlios.de  Tue Nov  6 05:57:34 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Tue, 6 Nov 2007 05:57:34 +0100
+Subject: [OpenFDM-svn] r337 - trunk/flightgear
+Message-ID: <200711060457.lA64vY3k013357@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-11-06 05:57:34 +0100 (Tue, 06 Nov 2007)
+New Revision: 337
+
+Modified:
+   trunk/flightgear/FGOpenFDM.cpp
+Log:
+Use newer FGInterface methods.
+
+
+Modified: trunk/flightgear/FGOpenFDM.cpp
+===================================================================
+--- trunk/flightgear/FGOpenFDM.cpp	2007-10-28 21:35:56 UTC (rev 336)
++++ trunk/flightgear/FGOpenFDM.cpp	2007-11-06 04:57:34 UTC (rev 337)
+@@ -364,9 +364,8 @@
+     SG_LOG(SG_FLIGHT, SG_WARN, "Trimming failed!");
+ 
+   // Copy the trim results back
+-  gp = vehicle->getGeodPosition();
+-  _updateGeodeticPosition(gp.latitude, gp.longitude,
+-                          Unit::foot().convertTo(gp.altitude));
++  Vector3 cart = vehicle->getCartPosition();
++  _updatePositionM(SGVec3d(cart(0), cart(1), cart(2)));
+ 
+   Rotation geodOr = vehicle->getGeodOrientation();
+   Vector3 euler = geodOr.getEuler();
+@@ -452,9 +451,8 @@
+   vehicle->update(dt);
+ 
+   // Now write the newly computed values into the interface class.
+-  gp = vehicle->getGeodPosition();
+-  _updateGeodeticPosition(gp.latitude, gp.longitude,
+-                          Unit::foot().convertTo(gp.altitude));
++  cart = vehicle->getCartPosition();
++  _updatePositionM(SGVec3d(cart(0), cart(1), cart(2)));
+ //   _set_Altitude_AGL(model->getAGL() * M2FT);
+ 
+   Rotation geodOr = vehicle->getGeodOrientation();
+
+
+
+From frohlich at mail.berlios.de  Thu Nov 29 21:03:24 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Thu, 29 Nov 2007 21:03:24 +0100
+Subject: [OpenFDM-svn] r338 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200711292003.lATK3OdO018197@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-11-29 21:03:17 +0100 (Thu, 29 Nov 2007)
+New Revision: 338
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/CowPtr.h
+Log:
+Doc updates.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/CowPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-11-06 04:57:34 UTC (rev 337)
++++ trunk/OpenFDM/src/OpenFDM/CowPtr.h	2007-11-29 20:03:17 UTC (rev 338)
+@@ -21,24 +21,28 @@
+ /// implementing its destructors and clone method as a virtual class member.
+ template<typename T>
+ class CowPtr {
++public:
++  void detach()
++  { mutablePtr(); }
++  
+ protected:
+   explicit CowPtr(T* ptr) : mPtr(ptr)
+   { OpenFDMAssert(mPtr); }
+ 
+-  T* ptr(void)
++  T* mutablePtr(void)
+   {
+     // Ok, asking here if the data is shared one time is suficient.
+     // For the first cut, it might happen that just past shared returned
+-    // false a new reference is generated in an othe thread.
++    // false a new reference is generated in an other thread.
+     // That can not happen, since a reference in an other thread would
+     // cause a reference count > 1 what means that we cannot use
+     // the shared copy anyway and we have already made a copy anyway.
+     if (shared(mPtr))
+-      mPtr = mPtr->clone();
++      mPtr = new T(*mPtr);
+     return mPtr;
+   }
+ 
+-  const T* ptr(void) const
++  const T* constPtr(void) const
+   { return mPtr; }
+ 
+ private:
+
+
+

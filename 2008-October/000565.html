@@ -1,0 +1,377 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r595%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810102007.m9AK7hwT029870%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000564.html">
+   <LINK REL="Next"  HREF="000566.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r595%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810102007.m9AK7hwT029870%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r595 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Oct 10 22:07:43 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000564.html">[OpenFDM-svn] r594 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000566.html">[OpenFDM-svn] r596 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#565">[ date ]</a>
+              <a href="thread.html#565">[ thread ]</a>
+              <a href="subject.html#565">[ subject ]</a>
+              <a href="author.html#565">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-10 22:07:42 +0200 (Fri, 10 Oct 2008)
+New Revision: 595
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+More Sample time handling.
+
+M    src/OpenFDM/ModelInstance.h
+M    src/OpenFDM/MechanicInstance.h
+M    src/OpenFDM/AbstractNodeInstance.cpp
+M    src/OpenFDM/MechanicInstance.cpp
+M    src/OpenFDM/ModelInstance.cpp
+M    src/OpenFDM/Node.h
+M    src/OpenFDM/Node.cpp
+M    src/OpenFDM/System.cpp
+M    src/OpenFDM/AbstractNodeInstance.h
+M    src/OpenFDM/NodeInstance.cpp
+M    src/OpenFDM/NodeInstance.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -11,8 +11,10 @@
+ 
+ namespace OpenFDM {
+ 
+-AbstractNodeInstance::AbstractNodeInstance(const NodePath&amp; nodePath) :
+-  mNodePath(nodePath)
++AbstractNodeInstance::AbstractNodeInstance(const NodePath&amp; nodePath,
++                                           const SampleTime&amp; sampleTime) :
++  mNodePath(nodePath),
++  mSampleTime(sampleTime)
+ {
+   OpenFDMAssert(!nodePath.empty());
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/AbstractNodeInstance.h	2008-10-10 20:07:42 UTC (rev 595)
+@@ -11,6 +11,7 @@
+ #include &quot;AbstractNodeContext.h&quot;
+ #include &quot;Assert.h&quot;
+ #include &quot;Node.h&quot;
++#include &quot;SampleTime.h&quot;
+ #include &quot;SharedPtr.h&quot;
+ #include &quot;WeakReferenced.h&quot;
+ 
+@@ -21,7 +22,7 @@
+ /// This class is meant to show up in the user interface of this simulation.
+ class AbstractNodeInstance : public WeakReferenced {
+ public:
+-  AbstractNodeInstance(const NodePath&amp; nodePath);
++  AbstractNodeInstance(const NodePath&amp; nodePath, const SampleTime&amp; sampleTime);
+   virtual ~AbstractNodeInstance();
+ 
+   /// The actual Node this AbstractNodeInstance stems from
+@@ -30,12 +31,12 @@
+ 
+   const NodePath&amp; getNodePath() const { return mNodePath; }
+ 
+-//   /// Set the sample times this node will run on
+-//   void setSampleTimeSet(const SampleTimeSet&amp; sampleTimeSet)
+-//   { mSampleTimeSet = sampleTimeSet; }
+-//   /// Get the sample times this node will run on
+-//   const SampleTimeSet&amp; getSampleTimeSet() const
+-//   { return mSampleTimeSet; }
++  /// Set the sample time this node will run on
++  void setSampleTime(const SampleTime&amp; sampleTime)
++  { mSampleTime = sampleTime; }
++  /// Get the sample time this node will run on
++  const SampleTime&amp; getSampleTime() const
++  { return mSampleTime; }
+ 
+   PortValueList&amp; getPortValueList()
+   { return getNodeContext().getPortValueList(); }
+@@ -53,8 +54,8 @@
+   AbstractNodeInstance(const AbstractNodeInstance&amp;);
+   AbstractNodeInstance&amp; operator=(const AbstractNodeInstance&amp;);
+ 
+-//   /// The sample times this node will run on
+-//   SampleTimeSet mSampleTimeSet;
++  /// The sample times this node will run on
++  SampleTime mSampleTime;
+ 
+   NodePath mNodePath;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -7,8 +7,9 @@
+ namespace OpenFDM {
+ 
+ MechanicInstance::MechanicInstance(const NodePath&amp; nodePath,
++                                   const SampleTime&amp; sampleTime,
+                                    const MechanicNode* mechanicNode) :
+-  AbstractNodeInstance(nodePath),
++  AbstractNodeInstance(nodePath, sampleTime),
+   mMechanicContext(new MechanicContext(mechanicNode))
+ {
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicInstance.h	2008-10-10 20:07:42 UTC (rev 595)
+@@ -14,7 +14,7 @@
+ 
+ class MechanicInstance : public AbstractNodeInstance {
+ public:
+-  MechanicInstance(const NodePath&amp; nodePath,
++  MechanicInstance(const NodePath&amp; nodePath, const SampleTime&amp; sampleTime,
+                    const MechanicNode* mechanicNode);
+   virtual ~MechanicInstance();
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -6,8 +6,9 @@
+ 
+ namespace OpenFDM {
+ 
+-ModelInstance::ModelInstance(const NodePath&amp; nodePath, const Model* model) :
+-  AbstractNodeInstance(nodePath),
++ModelInstance::ModelInstance(const NodePath&amp; nodePath,
++                             const SampleTime&amp; sampleTime, const Model* model) :
++  AbstractNodeInstance(nodePath, sampleTime),
+   mModelContext(new ModelContext(model))
+ {
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelInstance.h	2008-10-10 20:07:42 UTC (rev 595)
+@@ -14,7 +14,8 @@
+ 
+ class ModelInstance : public AbstractNodeInstance {
+ public:
+-  ModelInstance(const NodePath&amp; nodePath, const Model* model);
++  ModelInstance(const NodePath&amp; nodePath, const SampleTime&amp; sampleTime,
++                const Model* model);
+   virtual ~ModelInstance();
+ 
+   // Return true if this leaf directly depends on one of leafInstance outputs
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -14,7 +14,7 @@
+ 
+ Node::Node(const std::string&amp; name) :
+   Object(name),
+-  mSampleTime(0, 1)
++  mSampleTime(SampleTime::getInherited())
+ {
+ }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-10 20:07:42 UTC (rev 595)
+@@ -7,10 +7,10 @@
+ 
+ #include &lt;string&gt;
+ #include &lt;vector&gt;
+-#include &quot;Fraction.h&quot;
+ #include &quot;Object.h&quot;
+ #include &quot;PortId.h&quot;
+ #include &quot;PortInfo.h&quot;
++#include &quot;SampleTime.h&quot;
+ #include &quot;SharedPtr.h&quot;
+ 
+ namespace OpenFDM {
+@@ -49,9 +49,9 @@
+   unsigned getPortIndex(const PortId&amp; portId) const;
+   bool checkPort(const PortId&amp; portId) const;
+ 
+-  const Fraction&amp; getSampleTime() const
++  const SampleTime&amp; getSampleTime() const
+   { return mSampleTime; }
+-  void setSampleTime(const Fraction&amp; sampleTime)
++  void setSampleTime(const SampleTime&amp; sampleTime)
+   { mSampleTime = sampleTime; }
+ 
+ protected:
+@@ -79,7 +79,7 @@
+ 
+   /// Sample time handling.
+   /// FIXME Should that be something like the old sample time set??
+-  Fraction mSampleTime;
++  SampleTime mSampleTime;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -6,8 +6,9 @@
+ 
+ namespace OpenFDM {
+ 
+-NodeInstance::NodeInstance(const NodePath&amp; nodePath, const Node* node) :
+-  AbstractNodeInstance(nodePath),
++NodeInstance::NodeInstance(const NodePath&amp; nodePath,
++                           const SampleTime&amp; sampleTime, const Node* node) :
++  AbstractNodeInstance(nodePath, sampleTime),
+   mNodeContext(new NodeContext(node))
+ {
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/NodeInstance.h	2008-10-10 20:07:42 UTC (rev 595)
+@@ -12,7 +12,8 @@
+ 
+ class NodeInstance : public AbstractNodeInstance {
+ public:
+-  NodeInstance(const NodePath&amp; nodePath, const Node* node);
++  NodeInstance(const NodePath&amp; nodePath, const SampleTime&amp; sampleTime,
++               const Node* node);
+   virtual ~NodeInstance();
+ 
+ protected:
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-10 19:32:17 UTC (rev 594)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-10 20:07:42 UTC (rev 595)
+@@ -365,7 +365,7 @@
+   PortDataList* buildNodeContext(const Node&amp; node)
+   {
+     NodeInstance* nodeInstance;
+-    nodeInstance = new NodeInstance(getNodePath(), &amp;node);
++    nodeInstance = new NodeInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(nodeInstance);
+     PortDataList* portDataList;
+     portDataList = getCurrentNodePortDataList();
+@@ -395,7 +395,7 @@
+   {
+     // Need to stor the root nodes to build up the spanning tree for the
+     // mechanical system here.
+-    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), &amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+ //     _mechanicInstanceList.push_back(mechanicInstance);
+     _rootJointInstanceList.push_back(mechanicInstance);
+@@ -403,14 +403,14 @@
+   }
+   virtual void apply(const MechanicNode&amp; node)
+   {
+-    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), &amp;node);
++    MechanicInstance* mechanicInstance = new MechanicInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(mechanicInstance);
+     _mechanicInstanceList.push_back(mechanicInstance);
+     allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(const Model&amp; node)
+   {
+-    ModelInstance* modelInstance = new ModelInstance(getNodePath(), &amp;node);
++    ModelInstance* modelInstance = new ModelInstance(getNodePath(), mSampleTime, &amp;node);
+     _nodeInstanceList.push_back(modelInstance);
+     _modelInstanceList.push_back(modelInstance);
+     allocPortData(modelInstance, node);
+@@ -441,8 +441,16 @@
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+       mCurrentNodePortDataList = _portDataMap[i];
+ 
+-      group.getChild(i)-&gt;accept(*this);
++      SharedPtr&lt;const Node&gt; node = group.getChild(i);
+ 
++      SampleTime sampleTime = mSampleTime;
++      if (node-&gt;getSampleTime().isInherited())
++        mSampleTime = node-&gt;getSampleTime();
++
++      node-&gt;accept(*this);
++
++      mSampleTime = sampleTime;
++
+       // Pop the per node port information struct
+       parentNodePortDataList.swap(mCurrentNodePortDataList);
+     }
+@@ -536,6 +544,9 @@
+   typedef std::list&lt;SharedPtr&lt;PortDataList&gt; &gt; PortDataListList;
+   PortDataListList _portDataListList;
+ 
++  // Current nodes sample time
++  SampleTime mSampleTime;
++
+   // Here the miracle occurs.
+   // The collected simulation nodes are packed into something that can be used
+   // to simulate the system.
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000564.html">[OpenFDM-svn] r594 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000566.html">[OpenFDM-svn] r596 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#565">[ date ]</a>
+              <a href="thread.html#565">[ thread ]</a>
+              <a href="subject.html#565">[ subject ]</a>
+              <a href="author.html#565">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

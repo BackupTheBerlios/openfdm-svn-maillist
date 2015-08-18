@@ -1,0 +1,268 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r403 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-June/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r403%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200806021912.m52JCjEQ002023%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000375.html">
+   <LINK REL="Next"  HREF="000377.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r403 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r403%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200806021912.m52JCjEQ002023%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r403 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jun  2 21:12:45 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000375.html">[OpenFDM-svn] r402 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000377.html">[OpenFDM-svn] r404 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#376">[ date ]</a>
+              <a href="thread.html#376">[ thread ]</a>
+              <a href="subject.html#376">[ subject ]</a>
+              <a href="author.html#376">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-06-02 21:12:45 +0200 (Mon, 02 Jun 2008)
+New Revision: 403
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Referenced.h
+   trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+   trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+Log:
+Remove the need for the Mutex in WeakReferenced.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Referenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/Referenced.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -29,18 +29,6 @@
+   { if (ref) return ref-&gt;_refcount; else return 0u; }
+   static bool shared(const Referenced* ref)
+   { if (ref) return 1u &lt; ref-&gt;_refcount; else return false; }
+-  static unsigned getNonZero(const Referenced* ref)
+-  {
+-    if (!ref)
+-      return 0u;
+-    unsigned count;
+-    do {
+-      count = ref-&gt;_refcount;
+-      if (count == 0)
+-        return 0u;
+-    } while (!ref-&gt;_refcount.compareAndExchange(count, count+1));
+-    return count + 1;
+-  }
+ 
+   template&lt;typename T&gt;
+   static void destroy(T* ref)
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakPtr.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/WeakPtr.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -15,7 +15,7 @@
+ public:
+   WeakPtr(void)
+   { }
+-  WeakPtr(const WeakPtr&amp; p) : mWeakDataPtr(p.mWeakDataPtr)
++  WeakPtr(const WeakPtr&amp; p) : mWeakData(p.mWeakData)
+   { }
+   template&lt;typename U&gt;
+   WeakPtr(const SharedPtr&lt;U&gt;&amp; p)
+@@ -35,33 +35,33 @@
+   WeakPtr&amp; operator=(const WeakPtr&lt;U&gt;&amp; p)
+   { SharedPtr&lt;T&gt; sharedPtr = p.lock(); assign(sharedPtr.get()); return *this; }
+   WeakPtr&amp; operator=(const WeakPtr&amp; p)
+-  { mWeakDataPtr = p.mWeakDataPtr; return *this; }
++  { mWeakData = p.mWeakData; return *this; }
+ 
+   SharedPtr&lt;T&gt; lock(void) const
+   {
+-    if (!mWeakDataPtr)
++    if (!mWeakData)
+       return SharedPtr&lt;T&gt;();
+     SharedPtr&lt;T&gt; sharedPtr;
+-    sharedPtr.assignNonRef(mWeakDataPtr-&gt;get&lt;T&gt;());
++    sharedPtr.assignNonRef(mWeakData-&gt;getPointer&lt;T&gt;());
+     return sharedPtr;
+   }
+ 
+   void clear()
+-  { mWeakDataPtr = 0; }
++  { mWeakData = 0; }
+   void swap(WeakPtr&amp; weakPtr)
+-  { mWeakDataPtr.swap(weakPtr.mWeakDataPtr); }
++  { mWeakData.swap(weakPtr.mWeakData); }
+ 
+ private:
+   void assign(T* p)
+   {
+     if (p)
+-      mWeakDataPtr = p-&gt;mWeakDataPtr;
++      mWeakData = p-&gt;mWeakData;
+     else
+-      mWeakDataPtr = 0;
++      mWeakData = 0;
+   }
+   
+   // The indirect reference itself.
+-  SharedPtr&lt;WeakReferenced::WeakData&gt; mWeakDataPtr;
++  SharedPtr&lt;WeakReferenced::WeakData&gt; mWeakData;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/WeakReferenced.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-06-02 18:47:13 UTC (rev 402)
++++ trunk/OpenFDM/src/OpenFDM/WeakReferenced.h	2008-06-02 19:12:45 UTC (rev 403)
+@@ -15,58 +15,81 @@
+ template&lt;typename T&gt;
+ class WeakPtr;
+ 
+-class WeakReferenced : public Referenced {
++class WeakReferenced {
+ public:
+-  /// Note that object construction is atomic anyway.
+-  /// This way we do not need to guard setting the mWeakDataPtr variable
+-  WeakReferenced(void) : mWeakDataPtr(new WeakData(this))
++  /// The object backref and the reference count for this object need to be
++  /// there in any case. Also these are per object and shall not be copied nor
++  /// assigned.
++  /// The reference count for this object is stored in a secondary object that
++  /// is shared with all weak pointers to this current object. This way we
++  /// have an atomic decision using the reference count of this current object
++  /// if the backref is still valid. At the time where the atomic count is
++  /// equal to zero the object is considered dead.
++  WeakReferenced(void) :
++    mWeakData(new WeakData(this))
+   {}
+-  // Do not copy the weak backward references ...
+   WeakReferenced(const WeakReferenced&amp; weakReferenced) :
+-    Referenced(weakReferenced), mWeakDataPtr(new WeakData(this))
++    mWeakData(new WeakData(this))
+   {}
+   ~WeakReferenced(void)
+-  { mWeakDataPtr-&gt;clear(); }
++  { mWeakData-&gt;mWeakReferenced = 0; }
+ 
+   /// Do not copy the weak backward references ...
+   WeakReferenced&amp; operator=(const WeakReferenced&amp;)
+-  { Referenced::operator=(*this); return *this; }
++  { return *this; }
+ 
++  /// The usual operations on weak pointers.
++  /// The interface should stay the same then what we have in Referenced.
++  static unsigned get(const WeakReferenced* ref)
++  { if (ref) return ++(ref-&gt;mWeakData-&gt;mRefcount); else return 0u; }
++  static unsigned put(const WeakReferenced* ref)
++  { if (ref) return --(ref-&gt;mWeakData-&gt;mRefcount); else return ~0u; }
++  static unsigned count(const WeakReferenced* ref)
++  { if (ref) return ref-&gt;mWeakData-&gt;mRefcount; else return 0u; }
++
++  template&lt;typename T&gt;
++  static void destroy(T* ref)
++  { delete ref; }
++
+ private:
+   /// Support for weak references, not increasing the reference count
+   /// that is done through that small helper class which holds an uncounted
+   /// reference which is zeroed out on destruction of the current object
+   class WeakData : public Referenced {
+   public:
+-    WeakData(WeakReferenced* object) : mObject(object) {}
++    WeakData(WeakReferenced* weakReferenced) :
++      mRefcount(0u),
++      mWeakReferenced(weakReferenced)
++    { }
++
+     template&lt;typename T&gt;
+-    T* get()
++    T* getPointer()
+     {
+-      // This lock guarantees that the object is not deleted in between.
+-      ScopeLock scopeLock(mMutex);
+-      if (WeakReferenced::getNonZero(mObject) == 0)
+-        return 0;
+-      else
+-        return static_cast&lt;T*&gt;(mObject);
++      // Try to increment the reference count if the count is greater
++      // then zero. Since it should only be incremented iff it is nonzero, we
++      // need to check that value and try to do an atomic test and set. If this
++      // fails, try again. The usual lockless algorithm ...
++      unsigned count;
++      do {
++        count = mRefcount;
++        if (count == 0)
++          return 0;
++      } while (!mRefcount.compareAndExchange(count, count + 1));
++      // We know that as long as the refcount is not zero, the pointer still
++      // points to valid data. So it is safe to work on it.
++      return static_cast&lt;T*&gt;(mWeakReferenced);
+     }
+-    void clear()
+-    {
+-      ScopeLock scopeLock(mMutex);
+-      mObject = 0;
+-    }
++
++    Atomic mRefcount;
++    WeakReferenced* mWeakReferenced;
++
+   private:
+     WeakData(void);
+     WeakData(const WeakData&amp;);
+     WeakData&amp; operator=(const WeakData&amp;);
+-
+-    // Mutex to protect the non atomic pointer assignment and that avoids
+-    // access to an object that is not yet zeroed out but deletion is in
+-    // progress.
+-    Mutex mMutex;
+-    WeakReferenced* mObject;
+   };
+ 
+-  SharedPtr&lt;WeakData&gt; mWeakDataPtr;
++  SharedPtr&lt;WeakData&gt; mWeakData;
+ 
+   template&lt;typename T&gt;
+   friend class WeakPtr;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000375.html">[OpenFDM-svn] r402 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000377.html">[OpenFDM-svn] r404 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#376">[ date ]</a>
+              <a href="thread.html#376">[ thread ]</a>
+              <a href="subject.html#376">[ subject ]</a>
+              <a href="author.html#376">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

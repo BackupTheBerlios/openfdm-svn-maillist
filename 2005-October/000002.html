@@ -1,0 +1,234 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Openfdm-svn] r9 - trunk/flightgear
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r9%20-%20trunk/flightgear&In-Reply-To=%3C200510051524.j95FOw2I001284%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000001.html">
+   <LINK REL="Next"  HREF="000003.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Openfdm-svn] r9 - trunk/flightgear</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r9%20-%20trunk/flightgear&In-Reply-To=%3C200510051524.j95FOw2I001284%40sheep.berlios.de%3E"
+       TITLE="[Openfdm-svn] r9 - trunk/flightgear">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Oct  5 17:24:58 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000001.html">[Openfdm-svn] r8 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000003.html">[Openfdm-svn] r10 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#2">[ date ]</a>
+              <a href="thread.html#2">[ thread ]</a>
+              <a href="subject.html#2">[ subject ]</a>
+              <a href="author.html#2">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-05 17:24:57 +0200 (Wed, 05 Oct 2005)
+New Revision: 9
+
+Added:
+   trunk/flightgear/README
+   trunk/flightgear/flightgear.diff
+Log:
+Add flightgear patch and minimal build instructions.
+
+
+Added: trunk/flightgear/README
+===================================================================
+--- trunk/flightgear/README	2005-10-05 14:21:08 UTC (rev 8)
++++ trunk/flightgear/README	2005-10-05 15:24:57 UTC (rev 9)
+@@ -0,0 +1,21 @@
++This directory contains the files required to integrate OpenFDM
++into flightgear.
++
++To do this, build and install the OpenFDM package into the same
++prefix than SimGear is built into.
++
++Create a new directory in flightgears source directory:
++  source/src/FDM/OpenFDM
++
++Then copy the files from this directory into the newly created
++one.
++
++Apply the patch 'flightgear.diff' to the source directory. This
++one will integrate this new directory into the build system and
++it will call the initialization routines if we find a OpenFDM
++aircraft.
++
++Reconfigure and rebuild flightgear.
++
++Have fun.
++
+
+Added: trunk/flightgear/flightgear.diff
+===================================================================
+--- trunk/flightgear/flightgear.diff	2005-10-05 14:21:08 UTC (rev 8)
++++ trunk/flightgear/flightgear.diff	2005-10-05 15:24:57 UTC (rev 9)
+@@ -0,0 +1,129 @@
++Index: configure.ac
++===================================================================
++RCS file: /var/cvs/FlightGear-0.9/source/configure.ac,v
++retrieving revision 1.96
++diff -u -r1.96 configure.ac
++--- configure.ac	24 Sep 2005 12:31:41 -0000	1.96
+++++ configure.ac	5 Oct 2005 15:17:44 -0000
++@@ -444,6 +444,14 @@
++ fi
++ AM_CONDITIONAL(ENABLE_JPEG_SERVER, test &quot;x$ac_cv_header_simgear_screen_jpgfactory_hxx&quot; = &quot;xyes&quot;)
++ 
+++dnl Check for installed OpenFDM
+++AC_CHECK_HEADER(OpenFDM/OpenFDMConfig.h)
+++AM_CONDITIONAL(ENABLE_OpenFDM_FDM, \
+++               [ test &quot;x$ac_cv_header_OpenFDM_OpenFDMConfig_h&quot; = &quot;xyes&quot; ] )
+++if test &quot;x$ac_cv_header_OpenFDM_OpenFDMConfig_h&quot; = &quot;xyes&quot; ; then
+++    AC_DEFINE([FG_ENABLE_OPENFDM_FDM], 1, [Define for no logging output])
+++fi
+++
++ AC_LANG_POP
++ 
++ dnl Check for system installed zlib
++@@ -519,6 +527,7 @@
++ 	src/FDM/JSBSim/Makefile \
++ 	src/FDM/JSBSim/filtersjb/Makefile \
++ 	src/FDM/LaRCsim/Makefile \
+++	src/FDM/OpenFDM/Makefile \
++ 	src/FDM/SP/Makefile \
++ 	src/FDM/UIUCModel/Makefile \
++ 	src/FDM/YASim/Makefile \
++Index: src/FDM/Makefile.am
++===================================================================
++RCS file: /var/cvs/FlightGear-0.9/source/src/FDM/Makefile.am,v
++retrieving revision 1.7
++diff -u -r1.7 Makefile.am
++--- src/FDM/Makefile.am	22 Nov 2004 10:10:33 -0000	1.7
+++++ src/FDM/Makefile.am	5 Oct 2005 15:17:44 -0000
++@@ -4,8 +4,14 @@
++ SP_DIR =
++ endif
++ 
+++if ENABLE_OpenFDM_FDM
+++OpenFDM_DIR = OpenFDM
+++else
+++OpenFDM_DIR =
+++endif
+++
++ SUBDIRS	= Balloon JSBSim LaRCsim UIUCModel YASim \
++-          $(SP_DIR) ExternalNet ExternalPipe
+++          $(SP_DIR) $(OpenFDM_DIR) ExternalNet ExternalPipe
++ 
++ noinst_LIBRARIES = libFlight.a
++ 
++Index: src/FDM/flight.hxx
++===================================================================
++RCS file: /var/cvs/FlightGear-0.9/source/src/FDM/flight.hxx,v
++retrieving revision 1.9
++diff -u -r1.9 flight.hxx
++--- src/FDM/flight.hxx	3 Jul 2005 09:39:14 -0000	1.9
+++++ src/FDM/flight.hxx	5 Oct 2005 15:17:45 -0000
++@@ -433,7 +433,10 @@
++ 	FG_PARACHUTE = 9,
++ 
++ 	// Driven externally via a serial port, net, file, etc.
++-	FG_EXTERNAL = 10
+++	FG_EXTERNAL = 10,
+++
+++	// OpenFDM. Reads JSBSim legacy and new files.
+++	FG_OPENFDM = 11
++     };
++ 
++     // initialization
++Index: src/Main/Makefile.am
++===================================================================
++RCS file: /var/cvs/FlightGear-0.9/source/src/Main/Makefile.am,v
++retrieving revision 1.54
++diff -u -r1.54 Makefile.am
++--- src/Main/Makefile.am	25 Jun 2005 11:21:18 -0000	1.54
+++++ src/Main/Makefile.am	5 Oct 2005 15:17:45 -0000
++@@ -13,6 +13,13 @@
++ SP_FDM_LIBS = 
++ endif
++ 
+++if ENABLE_OpenFDM_FDM
+++OpenFDM_LIBS = $(top_builddir)/src/FDM/OpenFDM/libFGOpenFDM.a \
+++               -lJSBReader -lOpenFDM
+++else
+++OpenFDM_LIBS = 
+++endif
+++
++ if WITH_THREADS
++ THREAD_LIBS = -lsgthreads $(thread_LIBS)
++ else
++@@ -70,6 +77,7 @@
++ 	$(top_builddir)/src/FDM/LaRCsim/libLaRCsim.a \
++ 	$(top_builddir)/src/FDM/UIUCModel/libUIUCModel.a \
++ 	$(SP_FDM_LIBS) \
+++	$(OpenFDM_LIBS) \
++ 	$(top_builddir)/src/GUI/libGUI.a \
++ 	$(top_builddir)/src/Autopilot/libAutopilot.a \
++ 	$(top_builddir)/src/Input/libInput.a \
++Index: src/Main/fg_init.cxx
++===================================================================
++RCS file: /var/cvs/FlightGear-0.9/source/src/Main/fg_init.cxx,v
++retrieving revision 1.131
++diff -u -r1.131 fg_init.cxx
++--- src/Main/fg_init.cxx	4 Oct 2005 20:36:38 -0000	1.131
+++++ src/Main/fg_init.cxx	5 Oct 2005 15:17:46 -0000
++@@ -91,6 +91,9 @@
++ #include &lt;FDM/UFO.hxx&gt;
++ #include &lt;FDM/NullFDM.hxx&gt;
++ #include &lt;FDM/YASim/YASim.hxx&gt;
+++#ifdef FG_ENABLE_OPENFDM_FDM
+++#include &lt;FDM/OpenFDM/FGOpenFDM.h&gt;
+++#endif
++ #include &lt;GUI/new_gui.hxx&gt;
++ #include &lt;Include/general.hxx&gt;
++ #include &lt;Input/input.hxx&gt;
++@@ -1382,6 +1385,10 @@
++             cur_fdm_state = new FGNullFDM( dt );
++         } else if ( model == &quot;yasim&quot; ) {
++             cur_fdm_state = new YASim( dt );
+++#ifdef FG_ENABLE_OPENFDM_FDM
+++        } else if ( model == &quot;openfdm&quot; ) {
+++            cur_fdm_state = new OpenFDM::FGOpenFDM();
+++#endif
++         } else {
++             SG_LOG(SG_GENERAL, SG_ALERT,
++                    &quot;Unrecognized flight model '&quot; &lt;&lt; model
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000001.html">[Openfdm-svn] r8 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000003.html">[Openfdm-svn] r10 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#2">[ date ]</a>
+              <a href="thread.html#2">[ thread ]</a>
+              <a href="subject.html#2">[ subject ]</a>
+              <a href="author.html#2">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

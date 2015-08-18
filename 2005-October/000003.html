@@ -1,0 +1,233 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [Openfdm-svn] r10 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r10%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510051753.j95Hr36v030332%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000002.html">
+   <LINK REL="Next"  HREF="000004.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[Openfdm-svn] r10 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenfdm-svn%5D%20r10%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510051753.j95Hr36v030332%40sheep.berlios.de%3E"
+       TITLE="[Openfdm-svn] r10 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Wed Oct  5 19:53:03 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000002.html">[Openfdm-svn] r9 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000004.html">[Openfdm-svn] r11 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#3">[ date ]</a>
+              <a href="thread.html#3">[ thread ]</a>
+              <a href="subject.html#3">[ subject ]</a>
+              <a href="author.html#3">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-05 19:52:49 +0200 (Wed, 05 Oct 2005)
+New Revision: 10
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Object.cpp
+   trunk/OpenFDM/src/OpenFDM/Object.h
+   trunk/OpenFDM/src/OpenFDM/Variant.h
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+Provide direct property get/set method to an Object.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.cpp	2005-10-05 15:24:57 UTC (rev 9)
++++ trunk/OpenFDM/src/OpenFDM/Object.cpp	2005-10-05 17:52:49 UTC (rev 10)
+@@ -42,7 +42,28 @@
+   return nameList;
+ }
+ 
++Variant
++Object::getPropertyValue(const std::string&amp; name) const
++{
++  // Just use the current property system for now
++
++  // Return an empty variant if this property does not exist.
++  if (mProperties.count(name) &lt;= 0)
++    return Variant();
++
++  // Return the value of the property
++  // FIXME: properties, like they are now, do not preserve constness
++  return ((Property&amp;)(mProperties.find(name)-&gt;second)).getValue();
++}
++
+ void
++Object::setPropertyValue(const std::string&amp; name, const Variant&amp; value)
++{
++  // Just use the current property system for now
++  getProperty(name).setValue(value);
++}
++
++void
+ Object::addProperty(const std::string&amp; name, const Property&amp; property)
+ {
+   mProperties[name] = property;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.h	2005-10-05 15:24:57 UTC (rev 9)
++++ trunk/OpenFDM/src/OpenFDM/Object.h	2005-10-05 17:52:49 UTC (rev 10)
+@@ -8,6 +8,7 @@
+ #include &lt;list&gt;
+ #include &lt;map&gt;
+ #include &quot;Referenced.h&quot;
++#include &quot;Variant.h&quot;
+ #include &quot;Property.h&quot;
+ 
+ namespace OpenFDM {
+@@ -25,10 +26,18 @@
+   Property getProperty(const std::string&amp; name);
+   std::list&lt;std::string&gt; listProperties(void) const;
+ 
++  /// Returns the objects property named name
++  Variant getPropertyValue(const std::string&amp; name) const;
++  /// Set an objects property named name to the given value
++  void setPropertyValue(const std::string&amp; name, const Variant&amp; value);
++
++  /// Returns the objects attached user data
+   Object* getUserData(void)
+   { return mUserData; }
++  /// Returns the objects attached const user data
+   const Object* getUserData(void) const
+   { return mUserData; }
++  /// Sets the objects user data
+   void setUserData(Object* userData)
+   { mUserData = userData; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Variant.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Variant.h	2005-10-05 15:24:57 UTC (rev 9)
++++ trunk/OpenFDM/src/OpenFDM/Variant.h	2005-10-05 17:52:49 UTC (rev 10)
+@@ -10,7 +10,6 @@
+ #include &quot;Types.h&quot;
+ #include &quot;Referenced.h&quot;
+ #include &quot;RefPtr.h&quot;
+-#include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+ 
+ namespace OpenFDM {
+@@ -47,13 +46,14 @@
+     mData(new StringVariantData(value))
+   {}
+ 
+-  // FIXME we need some kind of struct
+-  
+   /// Assignment operator
+   /// Variant follows the copy on copy sematics, that is in this operator
+   /// the contents of the Variant is copied.
+   inline Variant&amp; operator=(const Variant&amp; value);
+ 
++  /// Returns true if the variant contains some value
++  inline bool isValid(void) const;
++
+   /// Returns true if the variant can be converted to the given type.
+   inline bool isString(void) const;
+   inline bool isReal(void) const;
+@@ -142,6 +142,12 @@
+ }
+ 
+ inline bool
++Variant::isValid(void) const
++{
++  return mData;
++}
++
++inline bool
+ Variant::isString() const
+ {
+   return mData &amp;&amp; mData-&gt;toStringVariant();
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2005-10-05 15:24:57 UTC (rev 9)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2005-10-05 17:52:49 UTC (rev 10)
+@@ -279,28 +279,15 @@
+ 
+       const XMLElement* propElement = element-&gt;getElement(*it);
+       if (propElement) {
+-        Property prop = object-&gt;getProperty(*it);
++        if (1 != propElement-&gt;getNumElements(&quot;matrix&quot;))
++          return error(&quot;InitialValue tag found without content!&quot;);
+ 
+-        if (prop.isMatrixProperty()) {
+-          if (1 != propElement-&gt;getNumElements(&quot;matrix&quot;))
+-            return error(&quot;InitialValue tag found without content!&quot;);
++        Matrix m;
++        if (!readMatrix(propElement-&gt;getElement(&quot;matrix&quot;), m))
++          return error(&quot;Cannot read InitialValue Matrix!&quot;);
+ 
+-          Matrix m;
+-          if (!readMatrix(propElement-&gt;getElement(&quot;matrix&quot;), m))
+-            return error(&quot;Cannot read InitialValue Matrix!&quot;);
++        object-&gt;setPropertyValue(*it, Variant(m));
+ 
+-          prop.setValue(m);
+-        } else if (prop.isRealProperty()) {
+-          if (1 != propElement-&gt;getNumElements(&quot;matrix&quot;))
+-            return error(&quot;InitialValue tag found without content!&quot;);
+-
+-          Matrix m;
+-          if (!readMatrix(propElement-&gt;getElement(&quot;matrix&quot;), m))
+-            return error(&quot;Cannot read InitialValue Matrix!&quot;);
+-
+-          /// FIXME
+-          prop.setValue(m(1, 1));
+-        }
+         // FIXME add more here
+       }
+       ++it;
+@@ -695,9 +682,6 @@
+   }
+ #endif
+ 
+-//   Property prop = vehicle-&gt;getProperty(&quot;cartPosition&quot;);
+-//   cout &lt;&lt; prop.getValue().toMatrix() &lt;&lt; std::endl;
+-
+   return 0;
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000002.html">[Openfdm-svn] r9 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000004.html">[Openfdm-svn] r11 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#3">[ date ]</a>
+              <a href="thread.html#3">[ thread ]</a>
+              <a href="subject.html#3">[ subject ]</a>
+              <a href="author.html#3">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

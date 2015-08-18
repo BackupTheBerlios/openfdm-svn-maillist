@@ -1,0 +1,141 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r314 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2007-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r314%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200707280522.l6S5M8cx001297%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000289.html">
+   <LINK REL="Next"  HREF="000291.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r314 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r314%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200707280522.l6S5M8cx001297%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r314 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jul 28 07:22:08 CEST 2007</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000289.html">[OpenFDM-svn] r313 - trunk/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000291.html">[OpenFDM-svn] r315 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#290">[ date ]</a>
+              <a href="thread.html#290">[ thread ]</a>
+              <a href="subject.html#290">[ subject ]</a>
+              <a href="author.html#290">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2007-07-28 07:22:08 +0200 (Sat, 28 Jul 2007)
+New Revision: 314
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+Log:
+Use visitors for path collection.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-27 18:08:44 UTC (rev 313)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2007-07-28 05:22:08 UTC (rev 314)
+@@ -217,36 +217,48 @@
+   return mOutputPorts[i]-&gt;getName();
+ }
+ 
+-class ModelPathCollector :
++class ModelPathStringCollector :
+     public ModelVisitor {
+ public:
+-  virtual ~ModelPathCollector(void)
+-  { }
+   virtual void apply(Model&amp; model)
+-  { ascend(model); path += &quot;/&quot;; path += model.getName(); }
++  {
++    // First go up and collect the path above when back here append the own one
++    ascend(model);
++    path += &quot;/&quot;;
++    path += model.getName();
++  }
+   std::string path;
+ };
+ 
+ std::string
+ Model::getPathString(void)
+ {
+-  ModelPathCollector modelPathCollector;
+-  accept(modelPathCollector);
+-  return modelPathCollector.path;
++  ModelPathStringCollector modelPathStringCollector;
++  accept(modelPathStringCollector);
++  return modelPathStringCollector.path;
+ }
+ 
++class ModelPathCollector :
++    public ModelVisitor {
++public:
++  virtual void apply(Model&amp; model)
++  {
++    // First go up and collect the path above when back here append the own one
++    ascend(model);
++    ModelGroup* modelGroup = model.toModelGroup();
++    if (!modelGroup)
++      return;
++    path.push_back(modelGroup);
++  }
++  Model::Path path;
++};
++
+ Model::Path
+ Model::getPath()
+ {
+-  Path path;
+-
+-  SharedPtr&lt;ModelGroup&gt; model = getParent();
+-  while(model) {
+-    path.push_front(model);
+-    model = model-&gt;getParent();
+-  }
+-
+-  return path;
++  ModelPathCollector modelPathCollector;
++  accept(modelPathCollector);
++  return modelPathCollector.path;
+ }
+ 
+ const ModelGroup*
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000289.html">[OpenFDM-svn] r313 - trunk/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000291.html">[OpenFDM-svn] r315 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#290">[ date ]</a>
+              <a href="thread.html#290">[ thread ]</a>
+              <a href="subject.html#290">[ subject ]</a>
+              <a href="author.html#290">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,658 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r268 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r268%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603121850.k2CIoZ2p020194%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000246.html">
+   <LINK REL="Next"  HREF="000248.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r268 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r268%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200603121850.k2CIoZ2p020194%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r268 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Mar 12 19:50:35 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000246.html">[OpenFDM-svn] r267 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000248.html">[OpenFDM-svn] r269 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#247">[ date ]</a>
+              <a href="thread.html#247">[ thread ]</a>
+              <a href="subject.html#247">[ subject ]</a>
+              <a href="author.html#247">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-03-12 19:50:10 +0100 (Sun, 12 Mar 2006)
+New Revision: 268
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/Bias.cpp
+   trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.h
+   trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+   trunk/OpenFDM/src/OpenFDM/Gain.cpp
+   trunk/OpenFDM/src/OpenFDM/Input.cpp
+   trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+   trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+   trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/Product.cpp
+   trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+   trunk/OpenFDM/src/OpenFDM/Sensor.h
+   trunk/OpenFDM/src/OpenFDM/Summer.cpp
+   trunk/OpenFDM/src/OpenFDM/Table.cpp
+   trunk/OpenFDM/src/OpenFDM/Tank.cpp
+   trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp
+   trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+   trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+   trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+Log:
+Implement a generic enable/disable port.
+Make use of that in Contact
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -619,7 +619,7 @@
+         std::string retract = stringData((*it)-&gt;getElement(&quot;retractable&quot;));
+         if (retract == &quot;RETRACT&quot; || retract == &quot;1&quot;) {
+           Port* port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+-          sg-&gt;getInputPort(&quot;enabled&quot;)-&gt;connect(port);
++          sg-&gt;getEnablePort()-&gt;connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+                          &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -462,7 +462,7 @@
+ 
+         if (retract == &quot;RETRACT&quot;) {
+           Port* port = lookupJSBExpression(&quot;gear/gear-pos-norm&quot;);
+-          sg-&gt;getInputPort(&quot;enabled&quot;)-&gt;connect(port);
++          sg-&gt;getEnablePort()-&gt;connect(port);
+           // Well, connect that directly to the input
+           addOutputModel(port, &quot;Gear &quot; + numStr + &quot; Position&quot;,
+                          &quot;gear/gear[&quot; + numStr + &quot;]/position-norm&quot;);
+
+Modified: trunk/OpenFDM/src/OpenFDM/AirSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/AirSpring.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -62,7 +62,7 @@
+     return false;
+   }
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Bias.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Bias.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -25,8 +25,7 @@
+   setNumInputPorts(1);
+   setInputPortName(0, &quot;input&quot;);
+   
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;output&quot;, this, &amp;Bias::getOutput);
++  addOutputPort(&quot;output&quot;, this, &amp;Bias::getOutput);
+ }
+ 
+ Bias::~Bias(void)
+@@ -55,7 +54,7 @@
+   }
+   mOutput.resize(mInputPort.getMatrixValue());
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/BinaryFunctionModel.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -72,7 +72,10 @@
+   OpenFDMAssert(getInputPort(1)-&gt;isConnected());
+   mImpl-&gt;setRealPortHandle(0, getInputPort(0)-&gt;toRealPortHandle());
+   mImpl-&gt;setRealPortHandle(1, getInputPort(1)-&gt;toRealPortHandle());
+-  return getInputPort(0)-&gt;isConnected() &amp;&amp; getInputPort(1)-&gt;isConnected();
++  if (!getInputPort(0)-&gt;isConnected() || !getInputPort(1)-&gt;isConnected())
++    return false;
++
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -19,10 +19,7 @@
+ Contact::Contact(const std::string&amp; name)
+   : ExternalForce(name)
+ {
+-  mEnabled = true;
+-  unsigned inputPortBase = getNumInputPorts();
+-  setNumInputPorts(inputPortBase + 1);
+-  setInputPortName(inputPortBase + 0, &quot;enabled&quot;);
++  setDisableMode(Model::ResetHold);
+ 
+   // FIXME??
+   addSampleTime(SampleTime::PerTimestep);
+@@ -36,9 +33,11 @@
+ bool
+ Contact::init(void)
+ {
++  setForce(Vector6::zeros());
+   mEnvironment = getEnvironment();
+   if (!mEnvironment)
+     return false;
++
+   return ExternalForce::init();
+ }
+ 
+@@ -50,19 +49,8 @@
+     Log(Model, Debug) &lt;&lt; &quot;Contact::output(): \&quot;&quot; &lt;&lt; getName()
+                       &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
+     getGround(taskInfo.getTime());
+-
+-    // FIXME
+-    if (getInputPort(&quot;enabled&quot;)-&gt;isConnected()) {
+-      RealPortHandle rh = getInputPort(&quot;enabled&quot;)-&gt;toRealPortHandle();
+-      mEnabled = 0.5 &lt; rh.getRealValue();
+-    }
+   }
+ 
+-  if (!mEnabled) {
+-    setForce(Vector6::zeros());
+-    return;
+-  }
+-
+   // Transform the plane equation to the local frame.
+   Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
+   
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.h	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Contact.h	2006-03-12 18:50:10 UTC (rev 268)
+@@ -36,7 +36,6 @@
+ private:
+   void getGround(real_type t);
+ 
+-  bool mEnabled;
+   GroundValues mGroundVal;
+   SharedPtr&lt;Environment&gt; mEnvironment;
+ };
+
+Modified: trunk/OpenFDM/src/OpenFDM/DeadBand.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/DeadBand.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -43,7 +43,7 @@
+     return false;
+   }
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -56,7 +56,7 @@
+   // start with zero friction force
+   mZ = 0;
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/DiscreteIntegrator.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -60,7 +60,7 @@
+ 
+   setNumDiscreteStates(rows(mIntegralState)*cols(mIntegralState));
+   
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Gain.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Gain.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -46,7 +46,7 @@
+   }
+   mOutput.resize(mInputPort.getMatrixValue());
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void Gain::output(const TaskInfo&amp;)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Input.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Input.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -38,7 +38,7 @@
+ bool
+ Input::init(void)
+ {
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+@@ -115,7 +115,7 @@
+ bool
+ Output::init(void)
+ {
+-  return true;
++  return Model::init();
+ }
+ 
+ const Output*
+
+Modified: trunk/OpenFDM/src/OpenFDM/Integrator.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Integrator.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -44,7 +44,7 @@
+ 
+   mIntegralState = mInitialValue;
+   mIntegralOutput = mIntegralState;
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -53,7 +53,7 @@
+   }
+   mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/MaxModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/MaxModel.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -48,7 +48,7 @@
+       return false;
+   }
+   mMax.resize(a0);
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/MinModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/MinModel.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -48,7 +48,7 @@
+       return false;
+   }
+   mMin.resize(a0);
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -20,6 +20,7 @@
+   mNumDiscreteStates(0l),
+   mDirectFeedThrough(false),
+   mEnabled(true),
++  mEnablePort(new Port),
+   mDisableMode(Hold)
+ {
+ }
+@@ -109,6 +110,10 @@
+ bool
+ Model::init(void)
+ {
++  if (mEnablePort)
++    mEnablePortInterface = mEnablePort-&gt;toRealPortHandle();
++  else
++    mEnablePortInterface = 0;
+   return true;
+ }
+ 
+@@ -322,7 +327,7 @@
+ void
+ Model::setEnabledUnconditional(bool enabled)
+ {
+-  if (enabled) {
++  if (mEnabled) {
+     switch (mDisableMode) {
+     case ResetHold:
+       /// If disabled, the models output/state is initialized
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2006-03-12 18:50:10 UTC (rev 268)
+@@ -85,6 +85,19 @@
+   /// Called whenever discrete states need to be updated.
+   virtual void update(const TaskInfo&amp; taskInfo);
+ 
++  /// Convinience functions may make the virtuals protected ...
++  void outputIfEnabled(const TaskInfo&amp; taskInfo)
++  {
++    if (mEnablePortInterface.isConnected()) {
++      /// FIXME bool!!!!
++      setEnabled(0.5 &lt; fabs(mEnablePortInterface.getRealValue()));
++    }
++    if (mEnabled)
++      output(taskInfo);
++  }
++  void updateIfEnabled(const TaskInfo&amp; taskInfo)
++  { if (mEnabled) update(taskInfo); }
++
+   virtual void setState(const StateStream&amp; state);
+   virtual void getState(StateStream&amp; state) const;
+   virtual void getStateDeriv(StateStream&amp; stateDeriv);
+@@ -92,6 +105,8 @@
+   virtual void setDiscreteState(const StateStream&amp; state);
+   virtual void getDiscreteState(StateStream&amp; state) const;
+ 
++  /// Must return true if the model given in the argument must be scheduled
++  /// before this one because of input data dependencies
+   virtual bool dependsDirectOn(Model* model);
+ 
+   /// Return the number of continous states
+@@ -135,6 +150,8 @@
+     OpenFDMAssert(i &lt; mInputPorts.size());
+     return mInputPorts[i];
+   }
++  Port* getEnablePort(void)
++  { return mEnablePort; }
+ 
+   unsigned getNumOutputPorts(void) const
+   { return mOutputPorts.size(); }
+@@ -214,6 +231,8 @@
+   bool mDirectFeedThrough;
+   /// True if the Model is enabled
+   bool mEnabled;
++  SharedPtr&lt;Port&gt; mEnablePort;
++  RealPortHandle mEnablePortInterface;
+   DisableMode mDisableMode;
+   // FIXME, at the moment used to state that this model must be scheduled
+   // past all joint interacts
+
+Modified: trunk/OpenFDM/src/OpenFDM/Product.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Product.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -68,7 +68,7 @@
+                     cols(mMatrixFactorPorts.back().getMatrixValue()));
+   }
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Saturation.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Saturation.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -48,7 +48,8 @@
+     mOutput.resize(0, 0);
+   
+   mOutput.resize(inputMatrix);
+-  return true;
++
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Sensor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Sensor.h	2006-03-12 18:50:10 UTC (rev 268)
+@@ -32,7 +32,7 @@
+   {
+     mNextNlfz = 0;
+     mNextAz = 0;
+-    return true;
++    return Interact::init();
+   }
+ 
+   virtual void output(const TaskInfo&amp; taskInfo)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Summer.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Summer.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -63,7 +63,8 @@
+       }
+     }
+   }
+-  return true;
++
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Table.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Table.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Table.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -42,7 +42,7 @@
+                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+     return false;
+   }
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+@@ -89,7 +89,7 @@
+                      &lt;&lt; getName() &lt;&lt; &quot;\&quot; is not connected&quot; &lt;&lt; endl;
+     return false;
+   }
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+@@ -141,7 +141,7 @@
+       return false;
+     }
+   }
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+@@ -196,7 +196,7 @@
+       return false;
+     }
+   }
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Tank.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/Tank.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -34,7 +34,7 @@
+ Tank::init(void)
+ {
+   mInputPort = getInputPort(0)-&gt;toRealPortHandle();
+-  return true;
++  return Mass::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/TaskInfo.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -14,8 +14,7 @@
+ {
+   ModelList::const_iterator it = mModelList.begin();
+   for (; it != mModelList.end(); ++it)
+-    if ((*it)-&gt;getEnabled())
+-      (*it)-&gt;output(*this);
++    (*it)-&gt;outputIfEnabled(*this);
+ }
+ 
+ void
+@@ -23,8 +22,7 @@
+ {
+   ModelList::const_iterator it = mModelList.begin();
+   for (; it != mModelList.end(); ++it)
+-    if ((*it)-&gt;getEnabled())
+-      (*it)-&gt;update(*this);
++    (*it)-&gt;updateIfEnabled(*this);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/TimeDerivative.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -34,7 +34,8 @@
+ 
+   // Set a mark for the first step.
+   mDt = 0.0;
+-  return true;
++
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/TransferFunction.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -122,7 +122,7 @@
+   mState.clear();
+   setNumDiscreteStates(rows(mDenNorm));
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-03-12 18:48:46 UTC (rev 267)
++++ trunk/OpenFDM/src/OpenFDM/UnaryFunctionModel.cpp	2006-03-12 18:50:10 UTC (rev 268)
+@@ -145,9 +145,10 @@
+ UnaryFunctionModel::init(void)
+ {
+   OpenFDMAssert(mImpl);
+-  OpenFDMAssert(getInputPort(0)-&gt;isConnected());
+   mImpl-&gt;setRealPortHandle(getInputPort(0)-&gt;toRealPortHandle());
+-  return getInputPort(0)-&gt;isConnected();
++  if (!getInputPort(0)-&gt;isConnected())
++    return false;
++  return Model::init();
+ }
+ 
+ void
+@@ -255,7 +256,7 @@
+     return false;
+   }
+ 
+-  return true;
++  return Model::init();
+ }
+ 
+ void
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000246.html">[OpenFDM-svn] r267 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000248.html">[OpenFDM-svn] r269 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#247">[ date ]</a>
+              <a href="thread.html#247">[ thread ]</a>
+              <a href="subject.html#247">[ subject ]</a>
+              <a href="author.html#247">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

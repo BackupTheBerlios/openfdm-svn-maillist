@@ -1,0 +1,300 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r858 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r858%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812061002.mB6A2Yfm021458%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000825.html">
+   <LINK REL="Next"  HREF="000827.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r858 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r858%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200812061002.mB6A2Yfm021458%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r858 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Dec  6 11:02:34 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000825.html">[OpenFDM-svn] r857 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000827.html">[OpenFDM-svn] r859 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#826">[ date ]</a>
+              <a href="thread.html#826">[ thread ]</a>
+              <a href="subject.html#826">[ subject ]</a>
+              <a href="author.html#826">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-06 11:02:33 +0100 (Sat, 06 Dec 2008)
+New Revision: 858
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CSVSystemOutput.h
+Removed:
+   branches/OpenFDM-StateSeparation/src/test/CSVWriter.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp
+Log:
+Provide alternative default system output in case we have no hdf5 implementation.
+
+D    src/test/CSVWriter.h
+M    src/OpenFDM/SystemOutput.cpp
+A    src/OpenFDM/CSVSystemOutput.h
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/CSVSystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CSVSystemOutput.h	2008-12-06 10:00:54 UTC (rev 857)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CSVSystemOutput.h	2008-12-06 10:02:33 UTC (rev 858)
+@@ -0,0 +1,132 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_CSVSystemOutput_H
++#define OpenFDM_CSVSystemOutput_H
++
++#include &lt;sstream&gt;
++#include &lt;set&gt;
++#include &lt;fstream&gt;
++#include &quot;Group.h&quot;
++#include &quot;SystemOutput.h&quot;
++#include &quot;ConstNodeVisitor.h&quot;
++#include &quot;NodeInstance.h&quot;
++
++namespace OpenFDM {
++
++class CSVSystemOutput : public SystemOutput {
++public:
++  CSVSystemOutput(const std::string&amp; filename) :
++    mFileStream((filename + &quot;.csv&quot;).c_str())
++  { }
++  virtual ~CSVSystemOutput()
++  { }
++
++  virtual void output(const real_type&amp; t)
++  {
++    mFileStream &lt;&lt; t;
++    DumperList::iterator i;
++    for (i = mDumperList.begin(); i != mDumperList.end(); ++i) {
++      mFileStream &lt;&lt; ',';
++      (*i)-&gt;append(mFileStream);
++    }
++    mFileStream &lt;&lt; '\n';
++  }
++
++  virtual void attachTo(const System* system)
++  {
++    mDumperList.clear();
++    if (!system)
++      return;
++    mFileStream &lt;&lt; &quot;time&quot;;
++    Visitor visitor(system, mFileStream);
++    system-&gt;getNode()-&gt;accept(visitor);
++    mDumperList = visitor.mDumperList;
++    mFileStream &lt;&lt; '\n';
++  }
++
++private:
++  std::ofstream mFileStream;
++
++  struct Dumper : public Referenced {
++    virtual ~Dumper() {}
++    virtual void append(std::ostream&amp;) = 0;
++  };
++
++  struct MatrixDumper : public Dumper {
++    MatrixDumper(const NumericPortValue* numericPortValue, 
++                 const std::string&amp; name) :
++      mNumericPortValue(numericPortValue)
++    { OpenFDMAssert(numericPortValue); }
++    virtual void append(std::ostream&amp; stream)
++    {
++      Size s = size(mNumericPortValue-&gt;getValue());
++      for (unsigned i = 0; i &lt; s(0); ++i)
++        for (unsigned j = 0; j &lt; s(1); ++j)
++          stream &lt;&lt; ' ' &lt;&lt; mNumericPortValue-&gt;getValue()(i, j);
++    }
++    SharedPtr&lt;const NumericPortValue&gt; mNumericPortValue;
++  };
++
++  typedef std::list&lt;SharedPtr&lt;Dumper&gt; &gt; DumperList;
++  DumperList mDumperList;
++
++  class Visitor : public ConstNodeVisitor {
++  public:
++    Visitor(const System* system, std::ostream&amp; stream) :
++      mSystem(system),
++      mStream(stream)
++    { }
++    
++    SharedPtr&lt;const System&gt; mSystem;
++    std::ostream&amp; mStream;
++    
++    const AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath) const
++    {
++      if (!mSystem)
++        return 0;
++      return mSystem-&gt;getNodeInstance(nodePath);
++    }
++    
++    virtual void apply(const NumericPortInfo&amp; portInfo)
++    {
++      const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
++      if (!nodeInstance)
++        return;
++      apply(portInfo, nodeInstance-&gt;getPortValue(portInfo));
++    }
++    
++    virtual void apply(const NumericPortInfo&amp; portInfo,
++                       const NumericPortValue* numericPortValue)
++    {
++      std::string name = portInfo.getName();
++      mStream &lt;&lt; ',' &lt;&lt; Node::toNodePathName(getNodePath()) &lt;&lt; '/' &lt;&lt; name;
++      mDumperList.push_back(new MatrixDumper(numericPortValue, name));
++    }
++    
++    void appendPortValues(const Node&amp; node)
++    {
++      if (!node.getNumPorts())
++        return;
++      node.traversePorts(*this);
++    }
++    
++    virtual void apply(const Node&amp; node)
++    {
++      appendPortValues(node);
++    }
++    virtual void apply(const Group&amp; group)
++    {
++      appendPortValues(group);
++      group.traverse(*this);
++    }
++    
++    typedef std::list&lt;SharedPtr&lt;Dumper&gt; &gt; DumperList;
++    DumperList mDumperList;
++  };
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp	2008-12-06 10:00:54 UTC (rev 857)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/SystemOutput.cpp	2008-12-06 10:02:33 UTC (rev 858)
+@@ -11,6 +11,7 @@
+ #ifdef HAVE_HDF5_H
+ #include &quot;HDF5SystemOutput.h&quot;
+ #endif
++#include &quot;CSVSystemOutput.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -30,7 +31,7 @@
+ #ifdef HAVE_HDF5_H
+   return new HDF5SystemOutput(filename);
+ #else
+-  return 0;
++  return new CSVSystemOutput(filename);
+ #endif
+ }
+ 
+
+Deleted: branches/OpenFDM-StateSeparation/src/test/CSVWriter.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/CSVWriter.h	2008-12-06 10:00:54 UTC (rev 857)
++++ branches/OpenFDM-StateSeparation/src/test/CSVWriter.h	2008-12-06 10:02:33 UTC (rev 858)
+@@ -1,55 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_CSVWriter_H
+-#define OpenFDM_CSVWriter_H
+-
+-#include &lt;fstream&gt;
+-#include &lt;OpenFDM/ModelGroup.h&gt;
+-#include &lt;OpenFDM/ModelVisitor.h&gt;
+-#include &lt;OpenFDM/System.h&gt;
+-
+-namespace OpenFDM {
+-
+-class CSVWriter : public ModelVisitor {
+-public:
+-  CSVWriter(const std::string&amp; filename) :
+-    _csvFile(filename.c_str())
+-  { }
+-  virtual void apply(Model&amp; model)
+-  {
+-    unsigned numOutputs = model.getNumOutputPorts();
+-    for (unsigned i = 0; i &lt; numOutputs; ++i) {
+-      NumericPortProvider* numericPort = model.getOutputPort(i);
+-      if (!numericPort)
+-        continue;
+-      PortInterface* portInterface = numericPort-&gt;getPortInterface();
+-      if (!portInterface)
+-        continue;
+-      MatrixPortInterface* matrixPortInterface;
+-      matrixPortInterface = portInterface-&gt;toMatrixPortInterface();
+-      if (!matrixPortInterface)
+-        continue;
+-
+-      const Matrix&amp; m = matrixPortInterface-&gt;getMatrixValue();
+-      for (unsigned i = 0; i &lt; rows(m); ++i)
+-        for (unsigned j = 0; j &lt; cols(m); ++j)
+-          _csvFile &lt;&lt; &quot;, &quot; &lt;&lt; m(i, j);
+-    }
+-  }
+-  virtual void apply(ModelGroup&amp; modelGroup)
+-  { traverse(modelGroup); }
+-  virtual void apply(System&amp; system)
+-  {
+-    _csvFile &lt;&lt; system.getTime();
+-    ModelVisitor::apply(system);
+-    _csvFile &lt;&lt; std::endl;
+-  }
+-private:
+-  std::ofstream _csvFile;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000825.html">[OpenFDM-svn] r857 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000827.html">[OpenFDM-svn] r859 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#826">[ date ]</a>
+              <a href="thread.html#826">[ thread ]</a>
+              <a href="subject.html#826">[ subject ]</a>
+              <a href="author.html#826">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

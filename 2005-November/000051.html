@@ -1,0 +1,430 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r64 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r64%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511171909.jAHJ97Zw010956%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000050.html">
+   <LINK REL="Next"  HREF="000052.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r64 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r64%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200511171909.jAHJ97Zw010956%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r64 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Thu Nov 17 20:09:07 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000050.html">[OpenFDM-svn] r63 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000052.html">[OpenFDM-svn] r65 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#51">[ date ]</a>
+              <a href="thread.html#51">[ thread ]</a>
+              <a href="subject.html#51">[ subject ]</a>
+              <a href="author.html#51">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-17 20:08:25 +0100 (Thu, 17 Nov 2005)
+New Revision: 64
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/DoPri5.cpp
+   trunk/OpenFDM/src/OpenFDM/DoPri5.h
+   trunk/OpenFDM/src/OpenFDM/ExplicitEuler.cpp
+   trunk/OpenFDM/src/OpenFDM/ExplicitEuler.h
+   trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp
+   trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h
+   trunk/OpenFDM/src/OpenFDM/MidpointRule.cpp
+   trunk/OpenFDM/src/OpenFDM/MidpointRule.h
+   trunk/OpenFDM/src/OpenFDM/ODESolver.cpp
+   trunk/OpenFDM/src/OpenFDM/ODESolver.h
+Log:
+Some simple and untested dense output code.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/DoPri5.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DoPri5.cpp	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/DoPri5.cpp	2005-11-17 19:08:25 UTC (rev 64)
+@@ -21,13 +21,10 @@
+ bool
+ DoPri5::integrate(real_type toTEnd)
+ {
+-  Vector k1, k2, k3, k4, k5, k6, k7;
+-  Vector y2, y3, y4, y5, y6, y7;
+-  Vector err;
+-
++  real_type h = 0;
+   while (!reached(toTEnd)) {
+     real_type t = getTime();
+-    real_type h = maxStepsize(toTEnd);
++    h = maxStepsize(toTEnd);
+ 
+     // Compute the inner stages k1, ..., k7
+     evalFunction(t, mState, k1);
+@@ -52,12 +49,6 @@
+       + (h*a75)*k5 + (h*a76)*k6;
+     evalFunction(t+h, y7, k7);
+     
+-    // Dense output ...
+-    // We do not support this one ...
+-//     rcont = (h*d1)*k1
+-//       + (h*d3)*k3 + (h*d4)*k4 + (h*d5)*k5
+-//       + (h*d6)*k6 + (h*d7)*k7;
+- 
+     // The error estimate. Is the error to a 4-th order embedded scheme.
+     err = (h*e1)*k1 + (h*e3)*k3 + (h*e4)*k4 + (h*e5)*k5
+       + (h*e6)*k6 + (h*e7)*k7;
+@@ -66,18 +57,46 @@
+     real_type rtol = 1e-14;
+     real_type en = scaledErr(y7, err, atol, rtol);
+ 
+-    if ( 1.0 &lt; en )
++    if (1.0 &lt; en)
+       Log(TimeStep, Warning) &lt;&lt; &quot;DOPRI5: error too big: &quot; &lt;&lt; en &lt;&lt; endl;
+     else
+       Log(TimeStep, Info) &lt;&lt; &quot;DOPRI5: local error: &quot; &lt;&lt; en &lt;&lt; endl;
+ 
++    // Need to save that here
++    mRCont[0] = mState;
++
+     // We do unconditionally accept all steps, y7 is the new mState value.
+     mState = y7;
+     mTime += h;
+   }
++
++  // Dense output ...
++  mRCont[1] = mState - mRCont[0];
++  mRCont[2] = h*k1 - mRCont[1];
++  mRCont[3] = (-h)*k2 + mRCont[1] - mRCont[2];
++  mRCont[4] = (h*d1)*k1 + (h*d3)*k3 + (h*d4)*k4 + (h*d5)*k5
++    + (h*d6)*k6 + (h*d7)*k2;
++
+   return true;
+ }
+ 
++bool
++DoPri5::denseOutput(real_type t, Vector&amp; out)
++{
++  if (t &lt; mTime - mStepsize || mTime &lt; t) {
++    Log(TimeStep, Error) &lt;&lt; &quot;Request for dense output at t = &quot; &lt;&lt; t
++                         &lt;&lt; &quot; out of range [&quot; &lt;&lt; mTime - mStepsize
++                         &lt;&lt; &quot;,&quot; &lt;&lt; mTime &lt;&lt; &quot;]&quot; &lt;&lt; endl;
++//     return false;
++  }
++
++  /// Compute dense output. That is
++  real_type theta = (t - (mTime - mStepsize))/mStepsize;
++  real_type theta1 = 1 - theta;
++  out = mRCont[0] + theta*(mRCont[1] + theta1*(mRCont[2] + theta*(mRCont[3] + theta1*mRCont[4])));
++  return true;
++}
++
+ // The values of the Runge-Kutta tables
+ const real_type DoPri5::a21 = 2.0/10.0;
+ const real_type DoPri5::a31 = 3.0/40.0;
+
+Modified: trunk/OpenFDM/src/OpenFDM/DoPri5.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DoPri5.h	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/DoPri5.h	2005-11-17 19:08:25 UTC (rev 64)
+@@ -38,8 +38,17 @@
+   virtual ~DoPri5(void);
+ 
+   virtual bool integrate(real_type toTEnd);
++  virtual bool denseOutput(real_type t, Vector&amp; out);
+ 
+ private:
++  /// For dense output
++  Vector mRCont[5];
++
++  /// actually only used in integrate, but for performance reasons
++  Vector k1, k2, k3, k4, k5, k6, k7;
++  Vector y2, y3, y4, y5, y6, y7;
++  Vector err;
++
+   // The coefficients of the method.
+   static const real_type c2, c3, c4, c5;
+   static const real_type d1, d3, d4, d5, d6, d7;
+
+Modified: trunk/OpenFDM/src/OpenFDM/ExplicitEuler.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ExplicitEuler.cpp	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ExplicitEuler.cpp	2005-11-17 19:08:25 UTC (rev 64)
+@@ -20,16 +20,23 @@
+ bool
+ ExplicitEuler::integrate(real_type toTEnd)
+ {
+-  Vector deriv;
+   while (!reached(toTEnd)) {
+     real_type t = getTime();
+     real_type h = maxStepsize(toTEnd);
+ 
+-    evalFunction(t, getState(), deriv);
+-    mState += h*deriv;
++    evalFunction(t, getState(), mDeriv);
++    mState += h*mDeriv;
+     mTime += h;
+   }
+   return true;
+ }
+ 
++bool
++ExplicitEuler::denseOutput(real_type t, Vector&amp; out)
++{
++  // Do linear interpolation
++  out = mState - (mTime - t)*mDeriv;
++  return true;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ExplicitEuler.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ExplicitEuler.h	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ExplicitEuler.h	2005-11-17 19:08:25 UTC (rev 64)
+@@ -17,6 +17,12 @@
+   virtual ~ExplicitEuler(void);
+ 
+   virtual bool integrate(real_type toTEnd);
++  virtual bool denseOutput(real_type t, Vector&amp; out);
++
++private:
++  /// Vector storing the derivative of that step. That is used for
++  /// dense output.
++  Vector mDeriv;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ImplicitEuler.cpp	2005-11-17 19:08:25 UTC (rev 64)
+@@ -23,6 +23,12 @@
+ {
+ }
+ 
++void
++ImplicitEuler::invalidateHistory(void)
++{
++  mJacStepsize = 0;
++}
++
+ bool
+ ImplicitEuler::integrate(real_type toTEnd)
+ {
+@@ -33,8 +39,9 @@
+ 
+   unsigned dim = mModel-&gt;getNumContinousStates();
+ 
++  real_type h = 0;
+   while (!reached(toTEnd)) {
+-    real_type h = maxStepsize(toTEnd);
++    h = maxStepsize(toTEnd);
+ 
+     mCurrentStepsize = h;
+     if (mJacStepsize != mCurrentStepsize) {
+@@ -52,13 +59,22 @@
+     mState += fState;
+     mTime += h;
+   }
++
++  // Save that for dense output
++  if (h == 0)
++    mDeriv.clear();
++  else
++    mDeriv = 1/h*fState;
++
+   return true;
+ }
+ 
+-void
+-ImplicitEuler::invalidateHistory(void)
++bool
++ImplicitEuler::denseOutput(real_type t, Vector&amp; out)
+ {
+-  mJacStepsize = 0;
++  // Do linear interpolation
++  out = mState - (mTime - t)*mDeriv;
++  return true;
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ImplicitEuler.h	2005-11-17 19:08:25 UTC (rev 64)
+@@ -18,11 +18,11 @@
+   ImplicitEuler(void);
+   virtual ~ImplicitEuler(void);
+ 
++  virtual void invalidateHistory(void);
+   virtual bool integrate(real_type toTEnd);
+-  virtual void invalidateHistory(void);
++  virtual bool denseOutput(real_type t, Vector&amp; out);
+ 
+ private:
+-
+   class IEFunction
+     : public Function {
+   public:
+@@ -54,6 +54,10 @@
+   real_type mJacStepsize;
+   Matrix mJac;
+   MatrixFactors mJacDecomp;
++
++  /// Vector storing the derivative of that step. That is used for
++  /// dense output.
++  Vector mDeriv;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MidpointRule.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MidpointRule.cpp	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/MidpointRule.cpp	2005-11-17 19:08:25 UTC (rev 64)
+@@ -32,7 +32,6 @@
+   real_type atol = 1e-10;
+ 
+   Vector dy(mState.size());
+-  Vector f;
+   while (!reached(toTEnd)) {
+     real_type t = getTime();
+     real_type h = maxStepsize(toTEnd);
+@@ -66,10 +65,10 @@
+       Vector y = mState + 0.5*dy;
+ 
+       // Compute new approximations to the state derivatives
+-      evalFunction(t+h2, y, f);
++      evalFunction(t+h2, y, mDeriv);
+ 
+       // Check if the increment is small enough ...
+-      real_type err = scaledDiff(y, mState + h2*f, atol, rtol);
++      real_type err = scaledDiff(y, mState + h2*mDeriv, atol, rtol);
+       converged = err &lt; 1;
+ 
+       // Check if we do converge in any way.
+@@ -77,7 +76,7 @@
+       prev_err = err;
+ 
+       // Use the new approximation
+-      dy = h*f;
++      dy = h*mDeriv;
+ 
+       ++mStats.numIter;
+     } while (!converged &amp;&amp; 0 &lt; --maxit &amp;&amp; converging);
+@@ -98,8 +97,8 @@
+ 
+       Log(TimeStep, Warning) &lt;&lt; &quot;MidpointRule did not converge&quot; &lt;&lt; endl;
+ 
+-      evalFunction(t, mState, f);
+-      mState += h*f;
++      evalFunction(t, mState, mDeriv);
++      mState += h*mDeriv;
+ 
+       ++mStats.numFailed;
+       ++mStats.numSteps;
+@@ -111,4 +110,12 @@
+   return true;
+ }
+ 
++bool
++MidpointRule::denseOutput(real_type t, Vector&amp; out)
++{
++  // Use the collocation polynomials
++  out = mState - (mTime - t)*mDeriv;
++  return true;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MidpointRule.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MidpointRule.h	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/MidpointRule.h	2005-11-17 19:08:25 UTC (rev 64)
+@@ -49,10 +49,14 @@
+ 
+   virtual void invalidateHistory(void);
+   virtual bool integrate(real_type toTEnd);
++  virtual bool denseOutput(real_type t, Vector&amp; out);
+ 
+ private:
+   bool mCollocationPolynomialValid;
+   Vector old_dy;
++  /// Vector storing the derivative of that step. That is used for
++  /// dense output.
++  Vector mDeriv;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ODESolver.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ODESolver.cpp	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ODESolver.cpp	2005-11-17 19:08:25 UTC (rev 64)
+@@ -41,4 +41,12 @@
+ {
+ }
+ 
++bool
++ODESolver::denseOutput(real_type t, Vector&amp; out)
++{
++  // Simplest dense output you can imagine ...
++  out = mState;
++  return true;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/ODESolver.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ODESolver.h	2005-11-14 21:51:23 UTC (rev 63)
++++ trunk/OpenFDM/src/OpenFDM/ODESolver.h	2005-11-17 19:08:25 UTC (rev 64)
+@@ -29,6 +29,7 @@
+ 
+   virtual void invalidateHistory(void);
+   virtual bool integrate(real_type toTEnd) = 0;
++  virtual bool denseOutput(real_type t, Vector&amp; out);
+ 
+   bool reached(real_type tEnd);
+   real_type maxStepsize(real_type tEnd);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000050.html">[OpenFDM-svn] r63 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000052.html">[OpenFDM-svn] r65 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#51">[ date ]</a>
+              <a href="thread.html#51">[ thread ]</a>
+              <a href="subject.html#51">[ subject ]</a>
+              <a href="author.html#51">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

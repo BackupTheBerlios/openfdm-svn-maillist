@@ -1,0 +1,281 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r426%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808310643.m7V6hIu0005741%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000397.html">
+   <LINK REL="Next"  HREF="000399.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r426%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200808310643.m7V6hIu0005741%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r426 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug 31 08:43:18 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000397.html">[OpenFDM-svn] r425 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000399.html">[OpenFDM-svn] r427 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#398">[ date ]</a>
+              <a href="thread.html#398">[ thread ]</a>
+              <a href="subject.html#398">[ subject ]</a>
+              <a href="author.html#398">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-08-31 08:43:16 +0200 (Sun, 31 Aug 2008)
+New Revision: 426
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Implement a typical discrete Delay model.
+
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-08-30 12:52:00 UTC (rev 425)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.cpp	2008-08-31 06:43:16 UTC (rev 426)
+@@ -0,0 +1,103 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Delay.h&quot;
++
++#include &lt;string&gt;
++#include &lt;vector&gt;
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;LeafContext.h&quot;
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Delay, Model)
++  DEF_OPENFDM_PROPERTY(Unsigned, Delay, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++Delay::Delay(const std::string&amp; name) :
++  Model(name),
++  mInputPort(newMatrixInputPort(&quot;input&quot;)),
++  mOutputPort(newMatrixOutputPort(&quot;output&quot;)),
++  mDelay(0)
++{
++  mMatrixStateInfo = new MatrixListStateInfo;
++  addDiscreteStateInfo(mMatrixStateInfo);
++}
++
++Delay::~Delay()
++{
++}
++
++bool
++Delay::alloc(LeafContext&amp; leafContext) const
++{
++  Size sz = size(leafContext.mPortValueList[mInputPort]);
++  leafContext.mPortValueList.setPortSize(mOutputPort, sz);
++  leafContext.mDiscreteState.setValue(*mMatrixStateInfo, leafContext);
++  return true;
++}
++
++void
++Delay::init(DiscreteStateValueVector&amp; discreteState,
++            ContinousStateValueVector&amp;) const
++{
++  discreteState[*mMatrixStateInfo].clear();
++  for (unsigned i = 0; i &lt;= mDelay; ++i)
++    discreteState[*mMatrixStateInfo].push_back(mInitialValue);
++}
++
++void
++Delay::output(const DiscreteStateValueVector&amp; discreteState,
++              const ContinousStateValueVector&amp;,
++              PortValueList&amp; portValues) const
++{
++  portValues[mOutputPort] = discreteState[*mMatrixStateInfo].front();
++}
++
++void
++Delay::update(DiscreteStateValueVector&amp; discreteState,
++              ContinousStateValueVector&amp;,
++              const PortValueList&amp; portValues) const
++{
++  discreteState[*mMatrixStateInfo].rotate(portValues[mInputPort]);
++}
++
++bool
++Delay::dependsOn(const PortId&amp; in, const PortId&amp; out) const
++{
++  if (mDelay != 0)
++    return false;
++  return in == getPortId(mInputPort.getPortIndex())
++    &amp;&amp; out == getPortId(mOutputPort.getPortIndex());
++}
++
++unsigned
++Delay::getDelay(void) const
++{
++  return mDelay;
++}
++
++void
++Delay::setDelay(unsigned delay)
++{
++  mDelay = delay;
++}
++
++const Matrix&amp;
++Delay::getInitialValue() const
++{
++  return mInitialValue;
++}
++
++void
++Delay::setInitialValue(const Matrix&amp; initialValue)
++{
++  mInitialValue = initialValue;
++}
++
++} // namespace OpenFDM
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-08-30 12:52:00 UTC (rev 425)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Delay.h	2008-08-31 06:43:16 UTC (rev 426)
+@@ -0,0 +1,71 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2007-2008 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Delay_H
++#define OpenFDM_Delay_H
++
++#include &lt;string&gt;
++
++#include &quot;Model.h&quot;
++#include &quot;TemplateDiscreteStateInfo.h&quot;
++
++namespace OpenFDM {
++
++class Delay : public Model {
++  OPENFDM_OBJECT(Delay, Model);
++public:
++  Delay(const std::string&amp; name);
++  virtual ~Delay();
++
++  virtual bool alloc(LeafContext&amp; leafContext) const;
++  virtual void init(DiscreteStateValueVector&amp; discreteState,
++                    ContinousStateValueVector&amp;) const;
++  virtual void output(const DiscreteStateValueVector&amp; discreteState,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++  virtual void update(DiscreteStateValueVector&amp; discreteState,
++                      ContinousStateValueVector&amp;,
++                      const PortValueList&amp; portValues) const;
++
++  virtual bool dependsOn(const PortId&amp; in, const PortId&amp; out) const;
++
++  /// The delay number of timeslices
++  unsigned getDelay(void) const;
++  void setDelay(unsigned delay);
++
++  /// The initial output values on the output until input values are available.
++  const Matrix&amp; getInitialValue() const;
++  void setInitialValue(const Matrix&amp; initialValue);
++
++private:
++
++  class MatrixList : public std::list&lt;Matrix&gt; {
++  public:
++    MatrixList() {}
++    MatrixList(size_type n, const Matrix&amp; matrix)
++    {
++      while (0 &lt; n--)
++        push_back(matrix);
++    }
++    void rotate(const Matrix&amp; matrix)
++    {
++      // splice is O(1)
++      splice(end(), *this, begin());
++      // append new value
++      back() = matrix;
++    }
++  };
++
++  typedef  TemplateDiscreteStateInfo&lt;MatrixList&gt; MatrixListStateInfo;
++
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mOutputPort;
++  unsigned mDelay;
++  Matrix mInitialValue;
++  SharedPtr&lt;MatrixListStateInfo&gt; mMatrixStateInfo;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-30 12:52:00 UTC (rev 425)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-08-31 06:43:16 UTC (rev 426)
+@@ -159,6 +159,7 @@
+   DefaultGravity.h \
+   DefaultGround.h \
+   DefaultPlanet.h \
++  Delay.h \
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+   ExternalForceModel.h \
+@@ -207,6 +208,7 @@
+   Wind.h
+ 
+ OpenFDMModelsSOURCES = \
++  Delay.cpp \
+   Gain.cpp \
+   Integrator.cpp
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000397.html">[OpenFDM-svn] r425 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000399.html">[OpenFDM-svn] r427 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#398">[ date ]</a>
+              <a href="thread.html#398">[ thread ]</a>
+              <a href="subject.html#398">[ subject ]</a>
+              <a href="author.html#398">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

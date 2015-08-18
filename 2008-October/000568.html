@@ -1,0 +1,118 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r598 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r598%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810110907.m9B97JEK010164%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000567.html">
+   <LINK REL="Next"  HREF="000569.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r598 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r598%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810110907.m9B97JEK010164%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r598 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Oct 11 11:07:19 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000567.html">[OpenFDM-svn] r597 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000569.html">[OpenFDM-svn] r599 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#568">[ date ]</a>
+              <a href="thread.html#568">[ thread ]</a>
+              <a href="subject.html#568">[ subject ]</a>
+              <a href="author.html#568">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-11 11:07:19 +0200 (Sat, 11 Oct 2008)
+New Revision: 598
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add check for self referencing direct dependencies.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-11 08:17:15 UTC (rev 597)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2008-10-11 09:07:19 UTC (rev 598)
+@@ -619,6 +619,13 @@
+       SharedPtr&lt;ModelInstance&gt; modelInstance = _modelInstanceList.front();
+       _modelInstanceList.pop_front();
+ 
++      if (modelInstance-&gt;dependsOn(*modelInstance)) {
++        Log(Schedule, Error)
++          &lt;&lt; &quot;Self referencing direct dependency for Model \&quot;&quot;
++          &lt;&lt; modelInstance-&gt;getNodeNamePath() &lt;&lt; &quot;\&quot; detected!&quot; &lt;&lt; std::endl;
++        return false;
++      }
++
+       ModelInstanceList::iterator i;
+       for (i = sortedModelInstanceList.begin();
+            i != sortedModelInstanceList.end();
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-11 08:17:15 UTC (rev 597)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-11 09:07:19 UTC (rev 598)
+@@ -15,7 +15,7 @@
+ // Build a system with a single gain component referencing itself
+ bool testSelfReferencingDirectInput()
+ {
+-  Group* group = new Group(&quot;group&quot;);
++  SharedPtr&lt;Group&gt; group = new Group(&quot;group&quot;);
+   Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;));
+   group-&gt;connect(gain, &quot;output&quot;, gain, &quot;input&quot;);
+ 
+@@ -107,6 +107,12 @@
+ 
+ int main()
+ {
++  // Check a self referencing gain model, to see if cyclic loops
++  // are properly detected
++  if (!testSelfReferencingDirectInput())
++    return EXIT_FAILURE;
++
++
+   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000567.html">[OpenFDM-svn] r597 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000569.html">[OpenFDM-svn] r599 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#568">[ date ]</a>
+              <a href="thread.html#568">[ thread ]</a>
+              <a href="subject.html#568">[ subject ]</a>
+              <a href="author.html#568">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

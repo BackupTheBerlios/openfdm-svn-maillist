@@ -1,0 +1,419 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r71 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r71%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511261211.jAQCBHif017327%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000055.html">
+   <LINK REL="Next"  HREF="000057.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r71 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r71%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200511261211.jAQCBHif017327%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r71 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Nov 26 13:11:17 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000055.html">[OpenFDM-svn] r70 - trunk/flightgear
+</A></li>
+        <LI>Next message: <A HREF="000057.html">[OpenFDM-svn] r72 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#56">[ date ]</a>
+              <a href="thread.html#56">[ thread ]</a>
+              <a href="subject.html#56">[ subject ]</a>
+              <a href="author.html#56">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-11-26 13:11:09 +0100 (Sat, 26 Nov 2005)
+New Revision: 71
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/main.cpp
+Log:
+Obsolete getOutputProperty.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-26 11:59:34 UTC (rev 70)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-11-26 12:11:09 UTC (rev 71)
+@@ -452,7 +452,7 @@
+   input-&gt;setInputName(propName);
+   input-&gt;setInputGain(gain);
+   addFCSModel(input);
+-  Property prop = input-&gt;getOutputProperty(0);
++  Property prop = input-&gt;getOutputPort(0)-&gt;getProperty();
+   registerExpression(propName, prop);
+   return prop;
+ }
+@@ -476,7 +476,7 @@
+   gain-&gt;setInputPort(0, in);
+   gain-&gt;setGain(-1);
+   addFCSModel(gain);
+-  return gain-&gt;getOutputProperty(0);
++  return gain-&gt;getOutputPort(0)-&gt;getProperty();
+ }
+ 
+ Property
+@@ -486,7 +486,7 @@
+     = new UnaryFunctionModel(name + &quot; Abs&quot;, new AbsExpressionImpl);
+   unary-&gt;setInputPort(0, in);
+   addFCSModel(unary);
+-  return unary-&gt;getOutputProperty(0);
++  return unary-&gt;getOutputPort(0)-&gt;getProperty();
+ }
+ 
+ void
+@@ -693,7 +693,7 @@
+   epFrame-&gt;setRelAccel(Vector6::zeros());
+   Sensor* accelSensor = new Sensor(&quot;Acceleration Sensor&quot;);
+   accelSensor-&gt;addSampleTime(SampleTime(1.0/120));
+-  Property prop = accelSensor-&gt;getOutputProperty(&quot;nz&quot;);
++  Property prop = accelSensor-&gt;getOutputPort(&quot;nz&quot;)-&gt;getProperty();
+   registerJSBExpression(&quot;accelerations/n-pilot-z-norm&quot;, prop);
+ //   epFrame-&gt;addMultiBodyModel(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(accelSensor);
+@@ -747,7 +747,7 @@
+   wc-&gt;setFrictionCoeficient(0.9);
+   wheel-&gt;addMultiBodyModel(wc);
+   
+-  Property prop = wj-&gt;getOutputProperty(0);
++  Property prop = wj-&gt;getOutputPort(0)-&gt;getProperty();
+   addOutputModel(prop, &quot;Wheel &quot; + numStr + &quot; Position&quot;,
+                  &quot;gear/gear[&quot; + numStr + &quot;]/wheel-position-rad&quot;);
+   SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
+@@ -836,10 +836,10 @@
+           UnaryFunctionModel *unary
+             = new UnaryFunctionModel(name + &quot; Degree Conversion&quot;,
+                                      new UnitToSiExpressionImpl(uDegree));
+-          unary-&gt;setInputPort(0, gain-&gt;getOutputProperty(0));
++          unary-&gt;setInputPort(0, gain-&gt;getOutputPort(0)-&gt;getProperty());
+           addFCSModel(unary);
+ 
+-          sg-&gt;setInputPort(&quot;steeringAngle&quot;, unary-&gt;getOutputProperty(0));
++          sg-&gt;setInputPort(&quot;steeringAngle&quot;, unary-&gt;getOutputPort(0)-&gt;getProperty());
+         }
+         
+         if (brake == &quot;LEFT&quot;) {
+@@ -926,7 +926,7 @@
+       attachWheel(name, Vector3(-armLength, 0, 0), brake, numStr, wheelDiam,
+                   tireSpring, tireDamp, arm);
+ 
+-      Property prop = rj-&gt;getOutputProperty(0);
++      Property prop = rj-&gt;getOutputPort(0)-&gt;getProperty();
+       addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-rad&quot;);
+ 
+@@ -997,7 +997,7 @@
+         strutParent = steer;
+         
+         // Prepare outputs
+-        prop = sj-&gt;getOutputProperty(0);
++        prop = sj-&gt;getOutputPort(0)-&gt;getProperty();
+         addOutputModel(prop, &quot;Steering &quot; + numStr + &quot; Position&quot;,
+                        &quot;/gear/gear[&quot; + numStr + &quot;]/steering-pos-rad&quot;);
+         SiToUnitExpressionImpl* c = new SiToUnitExpressionImpl(uDegree);
+@@ -1038,7 +1038,7 @@
+                   tireSpring, tireDamp, arm);
+ 
+       // Prepare some outputs ...
+-      Property prop = pj-&gt;getOutputProperty(0);
++      Property prop = pj-&gt;getOutputPort(0)-&gt;getProperty();
+       addOutputModel(prop, &quot;Gear &quot; + numStr + &quot; Compression&quot;,
+                      &quot;/gear/gear[&quot; + numStr + &quot;]/compression-m&quot;);
+ 
+@@ -1130,18 +1130,18 @@
+     summer-&gt;setNumSummands(0);
+     model = summer;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;DEADBAND&quot;) {
+     deadband = new DeadBand(name);
+     model = deadband;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;GRADIENT&quot;) {
+     model = new TimeDerivative(name);
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;SWITCH&quot;) {
+     std::cout &lt;&lt; &quot;Ignoring SWITCH&quot; &lt;&lt; std::endl;
+@@ -1158,44 +1158,44 @@
+ 
+     inputSaturation = new Saturation(name + &quot; Input Saturation&quot;);
+     addFCSModel(inputSaturation);
+-    inputSaturation-&gt;setInputPort(0, gain-&gt;getOutputProperty(0));
++    inputSaturation-&gt;setInputPort(0, gain-&gt;getOutputPort(0)-&gt;getProperty());
+ 
+     Summer* inputError = new Summer(name + &quot; Input Sum&quot;);
+     addFCSModel(inputError);
+-    inputError-&gt;setInputPort(0, inputSaturation-&gt;getOutputProperty(0));
++    inputError-&gt;setInputPort(0, inputSaturation-&gt;getOutputPort(0)-&gt;getProperty());
+     inputError-&gt;setNumSummands(2);
+ 
+     Gain* errorGain = new Gain(name + &quot; Error Gain&quot;);
+     addFCSModel(errorGain);
+     errorGain-&gt;setGain(100);
+-    errorGain-&gt;setInputPort(0, inputError-&gt;getOutputProperty(0));
++    errorGain-&gt;setInputPort(0, inputError-&gt;getOutputPort(0)-&gt;getProperty());
+ 
+     kinematRateLimit = new Saturation(name + &quot; Rate Limit&quot;);
+     addFCSModel(kinematRateLimit);
+-    kinematRateLimit-&gt;setInputPort(0, errorGain-&gt;getOutputProperty(0));
++    kinematRateLimit-&gt;setInputPort(0, errorGain-&gt;getOutputPort(0)-&gt;getProperty());
+ 
+     DiscreteIntegrator* integrator
+       = new DiscreteIntegrator(name + &quot; Integrator&quot;);
+     addFCSModel(integrator);
+-    integrator-&gt;setInputPort(0, kinematRateLimit-&gt;getOutputProperty(0));
++    integrator-&gt;setInputPort(0, kinematRateLimit-&gt;getOutputPort(0)-&gt;getProperty());
+     Matrix tmp(1, 1);
+     tmp(1, 1) = 1;
+ //     tmp.clear();
+     integrator-&gt;setInitialValue(tmp);
+-    out = integrator-&gt;getOutputProperty(0);
++    out = integrator-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+     Gain* feedbackGain = new Gain(name + &quot; Feedback Gain&quot;);
+     addFCSModel(feedbackGain);
+     feedbackGain-&gt;setGain(-1);
+-    feedbackGain-&gt;setInputPort(0, integrator-&gt;getOutputProperty(0));
+-    inputError-&gt;setInputPort(1, feedbackGain-&gt;getOutputProperty(0));
++    feedbackGain-&gt;setInputPort(0, integrator-&gt;getOutputPort(0)-&gt;getProperty());
++    inputError-&gt;setInputPort(1, feedbackGain-&gt;getOutputPort(0)-&gt;getProperty());
+ 
+   } else if (type == &quot;PURE_GAIN&quot;) {
+     gain = new Gain(name);
+     gain-&gt;setGain(1);
+     model = gain;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;AEROSURFACE_SCALE&quot;) {
+     // An AEROSURFACE_SCALE component is done with n input saturation clipping
+@@ -1206,7 +1206,7 @@
+     inputSaturation = new Saturation(name + &quot;Input Saturation&quot;);
+     model = inputSaturation;
+     addFCSModel(inputSaturation);
+-    normOut = inputSaturation-&gt;getOutputProperty(0);
++    normOut = inputSaturation-&gt;getOutputPort(0)-&gt;getProperty();
+     Matrix tmp(1, 1);
+     tmp(1, 1) = -1;
+     inputSaturation-&gt;setMinSaturation(tmp);
+@@ -1230,24 +1230,24 @@
+     iv(1) = 3;
+     tableData(iv) = 1;
+     table1D-&gt;setTableData(tableData);
+-    table1D-&gt;setInputPort(0, inputSaturation-&gt;getOutputProperty(0));
++    table1D-&gt;setInputPort(0, inputSaturation-&gt;getOutputPort(0)-&gt;getProperty());
+ 
+     addFCSModel(table1D);
+-    out = table1D-&gt;getOutputProperty(0);
++    out = table1D-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;SCHEDULED_GAIN&quot;) {
+     Product* prod = new Product(name);
+     prod-&gt;setNumFactors(2);
+     table1D = new Table1D(std::string(&quot;Lookup table for &quot;) + name);
+     addFCSModel(table1D);
+-    prod-&gt;setInputPort(1, table1D-&gt;getOutputProperty(0));
++    prod-&gt;setInputPort(1, table1D-&gt;getOutputPort(0)-&gt;getProperty());
+     model = prod;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;INTEGRATOR&quot;) {
+     model = new DiscreteIntegrator(name);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+     addFCSModel(model);
+ 
+   } else if (type == &quot;LAG_FILTER&quot;) {
+@@ -1262,7 +1262,7 @@
+     discreteTransfFunc-&gt;setDenominator(v);
+     model = discreteTransfFunc;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;LEAD_LAG_FILTER&quot;) {
+     // C1*s + C2
+@@ -1273,7 +1273,7 @@
+     discreteTransfFunc-&gt;setDenominator(Vector(2));
+     model = discreteTransfFunc;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;WASHOUT_FILTER&quot;) {
+     //   s
+@@ -1287,7 +1287,7 @@
+     discreteTransfFunc-&gt;setDenominator(v);
+     model = discreteTransfFunc;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else if (type == &quot;SECOND_ORDER_FILTER&quot;) {
+     // C1*s + C2*s + C3
+@@ -1298,7 +1298,7 @@
+     discreteTransfFunc-&gt;setDenominator(Vector(3));
+     model = discreteTransfFunc;
+     addFCSModel(model);
+-    out = model-&gt;getOutputProperty(0);
++    out = model-&gt;getOutputPort(0)-&gt;getProperty();
+ 
+   } else
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+@@ -1672,15 +1672,15 @@
+   // Doing that now will put them together in a well defined order.
+   if (outbias) {
+     outbias-&gt;setInputPort(0, out);
+-    out = outbias-&gt;getOutputProperty(0);
++    out = outbias-&gt;getOutputPort(0)-&gt;getProperty();
+   }
+   if (outgain) {
+     outgain-&gt;setInputPort(0, out);
+-    out = outgain-&gt;getOutputProperty(0);
++    out = outgain-&gt;getOutputPort(0)-&gt;getProperty();
+   }
+   if (saturation) {
+     saturation-&gt;setInputPort(0, out);
+-    out = saturation-&gt;getOutputProperty(0);
++    out = saturation-&gt;getOutputPort(0)-&gt;getProperty();
+   }
+   if (outInvert) {
+     out = addInverterModel(name, out);
+@@ -1698,7 +1698,7 @@
+       normGain-&gt;setGain(1/gain-&gt;getGain());
+       addFCSModel(normGain);
+       normGain-&gt;setInputPort(0, out);
+-      normOut = normGain-&gt;getOutputProperty(0);
++      normOut = normGain-&gt;getOutputPort(0)-&gt;getProperty();
+     }
+   }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-26 11:59:34 UTC (rev 70)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-11-26 12:11:09 UTC (rev 71)
+@@ -230,18 +230,6 @@
+   return 0;
+ }
+ 
+-Property
+-Model::getOutputProperty(unsigned i) const
+-{
+-  if (mOutputPorts.size() &lt;= i) {
+-    Log(Model, Error) &lt;&lt; &quot;Output port index &quot; &lt;&lt; i &lt;&lt; &quot;out of range in \&quot;&quot;
+-                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-    return Property();
+-  }
+-
+-  return mOutputPorts[i]-&gt;getProperty();
+-}
+-
+ const std::string&amp;
+ Model::getOutputPortName(unsigned i) const
+ {
+@@ -249,22 +237,6 @@
+   return mOutputPorts[i]-&gt;getName();
+ }
+ 
+-Property
+-Model::getOutputProperty(const std::string&amp; name) const
+-{
+-  // Check if this one exists and return its value.
+-  std::vector&lt;shared_ptr&lt;Port&gt; &gt;::const_iterator it = mOutputPorts.begin();
+-  while (it != mOutputPorts.end()) {
+-    if ((*it)-&gt;getName() == name)
+-      return (*it)-&gt;getProperty();
+-    ++it;
+-  }
+-
+-  Log(Model, Error) &lt;&lt; &quot;Output port name &quot; &lt;&lt; name &lt;&lt; &quot;not found in \&quot;&quot;
+-                    &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-  return Property();
+-}
+-
+ bool
+ Model::dependsDirectOn(const Model* const model) const
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-26 11:59:34 UTC (rev 70)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-11-26 12:11:09 UTC (rev 71)
+@@ -217,9 +217,6 @@
+   Port* getOutputPort(const std::string&amp; name);
+   const std::string&amp; getOutputPortName(unsigned i) const;
+ 
+-  Property getOutputProperty(unsigned i) const; /* OBSOLETE */
+-  Property getOutputProperty(const std::string&amp; name) const; /* OBSOLETE */
+-
+   bool dependsDirectOn(const Model* const model) const;
+ 
+ protected:
+
+Modified: trunk/OpenFDM/src/OpenFDM/main.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/main.cpp	2005-11-26 11:59:34 UTC (rev 70)
++++ trunk/OpenFDM/src/OpenFDM/main.cpp	2005-11-26 12:11:09 UTC (rev 71)
+@@ -632,7 +632,7 @@
+     system-&gt;simulate(j*0.01);
+ 
+     for (unsigned i = 0; i &lt; modelGroup-&gt;getNumModels(); ++i)
+-      cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getOutputProperty(&quot;output&quot;).getValue().toMatrix() &lt;&lt; &quot; &quot;;
++      cout &lt;&lt; modelGroup-&gt;getModel(i)-&gt;getOutputPort(&quot;output&quot;)-&gt;getValue().toMatrix() &lt;&lt; &quot; &quot;;
+ 
+     cout &lt;&lt; endl;
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000055.html">[OpenFDM-svn] r70 - trunk/flightgear
+</A></li>
+	<LI>Next message: <A HREF="000057.html">[OpenFDM-svn] r72 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#56">[ date ]</a>
+              <a href="thread.html#56">[ thread ]</a>
+              <a href="subject.html#56">[ subject ]</a>
+              <a href="author.html#56">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

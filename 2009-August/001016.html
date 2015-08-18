@@ -1,0 +1,261 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1056 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1056%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200908031626.n73GQxto026039%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001015.html">
+   <LINK REL="Next"  HREF="001017.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1056 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1056%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200908031626.n73GQxto026039%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1056 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug  3 18:26:59 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001015.html">[OpenFDM-svn] r1055 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001017.html">[OpenFDM-svn] r1057 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1016">[ date ]</a>
+              <a href="thread.html#1016">[ thread ]</a>
+              <a href="subject.html#1016">[ subject ]</a>
+              <a href="author.html#1016">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-03 18:26:58 +0200 (Mon, 03 Aug 2009)
+New Revision: 1056
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/mechanicstructure.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Add a new test for the topology of a mechanic system.
+
+M    test/Makefile.am
+AM   test/mechanicstructure.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-08-03 16:26:08 UTC (rev 1055)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2009-08-03 16:26:58 UTC (rev 1056)
+@@ -7,6 +7,7 @@
+ 	limit \
+ 	linalg \
+ 	quattest \
++	mechanicstructure \
+ 	simulationtime \
+ 	structure \
+ 	unitstest
+@@ -18,6 +19,7 @@
+ 	foucault \
+ 	inertianav \
+ 	mechanic \
++	mechanicstructure \
+ 	structure \
+ 	tiretestrig \
+ 	coordsys \
+@@ -53,6 +55,9 @@
+ mechanic_SOURCES = mechanic.cpp
+ mechanic_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++mechanicstructure_SOURCES = mechanicstructure.cpp
++mechanicstructure_LDADD = ../OpenFDM/libOpenFDM.la
++
+ quattest_SOURCES = quattest.cpp
+ quattest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/mechanicstructure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanicstructure.cpp	2009-08-03 16:26:08 UTC (rev 1055)
++++ branches/OpenFDM-StateSeparation/src/test/mechanicstructure.cpp	2009-08-03 16:26:58 UTC (rev 1056)
+@@ -0,0 +1,142 @@
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
++#include &lt;OpenFDM/PrismaticJoint.h&gt;
++#include &lt;OpenFDM/RevoluteJoint.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++
++using namespace OpenFDM;
++
++void addBodiesRecursive(unsigned numLevels, unsigned numBodies,
++                        RigidBody* rigidBody, Group* group)
++{
++  if (!numLevels)
++    return;
++
++  for (unsigned i = 0; i &lt; numBodies; ++i) {
++    RevoluteJoint* revoluteJoint = new RevoluteJoint(&quot;RevoluteJoint&quot;);
++    group-&gt;addChild(revoluteJoint);
++    group-&gt;connect(revoluteJoint-&gt;getPort(&quot;link0&quot;),
++                   rigidBody-&gt;addLink(&quot;childLink&quot;));
++    
++    RigidBody* rigidBody2 = new RigidBody(&quot;RigidBody&quot;);
++    group-&gt;addChild(rigidBody2);
++    group-&gt;connect(revoluteJoint-&gt;getPort(&quot;link1&quot;),
++                   rigidBody2-&gt;addLink(&quot;parentLink&quot;));
++    
++    Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++    group-&gt;addChild(mass);
++    group-&gt;connect(mass-&gt;getPort(&quot;link&quot;), rigidBody2-&gt;addLink(&quot;massLink&quot;));
++    
++    addBodiesRecursive(numLevels - 1, numBodies, rigidBody2, group);
++  }
++}
++
++bool testBodyTreeModel1(unsigned numLevels, unsigned numBodies)
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++
++  MobileRootJoint* mechanicRootJoint = new MobileRootJoint(&quot;RootJoint&quot;);
++  group-&gt;addChild(mechanicRootJoint);
++
++  RigidBody* rigidBody = new RigidBody(&quot;RigidBody&quot;);
++  group-&gt;addChild(rigidBody);
++  group-&gt;connect(mechanicRootJoint-&gt;getPort(&quot;link&quot;),
++                 rigidBody-&gt;addLink(&quot;rootLink&quot;));
++  
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  group-&gt;addChild(mass);
++  group-&gt;connect(mass-&gt;getPort(&quot;link&quot;), rigidBody-&gt;addLink(&quot;massLink&quot;));
++
++  addBodiesRecursive(numLevels, numBodies, rigidBody, group);
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Closed kinematic Loop 1&quot;);
++  system-&gt;setNode(group);
++
++  if (!system-&gt;init()) {
++    std::cerr &lt;&lt; &quot;Initialization of single body model failed!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++
++bool testClosedKinematicLoop1()
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++
++  MobileRootJoint* mechanicRootJoint = new MobileRootJoint(&quot;RootJoint&quot;);
++  group-&gt;addChild(mechanicRootJoint);
++
++  PrismaticJoint* prismaticJoint = new PrismaticJoint(&quot;PrismaticJoint&quot;);
++  group-&gt;addChild(prismaticJoint);
++  group-&gt;connect(mechanicRootJoint-&gt;getPort(&quot;link&quot;),
++                 prismaticJoint-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(mechanicRootJoint-&gt;getPort(&quot;link&quot;),
++                 prismaticJoint-&gt;getPort(&quot;link1&quot;));
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Closed kinematic Loop 1&quot;);
++  system-&gt;setNode(group);
++
++  if (system-&gt;init()) {
++    std::cerr &lt;&lt; &quot;Detection of klosed kinematic loop failed!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++bool testClosedKinematicLoop2()
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++
++  MobileRootJoint* mechanicRootJoint = new MobileRootJoint(&quot;RootJoint&quot;);
++  group-&gt;addChild(mechanicRootJoint);
++
++  RigidBody* rigidBody = new RigidBody(&quot;RigidBody&quot;);
++  group-&gt;addChild(rigidBody);
++  group-&gt;connect(mechanicRootJoint-&gt;getPort(&quot;link&quot;),
++                 rigidBody-&gt;addLink(&quot;rootLink&quot;));
++
++  PrismaticJoint* prismaticJoint = new PrismaticJoint(&quot;PrismaticJoint&quot;);
++  group-&gt;addChild(prismaticJoint);
++  group-&gt;connect(rigidBody-&gt;addLink(&quot;jointLink0&quot;),
++                 prismaticJoint-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;addLink(&quot;jointLink1&quot;),
++                 prismaticJoint-&gt;getPort(&quot;link1&quot;));
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Closed kinematic Loop 1&quot;);
++  system-&gt;setNode(group);
++
++  if (system-&gt;init()) {
++    std::cerr &lt;&lt; &quot;Detection of klosed kinematic loop failed!&quot; &lt;&lt; std::endl;
++    return false;
++  }
++  return true;
++}
++
++int main()
++{
++  // Test a single body mass model
++  if (!testBodyTreeModel1(0, 1))
++    return EXIT_FAILURE;
++
++  // Tests with multiple linear (numBodies = 1) and
++  // tree (1 &lt; numBodies) chained bodies
++  for (unsigned numBodies = 1; numBodies &lt; 4; ++numBodies) {
++    for (unsigned numLevels = 1; numLevels &lt; 4; ++numLevels) {
++      if (!testBodyTreeModel1(numLevels, numBodies))
++        return EXIT_FAILURE;
++    }
++  }
++
++  // Some simple explicit kinematic loops
++  if (!testClosedKinematicLoop1())
++    return EXIT_FAILURE;
++  if (!testClosedKinematicLoop2())
++    return EXIT_FAILURE;
++
++  std::cout &lt;&lt; &quot;PASSED&quot; &lt;&lt; std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/test/mechanicstructure.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001015.html">[OpenFDM-svn] r1055 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001017.html">[OpenFDM-svn] r1057 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1016">[ date ]</a>
+              <a href="thread.html#1016">[ thread ]</a>
+              <a href="subject.html#1016">[ subject ]</a>
+              <a href="author.html#1016">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

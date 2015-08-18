@@ -1,0 +1,246 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r288 - in trunk/OpenFDM: . src/builder
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-June/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r288%20-%20in%20trunk/OpenFDM%3A%20.%20src/builder&In-Reply-To=%3C200606041017.k54AHanp007168%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000265.html">
+   <LINK REL="Next"  HREF="000267.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r288 - in trunk/OpenFDM: . src/builder</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r288%20-%20in%20trunk/OpenFDM%3A%20.%20src/builder&In-Reply-To=%3C200606041017.k54AHanp007168%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r288 - in trunk/OpenFDM: . src/builder">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Jun  4 12:17:36 CEST 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000265.html">[OpenFDM-svn] r287 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000267.html">[OpenFDM-svn] r289 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#266">[ date ]</a>
+              <a href="thread.html#266">[ thread ]</a>
+              <a href="subject.html#266">[ subject ]</a>
+              <a href="author.html#266">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-06-04 12:17:36 +0200 (Sun, 04 Jun 2006)
+New Revision: 288
+
+Modified:
+   trunk/OpenFDM/configure.ac
+   trunk/OpenFDM/src/builder/Makefile.am
+Log:
+Streamline the qt dependent build system a bit
+
+
+Modified: trunk/OpenFDM/configure.ac
+===================================================================
+--- trunk/OpenFDM/configure.ac	2006-06-04 10:17:12 UTC (rev 287)
++++ trunk/OpenFDM/configure.ac	2006-06-04 10:17:36 UTC (rev 288)
+@@ -1,26 +1,29 @@
++# -*- Autoconf -*-
++
++AC_PREREQ(2.59)
+ AC_INIT([OpenFDM], [0.5])
+-dnl AC_PREREQ(2.59)
+-dnl AC_COPYRIGHT(COPYRIGHT-NOTICE)
+-AM_INIT_AUTOMAKE
+-
++dnl AC_CONFIG_AUX_DIR(config)
+ AC_CONFIG_SRCDIR([src/OpenFDM/Object.h])
++dnl AC_CONFIG_HEADER([config.h])
++AM_INIT_AUTOMAKE()
+ 
+-dnl try to append the prefix path to the include and library paths if present
+-if test &quot;x$prefix&quot; != &quot;xNONE&quot; ; then
+-  CPPFLAGS=&quot;$CPPFLAGS -I$prefix/include&quot;
+-  LDFLAGS=&quot;$LDFLAGS -L$prefix/lib&quot;
+-fi
+-
+-AC_CANONICAL_HOST
+-
++dnl AC_CANONICAL_HOST
++AC_LANG(C++)
+ AC_PROG_CC
+ AC_PROG_CPP
+ AC_PROG_CXX
++AC_PROG_INSTALL
+ 
+ AC_DISABLE_SHARED
+ AC_PROG_LIBTOOL
+ AC_SUBST(LIBTOOL_DEPS)
+ 
++dnl try to append the prefix path to the include and library paths if present
++if test &quot;x$prefix&quot; != &quot;xNONE&quot; ; then
++  CPPFLAGS=&quot;$CPPFLAGS -I$prefix/include&quot;
++  LDFLAGS=&quot;$LDFLAGS -L$prefix/lib&quot;
++fi
++
+ dnl Configure debugging checks
+ AC_ARG_ENABLE(debug,
+ [  --enable-debug            Enable assertions [default=yes]],
+@@ -45,9 +48,6 @@
+ ]
+ AC_SUBST(enable_range_checking)
+ 
+-dnl Since OpenFDM is c++ ...
+-AC_LANG_PUSH(C++)
+-
+ dnl Check for headers and symbols required for better speaking backtraces ...
+ AC_CHECK_HEADERS([execinfo.h cxxabi.h])
+ AC_CHECK_FUNCS([backtrace backtrace_symbols])
+@@ -97,9 +97,23 @@
+ AC_SUBST(OpenFDM_HAVE_LIBXML2_XMLREADER)
+ 
+ dnl simple check for qt4
+-AC_CHECK_HEADERS([Qt/QtCore],[openfdm_have_qt4=&quot;yes&quot;])
++if test &quot;x$QTDIR&quot; != &quot;x&quot; ; then
++  CPPFLAGS=&quot;$CPPFLAGS -I$QTDIR/include&quot;
++  LDFLAGS=&quot;$LDFLAGS -L$QTDIR/lib&quot;
++  AC_CHECK_HEADERS([Qt/QtCore],[openfdm_have_qt4=&quot;yes&quot;])
++  QT_MOC=$QTDIR/bin/moc
++  QT_UIC=$QTDIR/bin/uic
++else
++  AC_MSG_WARN([You must have QTDIR set to the qt-4 directory for the builder])
++  QT_MOC=/bin/false
++  QT_UIC=/bin/false
++fi
++AC_SUBST(QT_MOC)
++AC_SUBST(QT_UIC)
++
+ dnl simple check for osg
+ AC_CHECK_HEADERS([osg/Object],[openfdm_have_osg=&quot;yes&quot;])
++
+ dnl avoid trying to build the editor if qt4 or osg is missing
+ if test &quot;x$openfdm_have_qt4&quot; = &quot;xyes&quot; &amp;&amp; test &quot;x$openfdm_have_osg&quot; = &quot;xyes&quot;
+ then
+
+Modified: trunk/OpenFDM/src/builder/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/builder/Makefile.am	2006-06-04 10:17:12 UTC (rev 287)
++++ trunk/OpenFDM/src/builder/Makefile.am	2006-06-04 10:17:36 UTC (rev 288)
+@@ -1,46 +1,55 @@
++INCLUDES = -I$(srcdir)/..
+ 
+-qtinclude=$(QTDIR)/include
+-othrinclude=$(HOME)/sw/include
+-osginclude=$(HOME)/sw/include
+-x11lib=/usr/X11R6/lib
+-
+-qtlib=$(QTDIR)/lib
+-othrlib=$(HOME)/sw/lib
+-osglib=$(HOME)/sw/lib
+-
+-MOC=$(QTDIR)/bin/moc
+-
+-SUFFIXES = _moc.cpp
+-.h_moc.cpp:
+-	$(MOC) $(CPPFLAGS) -o $@ $&lt;
+-
+-INCLUDES = -I$(srcdir)/.. -I$(qtinclude) -I$(othrinclude) -I$(osginclude)
+-
+-BUILT_SOURCES = QOsgWidget_moc.cpp
+-
+ bin_PROGRAMS = openfdm
+ 
+-openfdm_SOURCES = \
++DISTSOURCES = \
+ 	main.cpp \
+-	Configuration.h \
+ 	Configuration.cpp \
+-	FrameItem.h \
+ 	FrameItem.cpp \
+-	Geometries.h \
+ 	Geometries.cpp \
+-	MainWindow.h \
+ 	MainWindow.cpp \
+-	ModelItem.h \
+ 	ModelItem.cpp \
+-	QOsgWidget.h \
+-	QOsgWidget.cpp \
+-	QOsgWidget_moc.cpp
++	QOsgWidget.cpp
+ 
++# Headers with QObjects
++DISTHEADERS_MOC = \
++	QOsgWidget.h
++
++# Headers without QObjects
++DISTHEADERS_NO_MOC = \
++	Configuration.h \
++	FrameItem.h \
++	Geometries.h \
++	MainWindow.h \
++	ModelItem.h
++
++# ui files
++FORMS = 
++
++# The derived files
++FORMHEADERS = $(FORMS:.ui=.h)
++MOC_CC = $(FORMS:.ui=.moc.cpp) $(DISTHEADERS_MOC:.h=.moc.cpp)
++UIC_CC = $(FORMS:.ui=.uic.cpp)
++
++BUILT_SOURCES = $(FORMHEADERS) $(UIC_CC) $(MOC_CC)
++CLEANFILES = $(BUILT_SOURCES)
++
++openfdm_SOURCES = $(DISTSOURCES) $(DISTHEADERS_MOC) $(DISTHEADERS_NO_MOC)
++nodist_openfdm_SOURCES = $(MOC_CC) $(UIC_CC)
++
+ openfdm_LDADD = ../JSBSim/libOpenFDMJSBReader.la ../OpenFDM/libOpenFDM.la \
+                 -losgGA -losgUtil -losgDB -losg -lOpenThreads \
+                 -lQtGui -lQtOpenGL -lQtCore \
+                 -lGL -lGLU
+ 
+-openfdm_LDFLAGS = -L$(qtlib) \
+-                -L$(osglib) -L$(othrlib) -Wl,-rpath,$(osglib) \
+-                -L$(qtlib)
++# Some suffix rules to make qt built sources
++.ui.h:
++	$(QT_UIC) -o $@ $&lt;
++
++.h.moc.cpp:
++	$(QT_MOC) -o $@ $&lt;
++
++.ui.uic.cpp:
++	$(QT_UIC) -o $@ -impl $*.h $&lt;
++
++SUFFIXES = .h .ui .moc.cpp .uic.cpp
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000265.html">[OpenFDM-svn] r287 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000267.html">[OpenFDM-svn] r289 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#266">[ date ]</a>
+              <a href="thread.html#266">[ thread ]</a>
+              <a href="subject.html#266">[ subject ]</a>
+              <a href="author.html#266">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

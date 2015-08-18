@@ -1,0 +1,218 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r964 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r964%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901260630.n0Q6Ua5G017916%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000928.html">
+   <LINK REL="Next"  HREF="000930.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r964 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r964%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901260630.n0Q6Ua5G017916%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r964 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jan 26 07:30:36 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000928.html">[OpenFDM-svn] r963 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000930.html">[OpenFDM-svn] r965 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#929">[ date ]</a>
+              <a href="thread.html#929">[ thread ]</a>
+              <a href="subject.html#929">[ subject ]</a>
+              <a href="author.html#929">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-26 07:30:34 +0100 (Mon, 26 Jan 2009)
+New Revision: 964
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Improove sample time handling.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-01-24 07:54:27 UTC (rev 963)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-01-26 06:30:34 UTC (rev 964)
+@@ -702,8 +702,9 @@
+ 
+   virtual void apply(const GroupInterfaceNode&amp; node)
+   {
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;NodeInstanceData&gt; instanceData;
+-    instanceData = new NodeInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new NodeInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mNodeInstanceDataList.push_back(instanceData);
+ 
+@@ -727,22 +728,25 @@
+   {
+     // Need to store the root nodes to build up the spanning tree for the
+     // mechanical system here.
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;JointInstanceData&gt; instanceData;
+-    instanceData = new JointInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new JointInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mRootJointInstanceDataList.push_back(instanceData);
+   }
+   virtual void apply(const Interact&amp; node)
+   {
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;InteractInstanceData&gt; instanceData;
+-    instanceData = new InteractInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new InteractInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mInteractInstanceDataList.push_back(instanceData);
+   }
+   virtual void apply(const RigidBody&amp; node)
+   {
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;NodeInstanceData&gt; instanceData;
+-    instanceData = new NodeInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new NodeInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mNodeInstanceDataList.push_back(instanceData);
+ 
+@@ -761,21 +765,27 @@
+   }
+   virtual void apply(const Joint&amp; node)
+   {
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;JointInstanceData&gt; instanceData;
+-    instanceData = new JointInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new JointInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mJointInstanceDataList.push_back(instanceData);
+   }
+   virtual void apply(const AbstractModel&amp; node)
+   {
++    SampleTime sampleTime = mergeSampleTime(mSampleTime, node.getSampleTime());
+     SharedPtr&lt;ModelInstanceData&gt; instanceData;
+-    instanceData = new ModelInstanceData(node, getNodePath(), mSampleTime);
++    instanceData = new ModelInstanceData(node, getNodePath(), sampleTime);
+     addInstanceData(instanceData);
+     mModelInstanceDataList.push_back(instanceData);
+   }
+ 
+   virtual void apply(const Group&amp; group)
+   {
++    // push the sample time
++    SampleTime parentSampleTime = mSampleTime;
++    mSampleTime = mergeSampleTime(parentSampleTime, group.getSampleTime());
++
+     SharedPtr&lt;NodeInstanceData&gt; instanceData;
+     instanceData = new NodeInstanceData(group, getNodePath(), mSampleTime);
+     addInstanceData(instanceData);
+@@ -798,32 +808,12 @@
+ 
+     // Now walk the children
+     for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
+-      // push the sample time
+-      SampleTime sampleTime = mSampleTime;
+ 
+       // our next node to traverse
+       SharedPtr&lt;const Node&gt; node = group.getChild(i);
+ 
+-      // check what to do with sample times
+-      mSampleTime = node-&gt;getSampleTime();
+-      if (mSampleTime.isInherited())
+-        mSampleTime = sampleTime;
+-      else if (mSampleTime.isDiscrete()) {
+-        if (!mBasicSampleTime.isDiscrete())
+-          mBasicSampleTime = mSampleTime;
+-        else {
+-          Fraction a = mBasicSampleTime.getSampleTime();
+-          Fraction b = mSampleTime.getSampleTime();
+-          mBasicSampleTime = SampleTime(greatestCommonDivisor(a, b));
+-          OpenFDMAssert(mBasicSampleTime.isDiscrete());
+-        }
+-      }
+-
+       // now traverse the child ...
+       node-&gt;accept(*this);
+-
+-      // restore old group sample time
+-      mSampleTime = sampleTime;
+     }
+ 
+     // Apply the group internal connections to the instances
+@@ -899,6 +889,9 @@
+     // Pop the per group port connect info
+     parentGroupInterfacePortDataMap.swap(mGroupInterfacePortDataMap);
+     parentInstanceDataVector.swap(mInstanceDataVector);
++
++    // restore old group sample time
++    mSampleTime = parentSampleTime;
+   }
+ 
+   ////////////////////////////////////////////////////////////////////////////
+@@ -1002,6 +995,28 @@
+   }
+ 
+ protected:
++
++
++  SampleTime mergeSampleTime(const SampleTime&amp; parentSampleTime,
++                             const SampleTime&amp; nodeSampleTime)
++  {
++    if (nodeSampleTime.isInherited())
++      return parentSampleTime;
++
++    SampleTime sampleTime = nodeSampleTime;
++    if (sampleTime.isDiscrete()) {
++      if (!mBasicSampleTime.isDiscrete())
++        mBasicSampleTime = sampleTime;
++      else {
++        Fraction a = mBasicSampleTime.getSampleTime();
++        Fraction b = sampleTime.getSampleTime();
++        mBasicSampleTime = SampleTime(greatestCommonDivisor(a, b));
++        OpenFDMAssert(mBasicSampleTime.isDiscrete());
++      }
++    }
++    return sampleTime;
++  }
++
+   // method to sort the leafs according to their dependency
+   bool sortMechanicList()
+   {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000928.html">[OpenFDM-svn] r963 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000930.html">[OpenFDM-svn] r965 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#929">[ date ]</a>
+              <a href="thread.html#929">[ thread ]</a>
+              <a href="subject.html#929">[ subject ]</a>
+              <a href="author.html#929">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

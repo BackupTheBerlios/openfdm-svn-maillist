@@ -1,0 +1,1041 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r117 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r117%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512251822.jBPIMMku008225%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000100.html">
+   <LINK REL="Next"  HREF="000102.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r117 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r117%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200512251822.jBPIMMku008225%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r117 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Dec 25 19:22:22 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000100.html">[OpenFDM-svn] r116 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000102.html">[OpenFDM-svn] r118 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#101">[ date ]</a>
+              <a href="thread.html#101">[ thread ]</a>
+              <a href="subject.html#101">[ subject ]</a>
+              <a href="author.html#101">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-25 19:22:08 +0100 (Sun, 25 Dec 2005)
+New Revision: 117
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/AeroForce.h
+   trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+   trunk/OpenFDM/src/OpenFDM/Interact.cpp
+   trunk/OpenFDM/src/OpenFDM/Interact.h
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+   trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+   trunk/OpenFDM/src/OpenFDM/RigidBody.h
+   trunk/OpenFDM/src/OpenFDM/Sensor.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+Log:
+Make Joints Interacts
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -718,7 +718,7 @@
+   accelSensor-&gt;addSampleTime(SampleTime(1.0/120));
+   Port* port = accelSensor-&gt;getOutputPort(&quot;nz&quot;);
+   registerJSBExpression(&quot;accelerations/n-pilot-z-norm&quot;, port);
+-//   epFrame-&gt;addMultiBodyModel(accelSensor);
++//   epFrame-&gt;addInteract2(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(accelSensor);
+   mVehicle-&gt;getTopBody()-&gt;addChildFrame(epFrame);
+   addOutputModel(port, &quot;Normalized load value&quot;, &quot;/accelerations/nlf&quot;);
+@@ -743,8 +743,8 @@
+   mVehicle-&gt;getMultiBodySystem()-&gt;addRigidBody(wheel);
+   
+   RevoluteJoint* wj = new RevoluteJoint(name + &quot; Wheel Joint&quot;);
+-  parent-&gt;addMultiBodyModel(wj, 0);
+-  wheel-&gt;addMultiBodyModel(wj, 1);
++  parent-&gt;addInteract2(wj, 0);
++  wheel-&gt;addInteract2(wj, 1);
+   wj-&gt;setJointAxis(Vector3(0, 1, 0));
+   wj-&gt;setPosition(pos);
+   wj-&gt;setOrientation(Quaternion::unit());
+@@ -933,8 +933,8 @@
+ 
+       // Connect that with a revolute joint to the main body
+       RevoluteJoint* rj = new RevoluteJoint(name + &quot; Arm Joint&quot;);
+-      mVehicle-&gt;getTopBody()-&gt;addMultiBodyModel(rj, 0);
+-      arm-&gt;addMultiBodyModel(rj, 1);
++      mVehicle-&gt;getTopBody()-&gt;addInteract2(rj, 0);
++      arm-&gt;addInteract2(rj, 1);
+       rj-&gt;setJointAxis(Vector3(0, 1, 0));
+       rj-&gt;setJointPos(0);
+       rj-&gt;setJointVel(0);
+@@ -1009,8 +1009,8 @@
+         // Note the 0.05m below, most steering wheels have some kind of
+         // castering auto line up behavour. That is doe with this 0.05m.
+         RevoluteJoint* sj = new RevoluteJoint(name + &quot; Steer Joint&quot;);
+-        strutParent-&gt;addMultiBodyModel(sj, 0);
+-        steer-&gt;addMultiBodyModel(sj, 1);
++        strutParent-&gt;addInteract2(sj, 0);
++        steer-&gt;addInteract2(sj, 1);
+         sj-&gt;setJointAxis(Vector3(0, 0, 1));
+         sj-&gt;setJointPos(0);
+         sj-&gt;setJointVel(0);
+@@ -1051,8 +1051,8 @@
+ 
+       // This time it is a prismatic joint
+       PrismaticJoint* pj = new PrismaticJoint(name + &quot; Compress Joint&quot;);
+-      strutParent-&gt;addMultiBodyModel(pj, 0);
+-      arm-&gt;addMultiBodyModel(pj, 1);
++      strutParent-&gt;addInteract2(pj, 0);
++      arm-&gt;addInteract2(pj, 1);
+       pj-&gt;setJointAxis(Vector3(0, 0, -1));
+       if (strutParent == mVehicle-&gt;getTopBody())
+         pj-&gt;setPosition(structToBody(compressJointPos));
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -31,23 +31,7 @@
+   mWingArea = 0.0;
+   mCoord = 0.0;
+ 
+-  mDirtyRefPosition = true;
+-  mDirtyUnitDown = false;
+-  mDirtyLocalGroundPlane = true;
+-  mDirtyAtmosphere = true;
+-  mDirtyAltitude = true;
+-  mDirtyAboveGroundLevel = true;
+-  mDirtySLAtmosphere = true;
+-  mDirtyAirSpeed = true;
+-  mDirtyMach = true;
+-  mDirtyTrueSpeed = true;
+-  mDirtyCalibratedAirSpeed = true;
+-  mDirtyEquivalentAirSpeed = true;
+-  mDirtyDynamicPressure = true;
+-  mDirtyAlpha = true;
+-  mDirtyAlphaDot = true;
+-  mDirtyBeta = true;
+-  mDirtyBetaDot = true;
++  dirtyAll();
+ 
+   addProperty(&quot;position&quot;,
+               Property(this, &amp;AeroForce::getPosition, &amp;AeroForce::setPosition));
+@@ -127,6 +111,7 @@
+     real_type t = taskInfo.getTime();
+     mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, getRefPosition());
+   }
++  dirtyAll();
+ }
+ 
+ void
+@@ -572,29 +557,6 @@
+ }
+ 
+ void
+-AeroForce::setState(const Vector&amp; state, unsigned offset)
+-{
+-  // Dirty everything.
+-  mDirtyRefPosition = true;
+-  mDirtyUnitDown = true;
+-  mDirtyLocalGroundPlane = true;
+-  mDirtyAtmosphere = true;
+-  mDirtyAltitude = true;
+-  mDirtyAboveGroundLevel = true;
+-  mDirtySLAtmosphere = true;
+-  mDirtyAirSpeed = true;
+-  mDirtyMach = true;
+-  mDirtyTrueSpeed = true;
+-  mDirtyCalibratedAirSpeed = true;
+-  mDirtyEquivalentAirSpeed = true;
+-  mDirtyDynamicPressure = true;
+-  mDirtyAlpha = true;
+-  mDirtyAlphaDot = true;
+-  mDirtyBeta = true;
+-  mDirtyBetaDot = true;
+-}
+-
+-void
+ AeroForce::computeForce(void)
+ {
+   // FIXME: they can be computed cheaper ...
+@@ -624,6 +586,29 @@
+ }
+ 
+ void
++AeroForce::dirtyAll(void)
++{
++  // Dirty everything.
++  mDirtyRefPosition = true;
++  mDirtyUnitDown = true;
++  mDirtyLocalGroundPlane = true;
++  mDirtyAtmosphere = true;
++  mDirtyAltitude = true;
++  mDirtyAboveGroundLevel = true;
++  mDirtySLAtmosphere = true;
++  mDirtyAirSpeed = true;
++  mDirtyMach = true;
++  mDirtyTrueSpeed = true;
++  mDirtyCalibratedAirSpeed = true;
++  mDirtyEquivalentAirSpeed = true;
++  mDirtyDynamicPressure = true;
++  mDirtyAlpha = true;
++  mDirtyAlphaDot = true;
++  mDirtyBeta = true;
++  mDirtyBetaDot = true;
++}
++
++void
+ AeroForce::computeAtmosphere(void) const
+ {
+   if (mDirtyAtmosphere) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -114,13 +114,11 @@
+     mBodyAxisSummers[axis-1]-&gt;addInputProperty(prop);
+   }
+ 
+-  virtual void
+-  setState(const Vector&amp; state, unsigned offset);
+-
+   // The interface to the mechanical system.
+   virtual void computeForce(void);
+ 
+ private:
++  void dirtyAll(void);
+   void computeAtmosphere(void) const;
+   void computeSLAtmosphere(void) const;
+   void computeCalEquAirspeed(void) const;
+
+Modified: trunk/OpenFDM/src/OpenFDM/FreeJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/FreeJoint.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -24,6 +24,18 @@
+   FreeJoint(Environment* env, const std::string&amp; name = std::string());
+   virtual ~FreeJoint(void);
+ 
++  /// HACK
++  virtual bool isArticulatedJoint(void) const
++  { return true; }
++  virtual Frame* getInboardGroup(void)
++  { return 0; }
++  virtual const Frame* getInboardGroup(void) const
++  { return 0; }
++  virtual Frame* getOutboardGroup(void)
++  { return getParentFrame(0); }
++  virtual const Frame* getOutboardGroup(void) const
++  { return getParentFrame(0); }
++
+   /** Set the relative velocity.
+    */
+   void setRelVel(const Vector6&amp; vel)
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/Interact.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -68,7 +68,7 @@
+   }
+   ParentList::iterator it;
+   for (it = mParents.begin(); it != mParents.end(); ++it) {
+-    if (!(*it)) {
++    if ((*it) == 0) {
+       (*it) = rigidBody;
+       (*it)-&gt;addInteract(this);
+       return true;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Interact.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/Interact.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -48,6 +48,9 @@
+ 
+   virtual void interactWith(RigidBody* rigidBody) = 0;
+ 
++  /// FIXME: hmm
++  virtual bool updateAccels() { return true; }
++
+   /// FIXME remove
+   const Frame* getParentFrame(unsigned id = 0) const
+   {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -7,7 +7,6 @@
+ 
+ #include &quot;Assert.h&quot;
+ #include &quot;Object.h&quot;
+-#include &quot;MultiBodyModel.h&quot;
+ #include &quot;Frame.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
+@@ -21,20 +20,11 @@
+ 
+ namespace OpenFDM {
+ 
+-class Joint2 :
+-    public Interact {
+-public:
+-  Joint2(const std::string&amp; name) : Interact(name, 2) { }
+-  virtual ~Joint2(void) { }
+-
+-};
+-
+ class Joint
+-  : public MultiBodyModel {
+-  OpenFDM_NodeImplementation(2);
++  : public Interact {
+ public:
+   Joint(const std::string&amp; name)
+-    : MultiBodyModel(name)
++    : Interact(name, 2)
+   {}
+ 
+   virtual void accept(Visitor&amp; visitor)
+@@ -42,7 +32,7 @@
+   virtual void accept(ConstVisitor&amp; visitor) const
+   { visitor.apply(*this); }
+ 
+-  bool isArticulatedJoint(void) const
++  virtual bool isArticulatedJoint(void) const
+   {
+     const Frame* parent0 = getParentFrame(0);
+     if (!parent0)
+@@ -57,7 +47,7 @@
+     return false;
+   }
+ 
+-  Frame* getInboardGroup(void)
++  virtual Frame* getInboardGroup(void)
+   {
+     Frame* parent0 = getParentFrame(0);
+     if (!parent0)
+@@ -71,7 +61,7 @@
+       return parent1;
+     return 0;
+   }
+-  const Frame* getInboardGroup(void) const
++  virtual const Frame* getInboardGroup(void) const
+   {
+     const Frame* parent0 = getParentFrame(0);
+     if (!parent0)
+@@ -85,7 +75,7 @@
+       return parent1;
+     return 0;
+   }
+-  Frame* getOutboardGroup(void)
++  virtual Frame* getOutboardGroup(void)
+   {
+     Frame* parent0 = getParentFrame(0);
+     if (!parent0)
+@@ -99,7 +89,7 @@
+       return parent0;
+     return 0;
+   }
+-  const Frame* getOutboardGroup(void) const
++  virtual const Frame* getOutboardGroup(void) const
+   {
+     const Frame* parent0 = getParentFrame(0);
+     if (!parent0)
+@@ -114,12 +104,22 @@
+     return 0;
+   }
+ 
+-  // Cast functions.
+-  virtual Joint* toJoint(void)
+-  { return this; }
+-  virtual const Joint* toJoint(void) const
+-  { return this; }
++  virtual void interactWith(RigidBody* rigidBody)
++  {
++    // HMmMm
++    if (!isArticulatedJoint())
++      return;
+ 
++    if (rigidBody-&gt;getFrame() != getInboardGroup())
++      return;
++
++    SpatialInertia artI = SpatialInertia::zeros();
++    Vector6 artF = Vector6::zeros();
++    contributeArticulation(artI, artF);
++    rigidBody-&gt;contributeForce(artF);
++    rigidBody-&gt;contributeInertia(artI);
++  }
++
+   bool contributeArticulation(SpatialInertia&amp; artI, Vector6&amp; artF)
+   {
+     RigidBody* outboardBody = getOutboardGroup()-&gt;toRigidBody();
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelVisitor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/ModelVisitor.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -20,16 +20,16 @@
+   { }
+   virtual void apply(ModelGroup&amp; modelGroup)
+   { apply((Model&amp;)modelGroup); }
++  virtual void apply(MultiBodySystem&amp; multiBodySystem)
++  { apply((ModelGroup&amp;)multiBodySystem); }
+   virtual void apply(Interact&amp; interact)
+   { apply((Model&amp;)interact); }
+-  virtual void apply(MultiBodySystem&amp; multiBodySystem)
+-  { apply((Model&amp;)multiBodySystem); }
+ protected:
+   /// Call this in the apply(ModelGroup&amp;) method if you want to
+   /// traverse downward
+   inline void traverse(ModelGroup&amp; modelGroup)
+   { modelGroup.traverse(*this); }
+-  /// Call this in the apply(MultiBodyModel&amp;) method if you want to
++  /// Call this in the apply(MultiBodySystem&amp;) method if you want to
+   /// traverse downward
+   inline void traverse(MultiBodySystem&amp; multiBodySystem)
+   { multiBodySystem.traverse(*this); }
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -42,136 +42,8 @@
+   }
+ };
+ 
+-class SetStateVisitor
+-  : public Visitor {
+-public:
+-  SetStateVisitor(const Vector&amp; state)
+-    : mState(state), mOffset(0u)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.setState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.setState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-private:
+-  Vector mState;
+-  unsigned mOffset;
+-  real_type mTime;
+-};
+-
+-class GetStateVisitor
+-  : public ConstVisitor {
+-public:
+-  GetStateVisitor(unsigned size)
+-    : mState(size), mOffset(0u)
+-  { }
+-  virtual void apply(const MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.getState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(const Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mState.size());
+-    abNode.getState(mState, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  const Vector&amp; getState(void) const
+-  { return mState; }
+-private:
+-  Vector mState;
+-  unsigned mOffset;
+-};
+-
+-class GetStateDerivVisitor
+-  : public Visitor {
+-public:
+-  GetStateDerivVisitor(unsigned size)
+-    : mStateDeriv(size), mOffset(0u)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
+-    abNode.getStateDeriv(mStateDeriv, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    OpenFDMAssert(mOffset + abNode.getNumContinousStates() &lt;= mStateDeriv.size());
+-    abNode.getStateDeriv(mStateDeriv, mOffset);
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  const Vector&amp; getStateDeriv(void) const
+-  { return mStateDeriv; }
+-private:
+-  Vector mStateDeriv;
+-  unsigned mOffset;
+-};
+-
+-class OutputVisitor
+-  : public Visitor {
+-public:
+-  OutputVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    abNode.output(mTaskInfo);
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    abNode.output(mTaskInfo);
+-  }
+-private:
+-  const TaskInfo&amp; mTaskInfo;
+-};
+-
+-class UpdateVisitor
+-  : public Visitor {
+-public:
+-  UpdateVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
+-  { }
+-  virtual void apply(MultiBodyModel&amp; abNode)
+-  {
+-    abNode.update(mTaskInfo);
+-  }
+-  virtual void apply(Interact&amp; abNode)
+-  {
+-    abNode.update(mTaskInfo);
+-  }
+-private:
+-  const TaskInfo&amp; mTaskInfo;
+-};
+-
+-class StateCountVisitor
+-  : public ConstVisitor {
+-public:
+-  StateCountVisitor(void)
+-    : mOffset(0u)
+-  { }
+-  virtual void apply(const MultiBodyModel&amp; abNode)
+-  {
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  virtual void apply(const Interact&amp; abNode)
+-  {
+-    mOffset += abNode.getNumContinousStates();
+-  }
+-  unsigned getStateCount(void) const
+-  { return mOffset; }
+-private:
+-  unsigned mOffset;
+-};
+-
+ MultiBodySystem::MultiBodySystem(RootFrame* rootFrame) :
+-  Model(&quot;multibodymodel&quot;),
++  ModelGroup(&quot;multibodymodel&quot;),
+   mRootFrame(rootFrame)
+ {
+   // FIXME
+@@ -189,56 +61,35 @@
+   visitor.apply(*this);
+ }
+ 
+-void
+-MultiBodySystem::setEvalState(const Vector&amp; state)
+-{
+-  // First we need to inject the current state into the tree of parts.
+-  setState(state, 0);
++// bool
++// MultiBodySystem::init(void)
++// {
++//   StateCountVisitor gsc;
++//   mRootFrame-&gt;accept(gsc);
++//   setNumContinousStates(gsc.getStateCount());
++//   return ModelGroup::init();
++// }
+ 
+-  // Compute the external and interaction forces.
+-  // FIXME:Output-&gt;continous states ...
++class OutputVisitor
++  : public Visitor {
++public:
++  OutputVisitor(const TaskInfo&amp; taskInfo) : mTaskInfo(taskInfo)
++  { }
++  virtual void apply(MultiBodyModel&amp; abNode)
++  {
++    abNode.output(mTaskInfo);
++  }
++  virtual void apply(Interact&amp; abNode)
++  { }
++private:
++  const TaskInfo&amp; mTaskInfo;
++};
+ 
+-  // Compute forward dynamics, that is the articulated forces and inertia.
+-  ForwardDynamicsVisitor fwdVisitor;
+-  mRootFrame-&gt;accept(fwdVisitor);
+-
+-  // Then compute the articulated inertias and forces.
+-  AccelerationPropagationVisitor apVisitor;
+-  mRootFrame-&gt;accept(apVisitor);
+-}
+-
+ void
+-MultiBodySystem::computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv)
++MultiBodySystem::output(const TaskInfo&amp; taskInfo)
+ {
+-  setEvalState(state);
++  ModelGroup::output(taskInfo);
+ 
+-  // And finally extract the derivative vector from the tree.
+-  GetStateDerivVisitor gsdv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsdv);
+-  deriv = gsdv.getStateDeriv();
+-}
+-
+-void
+-MultiBodySystem::setState(const Vector&amp; state, unsigned offset)
+-{
+-  SetStateVisitor ssv(state(Range(offset+1, offset+getNumContinousStates())));
+-  mRootFrame-&gt;accept(ssv);
+-}
+-
+-void
+-MultiBodySystem::getState(Vector&amp; state, unsigned offset) const
+-{
+-  GetStateVisitor gsv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsv);
+-  state(Range(offset+1, offset+getNumContinousStates())) = gsv.getState();
+-}
+-
+-void
+-MultiBodySystem::getStateDeriv(Vector&amp; stateDeriv, unsigned offset)
+-{
+-  // Compute the external and interaction forces.
+-  // FIXME:Output-&gt;continous states ...
+-
+   // Compute forward dynamics, that is the articulated forces and inertia.
+   ForwardDynamicsVisitor fwdVisitor;
+   mRootFrame-&gt;accept(fwdVisitor);
+@@ -247,37 +98,12 @@
+   AccelerationPropagationVisitor apVisitor;
+   mRootFrame-&gt;accept(apVisitor);
+ 
+-  // And finally extract the derivative vector from the tree.
+-  GetStateDerivVisitor gsdv(getNumContinousStates());
+-  mRootFrame-&gt;accept(gsdv);
+-  stateDeriv(Range(offset+1, offset+getNumContinousStates()))
+-    = gsdv.getStateDeriv();
+-}
+-
+-bool
+-MultiBodySystem::init(void)
+-{
+-  StateCountVisitor gsc;
+-  mRootFrame-&gt;accept(gsc);
+-  setNumContinousStates(gsc.getStateCount());
+-  return true;
+-}
+-
+-void
+-MultiBodySystem::output(const TaskInfo&amp; taskInfo)
+-{
++  // At the moment only that acceleration sensor ...
+   OutputVisitor ov(taskInfo);
+   mRootFrame-&gt;accept(ov);
+ }
+ 
+ void
+-MultiBodySystem::update(const TaskInfo&amp; taskInfo)
+-{
+-  UpdateVisitor uv(taskInfo);
+-  mRootFrame-&gt;accept(uv);
+-}
+-
+-void
+ MultiBodySystem::addRigidBody(RigidBody* rigidBody)
+ {
+   if (!rigidBody)
+@@ -289,6 +115,7 @@
+     ++it;
+   }
+   mRigidBodies.push_back(rigidBody);
++  rigidBody-&gt;setParentMultiBodySystem(this);
+ }
+ 
+ void
+@@ -296,8 +123,10 @@
+ {
+   RigidBodyList::iterator it = mRigidBodies.begin();
+   while (it != mRigidBodies.end()) {
+-    if ((*it) == rigidBody)
++    if ((*it) == rigidBody) {
+       it = mRigidBodies.erase(it);
++      rigidBody-&gt;setParentMultiBodySystem(0);
++    }
+     else
+       ++it;
+   }
+@@ -311,8 +140,7 @@
+   /// Already in the list, might be already attached to an other rigid body
+   if (this == interact-&gt;getParent())
+     return;
+-  mInteracts.push_back(interact);
+-  interact-&gt;setParent(this);
++  addModel(interact);
+ }
+ 
+ void
+@@ -322,14 +150,7 @@
+     return;
+   if (this != interact-&gt;getParent())
+     return;
+-  interact-&gt;setParent(0);
+-  InteractList::iterator it = mInteracts.begin();
+-  while (it != mInteracts.end()) {
+-    if ((*it) == interact)
+-      it = mInteracts.erase(it);
+-    else
+-      ++it;
+-  }
++  removeModel(interact);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -15,11 +15,12 @@
+ #include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
+ #include &quot;RootFrame.h&quot;
++#include &quot;ModelGroup.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ class MultiBodySystem :
+-    public Model {
++    public ModelGroup {
+ public:
+   MultiBodySystem(RootFrame* rootFrame);
+   virtual ~MultiBodySystem(void);
+@@ -29,30 +30,8 @@
+   /// Double dispatch helper for the multibody system visitor
+ //   virtual void accept(ConstModelVisitor&amp; visitor) const;
+ 
+-  void traverse(ModelVisitor&amp; visitor)
+-  {
+-    InteractList::iterator it = mInteracts.begin();
+-    while (it != mInteracts.end()) {
+-      (*it)-&gt;accept(visitor);
+-      ++it;
+-    }
+-  }
+-
+-  /** Sets the state of this multibody system from the state vector state.
+-   */
+-  void setEvalState(const Vector&amp; state);
+-  /** Sets the state of this multibody system from the state vector state
+-      and returns the time derivative in deriv.
+-   */
+-  void computeStateDeriv(real_type t, const Vector&amp; state, Vector&amp; deriv);
+-  
+-  virtual void setState(const Vector&amp; state, unsigned offset);
+-  virtual void getState(Vector&amp; state, unsigned offset) const;
+-  virtual void getStateDeriv(Vector&amp; stateDeriv, unsigned offset);
+-
+-  virtual bool init(void);
++//   virtual bool init(void);
+   virtual void output(const TaskInfo&amp; taskInfo);
+-  virtual void update(const TaskInfo&amp; taskInfo);
+ 
+   /// Add a RigidBody to that MultiBodySystem
+   void addRigidBody(RigidBody* rigidBody);
+@@ -69,10 +48,6 @@
+   /// A list of RigidBody objects in this MultiBodySystem
+   typedef std::vector&lt;SharedPtr&lt;RigidBody&gt; &gt; RigidBodyList;
+   RigidBodyList mRigidBodies;
+-
+-  /// A list of Interact objects in this MultiBodySystem
+-  typedef std::vector&lt;SharedPtr&lt;Interact&gt; &gt; InteractList;
+-  InteractList mInteracts;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -14,6 +14,7 @@
+ #include &quot;Force.h&quot;
+ #include &quot;Mass.h&quot;
+ #include &quot;Joint.h&quot;
++#include &quot;MultiBodySystem.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -78,23 +79,6 @@
+   mArtInertia = SpatialInertia::zeros();
+   mArtForce = Vector6::zeros();
+ 
+-  // Now collect all articulated forces and all articulated inertias.
+-  unsigned n = getNumMultiBodyModels();
+-  for (unsigned i = 0; i &lt; n; ++i) {
+-    Joint* joint = getMultiBodyModel(i)-&gt;toJoint();
+-    if (joint) {
+-      Log(ArtBody, Debug) &lt;&lt; &quot;Processing joint \&quot;&quot; &lt;&lt; joint-&gt;getName()
+-                          &lt;&lt; &quot;\&quot; to body \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-      // Check if this is an articulated joint and if we are the parent.
+-      // BTW: here the recursion happens ...
+-      if (joint-&gt;isArticulatedJoint() &amp;&amp; this == joint-&gt;getInboardGroup())
+-        joint-&gt;contributeArticulation(mArtInertia, mArtForce);
+-      else
+-        // Return some contraint force for now...
+-        ;
+-    }
+-  }
+-
+   // Collect all articulated forces and inertias
+   InteractList::iterator it;
+   for (it = mInteracts.begin(); it != mInteracts.end(); ++it)
+@@ -111,27 +95,41 @@
+   Log(ArtBody, Debug) &lt;&lt; &quot;Entry of computeAccel of \&quot;&quot; &lt;&lt; getName()
+                       &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+ 
+-  unsigned n = getNumMultiBodyModels();
+-  for (unsigned i = 0; i &lt; n; ++i) {
+-    Joint* joint = getMultiBodyModel(i)-&gt;toJoint();
+-    if (joint) {
+-      Log(ArtBody, Debug) &lt;&lt; &quot;Processing joint \&quot;&quot; &lt;&lt; joint-&gt;getName()
+-                          &lt;&lt; &quot;\&quot; to body \&quot;&quot; &lt;&lt; getName()
+-                          &lt;&lt; &quot;\&quot; for acceleration update&quot; &lt;&lt; endl;
+-      // Check if this is an articulated joint and if we are the parent.
+-      if (joint-&gt;isArticulatedJoint() &amp;&amp; this == joint-&gt;getOutboardGroup())
+-        joint-&gt;updateAccels();
+-    }
+-  }
+-  
++  // Update all accelerations, Hmm, is a bit too croase that way ...
++  InteractList::iterator it;
++  for (it = mInteracts.begin(); it != mInteracts.end(); ++it)
++    (*it)-&gt;updateAccels();
++
+   Log(ArtBody, Debug3) &lt;&lt; &quot;On exit of computeAccel of \&quot;&quot; &lt;&lt; getName()
+                        &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+ }
+ 
+ void
++RigidBody::setParentMultiBodySystem(MultiBodySystem* multiBodySystem)
++{
++  /// FIXME: rethink that ...
++  mParentMultiBodySystem = multiBodySystem;
++  if (!multiBodySystem)
++    return;
++  InteractList::iterator it;
++  for (it = mInteracts.begin(); it != mInteracts.end(); ++it) {
++    multiBodySystem-&gt;addInteract(*it);
++  }
++}
++
++MultiBodySystem*
++RigidBody::getParentMultiBodySystem(void)
++{
++  return mParentMultiBodySystem;
++}
++
++void
+ RigidBody::addInteract(Interact* interact)
+ {
+   mInteracts.push_back(interact);
++  if (!mParentMultiBodySystem)
++    return;
++  mParentMultiBodySystem-&gt;addInteract(interact);
+ }
+ 
+ bool
+
+Modified: trunk/OpenFDM/src/OpenFDM/RigidBody.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/RigidBody.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -20,6 +20,7 @@
+ namespace OpenFDM {
+ 
+ class Interact;
++class MultiBodySystem;
+ 
+ // Rename to Body???
+ class RigidBody :
+@@ -111,6 +112,9 @@
+   /// FIXME remove
+   virtual bool addInteract2(Interact* child, unsigned parentNum = 0);
+ 
++  void setParentMultiBodySystem(MultiBodySystem* multiBodySystem);
++  MultiBodySystem* getParentMultiBodySystem(void);
++
+ private:
+   void addInteract(Interact* interact);
+   bool removeInteract(Interact* interact);
+@@ -134,6 +138,8 @@
+ //   typedef std::vector&lt;SharedPtr&lt;Mass&gt; &gt; MassList;
+ //   MassList mMasses;
+ 
++  WeakPtr&lt;MultiBodySystem&gt; mParentMultiBodySystem;
++
+   friend class Interact;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Sensor.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Sensor.h	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/Sensor.h	2005-12-25 18:22:08 UTC (rev 117)
+@@ -30,9 +30,9 @@
+   { }
+ 
+   virtual void accept(Visitor&amp; visitor)
+-  {  visitor.apply(*this); }
++  { visitor.apply(*this); }
+   virtual void accept(ConstVisitor&amp; visitor) const
+-  {  visitor.apply(*this); }
++  { visitor.apply(*this); }
+ 
+   void output(const TaskInfo&amp; taskInfo)
+   {
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -13,6 +13,8 @@
+ #include &quot;Newton.h&quot;
+ #include &quot;System.h&quot;
+ 
++#include &quot;ModelVisitor.h&quot;
++
+ namespace OpenFDM {
+ 
+ System::System(const std::string&amp; name) :
+@@ -68,8 +70,8 @@
+   // Now that we know the basic sample time, build the job schedules
+   Log(Schedule, Info) &lt;&lt; &quot;Basic time is: &quot; &lt;&lt; gcd &lt;&lt; endl;
+   if (100*gcd &lt; minSampleTime)
+-    Log(Schedule, Warning) &lt;&lt; &quot;Basic sample time is less than 100 times smaller &quot;
+-      &quot;than the smalles submodels sample time&quot; &lt;&lt; endl;
++    Log(Schedule, Warning) &lt;&lt; &quot;Basic sample time is less than 100 times &quot;
++      &quot;smaller than the smallest submodels sample time&quot; &lt;&lt; endl;
+ 
+   // We do not have any discrete sample time, just do continous scheduling
+   if (gcd &lt;= 0)
+@@ -131,6 +133,37 @@
+   return true;
+ }
+ 
++class StateGetModelVisitor : public ModelVisitor {
++public:
++  StateGetModelVisitor(unsigned nStates) : mState(nStates), mOffset(0u)
++  {}
++  virtual void apply(Model&amp; model)
++  {
++    OpenFDMAssert(mOffset + model.getNumContinousStates() &lt;= mState.size());
++    model.getState(mState, mOffset);
++    mOffset += model.getNumContinousStates();
++  }
++
++  virtual void apply(ModelGroup&amp; modelGroup)
++  {
++    traverse(modelGroup);
++  }
++  virtual void apply(Interact&amp; interact)
++  {
++//     traverse(interact);
++  }
++  virtual void apply(MultiBodySystem&amp; multiBodySystem)
++  {
++    traverse(multiBodySystem);
++  }
++
++  const Vector&amp; getState(void) const
++  { return mState; }
++private:
++  Vector mState;
++  unsigned mOffset;
++};
++
+ bool
+ System::simulate(real_type tEnd)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Vehicle.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2005-12-23 19:59:05 UTC (rev 116)
++++ trunk/OpenFDM/src/OpenFDM/Vehicle.cpp	2005-12-25 18:22:08 UTC (rev 117)
+@@ -37,9 +37,9 @@
+   mTopBody = new RigidBody(&quot;Topmost rigid body&quot;);
+   mRootFrame-&gt;addChildFrame(mTopBody);
+ 
+-  mFreeJoint = new FreeJoint(mEnvironment, &quot;Mobile vehicle base (free joint)&quot;);
+-  mRootFrame-&gt;addMultiBodyModel(mFreeJoint, 1);
+-  mTopBody-&gt;addMultiBodyModel(mFreeJoint);
++  mFreeJoint = new FreeJoint(mEnvironment, &quot;Mobile vehicle base&quot;);
++  mRootFrame-&gt;addInteract2(mFreeJoint, 1);
++  mTopBody-&gt;addInteract2(mFreeJoint);
+ 
+   mSystem = new System(&quot;Top Vehicle System&quot;);
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000100.html">[OpenFDM-svn] r116 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000102.html">[OpenFDM-svn] r118 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#101">[ date ]</a>
+              <a href="thread.html#101">[ thread ]</a>
+              <a href="subject.html#101">[ subject ]</a>
+              <a href="author.html#101">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

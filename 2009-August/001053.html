@@ -1,0 +1,208 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1095%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908132046.n7DKkDK8026780%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001052.html">
+   <LINK REL="Next"  HREF="001054.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1095%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908132046.n7DKkDK8026780%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1095 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Aug 13 22:46:13 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001052.html">[OpenFDM-svn] r1094 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001054.html">[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1053">[ date ]</a>
+              <a href="thread.html#1053">[ thread ]</a>
+              <a href="subject.html#1053">[ subject ]</a>
+              <a href="author.html#1053">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-13 22:46:12 +0200 (Thu, 13 Aug 2009)
+New Revision: 1095
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp
+Log:
+Add loading of system tags.
+
+M    src/JSBSim/JSBSimReaderBase.cpp
+M    src/JSBSim/jsb2openfdm.cpp
+M    src/JSBSim/JSBSimReaderBase.h
+M    src/JSBSim/JSBSimReader.cpp
+M    src/JSBSim/JSBSimReader.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-13 20:19:56 UTC (rev 1094)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-13 20:46:12 UTC (rev 1095)
+@@ -379,10 +379,10 @@
+ 
+   // Include the system tags.
+   std::list&lt;const XMLElement*&gt; systemElems = topElem-&gt;getElements(&quot;system&quot;);
+-  if (!systemElems.empty()) {
+-    std::cout &lt;&lt; &quot;Ignoring system sections&quot; &lt;&lt; std::endl;
+-//     if (!convertPropulsion(propulsionElem))
+-//       return error(&quot;Cannot convert propulsion data&quot;);
++  for (std::list&lt;const XMLElement*&gt;::iterator i = systemElems.begin();
++       i != systemElems.end(); ++i) {
++    if (!convertSystem(*i))
++      return error(&quot;Cannot convert system data&quot;);
+   }
+   
+   // Convert the aerodynamic force.
+@@ -1611,6 +1611,7 @@
+   } else if (type == &quot;ACTUATOR&quot; || type == &quot;actuator&quot;) {
+     std::cout &lt;&lt; &quot;Ignoring ACTUATOR&quot; &lt;&lt; std::endl;
+ 
++  } else if (type == &quot;documentation&quot;) {
+   } else
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+                  + &quot;\&quot;. Ignoring whole FCS component \&quot;&quot; + name + &quot;\&quot;&quot; );
+@@ -1629,6 +1630,23 @@
+ }
+ 
+ bool
++JSBSimReader::convertSystem(const XMLElement* system)
++{
++  std::string systemName = system-&gt;getAttribute(&quot;file&quot;);
++  std::string sFileName = systemName + &quot;.xml&quot;;
++  std::ifstream sFileStream;
++  if (!openFile(mSystemPath, sFileName, sFileStream))
++    return error(&quot;Cannot find system \&quot;&quot; + systemName + &quot;\&quot;&quot;);
++
++  SharedPtr&lt;XMLElement&gt; systemTopElem = parseXMLStream(sFileStream);
++
++  if (!convertFCSList(systemTopElem))
++    return error(&quot;Cannot convert system file \&quot;&quot; + sFileName + &quot;\&quot;&quot;);
++
++  return true;
++}
++
++bool
+ JSBSimReader::convertAerodynamics(const XMLElement* aero)
+ {
+   std::list&lt;const XMLElement*&gt; elems = aero-&gt;getElements();
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h	2009-08-13 20:19:56 UTC (rev 1094)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.h	2009-08-13 20:46:12 UTC (rev 1095)
+@@ -40,6 +40,7 @@
+   bool convertMassBalance(const XMLElement* massBalanceElement);
+   bool convertFCSList(const XMLElement* fcsElem);
+   bool convertFCSComponent(const XMLElement* fcsComponent);
++  bool convertSystem(const XMLElement* system);
+   bool attachWheel(const XMLElement* wheelElem, const std::string&amp; name,
+                    const std::string&amp; numStr, RigidBody* parent);
+   bool convertGroundReactionsElem(const XMLElement* gr);
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-13 20:19:56 UTC (rev 1094)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.cpp	2009-08-13 20:46:12 UTC (rev 1095)
+@@ -89,6 +89,12 @@
+   mEnginePath.push_back(path);
+ }
+ 
++void
++JSBSimReaderBase::addSystemPath(const std::string&amp; path)
++{
++  mSystemPath.push_back(path);
++}
++
+ bool
+ JSBSimReaderBase::openFile(const std::list&lt;std::string&gt;&amp; paths,
+                            const std::string&amp; file, std::ifstream&amp; fs)
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-13 20:19:56 UTC (rev 1094)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReaderBase.h	2009-08-13 20:46:12 UTC (rev 1095)
+@@ -49,6 +49,10 @@
+   /// no getter available
+   void addEnginePath(const std::string&amp; path);
+ 
++  /// Add a new path component to search for system configurations
++  /// no getter available
++  void addSystemPath(const std::string&amp; path);
++
+ protected:
+   /// Locates a file from a given path list
+   static bool openFile(const std::list&lt;std::string&gt;&amp; paths,
+@@ -124,6 +128,8 @@
+   std::list&lt;std::string&gt; mAircraftPath;
+   /// List for the engine search path.
+   std::list&lt;std::string&gt; mEnginePath;
++  /// List for the system search path.
++  std::list&lt;std::string&gt; mSystemPath;
+ 
+   SharedPtr&lt;Group&gt; mTopLevelGroup;
+   JSBSimPropertyManager mPropertyManager;
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp	2009-08-13 20:19:56 UTC (rev 1094)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/jsb2openfdm.cpp	2009-08-13 20:46:12 UTC (rev 1095)
+@@ -21,11 +21,13 @@
+ 
+   std::string aircraftDir = argv[1];
+   std::string engineDir = aircraftDir + &quot;/Engines&quot;;
++  std::string systemDir = aircraftDir + &quot;/Systems&quot;;
+   std::string aircraftFile = argv[2];
+ 
+   JSBSimReader reader;
+   reader.addAircraftPath(aircraftDir);
+   reader.addEnginePath(engineDir);
++  reader.addSystemPath(systemDir);
+   reader.loadAircraft(aircraftFile);
+   if (reader.getErrorState()) {
+     std::cerr &lt;&lt; &quot;Cannot read aircraft!&quot; &lt;&lt; std::endl;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001052.html">[OpenFDM-svn] r1094 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001054.html">[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1053">[ date ]</a>
+              <a href="thread.html#1053">[ thread ]</a>
+              <a href="subject.html#1053">[ subject ]</a>
+              <a href="author.html#1053">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

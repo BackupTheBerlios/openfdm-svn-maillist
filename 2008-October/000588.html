@@ -1,0 +1,182 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r618 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r618%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810151906.m9FJ64Mm027748%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000587.html">
+   <LINK REL="Next"  HREF="000589.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r618 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r618%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810151906.m9FJ64Mm027748%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r618 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct 15 21:06:04 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000587.html">[OpenFDM-svn] r617 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000589.html">[OpenFDM-svn] r619 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#588">[ date ]</a>
+              <a href="thread.html#588">[ thread ]</a>
+              <a href="subject.html#588">[ subject ]</a>
+              <a href="author.html#588">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-15 21:06:03 +0200 (Wed, 15 Oct 2008)
+New Revision: 618
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+Log:
+Use hard links to store duplicate port values.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-15 18:45:40 UTC (rev 617)
++++ branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-15 19:06:03 UTC (rev 618)
+@@ -108,16 +108,16 @@
+     return 0 &lt;= id;
+   }
+ 
+-//   bool link(const HDF5Object&amp; object, const std::string&amp; name)
+-//   {
+-//     if (!valid())
+-//       return false;
+-//     if (!object.valid())
+-//       return false;
+-//     int status = H5Olink(object.getId(), getId(), name.c_str(),
+-//                          H5P_DEFAULT, H5P_DEFAULT);
+-//     return 0 &lt;= status;
+-//   }
++  bool link(const HDF5Object&amp; object, const std::string&amp; name)
++  {
++    if (!valid())
++      return false;
++    if (!object.valid())
++      return false;
++    herr_t status = H5Glink2(object.getId(), &quot;.&quot;, H5G_LINK_HARD,
++                             getId(), name.c_str());
++    return 0 &lt;= status;
++  }
+ };
+ 
+ class HDF5File : public HDF5Object {
+@@ -287,7 +287,16 @@
+     OpenFDMAssert(mCurrentPortValuesGroup.valid());
+     std::string name = portInfo-&gt;getName();
+     name = mCurrentPortValuesUniqueStringSet.makeUnique(name);
+-    mDumperList.push_back(new MatrixDumper(numericPortValue, mCurrentPortValuesGroup, name));
++
++    if (mPortValueMap.find(numericPortValue) == mPortValueMap.end()) {
++      MatrixDumper* dumper;
++      dumper = new MatrixDumper(numericPortValue,
++                                mCurrentPortValuesGroup, name);
++      mPortValueMap[numericPortValue] = dumper;
++      mDumperList.push_back(dumper);
++    } else {
++      mCurrentPortValuesGroup.link(mPortValueMap.find(numericPortValue)-&gt;second-&gt;getObject(), name);
++    }
+   }
+   virtual void apply(const PortInfo* portInfo,
+                      const MechanicLinkValue* mechanicLinkValue)
+@@ -295,7 +304,16 @@
+     OpenFDMAssert(mCurrentPortValuesGroup.valid());
+     std::string name = portInfo-&gt;getName();
+     name = mCurrentPortValuesUniqueStringSet.makeUnique(name);
+-    mDumperList.push_back(new MechanicDumper(mechanicLinkValue, mCurrentPortValuesGroup, name));
++
++    if (mPortValueMap.find(mechanicLinkValue) == mPortValueMap.end()) {
++      MechanicDumper* dumper;
++      dumper = new MechanicDumper(mechanicLinkValue,
++                                  mCurrentPortValuesGroup, name);
++      mPortValueMap[mechanicLinkValue] = dumper;
++      mDumperList.push_back(dumper);
++    } else {
++      mCurrentPortValuesGroup.link(mPortValueMap.find(mechanicLinkValue)-&gt;second-&gt;getObject(), name);
++    }
+   }
+ 
+   void appendPortValues(const Node&amp; node)
+@@ -369,13 +387,10 @@
+ 
+   HDF5Group mCurrentPortValuesGroup;
+ 
+-  // Only hdf5 version &gt;= 1.8 can do hard links
+-//   typedef std::map&lt;const PortValue*, SharedPtr&lt;HDF5Object&gt; &gt; PortValueMap;
+-//   PortValueMap mPortValueMap;
+-
+   struct Dumper : public Referenced {
+     virtual ~Dumper() {}
+     virtual void append() = 0;
++    virtual HDF5Object getObject() = 0;
+   };
+ 
+   struct MatrixDumper : public Dumper {
+@@ -386,6 +401,8 @@
+     { OpenFDMAssert(numericPortValue); }
+     virtual void append()
+     { _stream.append(mNumericPortValue-&gt;getValue()); }
++    virtual HDF5Object getObject()
++    { return _stream; }
+ 
+     SharedPtr&lt;const NumericPortValue&gt; mNumericPortValue;
+     HDFMatrixStream _stream;
+@@ -414,6 +431,8 @@
+       _force.append(mMechanicLinkValue-&gt;mArticulatedForce);
+       _inertia.append(mMechanicLinkValue-&gt;mArticulatedInertia);
+     }
++    virtual HDF5Object getObject()
++    { return _group; }
+ 
+     SharedPtr&lt;const MechanicLinkValue&gt; mMechanicLinkValue;
+     HDF5Group _group;
+@@ -426,6 +445,9 @@
+     HDFMatrixStream _inertia;
+   };
+ 
++  typedef std::map&lt;const PortValue*,SharedPtr&lt;Dumper&gt; &gt; PortValueMap;
++  PortValueMap mPortValueMap;
++
+   typedef std::list&lt;SharedPtr&lt;Dumper&gt; &gt; DumperList;
+   DumperList mDumperList;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000587.html">[OpenFDM-svn] r617 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000589.html">[OpenFDM-svn] r619 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#588">[ date ]</a>
+              <a href="thread.html#588">[ thread ]</a>
+              <a href="subject.html#588">[ subject ]</a>
+              <a href="author.html#588">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

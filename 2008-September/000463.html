@@ -1,0 +1,245 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r491 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r491%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809220615.m8M6FEwY030077%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000462.html">
+   <LINK REL="Next"  HREF="000464.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r491 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r491%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200809220615.m8M6FEwY030077%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r491 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Sep 22 08:15:14 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000462.html">[OpenFDM-svn] r490 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000464.html">[OpenFDM-svn] r492 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#463">[ date ]</a>
+              <a href="thread.html#463">[ thread ]</a>
+              <a href="subject.html#463">[ subject ]</a>
+              <a href="author.html#463">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-22 08:15:11 +0200 (Mon, 22 Sep 2008)
+New Revision: 491
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+Log:
+A node can have a number of parents. Yet unused.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-22 05:39:17 UTC (rev 490)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.cpp	2008-09-22 06:15:11 UTC (rev 491)
+@@ -8,12 +8,14 @@
+ 
+ namespace OpenFDM {
+ 
+-GroupAcceptorNode::GroupAcceptorNode() :
++GroupAcceptorNode::GroupAcceptorNode(const std::string&amp; name) :
++  Node(name),
+   _groupInternalPort(new ProxyProviderPortInfo(this, &quot;output&quot;))
+ {
+ }
+ 
+-GroupProviderNode::GroupProviderNode() :
++GroupProviderNode::GroupProviderNode(const std::string&amp; name) :
++  Node(name),
+   _groupInternalPort(new ProxyAcceptorPortInfo(this, &quot;input&quot;))
+ {
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-09-22 05:39:17 UTC (rev 490)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-09-22 06:15:11 UTC (rev 491)
+@@ -25,7 +25,7 @@
+ 
+ class GroupAcceptorNode : public Node {
+ public:
+-  GroupAcceptorNode();
++  GroupAcceptorNode(const std::string&amp; name = std::string());
+   virtual void accept(NodeVisitor&amp; visitor)
+   { visitor.apply(*this); }
+   virtual void accept(ConstNodeVisitor&amp; visitor) const
+@@ -37,7 +37,7 @@
+ 
+ class GroupProviderNode : public Node {
+ public:
+-  GroupProviderNode();
++  GroupProviderNode(const std::string&amp; name = std::string());
+   virtual void accept(NodeVisitor&amp; visitor)
+   { visitor.apply(*this); }
+   virtual void accept(ConstNodeVisitor&amp; visitor) const
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-22 05:39:17 UTC (rev 490)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.cpp	2008-09-22 06:15:11 UTC (rev 491)
+@@ -33,6 +33,46 @@
+   visitor.apply(*this);
+ }
+ 
++void
++Node::ascend(NodeVisitor&amp; visitor)
++{
++  ParentList::iterator i;
++  for (i = mParentList.begin(); i != mParentList.end(); ++i) {
++    SharedPtr&lt;Node&gt; parent = i-&gt;lock();
++    if (!parent)
++      continue;
++    parent-&gt;accept(visitor);
++  }
++}
++
++void
++Node::ascend(ConstNodeVisitor&amp; visitor) const
++{
++  ParentList::const_iterator i;
++  for (i = mParentList.begin(); i != mParentList.end(); ++i) {
++    SharedPtr&lt;const Node&gt; parent = i-&gt;lock();
++    if (!parent)
++      continue;
++    parent-&gt;accept(visitor);
++  }
++}
++
++WeakPtr&lt;const Node&gt;
++Node::getParent(unsigned i) const
++{
++  if (mParentList.size() &lt;= i)
++    return 0;
++  return mParentList[i];
++}
++
++WeakPtr&lt;Node&gt;
++Node::getParent(unsigned i)
++{
++  if (mParentList.size() &lt;= i)
++    return 0;
++  return mParentList[i];
++}
++
+ SharedPtr&lt;const PortInfo&gt;
+ Node::getPort(const PortId&amp; portId) const
+ {
+@@ -100,6 +140,27 @@
+ }
+ 
+ void
++Node::addParent(Node* parent)
++{
++  if (!parent)
++    return;
++  mParentList.push_back(parent);
++}
++
++void
++Node::removeParent(Node* parent)
++{
++  ParentList::iterator i;
++  for (i = mParentList.begin(); i != mParentList.end();) {
++    SharedPtr&lt;Node&gt; lockedParent = i-&gt;lock();
++    if (parent == lockedParent)
++      i = mParentList.erase(i);
++    else
++      ++i;
++  }
++}
++
++void
+ Node::addPort(PortInfo* port)
+ {
+   if (!port)
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-09-22 05:39:17 UTC (rev 490)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-09-22 06:15:11 UTC (rev 491)
+@@ -20,12 +20,19 @@
+ class Node : public Object {
+   OPENFDM_OBJECT(Node, Object);
+ public:
+-  Node(const std::string&amp; name = std::string());
++  Node(const std::string&amp; name);
+   virtual ~Node();
+ 
+   virtual void accept(NodeVisitor&amp; visitor);
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
++  void ascend(NodeVisitor&amp; visitor);
++  void ascend(ConstNodeVisitor&amp; visitor) const;
+ 
++  unsigned getNumParents() const
++  { return mParentList.size(); }
++  WeakPtr&lt;const Node&gt; getParent(unsigned i) const;
++  WeakPtr&lt;Node&gt; getParent(unsigned i);
++
+   SharedPtr&lt;const PortInfo&gt; getPort(const PortId&amp; portId) const;
+   SharedPtr&lt;const PortInfo&gt; getPort(unsigned index) const;
+   SharedPtr&lt;const PortInfo&gt; getPort(const std::string&amp; name) const;
+@@ -39,6 +46,9 @@
+ 
+ protected:
+ 
++  void addParent(Node* parent);
++  void removeParent(Node* parent);
++
+ private:
+   Node(const Node&amp;);
+   Node&amp; operator=(const Node&amp;);
+@@ -50,6 +60,9 @@
+   PortList mPortList;
+ 
+   friend class PortInfo;
++
++  typedef std::vector&lt;WeakPtr&lt;Node&gt; &gt; ParentList;
++  ParentList mParentList;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000462.html">[OpenFDM-svn] r490 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000464.html">[OpenFDM-svn] r492 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#463">[ date ]</a>
+              <a href="thread.html#463">[ thread ]</a>
+              <a href="subject.html#463">[ subject ]</a>
+              <a href="author.html#463">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

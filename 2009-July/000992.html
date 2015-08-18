@@ -1,0 +1,368 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1029 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1029%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262141.n6QLffxZ011402%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000991.html">
+   <LINK REL="Next"  HREF="000993.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1029 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1029%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262141.n6QLffxZ011402%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1029 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jul 26 23:41:41 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000991.html">[OpenFDM-svn] r1028 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000993.html">[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#992">[ date ]</a>
+              <a href="thread.html#992">[ thread ]</a>
+              <a href="subject.html#992">[ subject ]</a>
+              <a href="author.html#992">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-26 23:41:41 +0200 (Sun, 26 Jul 2009)
+New Revision: 1029
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add a WindAxis model and a WindAxisForce model.
+
+AM   WindAxis.h
+AM   WindAxis.cpp
+AM   WindAxisForce.cpp
+AM   WindAxisForce.h
+M    Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 21:26:17 UTC (rev 1028)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 21:41:41 UTC (rev 1029)
+@@ -224,7 +224,9 @@
+   TimeDerivative.h \
+   TransferFunction.h \
+   UnaryFunction.h \
+-  UnitConversion.h
++  UnitConversion.h \
++  WindAxis.h \
++  WindAxisForce.h
+ 
+ OpenFDMModelsSOURCES = \
+   Actuator.cpp \
+@@ -257,7 +259,9 @@
+   TimeDerivative.cpp \
+   TransferFunction.cpp \
+   UnaryFunction.cpp \
+-  UnitConversion.cpp
++  UnitConversion.cpp \
++  WindAxis.cpp \
++  WindAxisForce.cpp
+ 
+ OpenFDMMechanicHEADERS = \
+   AeroForce.h \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.cpp	2009-07-26 21:26:17 UTC (rev 1028)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.cpp	2009-07-26 21:41:41 UTC (rev 1029)
+@@ -0,0 +1,58 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;WindAxis.h&quot;
++
++#include &quot;TypeInfo.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(WindAxis, Model)
++  END_OPENFDM_OBJECT_DEF
++
++WindAxis::WindAxis(const std::string&amp; name) :
++  Model(name),
++  mVelocityPort(this, &quot;bodyVelocity&quot;, Size(3, 1), true),
++  mAlphaPort(this, &quot;alpha&quot;),
++  mAlphaDotPort(this, &quot;alphaDot&quot;),
++  mBetaPort(this, &quot;beta&quot;),
++  mBetaDotPort(this, &quot;betaDot&quot;),
++  mAirSpeedPort(this, &quot;airSpeed&quot;)
++{
++}
++
++WindAxis::~WindAxis(void)
++{
++}
++
++void
++WindAxis::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                 const ContinousStateValueVector&amp;,
++                 PortValueList&amp; portValues) const
++{
++  Vector3 v = portValues[mVelocityPort];
++  
++  real_type alpha = 0;
++  if (Limits&lt;real_type&gt;::min() &lt; fabs(v(0)))
++    alpha = atan2(v(2), v(0));
++  portValues[mAlphaPort] = alpha;
++  
++  real_type beta = 0;
++  real_type uw = sqrt(v(0)*v(0) + v(2)*v(2));
++  if (Limits&lt;real_type&gt;::min() &lt; fabs(uw))
++    beta = atan2(v(1), uw);
++  portValues[mBetaPort] = beta;
++  
++  real_type vt = norm(v);
++  portValues[mAirSpeedPort] = vt;
++  
++  // FIXME: we need something that avoids the singularities when just doing
++  // finite differences with alpha and beta.
++  // may be we can also get then a representation of alpha and beta that is
++  // steady at zero velocity
++  portValues[mAlphaDotPort] = 0;
++  portValues[mBetaDotPort] = 0;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.h	2009-07-26 21:26:17 UTC (rev 1028)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.h	2009-07-26 21:41:41 UTC (rev 1029)
+@@ -0,0 +1,43 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WindAxis_H
++#define OpenFDM_WindAxis_H
++
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++class WindAxis : public Model {
++  OPENFDM_OBJECT(WindAxis, Model);
++public:
++  WindAxis(const std::string&amp; name);
++  virtual ~WindAxis(void);
++
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++
++private:
++  /// The input port which must provide the fluid velocity 6 vector
++  MatrixInputPort mVelocityPort;
++
++  /// The resulting angle of attack output
++  RealOutputPort mAlphaPort;
++  /// The resulting angle of attack derivative output
++  RealOutputPort mAlphaDotPort;
++  /// The resulting side slip angle output
++  RealOutputPort mBetaPort;
++  /// The resulting side slip angle derivative output
++  RealOutputPort mBetaDotPort;
++  /// The resulting true airspeed output
++  RealOutputPort mAirSpeedPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxis.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp	2009-07-26 21:26:17 UTC (rev 1028)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp	2009-07-26 21:41:41 UTC (rev 1029)
+@@ -0,0 +1,65 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;WindAxisForce.h&quot;
++
++#include &quot;TypeInfo.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(WindAxisForce, Model)
++  END_OPENFDM_OBJECT_DEF
++
++WindAxisForce::WindAxisForce(const std::string&amp; name) :
++  Model(name),
++  mAlphaPort(this, &quot;alpha&quot;, true),
++  mBetaPort(this, &quot;beta&quot;, true),
++  mDragPort(this, &quot;drag&quot;, true),
++  mSidePort(this, &quot;side&quot;, true),
++  mLiftPort(this, &quot;lift&quot;, true),
++  mForcePort(this, &quot;bodyForce&quot;, Size(3, 1))
++{
++}
++
++WindAxisForce::~WindAxisForce(void)
++{
++}
++
++void
++WindAxisForce::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const
++{
++  // Get the matrix transforming from stability to body axis
++  real_type alpha = portValues[mAlphaPort];
++  real_type beta = portValues[mBetaPort];
++  real_type ca = cos(alpha);
++  real_type sa = sin(alpha);
++  real_type cb = cos(beta);
++  real_type sb = sin(beta);
++  
++  // The transform from stability axis to body axis where the
++  // stability axis x axis points into the wind, the y axis points
++  // to the right and the z axis points downwards
++  Matrix33 Tw2b(-ca*cb, -ca*sb,  sa,
++                -sb,     cb,   0,
++                -sa*cb, -sa*sb, -ca);
++  
++  // Get the forces
++  real_type drag = 0;
++  if (!mDragPort.empty())
++    drag = portValues[mDragPort];
++  real_type side = 0;
++  if (!mSidePort.empty())
++    side = portValues[mSidePort];
++  real_type lift = 0;
++  if (!mLiftPort.empty())
++    lift = portValues[mLiftPort];
++  
++  // Compute the force vector, note that drag is a force pointing
++  // afterwards and the lift upwards
++  portValues[mForcePort] = Tw2b*Vector3(-drag, side, -lift);
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.h	2009-07-26 21:26:17 UTC (rev 1028)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.h	2009-07-26 21:41:41 UTC (rev 1029)
+@@ -0,0 +1,45 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_WindAxisForce_H
++#define OpenFDM_WindAxisForce_H
++
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++class WindAxisForce : public Model {
++  OPENFDM_OBJECT(WindAxisForce, Model);
++public:
++  WindAxisForce(const std::string&amp; name);
++  virtual ~WindAxisForce(void);
++
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++
++  // FIXME insert the enable/disable stuff for the 3 inputs
++
++private:
++  /// The angle of attack input
++  RealInputPort mAlphaPort;
++  /// The side slip angle input
++  RealInputPort mBetaPort;
++  /// The drag force input
++  RealInputPort mDragPort;
++  /// The side force input
++  RealInputPort mSidePort;
++  /// The lift force input
++  RealInputPort mLiftPort;
++
++  /// The resulting force in body axis
++  MatrixOutputPort mForcePort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000991.html">[OpenFDM-svn] r1028 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000993.html">[OpenFDM-svn] r1030 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#992">[ date ]</a>
+              <a href="thread.html#992">[ thread ]</a>
+              <a href="subject.html#992">[ subject ]</a>
+              <a href="author.html#992">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

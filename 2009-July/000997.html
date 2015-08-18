@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1034 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1034%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907281852.n6SIqAkZ009477%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000996.html">
+   <LINK REL="Next"  HREF="000998.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1034 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1034%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907281852.n6SIqAkZ009477%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1034 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jul 28 20:52:10 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000996.html">[OpenFDM-svn] r1033 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000998.html">[OpenFDM-svn] r1035 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#997">[ date ]</a>
+              <a href="thread.html#997">[ thread ]</a>
+              <a href="subject.html#997">[ subject ]</a>
+              <a href="author.html#997">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-28 20:52:09 +0200 (Tue, 28 Jul 2009)
+New Revision: 1034
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp
+Log:
+Fix wind axis conventions.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-07-28 05:35:53 UTC (rev 1033)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalInteract.cpp	2009-07-28 18:52:09 UTC (rev 1034)
+@@ -70,9 +70,8 @@
+     const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
+ 
+     // The global coordinates position
+-    Vector3 refPosition = cs.getPosition();
+     if (mPosition.isConnected())
+-      mPosition = refPosition;
++      mPosition = cs.getPosition();
+     
+     if (mOrientation.isConnected())
+       mOrientation = cs.getOrientation();
+@@ -90,7 +89,7 @@
+     if (enableBodyAngularVelocity || enableBodyLinearVelocity
+         || enableGlobalAngularVelocity || enableGlobalLinearVelocity
+         || enableBodyWindVelocity || enableGlobalWindVelocity) {
+-      Vector6 refVelocity = getLink().getVelocity();
++      Vector6 refVelocity = getLink().getVelocity(cs.getPosition());
+       if (enableBodyAngularVelocity)
+         mBodyAngularVelocity = cs.rotToLocal(refVelocity.getAngular());
+       if (enableGlobalAngularVelocity)
+@@ -104,8 +103,8 @@
+       // Wind sensing
+       if (enableBodyWindVelocity || enableGlobalWindVelocity) {
+         Vector6 wind = getEnvironment().getWindVelocity(task.getTime(),
+-                                                        refPosition);
+-        wind -= refVelocity;
++                                                        cs.getPosition());
++        wind = refVelocity - wind;
+         if (enableBodyWindVelocity)
+           mBodyWindVelocity = cs.rotToLocal(wind.getLinear());
+         if (enableGlobalWindVelocity)
+@@ -123,7 +122,7 @@
+     bool enableAtmosphere = (enableTemperature || enableStaticPressure ||
+                              enableDensity || enableSoundSpeed);
+     if (enableAltitude || enableAtmosphere) {
+-      real_type altitude = getEnvironment().getAltitude(refPosition);
++      real_type altitude = getEnvironment().getAltitude(cs.getPosition());
+       if (enableAltitude)
+         mAltitude = altitude;
+       
+@@ -143,7 +142,8 @@
+     
+     if (mAboveGroundLevel.isConnected()) {
+       real_type agl;
+-      agl = getEnvironment().getAboveGroundLevel(task.getTime(), refPosition);
++      agl = getEnvironment().getAboveGroundLevel(task.getTime(),
++                                                 cs.getPosition());
+       mAboveGroundLevel = agl;
+     }
+   }
+@@ -170,8 +170,8 @@
+     if (enableBodyCentrifugalAcceleration || enableBodyLoad) {
+       const CoordinateSystem&amp; cs = getLink().getCoordinateSystem();
+ 
+-      Vector6 spatialVel = getLink().getInertialVelocity();
+-      Vector6 spatialAccel = getLink().getInertialAcceleration();
++      Vector6 spatialVel = getLink().getInertialVelocity(cs.getPosition());
++      Vector6 spatialAccel = getLink().getInertialAcceleration(cs.getPosition());
+       Vector3 centrifugalAccel = spatialAccel.getLinear();
+       centrifugalAccel += cross(spatialVel.getAngular(),spatialVel.getLinear());
+ 
+@@ -179,8 +179,7 @@
+         mBodyCentrifugalAcceleration = cs.rotToLocal(centrifugalAccel);
+       if (enableBodyLoad) {
+         // May be cache that from the velocity step??
+-        Vector3 refPosition = cs.getPosition();
+-        Vector3 gravity = getEnvironment().getGravityAcceleration(refPosition);
++        Vector3 gravity = getEnvironment().getGravityAcceleration(cs.getPosition());
+         mBodyLoad = cs.rotToLocal(Vector3(centrifugalAccel - gravity));
+       }
+     }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp	2009-07-28 05:35:53 UTC (rev 1033)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/WindAxisForce.cpp	2009-07-28 18:52:09 UTC (rev 1034)
+@@ -42,9 +42,9 @@
+   // The transform from stability axis to body axis where the
+   // stability axis x axis points into the wind, the y axis points
+   // to the right and the z axis points downwards
+-  Matrix33 Tw2b(-ca*cb, -ca*sb,  sa,
+-                -sb,     cb,   0,
+-                -sa*cb, -sa*sb, -ca);
++  Matrix33 Tw2b(ca*cb, -ca*sb, -sa,
++                   sb,     cb,   0,
++                sa*cb, -sa*sb,  ca);
+   
+   // Get the forces
+   real_type drag = 0;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000996.html">[OpenFDM-svn] r1033 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000998.html">[OpenFDM-svn] r1035 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#997">[ date ]</a>
+              <a href="thread.html#997">[ thread ]</a>
+              <a href="subject.html#997">[ subject ]</a>
+              <a href="author.html#997">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

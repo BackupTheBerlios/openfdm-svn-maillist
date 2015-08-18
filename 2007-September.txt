@@ -1,0 +1,160 @@
+From frohlich at mail.berlios.de  Sat Sep 29 10:55:28 2007
+From: frohlich at mail.berlios.de (frohlich at BerliOS)
+Date: Sat, 29 Sep 2007 10:55:28 +0200
+Subject: [OpenFDM-svn] r323 - trunk/OpenFDM/src/OpenFDM
+Message-ID: <200709290855.l8T8tSEr025371@sheep.berlios.de>
+
+Author: frohlich
+Date: 2007-09-29 10:55:27 +0200 (Sat, 29 Sep 2007)
+New Revision: 323
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/System.cpp
+   trunk/OpenFDM/src/OpenFDM/System.h
+Log:
+Move environment initialization to into System::init.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -28,6 +28,7 @@
+ class Environment;
+ class GroupInput;
+ class GroupOutput;
++class System;
+ 
+ class Input;
+ class Output;
+@@ -294,6 +295,8 @@
+                      const Matrix& (M::*getter)(void) const)
+   { addOutputPort(name, new MatrixGetterPortInterface<M>(model, getter)); }
+ 
++  // FIXME
++  friend class System;
+   virtual void setEnvironment(Environment* environment);
+ 
+ // private:
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2007-09-29 08:55:27 UTC (rev 323)
+@@ -153,7 +153,6 @@
+ 
+   // Update the number of states.
+   model->setParent(this);
+-  model->setEnvironment(mEnvironment);
+ 
+   // add to the model list.
+   mModels.push_back(model);
+@@ -197,7 +196,6 @@
+ 
+   // remove the backreference to this group
+   // this also updates the number of states
+-  model->setEnvironment(0);
+   model->setParent(0);
+ 
+   // remove from the model list.
+@@ -252,17 +250,6 @@
+   return mConnections[i];
+ }
+ 
+-void
+-ModelGroup::setEnvironment(Environment* environment)
+-{
+-  mEnvironment = environment;
+-  ModelList::iterator i = mModels.begin();
+-  while (i != mModels.end()) {
+-    (*i)->setEnvironment(environment);
+-    ++i;
+-  }
+-}
+-
+ Model::Path
+ ModelGroup::getGroupPath() /* FIXME const*/
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -9,7 +9,6 @@
+ 
+ #include "Object.h"
+ #include "Model.h"
+-#include "Environment.h"
+ #include "NumericPortProxy.h"
+ 
+ namespace OpenFDM {
+@@ -51,15 +50,10 @@
+   Connection* getConnection(unsigned i);
+   const Connection* getConnection(unsigned i) const;
+ 
+-  virtual void setEnvironment(Environment* environment);
+-
+   /// Returns the path of this ModelGroup. In contrast to getPath this returns
+   /// the path including the current ModelGroup.
+   Path getGroupPath() /* FIXME const*/;
+ 
+-protected:
+-  SharedPtr<Environment> mEnvironment;
+-
+ private:
+ 
+   typedef std::vector<SharedPtr<Model> > ModelList;
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.cpp	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/System.cpp	2007-09-29 08:55:27 UTC (rev 323)
+@@ -110,12 +110,19 @@
+   ModelCollectVisitor modelCollectVisitor;
+   accept(modelCollectVisitor);
+ 
++  // sett the environment, FIXME move somewhere into task
++  ModelList2::const_iterator mit;
++  mit = modelCollectVisitor.modelList.begin();
++  while (mit != modelCollectVisitor.modelList.end()) {
++    mit->model->setEnvironment(mEnvironment);
++    ++mit;
++  }
++ 
+   OpenFDM::sortModels(modelCollectVisitor.modelList);
+ 
+   // build up the lists of stateful models and count the number of states
+   unsigned numContinousStates = 0;
+   unsigned numDiscreteStates = 0;
+-  ModelList2::const_iterator mit;
+   mit = modelCollectVisitor.modelList.begin();
+   while (mit != modelCollectVisitor.modelList.end()) {
+     if (mit->model->getNumContinousStates()) {
+
+Modified: trunk/OpenFDM/src/OpenFDM/System.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/System.h	2007-08-12 08:28:31 UTC (rev 322)
++++ trunk/OpenFDM/src/OpenFDM/System.h	2007-09-29 08:55:27 UTC (rev 323)
+@@ -8,6 +8,7 @@
+ #include <string>
+ 
+ #include "ModelGroup.h"
++#include "Environment.h"
+ 
+ namespace OpenFDM {
+ 
+@@ -94,6 +95,8 @@
+   ModelList mDiscreteModelList;
+   ModelList mContinousModelList;
+ 
++  SharedPtr<Environment> mEnvironment;
++
+   /// The actual simulation time for the system
+   real_type mTime;
+ };
+
+
+

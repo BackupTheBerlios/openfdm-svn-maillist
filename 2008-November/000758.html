@@ -1,0 +1,235 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r789 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r789%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811241746.mAOHkgob011297%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000757.html">
+   <LINK REL="Next"  HREF="000759.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r789 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r789%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811241746.mAOHkgob011297%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r789 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Nov 24 18:46:42 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000757.html">[OpenFDM-svn] r788 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000759.html">[OpenFDM-svn] r790 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#758">[ date ]</a>
+              <a href="thread.html#758">[ thread ]</a>
+              <a href="subject.html#758">[ subject ]</a>
+              <a href="author.html#758">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-24 18:46:39 +0100 (Mon, 24 Nov 2008)
+New Revision: 789
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/linalg.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Add a matrix solver test.
+
+AM   test/linalg.cpp
+M    test/Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-24 06:24:23 UTC (rev 788)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-11-24 17:46:39 UTC (rev 789)
+@@ -6,7 +6,7 @@
+ 
+ # define some unit tests
+ #check_PROGRAMS = quattest unitstest structure simulationtime constintegral harmonic limit
+-check_PROGRAMS = quattest unitstest simulationtime limit
++check_PROGRAMS = quattest unitstest simulationtime limit linalg
+ TESTS          = $(check_PROGRAMS)
+ 
+ # tiretestrig_SOURCES = tiretestrig.cpp
+@@ -21,6 +21,9 @@
+ mechanic_SOURCES = mechanic.cpp
+ mechanic_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++linalg_SOURCES = linalg.cpp
++linalg_LDADD = ../OpenFDM/libOpenFDM.la
++
+ foucault_SOURCES = foucault.cpp
+ foucault_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/linalg.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/linalg.cpp	2008-11-24 06:24:23 UTC (rev 788)
++++ branches/OpenFDM-StateSeparation/src/test/linalg.cpp	2008-11-24 17:46:39 UTC (rev 789)
+@@ -0,0 +1,123 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;cstdlib&gt;
++#include &lt;iostream&gt;
++#include &lt;OpenFDM/Quaternion.h&gt;
++#include &lt;OpenFDM/Matrix.h&gt;
++#include &lt;OpenFDM/Vector.h&gt;
++
++namespace OpenFDM {
++
++/// Return random vector
++Vector
++rVec(unsigned len)
++{
++  Vector v(len);
++  for (unsigned i = 0; i &lt; len; ++i)
++    v(i) = drand48() - real_type(0.5);
++  return v;
++}
++
++/// Return normalized random vector
++Vector
++rnVec(unsigned len)
++{
++  return normalize(rVec(len));
++}
++
++Matrix
++rMatrix(const Size&amp; s)
++{
++  Matrix m(s(0), s(1));
++  for (unsigned i = 0; i &lt; s(0); ++i)
++    for (unsigned j = 0; j &lt; s(1); ++j)
++      m(i, j) = drand48() - real_type(0.5);
++  return m;
++}
++
++template&lt;unsigned n&gt;
++bool
++solvetest(const LinAlg::Matrix&lt;real_type,n,n&gt;&amp; m,
++          const LinAlg::Vector&lt;real_type,n&gt;&amp; v)
++{
++  // compute a decomposition
++  LinAlg::MatrixFactors&lt;real_type,n,n,LinAlg::LUTag&gt; decomp(m);
++
++  // crude condition estimation
++  real_type nrm = 0;
++  real_type rnrm = 0;
++  for (unsigned i = 0; i &lt; rows(v); ++i) {
++    nrm = max(nrm, norm1(m*Vector::unit(i, rows(v))));
++    rnrm = max(rnrm, norm1(decomp.solve(Vector::unit(i, rows(v)))));
++  }
++  real_type cond = nrm*rnrm;
++
++  // determine allowed tolerance from the condition number
++  real_type rtol = sqrt(rows(v))*cond*10*Limits&lt;real_type&gt;::epsilon();
++  real_type atol = sqrt(rows(v))*1e-5*Limits&lt;real_type&gt;::epsilon();
++
++  // Check ...
++  if (!equal(v, decomp.solve(m*v), rtol, atol)) {
++    std::cerr &lt;&lt; &quot;Matrix solve test failed\n&quot;;
++    std::cerr &lt;&lt; &quot;   condition number:       &quot; &lt;&lt; cond &lt;&lt; &quot;\n&quot;;
++    std::cerr &lt;&lt; &quot;   norm of the difference: &quot;
++              &lt;&lt; norm(v - decomp.solve(m*v)) &lt;&lt; std::endl;
++    return false;
++  }
++
++  return true;
++}
++
++template&lt;unsigned n&gt;
++bool
++solvetestFixedSize(void)
++{
++  Size s(n, n);
++  for (unsigned i = 0; i &lt; 100; ++i)
++    if (!solvetest(rMatrix(s), rVec(s(0))))
++      return false;
++  return true;
++}
++
++bool
++solvetestVariableSize(unsigned n)
++{
++  Size s(n, n);
++  for (unsigned i = 0; i &lt; 100; ++i)
++    if (!solvetest(rMatrix(s), rnVec(s(0))))
++      return false;
++  return true;
++}
++
++bool
++solvetest()
++{
++  if (!solvetestFixedSize&lt;1&gt;())
++    return false;
++  if (!solvetestFixedSize&lt;2&gt;())
++    return false;
++  if (!solvetestFixedSize&lt;3&gt;())
++    return false;
++  if (!solvetestFixedSize&lt;4&gt;())
++    return false;
++  if (!solvetestFixedSize&lt;5&gt;())
++    return false;
++  if (!solvetestFixedSize&lt;6&gt;())
++    return false;
++  for (unsigned n = 1; n &lt; 50; ++n)
++    if (!solvetestVariableSize(n))
++      return false;
++  return true;
++}
++
++}
++
++int
++main(int argc, char *argv[])
++{
++  if (!OpenFDM::solvetest())
++    return EXIT_FAILURE;
++  return EXIT_SUCCESS;
++}
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/test/linalg.cpp
+___________________________________________________________________
+Name: svn:executable
+   + *
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000757.html">[OpenFDM-svn] r788 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000759.html">[OpenFDM-svn] r790 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#758">[ date ]</a>
+              <a href="thread.html#758">[ thread ]</a>
+              <a href="subject.html#758">[ subject ]</a>
+              <a href="author.html#758">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

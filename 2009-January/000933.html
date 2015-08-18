@@ -1,0 +1,131 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r969%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271918.n0RJIPfa006729%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000932.html">
+   <LINK REL="Next"  HREF="000934.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r969%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901271918.n0RJIPfa006729%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r969 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Jan 27 20:18:25 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000932.html">[OpenFDM-svn] r968 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000934.html">[OpenFDM-svn] r970 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#933">[ date ]</a>
+              <a href="thread.html#933">[ thread ]</a>
+              <a href="subject.html#933">[ subject ]</a>
+              <a href="author.html#933">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-27 20:18:25 +0100 (Tue, 27 Jan 2009)
+New Revision: 969
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.h
+Log:
+Replace MechanicLink_ with MechanicLink.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-01-27 19:17:01 UTC (rev 968)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.cpp	2009-01-27 19:18:25 UTC (rev 969)
+@@ -23,7 +23,7 @@
+ 
+ FixedRootJoint::FixedRootJoint(const std::string&amp; name) :
+   RootJoint(name),
+-  mMechanicLink(newMechanicLink(&quot;link&quot;)),
++  mMechanicLink(new MechanicLink(this, &quot;link&quot;)),
+   mRootPosition(0, 0, 0),
+   mRootOrientation(Quaternion::unit())
+ {
+@@ -67,7 +67,7 @@
+ void
+ FixedRootJoint::initDesignPosition(PortValueList&amp; portValues) const
+ {
+-  portValues[mMechanicLink].setDesignPosition(getPosition());
++  portValues[*mMechanicLink].setDesignPosition(getPosition());
+ }
+ 
+ void
+@@ -76,9 +76,9 @@
+                          PortValueList&amp; portValues) const
+ {
+   Vector3 angularBaseVelocity = environment.getAngularVelocity(task.getTime());
+-  portValues[mMechanicLink].setCoordinateSystem(CoordinateSystem(mRootPosition,
+-                                                                 mRootOrientation));
+-  portValues[mMechanicLink].setPosAndVel(angularBaseVelocity, mRootPosition,
++  portValues[*mMechanicLink].setCoordinateSystem(CoordinateSystem(mRootPosition,
++                                         mRootOrientation));
++  portValues[*mMechanicLink].setPosAndVel(angularBaseVelocity, mRootPosition,
+                                          mRootOrientation, Vector6::zeros());
+ }
+ 
+@@ -96,7 +96,7 @@
+                              PortValueList&amp; portValues) const
+ {
+   Vector6 spatialAcceleration = environment.getAcceleration(task.getTime());
+-  portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
++  portValues[*mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.h	2009-01-27 19:17:01 UTC (rev 968)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/FixedRootJoint.h	2009-01-27 19:18:25 UTC (rev 969)
+@@ -44,7 +44,7 @@
+                             const ContinousStateValueVector&amp;,
+                             PortValueList&amp; portValues) const;
+ private:
+-  MechanicLink_ mMechanicLink;
++  SharedPtr&lt;MechanicLink&gt; mMechanicLink;
+ 
+   Vector3 mRootPosition;
+   Quaternion mRootOrientation;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000932.html">[OpenFDM-svn] r968 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000934.html">[OpenFDM-svn] r970 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#933">[ date ]</a>
+              <a href="thread.html#933">[ thread ]</a>
+              <a href="subject.html#933">[ subject ]</a>
+              <a href="author.html#933">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

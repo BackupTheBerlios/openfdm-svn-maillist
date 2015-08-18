@@ -1,0 +1,281 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r458 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r458%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809101845.m8AIjrM3013795%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000429.html">
+   <LINK REL="Next"  HREF="000431.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r458 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r458%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809101845.m8AIjrM3013795%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r458 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Sep 10 20:45:53 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000429.html">[OpenFDM-svn] r457 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000431.html">[OpenFDM-svn] r459 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#430">[ date ]</a>
+              <a href="thread.html#430">[ thread ]</a>
+              <a href="subject.html#430">[ subject ]</a>
+              <a href="author.html#430">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-10 20:45:53 +0200 (Wed, 10 Sep 2008)
+New Revision: 458
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+distinguish between model types.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-10 05:16:58 UTC (rev 457)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-10 18:45:53 UTC (rev 458)
+@@ -301,8 +301,7 @@
+     std::vector&lt;SharedPtr&lt;PortData&gt; &gt; mPortDataList;
+   };
+ 
+-  LeafInstance(const LeafNode* leaf) :
+-    mLeafNode(leaf)
++  LeafInstance(const LeafNode* leaf)
+   { allocPorts(leaf); }
+ 
+   LeafPortData* getPortData(const PortId&amp; portId)
+@@ -314,8 +313,7 @@
+     return mPortData[index];
+   }
+ 
+-  const SharedPtr&lt;const LeafNode&gt;&amp; getLeafNode() const
+-  { return mLeafNode; }
++  virtual const LeafNode* getLeafNode() const = 0;
+ 
+   // Return true if this leaf directly depends on one of leafInstance outputs
+   bool dependsOn(LeafInstance* leafInstance)
+@@ -324,13 +322,13 @@
+       for (unsigned j = 0; j &lt; leafInstance-&gt;mPortData.size(); ++j) {
+         if (!mPortData[i]-&gt;isConnected(leafInstance-&gt;mPortData[j]))
+           continue;
+-        PortId inPortId = mLeafNode-&gt;getPortId(i);
++        PortId inPortId = getLeafNode()-&gt;getPortId(i);
+ 
+         // FIXME, may be other concept:
+         // make Model return a list of 'direct feedthrough ports'?
+         for (unsigned k = 0; k &lt; mPortData.size(); ++k) {
+-          PortId outPortId = mLeafNode-&gt;getPortId(k);
+-          if (mLeafNode-&gt;dependsOn(inPortId, outPortId))
++          PortId outPortId = getLeafNode()-&gt;getPortId(k);
++          if (getLeafNode()-&gt;dependsOn(inPortId, outPortId))
+             return true;
+         }
+       }
+@@ -340,7 +338,7 @@
+ 
+   void print()
+   {
+-    std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; mLeafNode-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++    std::cout &lt;&lt; &quot;Leaf \&quot;&quot; &lt;&lt; getLeafNode()-&gt;getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+     for (unsigned i = 0; i &lt; mPortData.size(); ++i) {
+       mPortData[i]-&gt;print();
+     }
+@@ -360,21 +358,45 @@
+     }
+   }
+ 
+-  // The subsystem leaf node
+-  SharedPtr&lt;const LeafNode&gt; mLeafNode;
+-
+   // List of port dependent info used to build up the connect info and
+   // the sorted list of leafs.
+   std::vector&lt;SharedPtr&lt;LeafPortData&gt; &gt; mPortData;
+ };
+ 
++class ModelInstance : public LeafInstance {
++public:
++  ModelInstance(const Model* model) :
++    LeafInstance(model),
++    mModel(model)
++  { }
++
++  virtual const Model* getLeafNode() const
++  { return mModel; }
++
++  SharedPtr&lt;const Model&gt; mModel;
++};
++
++class MechanicInstance : public LeafInstance {
++public:
++  MechanicInstance(const MechanicNode* mechanicNode) :
++    LeafInstance(mechanicNode),
++    mMechanicNode(mechanicNode)
++  { }
++
++  virtual const MechanicNode* getLeafNode() const
++  { return mMechanicNode; }
++
++  SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
++};
++
++
+ class LeafInstanceCollector : public NodeVisitor {
+ public:
+ 
+   virtual void apply(Node&amp; node)
+-  {
+-    std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl;
+-  }
++  { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
++  virtual void apply(LeafNode&amp; leaf)
++  { std::cerr &lt;&lt; __PRETTY_FUNCTION__ &lt;&lt; std::endl; }
+ 
+   // Aussen acceptor, innen provider
+   virtual void apply(GroupAcceptorNode&amp; leaf)
+@@ -394,13 +416,10 @@
+     ad = new LeafInstance::AcceptorPortData(0, leaf._groupInternalPort);
+     _leafPortDataMap[getCurrentNodeId()][portId] = ad;
+   }
+-  virtual void apply(LeafNode&amp; leaf)
++
++  void allocPortData(LeafInstance* leafInstance, LeafNode&amp; leaf)
+   {
+-    // FIXME: assert that the current node id is something valid ...
+-
+-    LeafInstance* leafInstance = new LeafInstance(&amp;leaf);
+-    _leafInstanceList.push_back(leafInstance);
+-
++    // FIXME: move to LeafInstance??
+     for (unsigned i = 0; i &lt; leaf.getNumPorts(); ++i) {
+       PortId portId = leaf.getPortId(i);
+       LeafInstance::LeafPortData* portData = leafInstance-&gt;getPortData(portId);
+@@ -410,11 +429,17 @@
+ 
+   virtual void apply(MechanicNode&amp; node)
+   {
+-    apply(static_cast&lt;LeafNode&amp;&gt;(node));
++    MechanicInstance* mechanicInstance = new MechanicInstance(&amp;node);
++    _leafInstanceList.push_back(mechanicInstance);
++    _mechanicInstanceList.push_back(mechanicInstance);
++    allocPortData(mechanicInstance, node);
+   }
+   virtual void apply(Model&amp; node)
+   {
+-    apply(static_cast&lt;LeafNode&amp;&gt;(node));
++    ModelInstance* modelInstance = new ModelInstance(&amp;node);
++    _leafInstanceList.push_back(modelInstance);
++    _modelInstanceList.push_back(modelInstance);
++    allocPortData(modelInstance, node);
+   }
+ 
+   virtual void apply(Group&amp; group)
+@@ -500,6 +525,11 @@
+   typedef std::list&lt;SharedPtr&lt;LeafInstance&gt; &gt; LeafInstanceList;
+   LeafInstanceList _leafInstanceList;
+ 
++  typedef std::list&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelInstanceList;
++  ModelInstanceList _modelInstanceList;
++  typedef std::list&lt;SharedPtr&lt;MechanicInstance&gt; &gt; MechanicInstanceList;
++  MechanicInstanceList _mechanicInstanceList;
++
+   ////////////////////////////////////////////////////////////////////////////
+   // Used to map connections in groups ...
+   typedef std::map&lt;PortId, SharedPtr&lt;LeafInstance::PortData&gt; &gt; NodePortDataMap;
+@@ -508,26 +538,26 @@
+ 
+ 
+   // method to sort the leafs according to their dependency
+-  bool sortLeafList()
++  bool sortModelList()
+   {
+-    LeafInstanceList sortedLeafInstanceList;
+-    while (!_leafInstanceList.empty()) {
+-      SharedPtr&lt;LeafInstance&gt; leafInstance = _leafInstanceList.front();
+-      _leafInstanceList.pop_front();
++    ModelInstanceList sortedModelInstanceList;
++    while (!_modelInstanceList.empty()) {
++      SharedPtr&lt;ModelInstance&gt; modelInstance = _modelInstanceList.front();
++      _modelInstanceList.pop_front();
+ 
+-      LeafInstanceList::iterator i;
+-      for (i = sortedLeafInstanceList.begin();
+-           i != sortedLeafInstanceList.end();
++      ModelInstanceList::iterator i;
++      for (i = sortedModelInstanceList.begin();
++           i != sortedModelInstanceList.end();
+            ++i) {
+-        if (!(*i)-&gt;dependsOn(leafInstance))
++        if (!(*i)-&gt;dependsOn(modelInstance))
+           continue;
+-        sortedLeafInstanceList.insert(i, leafInstance);
++        sortedModelInstanceList.insert(i, modelInstance);
+         break;
+       }
+-      if (i == sortedLeafInstanceList.end())
+-        sortedLeafInstanceList.push_back(leafInstance);
++      if (i == sortedModelInstanceList.end())
++        sortedModelInstanceList.push_back(modelInstance);
+     }
+-    _leafInstanceList.swap(sortedLeafInstanceList);
++    _modelInstanceList.swap(sortedModelInstanceList);
+   }
+ 
+   
+@@ -587,13 +617,11 @@
+   LeafInstanceCollector nodeInstanceCollector;
+   topGroup-&gt;accept(nodeInstanceCollector);
+   
+-  nodeInstanceCollector.sortLeafList();
++  nodeInstanceCollector.sortModelList();
+ 
+-  std::cout &lt;&lt; nodeInstanceCollector._leafInstanceList.size() &lt;&lt; std::endl;
+-
+-  LeafInstanceCollector::LeafInstanceList::const_iterator i;
+-  for (i = nodeInstanceCollector._leafInstanceList.begin();
+-       i != nodeInstanceCollector._leafInstanceList.end();
++  LeafInstanceCollector::ModelInstanceList::const_iterator i;
++  for (i = nodeInstanceCollector._modelInstanceList.begin();
++       i != nodeInstanceCollector._modelInstanceList.end();
+        ++i) {
+     (*i)-&gt;print();
+   }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000429.html">[OpenFDM-svn] r457 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000431.html">[OpenFDM-svn] r459 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#430">[ date ]</a>
+              <a href="thread.html#430">[ thread ]</a>
+              <a href="subject.html#430">[ subject ]</a>
+              <a href="author.html#430">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

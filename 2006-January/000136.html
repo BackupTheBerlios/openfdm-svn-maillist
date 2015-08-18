@@ -1,0 +1,241 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r152 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r152%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601020918.k029IhZg022107%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000135.html">
+   <LINK REL="Next"  HREF="000137.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r152 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r152%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601020918.k029IhZg022107%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r152 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan  2 10:18:43 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000135.html">[OpenFDM-svn] r151 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000137.html">[OpenFDM-svn] r153 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#136">[ date ]</a>
+              <a href="thread.html#136">[ thread ]</a>
+              <a href="subject.html#136">[ subject ]</a>
+              <a href="author.html#136">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-02 10:18:40 +0100 (Mon, 02 Jan 2006)
+New Revision: 152
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+   trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+Log:
+Experiment with a dahl friction model
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 08:38:03 UTC (rev 151)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-02 09:18:40 UTC (rev 152)
+@@ -754,7 +754,8 @@
+   // Add a brake force
+   if (brake == &quot;LEFT&quot; || brake == &quot;RIGHT&quot;) {
+     DiscBrake* brakeF = new DiscBrake(name + &quot; Brake Force&quot;);
+-    brakeF-&gt;setFrictionConstant(-2e3);
++    brakeF-&gt;setMinForce(8e1);
++    brakeF-&gt;setMaxForce(1e4);
+     if (brake == &quot;LEFT&quot;) {
+       Port* port = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
+       brakeF-&gt;getInputPort(0)-&gt;connect(port);
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-01-02 08:38:03 UTC (rev 151)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.cpp	2006-01-02 09:18:40 UTC (rev 152)
+@@ -10,10 +10,13 @@
+ 
+ DiscBrake::DiscBrake(const std::string&amp; name) :
+   Model(name),
+-  mFrictionConstant(-1)
++  mMinForce(0),
++  mMaxForce(1)
+ {
+   setDirectFeedThrough(true);
+ 
++  setNumContinousStates(1);
++
+   setNumInputPorts(2);
+   setInputPortName(0, &quot;brakePressure&quot;);
+   setInputPortName(1, &quot;velocity&quot;);
+@@ -45,34 +48,76 @@
+   }
+   mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+ 
++  // start with zero friction force
++  mZ = 0;
++
+   return true;
+ }
+ 
+ void
+ DiscBrake::output(const TaskInfo&amp; taskInfo)
+ {
++  real_type sigma = 100;
+   real_type brakeInput = mBrakePressurePort.getRealValue();
+   real_type vel = mVelocityPort.getRealValue();
+-  /// Hmm, this seems to be an intermediate model for a disc brake ...
+-  mForce = vel*(-1e1 + brakeInput*mFrictionConstant);
++  // with this sigma the model is already very crisp and reaches the
++  // maximum force relatively fast, thus we do not need to make it even faster
++  // with higher speeds
++  vel = sign(vel)*min(1.0, fabs(vel));
++  // the time derivative of the friction state
++  mZDeriv = vel - sigma*fabs(vel)*mZ;
++  // this is to limit the stiffness of this model
++  mZDeriv = sign(mZDeriv)*min(10.0, fabs(mZDeriv));
++  // now the output force, modulate with the brake input
++  mForce = -interpolate(brakeInput, 0.0, mMinForce, 1.0, mMaxForce)*sigma*mZ;
+ }
+ 
++void
++DiscBrake::setState(const StateStream&amp; state)
++{
++  state.readSubState(mZ);
++}
++
++void
++DiscBrake::getState(StateStream&amp; state) const
++{
++  state.writeSubState(mZ);
++}
++
++void
++DiscBrake::getStateDeriv(StateStream&amp; stateDeriv)
++{
++  stateDeriv.writeSubState(mZDeriv);
++}
++
+ const real_type&amp;
+ DiscBrake::getForce(void) const
+ {
+   return mForce;
+ }
+ 
+-real_type
+-DiscBrake::getFrictionConstant(void) const
++const real_type&amp;
++DiscBrake::getMinForce(void) const
+ {
+-  return mFrictionConstant;
++  return mMinForce;
+ }
+ 
+ void
+-DiscBrake::setFrictionConstant(real_type frictionConstant)
++DiscBrake::setMinForce(const real_type&amp; minForce)
+ {
+-  mFrictionConstant = frictionConstant;
++  mMinForce = minForce;
+ }
+ 
++const real_type&amp;
++DiscBrake::getMaxForce(void) const
++{
++  return mMaxForce;
++}
++
++void
++DiscBrake::setMaxForce(const real_type&amp; maxForce)
++{
++  mMaxForce = maxForce;
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/DiscBrake.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2006-01-02 08:38:03 UTC (rev 151)
++++ trunk/OpenFDM/src/OpenFDM/DiscBrake.h	2006-01-02 09:18:40 UTC (rev 152)
+@@ -12,7 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-/// Linear spring damper model
++/// A modified Dahl fricion model
+ class DiscBrake :
+     public Model {
+ public:
+@@ -22,17 +22,29 @@
+   virtual bool init(void);
+   virtual void output(const TaskInfo&amp; taskInfo);
+ 
++  virtual void setState(const StateStream&amp; state);
++  virtual void getState(StateStream&amp; state) const;
++  virtual void getStateDeriv(StateStream&amp; stateDeriv);
++
+   const real_type&amp; getForce(void) const;
+ 
+-  real_type getFrictionConstant(void) const;
+-  void setFrictionConstant(real_type frictionConstant);
++  const real_type&amp; getMinForce(void) const;
++  void setMinForce(const real_type&amp; minForce);
+ 
++  const real_type&amp; getMaxForce(void) const;
++  void setMaxForce(const real_type&amp; maxForce);
++
+ private:
+-  /// The friction constant for that viscosous friction model
+-  real_type mFrictionConstant;
+-
+   /// The output brake force
+   real_type mForce;
++  /// The frictions state
++  real_type mZ;
++  /// The frictions stes derivative
++  real_type mZDeriv;
++  /// The maximum force when brakes are applied
++  real_type mMaxForce;
++  /// The maximum force when brakes are not applied
++  real_type mMinForce;
+ 
+   /// The intput port which must provide the position
+   RealPortHandle mBrakePressurePort;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000135.html">[OpenFDM-svn] r151 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000137.html">[OpenFDM-svn] r153 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#136">[ date ]</a>
+              <a href="thread.html#136">[ thread ]</a>
+              <a href="subject.html#136">[ subject ]</a>
+              <a href="author.html#136">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

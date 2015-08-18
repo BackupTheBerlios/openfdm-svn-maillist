@@ -1,0 +1,225 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1102 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1102%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908171918.n7HJI9LY007324%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001059.html">
+   <LINK REL="Next"  HREF="001061.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1102 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1102%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908171918.n7HJI9LY007324%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1102 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Aug 17 21:18:09 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001059.html">[OpenFDM-svn] r1101 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001061.html">[OpenFDM-svn] r1103 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1060">[ date ]</a>
+              <a href="thread.html#1060">[ thread ]</a>
+              <a href="subject.html#1060">[ subject ]</a>
+              <a href="author.html#1060">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-17 21:18:08 +0200 (Mon, 17 Aug 2009)
+New Revision: 1102
+
+Added:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+Log:
+Add a dummy actuator model.
+
+AM   JSBSim/JSBSimActuator.h
+M    JSBSim/JSBSimReader.cpp
+M    JSBSim/Makefile.am
+AM   JSBSim/JSBSimActuator.cpp
+
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.cpp	2009-08-16 19:55:33 UTC (rev 1101)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.cpp	2009-08-17 19:18:08 UTC (rev 1102)
+@@ -0,0 +1,37 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;JSBSimActuator.h&quot;
++
++#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/TimeDerivative.h&gt;
++
++namespace OpenFDM {
++
++JSBSimActuator::JSBSimActuator(const std::string&amp; name) :
++  JSBSimFCSComponent(name)
++{
++  // The error input of the JSBSim Actuator controller
++  mGroupInput = new GroupInput(&quot;Input&quot;);
++  getGroup()-&gt;addChild(mGroupInput);
++
++  // That single output port is this one
++  getGroup()-&gt;connect(getInternalOutputPort(),
++                      mGroupInput-&gt;getPort(&quot;output&quot;));
++}
++
++JSBSimActuator::~JSBSimActuator(void)
++{
++}
++
++const Port*
++JSBSimActuator::getInputPort()
++{
++  return getGroup()-&gt;getPort(mGroupInput-&gt;getExternalPortIndex());
++}
++
++} //namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.h	2009-08-16 19:55:33 UTC (rev 1101)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.h	2009-08-17 19:18:08 UTC (rev 1102)
+@@ -0,0 +1,32 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_JSBSimActuator_H
++#define OpenFDM_JSBSimActuator_H
++
++#include &quot;JSBSimFCSComponent.h&quot;
++#include &lt;OpenFDM/Connect.h&gt;
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/GroupInput.h&gt;
++#include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/SharedPtr.h&gt;
++
++namespace OpenFDM {
++
++/// Just a small container mapping the JSBSim Actuator parameters to
++/// the OpenFDM models.
++class JSBSimActuator : public JSBSimFCSComponent {
++public:
++  JSBSimActuator(const std::string&amp; name);
++  virtual ~JSBSimActuator(void);
++
++  const Port* getInputPort();
++
++private:
++  SharedPtr&lt;GroupInput&gt; mGroupInput;
++};
++
++} //namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimActuator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-16 19:55:33 UTC (rev 1101)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-17 19:18:08 UTC (rev 1102)
+@@ -50,6 +50,7 @@
+ 
+ #include &lt;OpenFDM/ReaderWriter.h&gt;
+ 
++#include &quot;JSBSimActuator.h&quot;
+ #include &quot;JSBSimAerosurfaceScale.h&quot;
+ #include &quot;JSBSimKinemat.h&quot;
+ #include &quot;JSBSimPID.h&quot;
+@@ -1646,8 +1647,16 @@
+     std::cout &lt;&lt; &quot;Ignoring ACCELEROMETER&quot; &lt;&lt; std::endl;
+ 
+   } else if (type == &quot;ACTUATOR&quot; || type == &quot;actuator&quot;) {
+-    std::cout &lt;&lt; &quot;Ignoring ACTUATOR&quot; &lt;&lt; std::endl;
++    SharedPtr&lt;JSBSimActuator&gt; actuator = new JSBSimActuator(name);
++    addFCSModel(actuator-&gt;getGroup());
+ 
++    std::string token = stringData(fcsComponent-&gt;getElement(&quot;input&quot;));
++    if (!connectJSBExpression(token, actuator-&gt;getInputPort()))
++      return error(&quot;could not connect to actuator input \&quot;&quot; + token + &quot;\&quot;&quot;);
++
++    model = actuator-&gt;getGroup();
++    out = actuator-&gt;getOutputPort();
++
+   } else if (type == &quot;documentation&quot;) {
+   } else
+     return error(&quot;Unknown FCS COMPONENT type: \&quot;&quot; + type
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-16 19:55:33 UTC (rev 1101)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-17 19:18:08 UTC (rev 1102)
+@@ -16,6 +16,7 @@
+ OpenFDMincludedir = $(includedir)/JSBSim
+ 
+ OpenFDMinclude_HEADERS = \
++  JSBSimActuator.h \
+   JSBSimAerodynamic.h \
+   JSBSimAerosurfaceScale.h \
+   JSBSimFCSComponent.h \
+@@ -30,6 +31,7 @@
+ 
+ lib_LTLIBRARIES = libOpenFDMJSBReader.la
+ libOpenFDMJSBReader_la_SOURCES = \
++  JSBSimActuator.cpp \
+   JSBSimAerodynamic.cpp \
+   JSBSimAerosurfaceScale.cpp \
+   JSBSimFCSComponent.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001059.html">[OpenFDM-svn] r1101 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001061.html">[OpenFDM-svn] r1103 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1060">[ date ]</a>
+              <a href="thread.html#1060">[ thread ]</a>
+              <a href="subject.html#1060">[ subject ]</a>
+              <a href="author.html#1060">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

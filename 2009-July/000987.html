@@ -1,0 +1,412 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1024 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-July/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1024%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262052.n6QKqegC005906%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000986.html">
+   <LINK REL="Next"  HREF="000988.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1024 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1024%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200907262052.n6QKqegC005906%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1024 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jul 26 22:52:40 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000986.html">[OpenFDM-svn] r1023 - branches/OpenFDM-StateSeparation
+</A></li>
+        <LI>Next message: <A HREF="000988.html">[OpenFDM-svn] r1025 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#987">[ date ]</a>
+              <a href="thread.html#987">[ thread ]</a>
+              <a href="subject.html#987">[ subject ]</a>
+              <a href="author.html#987">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-07-26 22:52:40 +0200 (Sun, 26 Jul 2009)
+New Revision: 1024
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h
+Log:
+Add MatrixConcat model.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-24 18:22:00 UTC (rev 1023)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-07-26 20:52:40 UTC (rev 1024)
+@@ -208,6 +208,7 @@
+   Input.h \
+   Integrator.h \
+   LinearSpringDamper.h \
++  MatrixConcat.h \
+   MaxModel.h \
+   MinModel.h \
+   Output.h \
+@@ -237,6 +238,7 @@
+   Input.cpp \
+   Integrator.cpp \
+   LinearSpringDamper.cpp \
++  MatrixConcat.cpp \
+   MaxModel.cpp \
+   MinModel.cpp \
+   Output.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.cpp	2009-07-24 18:22:00 UTC (rev 1023)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.cpp	2009-07-26 20:52:40 UTC (rev 1024)
+@@ -0,0 +1,184 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;MatrixConcat.h&quot;
++
++#include &quot;TypeInfo.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(MatrixConcat, AbstractModel)
++  END_OPENFDM_OBJECT_DEF
++
++MatrixConcat::Context::Context(const MatrixConcat* matrixConcat,
++                               const InputValueVector&amp; inputValues,
++                               NumericPortValue* outputValue) :
++  mMatrixConcat(matrixConcat),
++  mInputValues(inputValues),
++  mOutputValue(outputValue)
++{
++}
++
++MatrixConcat::Context::~Context()
++{
++}
++  
++const MatrixConcat&amp;
++MatrixConcat::Context::getNode() const
++{
++  return *mMatrixConcat;
++}
++
++const PortValue*
++MatrixConcat::Context::getPortValue(const Port&amp; port) const
++{
++  if (mMatrixConcat-&gt;mOutputPort == &amp;port)
++    return mOutputValue;
++  OpenFDMAssert(mInputValues.size() == mMatrixConcat-&gt;mInputPorts.size());
++  for (unsigned i = 0; i &lt; mInputValues.size(); ++i)
++    if (mMatrixConcat-&gt;mInputPorts[i] == &amp;port)
++      return mInputValues[i];
++  return 0;
++}
++
++ContinousStateValue*
++MatrixConcat::Context::getStateValue(const ContinousStateInfo&amp;)
++{
++  return 0;
++}
++
++ContinousStateValue*
++MatrixConcat::Context::getStateDerivative(const ContinousStateInfo&amp;)
++{
++  return 0;
++}
++  
++void
++MatrixConcat::Context::init(const /*Init*/Task&amp;)
++{
++}
++
++void
++MatrixConcat::Context::output(const Task&amp; task)
++{
++  unsigned concatDimension = mMatrixConcat-&gt;getConcatDimension();
++  
++  // May be have two contexts for each if clause??
++  if (concatDimension == 0) {
++    unsigned currentPos = 0;
++    for (unsigned i = 0; i &lt; mInputValues.size(); ++i) {
++      const Matrix&amp; m = mInputValues[i]-&gt;getValue();
++      Size sz = size(m);
++      mOutputValue-&gt;getValue()(Range(currentPos, currentPos + sz(0) - 1),
++                               Range(0, sz(1) - 1)) = m;
++      currentPos += sz(0);
++    }
++  } else {
++    unsigned currentPos = 0;
++    for (unsigned i = 0; i &lt; mInputValues.size(); ++i) {
++      const Matrix&amp; m = mInputValues[i]-&gt;getValue();
++      Size sz = size(m);
++      mOutputValue-&gt;getValue()(Range(0, sz(0) - 1),
++                               Range(currentPos, currentPos + sz(1) - 1)) = m;
++      currentPos += sz(1);
++    }
++  }
++}
++
++void
++MatrixConcat::Context::update(const DiscreteTask&amp;)
++{
++}
++
++void
++MatrixConcat::Context::derivative(const Task&amp;)
++{
++}
++
++MatrixConcat::MatrixConcat(const std::string&amp; name) :
++  AbstractModel(name),
++  mOutputPort(new OutputPort(this, &quot;output&quot;, Size(0, 0), false)),
++  mConcatDimension(0)
++{
++}
++
++MatrixConcat::~MatrixConcat(void)
++{
++}
++  
++MatrixConcat::Context*
++MatrixConcat::newModelContext(PortValueList&amp; portValueList) const
++{
++  if (mInputPorts.empty()) {
++    Log(Initialization, Info)
++      &lt;&lt; &quot;No input ports in models with multiple inputs!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  
++  NumericPortValue* outputPortValue = portValueList.getPortValue(mOutputPort);
++  if (!outputPortValue) {
++    Log(Initialization, Warning)
++      &lt;&lt; &quot;Output port value not connected for model \&quot;&quot; &lt;&lt; getName()
++      &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  InputValueVector inputValues;
++  
++  // Look into all ports and get the best size match.
++  Size sz = size(outputPortValue-&gt;getValue());
++  unsigned concatSum = 0;
++  for (unsigned i = 0; i &lt; mInputPorts.size(); ++i) {
++    NumericPortValue* npv = portValueList.getPortValue(mInputPorts[i]);
++    inputValues.push_back(npv);
++    Size sz2 = size(npv-&gt;getValue());
++    // If the ports size is undefined, use the size variabe here.
++    unsigned j = getNonConcatDimension();
++    if (sz(j) == 0) {
++      sz(j) = sz2(j);
++    } else {
++      if (sz2(j) != 0 &amp;&amp; sz(j) != sz2(j)) {
++        Log(Initialization, Info)
++          &lt;&lt; &quot;Port size &quot; &lt;&lt; sz2 &lt;&lt; &quot;of port &quot; &lt;&lt; j
++          &lt;&lt; &quot; does not match for model \&quot;&quot; &lt;&lt; getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; std::endl;
++        return 0;
++      }
++    }
++    concatSum += sz2(getConcatDimension());
++  }
++  if (sz(getConcatDimension()) == 0) {
++    sz(getConcatDimension()) = concatSum;
++  } else if (sz(getConcatDimension()) != concatSum) {
++    Log(Initialization, Info)
++      &lt;&lt; &quot;Port size sum does not match for model \&quot;&quot;
++      &lt;&lt; getName() &lt;&lt; &quot;\&quot;!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  
++  // Ok, success in checking output and input ports, set them all.
++  if (!portValueList.setOrCheckPortSize(mOutputPort, sz)) {
++    Log(Initialization, Info) &lt;&lt; &quot;Port sizes do not match!&quot; &lt;&lt; std::endl;
++    return 0;
++  }
++  for (unsigned i = 0; i &lt; mInputPorts.size(); ++i) {
++    Size sz2 = mInputPorts[i]-&gt;getSize();
++    sz2(getNonConcatDimension()) = sz(getNonConcatDimension());
++    if (!portValueList.setOrCheckPortSize(mInputPorts[i], sz2)) {
++      Log(Initialization, Info) &lt;&lt; &quot;Port sizes do not match!&quot; &lt;&lt; std::endl;
++      return 0;
++    }
++  }
++  
++  return new Context(this, inputValues, outputPortValue);
++}
++
++const InputPort*
++MatrixConcat::addInputPort(const std::string&amp; name, unsigned dimension)
++{
++  Size size(0, 0);
++  size(getConcatDimension()) = dimension;
++  mInputPorts.push_back(new InputPort(this, name, size, true));
++  return mInputPorts.back();
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.h	2009-07-24 18:22:00 UTC (rev 1023)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.h	2009-07-26 20:52:40 UTC (rev 1024)
+@@ -0,0 +1,72 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_MatrixConcat_H
++#define OpenFDM_MatrixConcat_H
++
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;AbstractModel.h&quot;
++#include &quot;ModelContext.h&quot;
++
++namespace OpenFDM {
++
++class MatrixConcat : public AbstractModel {
++  OPENFDM_OBJECT(MatrixConcat, AbstractModel);
++private:
++  class Context;
++public:
++  MatrixConcat(const std::string&amp; name);
++  virtual ~MatrixConcat(void);
++  
++  virtual Context* newModelContext(PortValueList&amp; portValueList) const;
++
++  unsigned getConcatDimension() const
++  { return mConcatDimension; }
++  void setConcatDimension(unsigned concatDimension)
++  { mConcatDimension = concatDimension; }
++
++  const InputPort* addInputPort(const std::string&amp; name, unsigned dimension = 1);
++  
++private:
++  typedef std::vector&lt;SharedPtr&lt;const NumericPortValue&gt; &gt; InputValueVector;
++
++  class Context : public AbstractModelContext {
++  public:
++    Context(const MatrixConcat* matrixConcat,
++            const InputValueVector&amp; inputValues,
++            NumericPortValue* outputValue);
++    virtual ~Context();
++  
++    virtual const MatrixConcat&amp; getNode() const;
++    virtual const PortValue* getPortValue(const Port&amp; port) const;
++  
++    virtual ContinousStateValue* getStateValue(const ContinousStateInfo&amp;);
++    virtual ContinousStateValue* getStateDerivative(const ContinousStateInfo&amp;);
++  
++    virtual void init(const /*Init*/Task&amp;);
++    virtual void output(const Task&amp; task);
++    virtual void update(const DiscreteTask&amp;);
++    virtual void derivative(const Task&amp;);
++  private:
++    SharedPtr&lt;const MatrixConcat&gt; mMatrixConcat;
++    InputValueVector mInputValues;
++    SharedPtr&lt;NumericPortValue&gt; mOutputValue;
++  };
++
++  unsigned getNonConcatDimension() const
++  { return (mConcatDimension == 0) ? 1 : 0; }
++
++  SharedPtr&lt;OutputPort&gt; mOutputPort;
++
++  typedef std::vector&lt;SharedPtr&lt;InputPort&gt; &gt; InputPortVector;
++  InputPortVector mInputPorts;
++
++  unsigned mConcatDimension;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/MatrixConcat.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h	2009-07-24 18:22:00 UTC (rev 1023)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Port.h	2009-07-26 20:52:40 UTC (rev 1024)
+@@ -109,15 +109,24 @@
+     numericPortValue = portValue-&gt;toNumericPortValue();
+     if (!numericPortValue)
+       return false;
+-    if (mSize == Size(0, 0))
+-      return true;
+-    if (size(numericPortValue-&gt;getValue()) == Size(0, 0)) {
+-      numericPortValue-&gt;getValue().resize(mSize(0), mSize(1));
+-      return true;
++    Size sz = size(numericPortValue-&gt;getValue());
++    for (unsigned i = 0; i &lt; 2; ++i) {
++      if (mSize(i) == 0)
++        continue;
++      if (sz(i) == 0)
++        continue;
++      if (mSize(i) != sz(i))
++        return false;
+     }
+-    return size(numericPortValue-&gt;getValue()) == mSize;
++    numericPortValue-&gt;getValue().resize(sz(0), sz(1));
++    return true;
+   }
+ 
++  const Size&amp; getSize() const
++  { return mSize; }
++  void setSize(const Size&amp; size)
++  { mSize = size; }
++
+ protected:
+   Size mSize;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000986.html">[OpenFDM-svn] r1023 - branches/OpenFDM-StateSeparation
+</A></li>
+	<LI>Next message: <A HREF="000988.html">[OpenFDM-svn] r1025 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#987">[ date ]</a>
+              <a href="thread.html#987">[ thread ]</a>
+              <a href="subject.html#987">[ subject ]</a>
+              <a href="author.html#987">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

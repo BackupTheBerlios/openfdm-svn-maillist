@@ -1,0 +1,315 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r822 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r822%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811301111.mAUBBlMI028382%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000789.html">
+   <LINK REL="Next"  HREF="000791.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r822 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r822%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811301111.mAUBBlMI028382%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r822 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Nov 30 12:11:47 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000789.html">[OpenFDM-svn] r821 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000791.html">[OpenFDM-svn] r823 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#790">[ date ]</a>
+              <a href="thread.html#790">[ thread ]</a>
+              <a href="subject.html#790">[ subject ]</a>
+              <a href="author.html#790">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-30 12:11:46 +0100 (Sun, 30 Nov 2008)
+New Revision: 822
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Reactivate DiscBrake
+
+M    src/OpenFDM/DiscBrake.cpp
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/DiscBrake.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.cpp	2008-11-30 10:39:38 UTC (rev 821)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.cpp	2008-11-30 11:11:46 UTC (rev 822)
+@@ -16,96 +16,61 @@
+ DiscBrake::DiscBrake(const std::string&amp; name) :
+   Model(name),
+   mMinForce(0),
+-  mMaxForce(1)
++  mMaxForce(1),
++  mSigma(100),
++  mZStateInfo(new Vector1StateInfo),
++  mBrakeInputPort(this, &quot;brakeInput&quot;, true),
++  mVelocityPort(this, &quot;velocity&quot;, true),
++  mForcePort(this, &quot;force&quot;)
+ {
+-  setDirectFeedThrough(true);
+-
+-  setNumContinousStates(1);
+-
+-  setNumInputPorts(2);
+-  setInputPortName(0, &quot;brakePressure&quot;);
+-  setInputPortName(1, &quot;velocity&quot;);
+-  
+-  setNumOutputPorts(1);
+-  setOutputPort(0, &quot;force&quot;, this, &amp;DiscBrake::getForce);
++  addContinousStateInfo(mZStateInfo);
+ }
+ 
+ DiscBrake::~DiscBrake(void)
+ {
+ }
+ 
+-bool
+-DiscBrake::init(void)
++void
++DiscBrake::init(const Task&amp;, DiscreteStateValueVector&amp;,
++                ContinousStateValueVector&amp; state, const PortValueList&amp;) const
+ {
+-  mBrakePressurePort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mBrakePressurePort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of DiscBrake model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
++  state[*mZStateInfo](0, 0) = 0;
++}
+ 
+-  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+-  if (!mVelocityPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of DiscBrake model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  // start with zero friction force
+-  mZ = 0;
+-
+-  return Model::init();
++void
++DiscBrake::output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                  const ContinousStateValueVector&amp; state,
++                  PortValueList&amp; portValues) const
++{
++  real_type brakeInput = portValues[mBrakeInputPort];
++  real_type z = state[*mZStateInfo](0, 0);
++  // now the output force, modulate with the brake input
++  portValues[mForcePort] = -interpolate(brakeInput, real_type(0), mMinForce,
++                                        real_type(1), mMaxForce)*mSigma*z;
+ }
+ 
+ void
+-DiscBrake::output(const TaskInfo&amp; taskInfo)
++DiscBrake::derivative(const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp; state,
++                      const PortValueList&amp; portValues,
++                      ContinousStateValueVector&amp; deriv) const
+ {
+-  real_type sigma = 100;
+-  real_type brakeInput = mBrakePressurePort.getRealValue();
+-  real_type vel = mVelocityPort.getRealValue();
+-  // with this sigma the model is already very crisp and reaches the
++  real_type z = state[*mZStateInfo](0, 0);
++  real_type vel = portValues[mVelocityPort];
++  // with this mSigma the model is already very crisp and reaches the
+   // maximum force relatively fast, thus we do not need to make it even faster
+   // with higher speeds
+ //   vel = saturate(vel, real_type(1));
+   vel = smoothSaturate(vel, real_type(1));
+   // the time derivative of the friction state
+-  mZDeriv = vel - sigma*fabs(vel)*mZ;
++  real_type zDeriv = vel - mSigma*fabs(vel)*z;
+   // this is to limit the stiffness of this model
+-//   mZDeriv = saturate(mZDeriv, real_type(10));
+-  mZDeriv = smoothSaturate(mZDeriv, real_type(10));
+-  // now the output force, modulate with the brake input
+-  mForce = -interpolate(brakeInput,
+-                        real_type(0), mMinForce,
+-                        real_type(1), mMaxForce)*sigma*mZ;
++//   zDeriv = saturate(zDeriv, real_type(10));
++  zDeriv = smoothSaturate(zDeriv, real_type(10));
++  deriv[*mZStateInfo](0, 0) = zDeriv;
+ }
+ 
+-void
+-DiscBrake::setState(const StateStream&amp; state)
+-{
+-  state.readSubState(mZ);
+-}
+-
+-void
+-DiscBrake::getState(StateStream&amp; state) const
+-{
+-  state.writeSubState(mZ);
+-}
+-
+-void
+-DiscBrake::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-  stateDeriv.writeSubState(mZDeriv);
+-}
+-
+ const real_type&amp;
+-DiscBrake::getForce(void) const
+-{
+-  return mForce;
+-}
+-
+-const real_type&amp;
+ DiscBrake::getMinForce(void) const
+ {
+   return mMinForce;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.h	2008-11-30 10:39:38 UTC (rev 821)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/DiscBrake.h	2008-11-30 11:11:46 UTC (rev 822)
+@@ -19,37 +19,42 @@
+   DiscBrake(const std::string&amp; name);
+   virtual ~DiscBrake(void);
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
++  virtual void init(const Task&amp;,DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp;, const PortValueList&amp;) const;
++  virtual void output(const Task&amp;, const DiscreteStateValueVector&amp;,
++                      const ContinousStateValueVector&amp;,
++                      PortValueList&amp; portValues) const;
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp;,
++                          ContinousStateValueVector&amp;) const;
+ 
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; stateDeriv);
+-
+-  const real_type&amp; getForce(void) const;
+-
+   const real_type&amp; getMinForce(void) const;
+   void setMinForce(const real_type&amp; minForce);
+ 
+   const real_type&amp; getMaxForce(void) const;
+   void setMaxForce(const real_type&amp; maxForce);
+ 
++  const real_type&amp; getSigma(void) const;
++  void setSigma(const real_type&amp; sigma);
++
+ private:
+-  /// The output brake force
+-  real_type mForce;
+-  /// The frictions state
+-  real_type mZ;
+-  /// The frictions stes derivative
+-  real_type mZDeriv;
+   /// The maximum force when brakes are applied
+   real_type mMaxForce;
+   /// The maximum force when brakes are not applied
+   real_type mMinForce;
++  /// The stiffness of the friction model
++  real_type mSigma;
+ 
+-  /// The intput port which must provide the position
+-  RealPortHandle mBrakePressurePort;
+-  /// The intput port which must provide the velocity
+-  RealPortHandle mVelocityPort;
++  // State of this model
++  SharedPtr&lt;Vector1StateInfo&gt; mZStateInfo;
++
++  /// The input port which must provide brake input
++  RealInputPort mBrakeInputPort;
++  /// The input port which must provide the velocity
++  RealInputPort mVelocityPort;
++  /// The resulting force output
++  RealOutputPort mForcePort;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-30 10:39:38 UTC (rev 821)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-30 11:11:46 UTC (rev 822)
+@@ -251,6 +251,7 @@
+   ConstModel.cpp \
+   DeadBand.cpp \
+   Delay.cpp \
++  DiscBrake.cpp \
+   DiscreteIntegrator.cpp \
+   Gain.cpp \
+   Input.cpp \
+@@ -269,7 +270,6 @@
+   UnaryFunction.cpp \
+   UnitConversion.cpp
+ 
+-#   DiscBrake.cpp \
+ #   TransferFunction.cpp \
+ #
+ 
+@@ -289,12 +289,13 @@
+ #   Contact.cpp \
+ #   ExternalForceModel.cpp \
+ #   Force.cpp \
+-#   Launchbar.cpp \
+ #   SimpleContact.cpp \
+ #   SimpleGear.cpp \
+-#   Tailhook.cpp \
+ #   Tank.cpp \
+ #   WheelContact.cpp
++
++#   Launchbar.cpp \
++#   Tailhook.cpp \
+ #
+ 
+ nobase_OpenFDMinclude_HEADERS = $(OpenFDMCoreHEADERS) $(OpenFDMModelsHEADERS)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000789.html">[OpenFDM-svn] r821 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000791.html">[OpenFDM-svn] r823 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#790">[ date ]</a>
+              <a href="thread.html#790">[ thread ]</a>
+              <a href="subject.html#790">[ subject ]</a>
+              <a href="author.html#790">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

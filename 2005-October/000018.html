@@ -1,0 +1,286 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r30 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r30%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510221803.j9MI3BvM029944%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000017.html">
+   <LINK REL="Next"  HREF="000019.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r30 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>Mathias Froehlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r30%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200510221803.j9MI3BvM029944%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r30 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sat Oct 22 20:03:11 CEST 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000017.html">[OpenFDM-svn] r29 - trunk/OpenFDM/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="000019.html">[OpenFDM-svn] r31 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#18">[ date ]</a>
+              <a href="thread.html#18">[ thread ]</a>
+              <a href="subject.html#18">[ subject ]</a>
+              <a href="author.html#18">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-10-22 20:03:10 +0200 (Sat, 22 Oct 2005)
+New Revision: 30
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Mutex.h
+   trunk/OpenFDM/src/OpenFDM/ScopeLock.h
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Logger.cpp
+Log:
+Make the logger visitor somehow more threadsafe.
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Logger.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Logger.cpp	2005-10-22 14:52:56 UTC (rev 29)
++++ trunk/OpenFDM/src/OpenFDM/Logger.cpp	2005-10-22 18:03:10 UTC (rev 30)
+@@ -5,17 +5,43 @@
+ #include &lt;cstdlib&gt;
+ #include &lt;iostream&gt;
+ #include &lt;sstream&gt;
++
++#include &quot;Mutex.h&quot;
++#include &quot;ScopeLock.h&quot;
+ #include &quot;LogStream.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ namespace Log {
+ 
++static unsigned
++atou(const char* s)
++{
++  if (!s)
++    return 0u;
++
++  std::stringstream strstream(s);
++  unsigned value;
++  strstream &gt;&gt; value;
++  if (!strstream)
++    return 0u;
++
++  return value;
++}
++
+ Logger::Logger(std::basic_ostream&lt;char&gt;* stream) :
+   mStream(stream),
+   mCategory(~0u),
+   mPriority(Log::Error)
+ {
++  // Set some defaults from the environment
++  unsigned value = atou(std::getenv(&quot;OPENFDM_DEBUG_PRIORITY&quot;));
++  if (value)
++    mPriority = value;
++      
++  value = atou(std::getenv(&quot;OPENFDM_DEBUG_CATEGORY&quot;));
++  if (value)
++    mCategory = value;
+ }
+ 
+ void
+@@ -42,37 +68,17 @@
+   logger-&gt;mPriority = priority;
+ }
+ 
+-static unsigned
+-atou(const char* s)
+-{
+-  if (!s)
+-    return 0u;
+-
+-  std::stringstream strstream(s);
+-  unsigned value;
+-  strstream &gt;&gt; value;
+-  if (!strstream)
+-    return 0u;
+-
+-  return value;
+-}
+-
+ Logger*
+ Logger::Instance(void)
+ {
+   static Logger* ptr = 0;
+   if (!ptr) {
+-    // Create new instance ...
+-    ptr = new Logger(&amp;std::cerr);
+-    
+-    // ... and set some defaults from the environment.
+-    unsigned value = atou(std::getenv(&quot;OPENFDM_DEBUG_PRIORITY&quot;));
+-    if (value)
+-      ptr-&gt;mPriority = value;
+-
+-    value = atou(std::getenv(&quot;OPENFDM_DEBUG_CATEGORY&quot;));
+-    if (value)
+-      ptr-&gt;mCategory = value;
++    static Mutex mutex;
++    ScopeLock scopeLock(mutex);
++    if (!ptr) {
++      // Create new instance ...
++      ptr = new Logger(&amp;std::cerr);
++    }
+   }
+   return ptr;
+ }
+
+Added: trunk/OpenFDM/src/OpenFDM/Mutex.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Mutex.h	2005-10-22 14:52:56 UTC (rev 29)
++++ trunk/OpenFDM/src/OpenFDM/Mutex.h	2005-10-22 18:03:10 UTC (rev 30)
+@@ -0,0 +1,66 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Mutex_H
++#define OpenFDM_Mutex_H
++
++#ifdef _WIN32
++#include &lt;windows.h&gt;
++#else
++#include &lt;pthread.h&gt;
++#endif
++
++namespace OpenFDM {
++
++class Mutex {
++public:
++  Mutex(void)
++  {
++#ifdef _WIN32
++    InitializeCriticalSection((LPCRITICAL_SECTION)&amp;mCriticalSection);
++#else
++    pthread_mutex_init(&amp;mMutex, NULL);
++#endif
++  }
++  ~Mutex(void)
++  {
++#ifdef _WIN32
++    LeaveCriticalSection((LPCRITICAL_SECTION)&amp;mCriticalSection);
++#else
++    pthread_mutex_destroy(&amp;mMutex);
++#endif
++  }
++
++  void lock(void)
++  {
++#ifdef _WIN32
++    EnterCriticalSection((LPCRITICAL_SECTION)&amp;mCriticalSection);
++#else
++    pthread_mutex_lock(&amp;mMutex);
++#endif
++  }
++
++  void unlock(void)
++  {
++#ifdef _WIN32
++    LeaveCriticalSection((LPCRITICAL_SECTION)&amp;mCriticalSection);
++#else
++    pthread_mutex_unlock(&amp;mMutex);
++#endif
++  }
++
++private:
++  Mutex(const Mutex&amp;);
++  Mutex&amp; operator=(const Mutex&amp;);
++
++#ifdef _WIN32
++  CRITICAL_SECTION mCriticalSection;
++#else
++  pthread_mutex_t mMutex;
++#endif
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Mutex.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/ScopeLock.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ScopeLock.h	2005-10-22 14:52:56 UTC (rev 29)
++++ trunk/OpenFDM/src/OpenFDM/ScopeLock.h	2005-10-22 18:03:10 UTC (rev 30)
+@@ -0,0 +1,29 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_ScopeLock_H
++#define OpenFDM_ScopeLock_H
++
++#include &quot;Mutex.h&quot;
++
++namespace OpenFDM {
++
++class ScopeLock {
++public:
++  ScopeLock(Mutex&amp; mutex) : mMutex(mutex)
++  { mMutex.lock(); }
++  ~ScopeLock(void)
++  { mMutex.unlock(); }
++
++private:
++  ScopeLock(void);
++  ScopeLock(const ScopeLock&amp;);
++  ScopeLock&amp; operator=(const ScopeLock&amp;);
++
++  Mutex&amp; mMutex;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/ScopeLock.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000017.html">[OpenFDM-svn] r29 - trunk/OpenFDM/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="000019.html">[OpenFDM-svn] r31 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#18">[ date ]</a>
+              <a href="thread.html#18">[ thread ]</a>
+              <a href="subject.html#18">[ subject ]</a>
+              <a href="author.html#18">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

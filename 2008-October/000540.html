@@ -1,0 +1,148 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r569 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r569%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810051903.m95J34VC000148%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000539.html">
+   <LINK REL="Next"  HREF="000541.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r569 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r569%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810051903.m95J34VC000148%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r569 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct  5 21:03:04 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000539.html">[OpenFDM-svn] r568 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000541.html">[OpenFDM-svn] r570 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#540">[ date ]</a>
+              <a href="thread.html#540">[ thread ]</a>
+              <a href="subject.html#540">[ subject ]</a>
+              <a href="author.html#540">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-05 21:03:04 +0200 (Sun, 05 Oct 2008)
+New Revision: 569
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add new example.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-05 19:02:32 UTC (rev 568)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-05 19:03:04 UTC (rev 569)
+@@ -4,6 +4,8 @@
+ #include &lt;OpenFDM/Delay.h&gt;
+ #include &lt;OpenFDM/Output.h&gt;
+ #include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/LibraryNode.h&gt;
++#include &lt;OpenFDM/LibraryModel.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ 
+ #include &quot;HDF5Writer.h&quot;
+@@ -28,7 +30,7 @@
+   return true;
+ }
+ 
+-Node* buildGroupExample()
++Node* buildContinousExample()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+   Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;, -1));
+@@ -49,19 +51,14 @@
+   group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
+   group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+ 
+-  //FIXME: broken naming
+-//   Group::NodeId groupOutputNode = group-&gt;addAcceptorPort();
+   Group::NodeId groupOutputNode = group-&gt;addProviderPort();
+   group-&gt;connect(integrator2, &quot;output&quot;, groupOutputNode, &quot;input&quot;);
+ 
+   SharedPtr&lt;Group&gt; topGroup = new Group(&quot;G1&quot;);
+-  Group::NodeId child0 = topGroup-&gt;addChild(group);
+-  Group::NodeId child1 = topGroup-&gt;addChild(group);
++  Group::NodeId child = topGroup-&gt;addChild(group);
+ 
+-  Group::NodeId output0 = topGroup-&gt;addChild(new Output(&quot;O2&quot;));
+-  topGroup-&gt;connect(child0, 0, output0, 0);
+-  Group::NodeId output1 = topGroup-&gt;addChild(new Output(&quot;O3&quot;));
+-  topGroup-&gt;connect(child1, 0, output1, 0);
++  Group::NodeId output0 = topGroup-&gt;addChild(new Output(&quot;Output&quot;));
++  topGroup-&gt;connect(child, 0, output0, 0);
+ 
+   return topGroup.release();
+ }
+@@ -90,10 +87,29 @@
+   return group.release();
+ }
+ 
++Node* buildLibraryNodeExample()
++{
++  SharedPtr&lt;Node&gt; node = buildDiscreteExample();
++  SharedPtr&lt;LibraryModel&gt; libraryModel = new LibraryModel(&quot;Library Model&quot;);
++  libraryModel-&gt;setNode(node);
++  
++  SharedPtr&lt;LibraryNode&gt; libraryNode1 = new LibraryNode(&quot;Library Node 1&quot;);
++  libraryNode1-&gt;setLibraryModel(libraryModel);
++
++  SharedPtr&lt;LibraryNode&gt; libraryNode2 = new LibraryNode(&quot;Library Node 2&quot;);
++  libraryNode2-&gt;setLibraryModel(libraryModel);
++
++  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
++  group-&gt;addChild(libraryNode1);
++  group-&gt;addChild(libraryNode2);
++  return group.release();
++}
++
+ int main()
+ {
+-  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildGroupExample());
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
+ //   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
++//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+ 
+   if (!system-&gt;init())
+     return 1;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000539.html">[OpenFDM-svn] r568 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000541.html">[OpenFDM-svn] r570 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#540">[ date ]</a>
+              <a href="thread.html#540">[ thread ]</a>
+              <a href="subject.html#540">[ subject ]</a>
+              <a href="author.html#540">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

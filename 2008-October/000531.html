@@ -1,0 +1,443 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r560 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r560%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810051251.m95CpoWU018316%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000530.html">
+   <LINK REL="Next"  HREF="000532.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r560 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r560%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200810051251.m95CpoWU018316%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r560 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Oct  5 14:51:50 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000530.html">[OpenFDM-svn] r559 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000532.html">[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#531">[ date ]</a>
+              <a href="thread.html#531">[ thread ]</a>
+              <a href="subject.html#531">[ subject ]</a>
+              <a href="author.html#531">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-05 14:51:50 +0200 (Sun, 05 Oct 2008)
+New Revision: 560
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Factor out some common functionality for the output log stuff.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-04 15:07:46 UTC (rev 559)
++++ branches/OpenFDM-StateSeparation/src/test/HDF5Writer.h	2008-10-05 12:51:50 UTC (rev 560)
+@@ -7,6 +7,7 @@
+ 
+ #include &lt;sstream&gt;
+ #include &lt;set&gt;
++#include &lt;map&gt;
+ #include &lt;hdf5.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/ConstNodeVisitor.h&gt;
+@@ -30,7 +31,7 @@
+   { return _id; }
+ 
+   int getNumReferences() const
+-  { return H5Iget_ref(_id); }
++  { if (_id &lt; 0) return 0; return H5Iget_ref(_id); }
+   bool valid() const
+   { return 0 &lt;= _id &amp;&amp; H5I_BADID != H5Iget_type(_id); }
+ 
+@@ -54,17 +55,25 @@
+   }
+ 
+ protected:
++  // Assign this object a new reference, the reference count is not incremented
++  // in this method
++  void assignNewRef(hid_t id)
++  {
++    if (_id == id)
++      return;
++    release();
++    _id = id;
++  }
+   void assign(hid_t id)
+   {
+     if (_id == id)
+       return;
+-    if (_id &lt; 0 || H5I_BADID == H5Iget_type(_id))
+-      release();
+-    H5Iinc_ref(id);
++    if (0 &lt;= id &amp;&amp; H5I_BADID != H5Iget_type(id))
++      H5Iinc_ref(id);
+     release();
+     _id = id;
+   }
+-// private:
++private:
+   hid_t _id;
+ };
+ 
+@@ -78,15 +87,27 @@
+ 
+   bool create(const HDF5Object&amp; parent, const std::string&amp; name)
+   {
++    hid_t id;
+ #if (1 &lt; H5_VERS_MAJOR || (1 == H5_VERS_MAJOR &amp;&amp; 8 &lt;= H5_VERS_MINOR))
+-    _id = H5Gcreate(parent.getId(), name.c_str(),  H5P_DEFAULT,  H5P_DEFAULT,  H5P_DEFAULT);
++    id = H5Gcreate(parent.getId(), name.c_str(), H5P_DEFAULT, H5P_DEFAULT,
++                   H5P_DEFAULT);
+ #else
+-    _id = H5Gcreate(parent.getId(), name.c_str(), 0);
++    id = H5Gcreate(parent.getId(), name.c_str(), 0);
+ #endif
+-    if (_id &lt; 0)
+-      return false;
+-    return true;
++    assignNewRef(id);
++    return 0 &lt; id;
+   }
++
++//   bool link(const HDF5Object&amp; object, const std::string&amp; name)
++//   {
++//     if (!valid())
++//       return false;
++//     if (!object.valid())
++//       return false;
++//     int status = H5Olink(object.getId(), getId(), name.c_str(),
++//                          H5P_DEFAULT, H5P_DEFAULT);
++//     return 0 &lt;= status;
++//   }
+ };
+ 
+ class HDF5File : public HDF5Object {
+@@ -96,7 +117,10 @@
+   HDF5File(const std::string&amp; filename)
+   { open(filename); }
+   void open(const std::string&amp; name)
+-  { _id = H5Fcreate(name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT); }
++  {
++    hid_t id = H5Fcreate(name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
++    assignNewRef(id);
++  }
+ };
+ 
+ class HDFMatrixStream : public HDF5Object {
+@@ -118,7 +142,7 @@
+   void append(const Matrix&amp; matrix)
+   {
+     herr_t status;
+-    if (_id &lt; 0) {
++    if (!valid()) {
+       hsize_t rank = 3;
+       if (cols(matrix) == 1) {
+         rank = 2;
+@@ -137,21 +161,23 @@
+ 
+       hid_t cparms = H5Pcreate(H5P_DATASET_CREATE);
+       status = H5Pset_chunk(cparms, rank, chunk_dims);
++      hid_t id;
+ #if (1 &lt; H5_VERS_MAJOR || (1 == H5_VERS_MAJOR &amp;&amp; 8 &lt;= H5_VERS_MINOR))
+-      _id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
++      id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
+                       _dataspace.getId(), H5P_DEFAULT, cparms, H5P_DEFAULT);
+ #else
+-      _id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
++      id = H5Dcreate(_parent.getId(), _name.c_str(), H5T_NATIVE_DOUBLE,
+                       _dataspace.getId(), cparms);
+ #endif
++      assignNewRef(id);
+       H5Pclose(cparms);
+     } else {
+       // increment size
+       _dims[0] += 1;
+-      status = H5Dextend(_id, _dims);
++      status = H5Dextend(getId(), _dims);
+     }
+ 
+-    HDF5Object filespace = H5Dget_space(_id);
++    HDF5Object filespace = H5Dget_space(getId());
+     hsize_t offset[3] = { _dims[0] - 1, 0, 0 };
+     hsize_t dims1[3] = { 1, _dims[1], _dims[2] };
+     status = H5Sselect_hyperslab(filespace.getId(), H5S_SELECT_SET,
+@@ -178,81 +204,121 @@
+   HDF5Object _parent;
+ };
+ 
++class DataLogObject : public ConstNodeVisitor {
++public:
++  virtual ~DataLogObject() {}
+ 
++  virtual void output(const real_type&amp; t) = 0;
+ 
+-
+-class HDF5Log : protected ConstNodeVisitor {
+-public:
+-  HDF5Log(const std::string&amp; filename) :
+-    mHDF5File(filename),
+-    mCurrentGroup(mHDF5File, &quot;System&quot;),
+-    mTimeStream(mCurrentGroup.getId(), &quot;t&quot;)
+-  { }
+-  ~HDF5Log()
+-  { }
+-
+   void attachTo(const System* system)
+   {
++    mNodeInstanceMap.clear();
+     if (!system)
+       return;
+-    if (!system-&gt;getNode())
+-      return;
+-    mSystem = system;
++    // Build an index to the system nodes
++    NodeInstanceList::const_iterator i;
++    for (i = system-&gt;getNodeInstanceList().begin();
++         i != system-&gt;getNodeInstanceList().end(); ++i) {
++      mNodeInstanceMap[(*i)-&gt;getNodePath()] = *i;
++    }
+     system-&gt;getNode()-&gt;accept(*this);
+   }
+ 
+-  void dump()
+-  {
+-    if (mSystem)
+-      mTimeStream.append(mSystem-&gt;getTime());
+-    DumperList::iterator i;
+-    for (i = mDumperList.begin(); i != mDumperList.end(); ++i)
+-      (*i)-&gt;append();
+-  }
++  virtual void apply(const PortInfo* portInfo, const PortValue* portValue)
++  { }
++  virtual void apply(const PortInfo* portInfo,
++                     const NumericPortValue* numericPortValue)
++  { apply(portInfo, static_cast&lt;const PortValue*&gt;(numericPortValue)); }
++  virtual void apply(const PortInfo* portInfo,
++                     const MechanicPortValue* mechanicPortValue)
++  { apply(portInfo, static_cast&lt;const PortValue*&gt;(mechanicPortValue)); }
+ 
+-private:
++protected:
+   const AbstractNodeInstance* getNodeInstance(const NodePath&amp; nodePath) const
+   {
+-    /// FIXME, use a map for that???
+-    NodeInstanceList::const_iterator i;
+-    for (i = mSystem-&gt;getNodeInstanceList().begin();
+-         i != mSystem-&gt;getNodeInstanceList().end(); ++i) {
+-      if ((*i)-&gt;getNodePath() == nodePath)
+-        return (*i);
+-    }
+-    return 0;
++    NodeInstanceMap::const_iterator i = mNodeInstanceMap.find(nodePath);
++    if (i == mNodeInstanceMap.end())
++      return 0;
++    return i-&gt;second;
+   }
+-
++  void appendPortValues(const Node&amp;)
++  {
++    const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
++    appendPortValues(*nodeInstance);
++  }
+   void appendPortValues(const AbstractNodeInstance&amp; nodeInstance)
+   {
+-    UniqueStringSet uniqueStringSet;
+-
+-    HDF5Group portValuesGroup(mCurrentGroup, &quot;portValues&quot;);
+     unsigned numPorts = nodeInstance.getNode().getNumPorts();
+     for (unsigned i = 0; i &lt; numPorts; ++i) {
+       const PortValue* portValue;
+       portValue = nodeInstance.getPortValueList().getPortValue(i);
+       const NumericPortValue* npv;
+       npv = dynamic_cast&lt;const NumericPortValue*&gt;(portValue);
+-      if (!npv)
++      if (npv) {
++        apply(nodeInstance.getNode().getPort(i), npv);
+         continue;
+-      std::string name = nodeInstance.getNode().getPort(i)-&gt;getName();
+-      name = uniqueStringSet.makeUnique(name);
+-      mDumperList.push_back(new MatrixDumper(npv, portValuesGroup, name));
++      }
++
++      const MechanicPortValue* mpv;
++      mpv = dynamic_cast&lt;const MechanicPortValue*&gt;(portValue);
++      if (npv) {
++        apply(nodeInstance.getNode().getPort(i), mpv);
++        continue;
++      }
++
++      apply(nodeInstance.getNode().getPort(i), portValue);
+     }
+   }
++
++private:
++  typedef std::map&lt;NodePath, SharedPtr&lt;const AbstractNodeInstance&gt; &gt; NodeInstanceMap;
++  NodeInstanceMap mNodeInstanceMap;
++};
++
++
++class HDF5Log : public DataLogObject {
++public:
++  HDF5Log(const std::string&amp; filename) :
++    mHDF5File(filename),
++    mCurrentGroup(mHDF5File, &quot;System&quot;),
++    mTimeStream(mCurrentGroup.getId(), &quot;t&quot;)
++  { }
++  ~HDF5Log()
++  { }
++
++// private:
++  void output(const real_type&amp; t)
++  {
++    mTimeStream.append(t);
++    DumperList::iterator i;
++    for (i = mDumperList.begin(); i != mDumperList.end(); ++i)
++      (*i)-&gt;append();
++  }
++
++  virtual void apply(const PortInfo* portInfo,
++                     const NumericPortValue* numericPortValue)
++  {
++    OpenFDMAssert(mCurrentPortValuesGroup.valid());
++    std::string name = portInfo-&gt;getName();
++    name = mCurrentPortValuesUniqueStringSet.makeUnique(name);
++    mDumperList.push_back(new MatrixDumper(numericPortValue, mCurrentPortValuesGroup, name));
++  }
++
+   void appendPortValues(const Node&amp; node)
+   {
+-    const AbstractNodeInstance* nodeInstance = getNodeInstance(getNodePath());
+-    OpenFDMAssert(nodeInstance);
+-    appendPortValues(*nodeInstance);
++    OpenFDMAssert(mCurrentGroup.valid());
++    mCurrentPortValuesGroup = HDF5Group(mCurrentGroup, &quot;portValues&quot;);
++    DataLogObject::appendPortValues(node);
++    mCurrentPortValuesGroup = HDF5Group();
++    mCurrentPortValuesUniqueStringSet = UniqueStringSet();
+   }
+ 
+   virtual void apply(const Node&amp; node)
+   {
+     HDF5Group parentGroup = mCurrentGroup;
++    OpenFDMAssert(mCurrentGroup.valid());
+     std::string name = node.getName();
+-    name = mCurrentUniqueStringSet.makeUnique(name);
++    name = mCurrentGroupUniqueStringSet.makeUnique(name);
+     mCurrentGroup = HDF5Group(parentGroup, name);
+     appendPortValues(node);
+     mCurrentGroup = parentGroup;
+@@ -260,16 +326,17 @@
+   virtual void apply(const Group&amp; group)
+   {
+     HDF5Group parentGroup = mCurrentGroup;
++    OpenFDMAssert(mCurrentGroup.valid());
+     std::string name = group.getName();
+-    name = mCurrentUniqueStringSet.makeUnique(name);
++    name = mCurrentGroupUniqueStringSet.makeUnique(name);
+     mCurrentGroup = HDF5Group(parentGroup, name);
+ 
+     appendPortValues(group);
+ 
+     UniqueStringSet parentUniqueStringSet;
+-    parentUniqueStringSet.swap(mCurrentUniqueStringSet);
++    parentUniqueStringSet.swap(mCurrentGroupUniqueStringSet);
+     group.traverse(*this);
+-    parentUniqueStringSet.swap(mCurrentUniqueStringSet);
++    parentUniqueStringSet.swap(mCurrentGroupUniqueStringSet);
+ 
+     mCurrentGroup = parentGroup;
+   }
+@@ -293,20 +360,25 @@
+       } while (_strings.find(unique) != _strings.end());
+       return unique;
+     }
+-    void swap(UniqueStringSet other)
++    void swap(UniqueStringSet&amp; other)
+     { _strings.swap(other._strings); }
+   private:
+     std::set&lt;std::string&gt; _strings;
+   };
+ 
+-  // FIXME: do we need???
+-  SharedPtr&lt;const System&gt; mSystem;
+-
+   HDF5File mHDF5File;
+   HDF5Group mCurrentGroup;
+-  UniqueStringSet mCurrentUniqueStringSet;
+   HDFMatrixStream mTimeStream;
+ 
++  UniqueStringSet mCurrentPortValuesUniqueStringSet;
++  UniqueStringSet mCurrentGroupUniqueStringSet;
++
++  HDF5Group mCurrentPortValuesGroup;
++
++  // Only hdf5 version &gt;= 1.8 can do hard links
++//   typedef std::map&lt;const PortValue*, SharedPtr&lt;HDF5Object&gt; &gt; PortValueMap;
++//   PortValueMap mPortValueMap;
++
+   struct MatrixDumper : public Referenced {
+     MatrixDumper(const NumericPortValue* numericPortValue,
+                  const HDF5Object&amp; parent, const std::string&amp; name) :
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-04 15:07:46 UTC (rev 559)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-05 12:51:50 UTC (rev 560)
+@@ -82,12 +82,12 @@
+ 
+   HDF5Log log(&quot;system.h5&quot;);
+   log.attachTo(system);
+-  log.dump();
++  log.output(system-&gt;getTime());
+ 
+   double h = 0.01;
+   while (system-&gt;getTime() &lt; 10) {
+     system-&gt;simulate(system-&gt;getTime() + h);
+-    log.dump();
++    log.output(system-&gt;getTime());
+   }
+ 
+   return 0;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000530.html">[OpenFDM-svn] r559 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000532.html">[OpenFDM-svn] r561 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#531">[ date ]</a>
+              <a href="thread.html#531">[ thread ]</a>
+              <a href="subject.html#531">[ subject ]</a>
+              <a href="author.html#531">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

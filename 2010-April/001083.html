@@ -1,0 +1,241 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1126 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2010-April/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1126%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C201004100535.o3A5ZB20030544%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1126 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1126%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C201004100535.o3A5ZB20030544%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1126 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Apr 10 07:35:11 CEST 2010</I>
+    <P><UL>
+        
+        
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1083">[ date ]</a>
+              <a href="thread.html#1083">[ thread ]</a>
+              <a href="subject.html#1083">[ subject ]</a>
+              <a href="author.html#1083">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2010-04-10 07:35:10 +0200 (Sat, 10 Apr 2010)
+New Revision: 1126
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h
+Log:
+Constify locks.
+
+M    OpenFDM/Atomic.h
+M    OpenFDM/ScopeLock.h
+M    OpenFDM/Mutex.h
+M    OpenFDM/TypeInfo.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Atomic.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -96,7 +96,7 @@
+   Atomic&amp; operator=(const Atomic&amp;);
+ 
+ #if defined(OpenFDM_USE_MUTEX)
+-  mutable Mutex mMutex;
++  Mutex mMutex;
+ #endif
+   unsigned mValue;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mutex.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -40,7 +40,7 @@
+ #endif
+   }
+ 
+-  void lock(void)
++  void lock(void) const
+   {
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+@@ -51,7 +51,7 @@
+ #endif
+   }
+ 
+-  void unlock(void)
++  void unlock(void) const
+   {
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+@@ -68,9 +68,9 @@
+ 
+ #ifndef OPENFDM_DISABLE_THREADS
+ #ifdef _WIN32
+-  CRITICAL_SECTION mCriticalSection;
++  mutable CRITICAL_SECTION mCriticalSection;
+ #else
+-  pthread_mutex_t mMutex;
++  mutable pthread_mutex_t mMutex;
+ #endif
+ #endif
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ScopeLock.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -11,7 +11,7 @@
+ 
+ class ScopeLock {
+ public:
+-  ScopeLock(Mutex&amp; mutex) : mMutex(mutex)
++  ScopeLock(const Mutex&amp; mutex) : mMutex(mutex)
+   { mMutex.lock(); }
+   ~ScopeLock(void)
+   { mMutex.unlock(); }
+@@ -21,7 +21,7 @@
+   ScopeLock(const ScopeLock&amp;);
+   ScopeLock&amp; operator=(const ScopeLock&amp;);
+ 
+-  Mutex&amp; mMutex;
++  const Mutex&amp; mMutex;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h	2010-03-06 08:21:05 UTC (rev 1125)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/TypeInfo.h	2010-04-10 05:35:10 UTC (rev 1126)
+@@ -1,4 +1,4 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich 
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2010 Mathias Froehlich
+  *
+  */
+ 
+@@ -33,7 +33,7 @@
+   /// This *should* not be required but the standard does not provide
+   /// guarantees about that. Access through the reflection framework
+   /// should not happen on the fast path, so do that here ...
+-  mutable Mutex mMutex;
++  Mutex mMutex;
+ 
+ private:
+   TypeInfo(const TypeInfo&amp;);
+@@ -168,12 +168,12 @@
+   typedef O ReflectedType;
+ 
+   TypeInfoTemplate(const char* name) : TypeInfo(name) {}
+-  
++
+   bool
+   getPropertyValue(const O* obj, const std::string&amp; name, Variant&amp; value) const
+   {
+     ScopeLock scopeLock(mMutex);
+-    
++
+     typename std::vector&lt;SharedPtr&lt;PropertyAccessor&lt;O&gt; &gt; &gt;::const_iterator it;
+     it = mProperyList.begin();
+     while (it != mProperyList.end()) {
+@@ -216,7 +216,7 @@
+ protected:
+   template&lt;typename T&gt;
+   void addProperty(const char* name, bool serializable,
+-                   const T&amp; (O::*getter) () const, 
++                   const T&amp; (O::*getter) () const,
+                    void (O::*setter) (const T&amp;))
+   {
+     ScopeLock scopeLock(mMutex);
+@@ -226,7 +226,7 @@
+ 
+   template&lt;typename T&gt;
+   void addProperty(const char* name, bool serializable,
+-                   T (O::*getter) () const, 
++                   T (O::*getter) () const,
+                    void (O::*setter) (T))
+   {
+     ScopeLock scopeLock(mMutex);
+@@ -241,7 +241,7 @@
+     mProperyList.push_back(new TypedPropertyAccessor&lt;O, T&gt;(name, false,
+                                                            getter, 0));
+   }
+-  
++
+   template&lt;typename T&gt;
+   void addProperty(const char* name, T (O::*getter) () const)
+   {
+@@ -249,11 +249,11 @@
+     mProperyList.push_back(new TypedPropertyAccessor2&lt;O, T&gt;(name, false,
+                                                             getter, 0));
+   }
+-  
++
+ private:
+   TypeInfoTemplate(const TypeInfoTemplate&amp;);
+   TypeInfoTemplate&amp; operator=(const TypeInfoTemplate&amp;);
+-  
++
+   std::vector&lt;SharedPtr&lt;PropertyAccessor&lt;O&gt; &gt; &gt; mProperyList;
+ };
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1083">[ date ]</a>
+              <a href="thread.html#1083">[ thread ]</a>
+              <a href="subject.html#1083">[ subject ]</a>
+              <a href="author.html#1083">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,291 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r488 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r488%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809211120.m8LBKdUN030774%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000459.html">
+   <LINK REL="Next"  HREF="000461.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r488 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r488%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200809211120.m8LBKdUN030774%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r488 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Sep 21 13:20:39 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000459.html">[OpenFDM-svn] r487 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000461.html">[OpenFDM-svn] r489 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#460">[ date ]</a>
+              <a href="thread.html#460">[ thread ]</a>
+              <a href="subject.html#460">[ subject ]</a>
+              <a href="author.html#460">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-21 13:20:38 +0200 (Sun, 21 Sep 2008)
+New Revision: 488
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Work with indices instead of the ids for building the model lists.
+This will work for a const model structure we definitely have here.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-09-19 04:58:06 UTC (rev 487)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Group.h	2008-09-21 11:20:38 UTC (rev 488)
+@@ -133,6 +133,10 @@
+       return nodeId;
+     return getGroupAcceptorNode(portId);
+   }
++  unsigned getGroupPortNodeIndex(const PortId&amp; portId) const
++  {
++    return getChildNumber(getGroupPortNode(portId));
++  }
+ 
+   PortId getGroupPort(const NodeId&amp; nodeId) const
+   {
+@@ -220,12 +224,20 @@
+       return NodeId();
+     return _connectList[i]-&gt;_acceptorNodeId;
+   }
++  unsigned getConnectAcceptorNodeIndex(unsigned i) const
++  {
++    return getChildNumber(getConnectAcceptorNodeId(i));
++  }
+   NodeId getConnectProviderNodeId(unsigned i) const
+   {
+     if (getNumConnects() &lt;= i)
+       return NodeId();
+     return _connectList[i]-&gt;_providerNodeId;
+   }
++  unsigned getConnectProviderNodeIndex(unsigned i) const
++  {
++    return getChildNumber(getConnectProviderNodeId(i));
++  }
+ 
+   SharedPtr&lt;const AcceptorPortInfo&gt;
+   getConnectAcceptorPortInfo(unsigned i) const
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-19 04:58:06 UTC (rev 487)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-21 11:20:38 UTC (rev 488)
+@@ -684,7 +684,7 @@
+ 
+     PortDataHelper::ProviderPortData* providerPortData;
+     providerPortData = portDataList-&gt;newProxyProviderPortData(leaf._groupInternalPort);
+-    _portDataMap[getCurrentNodeId()][portId] = providerPortData;
++    getCurrentNodePortDataMap()[portId] = providerPortData;
+   }
+   // Aussen provider, innen acceptor
+   virtual void apply(const GroupProviderNode&amp; leaf)
+@@ -696,7 +696,7 @@
+ 
+     PortDataHelper::AcceptorPortData* acceptorPortData;
+     acceptorPortData = portDataList-&gt;newProxyAcceptorPortData(leaf._groupInternalPort);
+-    _portDataMap[getCurrentNodeId()][portId] = acceptorPortData;
++    getCurrentNodePortDataMap()[portId] = acceptorPortData;
+   }
+ 
+   void allocPortData(NodeInstance* leafInstance, const LeafNode&amp; leaf)
+@@ -713,7 +713,7 @@
+         providerPortData = portDataList-&gt;newProviderPortData(providerPort);
+ 
+         PortId portId = leaf.getPortId(i);
+-        _portDataMap[getCurrentNodeId()][portId] = providerPortData;
++        getCurrentNodePortDataMap()[portId] = providerPortData;
+       }
+       const AcceptorPortInfo* acceptorPort = port-&gt;toAcceptorPortInfo();
+       if (acceptorPort) {
+@@ -721,7 +721,7 @@
+         acceptorPortData = portDataList-&gt;newAcceptorPortData(acceptorPort);
+ 
+         PortId portId = leaf.getPortId(i);
+-        _portDataMap[getCurrentNodeId()][portId] = acceptorPortData;
++        getCurrentNodePortDataMap()[portId] = acceptorPortData;
+       }
+     }
+   }
+@@ -762,7 +762,7 @@
+     group.traverse(*this);
+ #else
+     for (unsigned i = 0; i &lt; group.getNumChildren(); ++i) {
+-      pushNodeId(group.getNodeId(i));
++      pushNodeId(i);
+       mNodePath.push_back(group.getChild(i));
+       group.getChild(i)-&gt;accept(*this);
+       mNodePath.pop_back();
+@@ -773,14 +773,14 @@
+     // Apply the group internal connections to the instances
+     unsigned numConnects = group.getNumConnects();
+     for (unsigned i = 0; i &lt; numConnects; ++i) {
+-      Group::NodeId acceptorNodeId = group.getConnectAcceptorNodeId(i);
+-      Group::NodeId providerNodeId = group.getConnectProviderNodeId(i);
++      unsigned acceptorNodeIndex = group.getConnectAcceptorNodeIndex(i);
++      unsigned providerNodeIndex = group.getConnectProviderNodeIndex(i);
+ 
+-      if (!group.getChild(acceptorNodeId)) {
++      if (acceptorNodeIndex == ~0u) {
+         std::cerr &lt;&lt; &quot;Cannot find acceptor node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+-      if (!group.getChild(acceptorNodeId)) {
++      if (providerNodeIndex == ~0u) {
+         std::cerr &lt;&lt; &quot;Cannot find provider node from nodeId&quot; &lt;&lt; std::endl;
+         continue;
+       }
+@@ -794,35 +794,40 @@
+ 
+       if (!acceptorPort) {
+         std::cerr &lt;&lt; &quot;Cannot find acceptor Port data node &quot;
+-                  &lt;&lt; group.getChild(acceptorNodeId)-&gt;getName() &lt;&lt; std::endl;
++                  &lt;&lt; group.getChild(acceptorNodeIndex)-&gt;getName() &lt;&lt; std::endl;
+         continue;
+       }
+       if (!providerPort) {
+         std::cerr &lt;&lt; &quot;Cannot find provider Port data node &quot;
+-                  &lt;&lt; group.getChild(providerNodeId)-&gt;getName() &lt;&lt; std::endl;
++                  &lt;&lt; group.getChild(providerNodeIndex)-&gt;getName() &lt;&lt; std::endl;
+         continue;
+       }
+ 
+-      if (!_portDataMap[acceptorNodeId][acceptorPortId]-&gt;
+-          connect(_portDataMap[providerNodeId][providerPortId]))
++      if (!_portDataMap[acceptorNodeIndex][acceptorPortId]-&gt;
++          connect(_portDataMap[providerNodeIndex][providerPortId]))
+         std::cerr &lt;&lt; &quot;Cannot connect????&quot; &lt;&lt; std::endl;
+     }
+ 
+     PortDataHelper::PortDataList* portDataList = buildGenericNodeContext(group);
+ 
++    parentPortDataMap.swap(_portDataMap);
++    // Ok, some nameing niceness
++    PortDataMap childrenPortDataMap;
++    childrenPortDataMap.swap(parentPortDataMap);
++
+     // add group connect routings
+     // merge child list into the global list of instances
+     for (unsigned i = 0; i &lt; group.getNumPorts(); ++i) {
+       PortId portId = group.getPortId(i);
+-      Group::NodeId nodeId = group.getGroupPortNode(portId);
+-      if (_portDataMap[nodeId].empty()) {
++      unsigned nodeIndex = group.getGroupPortNodeIndex(portId);
++      if (childrenPortDataMap[nodeIndex].empty()) {
+         // FIXME, is this an internal error ???
+         std::cerr &lt;&lt; &quot;Hmm, cannot find GroupPortNode for external port &quot;
+                   &lt;&lt; i &lt;&lt; std::endl;
+         continue;
+       }
+ 
+-      PortDataHelper::PortData* portData = _portDataMap[nodeId].begin()-&gt;second;
++      PortDataHelper::PortData* portData = childrenPortDataMap[nodeIndex].begin()-&gt;second;
+       if (portData-&gt;toProxyAcceptorPortData()) {
+         PortDataHelper::ProxyAcceptorPortData* proxyAcceptorPortData;
+         proxyAcceptorPortData = portData-&gt;toProxyAcceptorPortData();
+@@ -837,7 +842,7 @@
+ 
+         proxyProviderPortData-&gt;setProxyAcceptorPortData(proxyAcceptorPortData);
+ 
+-        parentPortDataMap[getCurrentNodeId()][portId] = proxyProviderPortData;
++        getCurrentNodePortDataMap()[portId] = proxyProviderPortData;
+ 
+       } else if (portData-&gt;toProxyProviderPortData()) {
+         PortDataHelper::ProxyProviderPortData* proxyProviderPortData;
+@@ -853,14 +858,12 @@
+ 
+         proxyProviderPortData-&gt;setProxyAcceptorPortData(proxyAcceptorPortData);
+ 
+-        parentPortDataMap[getCurrentNodeId()][portId] = proxyAcceptorPortData;
++        getCurrentNodePortDataMap()[portId] = proxyAcceptorPortData;
+ 
+       } else {
+         OpenFDMAssert(false);
+       }
+     }
+-
+-    parentPortDataMap.swap(_portDataMap);
+   }
+ 
+   ////////////////////////////////////////////////////////////////////////////
+@@ -880,7 +883,7 @@
+   ////////////////////////////////////////////////////////////////////////////
+   // Used to map connections in groups ...
+   typedef std::map&lt;PortId, SharedPtr&lt;PortDataHelper::PortData&gt; &gt; NodePortDataMap;
+-  typedef std::map&lt;Group::NodeId, NodePortDataMap&gt; PortDataMap;
++  typedef std::map&lt;unsigned, NodePortDataMap&gt; PortDataMap;
+   PortDataMap _portDataMap;
+   // Just to hold references to all mort data lists we have in the
+   // simulation system. They are just needed during traversal for connect
+@@ -982,20 +985,20 @@
+     return true;
+   }
+ 
+-  void pushNodeId(const Group::NodeId&amp; nodeId)
+-  { _nodeIdStack.push_back(nodeId); }
++  void pushNodeId(unsigned index)
++  { mNodeIndexStack.push_back(index); }
+   void popNodeId()
+-  { _nodeIdStack.pop_back(); }
+-  Group::NodeId getCurrentNodeId() const
++  { mNodeIndexStack.pop_back(); }
++
++  NodePortDataMap&amp; getCurrentNodePortDataMap()
+   {
+-    if (_nodeIdStack.empty())
+-      return Group::NodeId();
+-    return _nodeIdStack.back();
++    OpenFDMAssert(!mNodeIndexStack.empty());
++    return _portDataMap[mNodeIndexStack.back()];
+   }
+ 
+ private:
+-  typedef std::list&lt;Group::NodeId&gt; NodeIdStack;
+-  NodeIdStack _nodeIdStack;
++  typedef std::list&lt;unsigned&gt; NodeIndexStack;
++  NodeIndexStack mNodeIndexStack;
+ 
+   NodePath mNodePath;
+ };
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000459.html">[OpenFDM-svn] r487 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000461.html">[OpenFDM-svn] r489 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#460">[ date ]</a>
+              <a href="thread.html#460">[ thread ]</a>
+              <a href="subject.html#460">[ subject ]</a>
+              <a href="author.html#460">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

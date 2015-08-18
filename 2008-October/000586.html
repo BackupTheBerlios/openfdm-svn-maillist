@@ -1,0 +1,136 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r616 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r616%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810151815.m9FIFAbP022329%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000585.html">
+   <LINK REL="Next"  HREF="000587.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r616 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r616%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810151815.m9FIFAbP022329%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r616 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Oct 15 20:15:10 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000585.html">[OpenFDM-svn] r615 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000587.html">[OpenFDM-svn] r617 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#586">[ date ]</a>
+              <a href="thread.html#586">[ thread ]</a>
+              <a href="subject.html#586">[ subject ]</a>
+              <a href="author.html#586">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-15 20:15:08 +0200 (Wed, 15 Oct 2008)
+New Revision: 616
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+Log:
+Unify state allication a small bit.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-10-15 17:07:42 UTC (rev 615)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LeafContext.h	2008-10-15 18:15:08 UTC (rev 616)
+@@ -21,12 +21,27 @@
+   void setContinousStateSize(const MatrixStateInfo&amp; stateInfo,
+                              const Size&amp; sz)
+   {
+-    mContinousState.setValue(stateInfo, *this);
+     mContinousState[stateInfo].resize(sz(0), sz(1));
+-    mContinousStateDerivative.setValue(stateInfo, *this);
+     mContinousStateDerivative[stateInfo].resize(sz(0), sz(1));
+   }
+ 
++  bool allocStates()
++  {
++    unsigned numContinousStates = getNode().getNumContinousStateValues();
++    for (unsigned i = 0; i &lt; numContinousStates; ++i) {
++      const ContinousStateInfo* continousStateInfo;
++      continousStateInfo = getNode().getContinousStateInfo(i);
++      mContinousState.setValue(*continousStateInfo, *this);
++      mContinousStateDerivative.setValue(*continousStateInfo, *this);
++    }
++    unsigned numDiscreteStates = getNode().getNumDiscreteStateValues();
++    for (unsigned i = 0; i &lt; numDiscreteStates; ++i) {
++      const StateInfo* stateInfo;
++      stateInfo = getNode().getDiscreteStateInfo(i);
++      mDiscreteState.setValue(*stateInfo, *this);
++    }
++    return true;
++  }
+ // protected:
+   // Continous States
+   ContinousStateValueVector mContinousState;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-15 17:07:42 UTC (rev 615)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-15 18:15:08 UTC (rev 616)
+@@ -26,7 +26,7 @@
+   virtual const MechanicNode&amp; getNode() const;
+ 
+   bool alloc()
+-  { return mMechanicNode-&gt;alloc(*this); }
++  { if (!allocStates()) return false; return mMechanicNode-&gt;alloc(*this); }
+   void init(const /*Init*/Task&amp; task)
+   { mMechanicNode-&gt;init(task, mDiscreteState, mContinousState, mPortValueList); }
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-10-15 17:07:42 UTC (rev 615)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ModelContext.h	2008-10-15 18:15:08 UTC (rev 616)
+@@ -26,7 +26,7 @@
+   virtual const Model&amp; getNode() const;
+ 
+   bool alloc()
+-  { return mModel-&gt;alloc(*this); }
++  { if (!allocStates()) return false; return mModel-&gt;alloc(*this); }
+   void init(const /*Init*/Task&amp; task)
+   { mModel-&gt;init(task, mDiscreteState, mContinousState, mPortValueList); }
+   void output(const Task&amp; task)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000585.html">[OpenFDM-svn] r615 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000587.html">[OpenFDM-svn] r617 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#586">[ date ]</a>
+              <a href="thread.html#586">[ thread ]</a>
+              <a href="subject.html#586">[ subject ]</a>
+              <a href="author.html#586">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

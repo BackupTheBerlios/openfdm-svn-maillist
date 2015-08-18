@@ -1,0 +1,513 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r143 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2005-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r143%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512300802.jBU82F41019801%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000126.html">
+   <LINK REL="Next"  HREF="000128.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r143 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r143%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200512300802.jBU82F41019801%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r143 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Fri Dec 30 09:02:15 CET 2005</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000126.html">[OpenFDM-svn] r142 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000128.html">[OpenFDM-svn] r144 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#127">[ date ]</a>
+              <a href="thread.html#127">[ thread ]</a>
+              <a href="subject.html#127">[ subject ]</a>
+              <a href="author.html#127">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2005-12-30 09:02:07 +0100 (Fri, 30 Dec 2005)
+New Revision: 143
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Joint.cpp
+   trunk/OpenFDM/src/OpenFDM/Joint.h
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+   trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+   trunk/OpenFDM/src/OpenFDM/Model.cpp
+   trunk/OpenFDM/src/OpenFDM/Model.h
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+   trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+   trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+Log:
+Include the multibody system structure into the
+Model scheduling stuff
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.cpp	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/Joint.cpp	2005-12-30 08:02:07 UTC (rev 143)
+@@ -25,4 +25,67 @@
+ {
+ }
+ 
++const Joint*
++Joint::toJoint(void) const
++{
++  return this;
++}
++
++Joint*
++Joint::toJoint(void)
++{
++  return this;
++}
++
++void
++Joint::output(const TaskInfo&amp; taskInfo)
++{
++  RigidBody* outboardBody = getOutboardBody();
++  if (!outboardBody)
++    return;
++  
++  Log(ArtBody, Debug) &lt;&lt; &quot;Preparing Body \&quot;&quot;
++                      &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++  
++  outboardBody-&gt;computeArtValues();
++}
++
++void
++Joint::interactWith(RigidBody* rigidBody)
++{
++  // HMmMm
++  if (rigidBody != getInboardBody())
++    return;
++  
++  RigidBody* outboardBody = getOutboardBody();
++  if (!outboardBody)
++    return;
++  
++  Log(ArtBody, Debug) &lt;&lt; &quot;Contributing articulation from \&quot;&quot;
++                      &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++  
++  // We need the articulated inertia and force from the outboard body.
++  SpatialInertia I;
++  Vector6 F;
++  
++  // Apply the joint degrees of freedom to that.
++  // If there was an error, (something was singular ???)
++  // just ignore that part. FIXME, ist this ok????
++  jointArticulation(I, F, outboardBody-&gt;getArtInertia(),
++                    outboardBody-&gt;getArtForce());
++  
++  Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values past joint &quot;
++                       &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; trans(F)
++                       &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
++  
++  // Contribute the transformed values to the parent.
++  if (!rigidBody)
++    return;
++  Frame* frame = outboardBody-&gt;getFrame();
++  rigidBody-&gt;contributeInertia(frame-&gt;inertiaToParent(I));
++  rigidBody-&gt;contributeForce(frame-&gt;forceToParent(F));
++}
++
+ } // namespace OpenFDM
+
+Modified: trunk/OpenFDM/src/OpenFDM/Joint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/Joint.h	2005-12-30 08:02:07 UTC (rev 143)
+@@ -18,57 +18,27 @@
+ 
+ namespace OpenFDM {
+ 
++/// FIXME: joint's should be lockable, which means trylock == true and
++/// velocity small enough - keep position ...
++
+ class Joint
+   : public Interact {
+ public:
+   Joint(const std::string&amp; name);
+   virtual ~Joint(void);
+ 
+-  /// FIXME: joint's should be lockable, which means trylock == true and
+-  /// velocity small enough - keep position ...
++  virtual const Joint* toJoint(void) const;
++  virtual Joint* toJoint(void);
+ 
++  virtual void output(const TaskInfo&amp; taskInfo);
++
+   RigidBody* getOutboardBody(void)
+   { return getParentRigidBody(0); }
+   RigidBody* getInboardBody(void)
+   { return getParentRigidBody(1); }
+ 
+-  virtual void interactWith(RigidBody* rigidBody)
+-  {
+-    // HMmMm
+-    if (rigidBody != getInboardBody())
+-      return;
++  virtual void interactWith(RigidBody* rigidBody);
+ 
+-    RigidBody* outboardBody = getOutboardBody();
+-    if (!outboardBody)
+-      return;
+-
+-    outboardBody-&gt;computeArtValues();
+-    Log(ArtBody, Debug) &lt;&lt; &quot;Contributing articulation from \&quot;&quot;
+-                        &lt;&lt; outboardBody-&gt;getName() &lt;&lt; &quot;\&quot; through joint \&quot;&quot;
+-                        &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+-
+-    // We need the articulated inertia and force from the outboard body.
+-    SpatialInertia I;
+-    Vector6 F;
+-
+-    // Apply the joint degrees of freedom to that.
+-    // If there was an error, (something was singular ???)
+-    // just ignore that part. FIXME, ist this ok????
+-    jointArticulation(I, F, outboardBody-&gt;getArtInertia(),
+-                      outboardBody-&gt;getArtForce());
+-
+-    Log(ArtBody, Debug3) &lt;&lt; &quot;Outboard Articulated values past joint &quot;
+-                         &lt;&lt; &quot;projection: Force:\n&quot; &lt;&lt; trans(F)
+-                         &lt;&lt; &quot;\nInertia\n&quot; &lt;&lt; I &lt;&lt; endl;
+-
+-    // Contribute the transformed values to the parent.
+-    if (!rigidBody)
+-      return;
+-    Frame* frame = outboardBody-&gt;getFrame();
+-    rigidBody-&gt;contributeInertia(frame-&gt;inertiaToParent(I));
+-    rigidBody-&gt;contributeForce(frame-&gt;forceToParent(F));
+-  }
+-
+   // Joint slot ...
+   virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+                                  const SpatialInertia&amp; outI,
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.cpp	2005-12-30 08:02:07 UTC (rev 143)
+@@ -30,6 +30,18 @@
+ {
+ }
+ 
++const MobileRootJoint*
++MobileRootJoint::toMobileRootJoint(void) const
++{
++  return this;
++}
++
++MobileRootJoint*
++MobileRootJoint::toMobileRootJoint(void)
++{
++  return this;
++}
++
+ bool
+ MobileRootJoint::init(void)
+ {
+@@ -55,6 +67,20 @@
+ }
+ 
+ void
++MobileRootJoint::output(const TaskInfo&amp; taskInfo)
++{
++  RigidBody* outboardBody = getOutboardBody();
++  if (!outboardBody)
++    return;
++  
++  Log(ArtBody, Debug) &lt;&lt; &quot;Computing mobile root accelerations for joint \&quot;&quot;
++                      &lt;&lt; getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++  
++  outboardBody-&gt;computeArtValues();
++  interactWith(getInboardBody());
++}
++
++void
+ MobileRootJoint::recheckTopology(void)
+ {
+   // Hmm, works for the first cut, but rethink what happens with strange
+
+Modified: trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/MobileRootJoint.h	2005-12-30 08:02:07 UTC (rev 143)
+@@ -26,7 +26,11 @@
+   MobileRootJoint(const std::string&amp; name);
+   virtual ~MobileRootJoint(void);
+ 
++  virtual const MobileRootJoint* toMobileRootJoint(void) const;
++  virtual MobileRootJoint* toMobileRootJoint(void);
++
+   virtual bool init(void);
++  virtual void output(const TaskInfo&amp; taskInfo);
+ 
+   virtual void recheckTopology(void);
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/Model.cpp	2005-12-30 08:02:07 UTC (rev 143)
+@@ -73,6 +73,30 @@
+   return 0;
+ }
+ 
++const Joint*
++Model::toJoint(void) const
++{
++  return 0;
++}
++
++Joint*
++Model::toJoint(void)
++{
++  return 0;
++}
++
++const MobileRootJoint*
++Model::toMobileRootJoint(void) const
++{
++  return 0;
++}
++
++MobileRootJoint*
++Model::toMobileRootJoint(void)
++{
++  return 0;
++}
++
+ bool
+ Model::init(void)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/Model.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/Model.h	2005-12-30 08:02:07 UTC (rev 143)
+@@ -28,6 +28,8 @@
+ 
+ class Input;
+ class Output;
++class Joint;
++class MobileRootJoint;
+ 
+ class ModelVisitor;
+ 
+@@ -55,6 +57,12 @@
+   virtual const Output* toOutput(void) const;
+   virtual Output* toOutput(void);
+ 
++  virtual const Joint* toJoint(void) const;
++  virtual Joint* toJoint(void);
++
++  virtual const MobileRootJoint* toMobileRootJoint(void) const;
++  virtual MobileRootJoint* toMobileRootJoint(void);
++
+   /// Called on each system initialization.
+   virtual bool init(void);
+   /// Called when the outputs need to be prepared for the next step.
+@@ -88,6 +96,8 @@
+   bool getDirectFeedThrough(void) const
+   { return mDirectFeedThrough; }
+ 
++  /// Returns true if it needs to know the accelerations ...
++  /// FIXME: do that in a different way ...
+   bool getMultiBodyAcceleration(void) const
+   { return mMultiBodyAcceleration; }
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.cpp	2005-12-30 08:02:07 UTC (rev 143)
+@@ -301,8 +301,69 @@
+ }
+ 
+ bool
++ModelGroup::dependsOnMultiBody(Joint* joint1, Joint* joint2)
++{
++  return joint1-&gt;getOutboardBody() == joint2-&gt;getInboardBody();
++}
++
++bool
+ ModelGroup::appendDependecies(const Model* firstModel, Model* model, ModelList&amp; newList)
+ {
++  Joint* joint = model-&gt;toJoint();
++  if (joint) {
++    for (;;) {
++      ModelList::iterator it = mModels.begin();
++      while (it != mModels.end()) {
++        Joint* joint2 = (*it)-&gt;toJoint();
++        if (joint2 &amp;&amp; dependsOnMultiBody(joint, joint2))
++          break;
++        ++it;
++      }
++      if (it == mModels.end())
++        break;
++
++      // We need to store that one here since the iterator possibly invalidates
++      // during the next append dependency call
++      SharedPtr&lt;Model&gt; tmpModel = *it;
++      mModels.erase(it);
++      
++      // Now recurse into that model.
++      if (!appendDependecies(firstModel, tmpModel, newList))
++        return false;
++ 
++      // Finally, past all the dependent models are already in the list,
++      // push that one in question.
++      newList.push_back(tmpModel);
++    }
++  }
++
++  // Special case: if we depend on the accelerations, like acceleration
++  // sensors, we depend on the mobile root ...
++  // Well a bit croase now, but until there is something better ...
++  if (model-&gt;getMultiBodyAcceleration()) {
++    ModelList::iterator it = mModels.begin();
++    while (it != mModels.end()) {
++      MobileRootJoint* joint = (*it)-&gt;toMobileRootJoint();
++      if (joint)
++        break;
++      ++it;
++    }
++    if (it != mModels.end()) {
++      // We need to store that one here since the iterator possibly invalidates
++      // during the next append dependency call
++      SharedPtr&lt;Model&gt; tmpModel = *it;
++      mModels.erase(it);
++      
++      // Now recurse into that model.
++      if (!appendDependecies(firstModel, tmpModel, newList))
++        return false;
++      
++      // Finally, past all the dependent models are already in the list,
++      // push that one in question.
++      newList.push_back(tmpModel);
++    }
++  }
++
+   // If the model in question does not have dependencies, stop.
+   if (!model-&gt;getDirectFeedThrough())
+     return true;
+
+Modified: trunk/OpenFDM/src/OpenFDM/ModelGroup.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/ModelGroup.h	2005-12-30 08:02:07 UTC (rev 143)
+@@ -71,6 +71,10 @@
+ 
+   /// Helper functions to sort the models according their dependencies
+   static bool dependsOn(Port* inputPort, Model* model);
++  /// return true if interact1 depends on interact2 which means that
++  /// interact1 is higher in the tree of multibody models
++  static bool dependsOnMultiBody(Joint* joint1, Joint* joint2);
++
+   bool appendDependecies(const Model* firstModel, Model* model,
+                          ModelList&amp; newList);
+   /// Sorts the models depending their dependencies
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.cpp	2005-12-30 08:02:07 UTC (rev 143)
+@@ -36,32 +36,17 @@
+   visitor.apply(*this);
+ }
+ 
+-bool
+-MultiBodySystem::init(void)
+-{
+-  return ModelGroup::init();
+-}
++// bool
++// MultiBodySystem::init(void)
++// {
++//   return true;
++// }
+ 
+-void
+-MultiBodySystem::output(const TaskInfo&amp; taskInfo)
+-{
+-  // Hmm, just works now ... FIXME
+-  ModelList::iterator it;
+-  for (it = mModels.begin(); it != mModels.end(); ++it) {
+-    if (!(*it)-&gt;getMultiBodyAcceleration())
+-      (*it)-&gt;output(taskInfo);
+-  }
++// void
++// MultiBodySystem::output(const TaskInfo&amp; taskInfo)
++// {
++// }
+ 
+-  // Compute forward dynamics, that is the articulated forces and inertia.
+-  mMobileRootJoint-&gt;interactWith(mMobileRootJoint-&gt;getInboardBody());
+-
+-  // Hmm, just works now ... FIXME
+-  for (it = mModels.begin(); it != mModels.end(); ++it) {
+-    if ((*it)-&gt;getMultiBodyAcceleration())
+-      (*it)-&gt;output(taskInfo);
+-  }
+-}
+-
+ void
+ MultiBodySystem::addRigidBody(RigidBody* rigidBody)
+ {
+
+Modified: trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-29 16:32:59 UTC (rev 142)
++++ trunk/OpenFDM/src/OpenFDM/MultiBodySystem.h	2005-12-30 08:02:07 UTC (rev 143)
+@@ -31,8 +31,8 @@
+   /// Double dispatch helper for the multibody system visitor
+ //   virtual void accept(ConstModelVisitor&amp; visitor) const;
+ 
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
++//   virtual bool init(void);
++//   virtual void output(const TaskInfo&amp; taskInfo);
+ 
+   /// Add a RigidBody to that MultiBodySystem
+   void addRigidBody(RigidBody* rigidBody);
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000126.html">[OpenFDM-svn] r142 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000128.html">[OpenFDM-svn] r144 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#127">[ date ]</a>
+              <a href="thread.html#127">[ thread ]</a>
+              <a href="subject.html#127">[ subject ]</a>
+              <a href="author.html#127">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,433 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r175%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601031457.k03EvNaB020585%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000158.html">
+   <LINK REL="Next"  HREF="000160.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r175%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200601031457.k03EvNaB020585%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Jan  3 15:57:23 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000158.html">[OpenFDM-svn] r174 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000160.html">[OpenFDM-svn] r176 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#159">[ date ]</a>
+              <a href="thread.html#159">[ thread ]</a>
+              <a href="subject.html#159">[ subject ]</a>
+              <a href="author.html#159">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-03 15:57:16 +0100 (Tue, 03 Jan 2006)
+New Revision: 175
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h
+Removed:
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+   trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Rename LinearSpring to LinearSpringDamper
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-03 14:57:16 UTC (rev 175)
+@@ -21,7 +21,7 @@
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
+-#include &lt;OpenFDM/LinearSpring.h&gt;
++#include &lt;OpenFDM/LinearSpringDamper.h&gt;
+ #include &lt;OpenFDM/MaxModel.h&gt;
+ #include &lt;OpenFDM/AirSpring.h&gt;
+ #include &lt;OpenFDM/PrismaticJoint.h&gt;
+
+Deleted: trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2006-01-03 14:57:16 UTC (rev 175)
+@@ -1,96 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;Model.h&quot;
+-#include &quot;Vector.h&quot;
+-#include &quot;LinearSpring.h&quot;
+-
+-namespace OpenFDM {
+-
+-LinearSpring::LinearSpring(const std::string&amp; name) :
+-  Model(name),
+-  mSpringReference(0),
+-  mSpringConstant(0),
+-  mDamperConstant(0)
+-{
+-}
+-
+-LinearSpring::~LinearSpring(void)
+-{
+-}
+-
+-bool
+-LinearSpring::init(void)
+-{
+-  if (!getInputPort(0)-&gt;isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
+-
+-  if (!getInputPort(1)-&gt;isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
+-
+-  return true;
+-}
+-
+-void
+-LinearSpring::output(const TaskInfo&amp; taskInfo)
+-{
+-  real_type position = mPositionPort.getRealValue();
+-  real_type vel = mVelocityPort.getRealValue();
+-  real_type displacement = position - mSpringReference;
+-  mForce = mSpringConstant*displacement + vel*mDamperConstant;
+-}
+-
+-const real_type&amp;
+-LinearSpring::getForce(void) const
+-{
+-  return mForce;
+-}
+-
+-real_type
+-LinearSpring::getSpringReference(void) const
+-{
+-  return mSpringReference;
+-}
+-
+-void
+-LinearSpring::setSpringReference(real_type springReference)
+-{
+-  mSpringReference = springReference;
+-}
+-
+-real_type
+-LinearSpring::getSpringConstant(void) const
+-{
+-  return mSpringConstant;
+-}
+-
+-void
+-LinearSpring::setSpringConstant(real_type springConstant)
+-{
+-  mSpringConstant = springConstant;
+-}
+-
+-real_type
+-LinearSpring::getDamperConstant(void) const
+-{
+-  return mDamperConstant;
+-}
+-
+-void
+-LinearSpring::setDamperConstant(real_type damperConstant)
+-{
+-  mDamperConstant = damperConstant;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: trunk/OpenFDM/src/OpenFDM/LinearSpring.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2006-01-03 14:57:16 UTC (rev 175)
+@@ -1,51 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_LinearSpring_H
+-#define OpenFDM_LinearSpring_H
+-
+-#include &lt;string&gt;
+-
+-#include &quot;Types.h&quot;
+-#include &quot;Model.h&quot;
+-
+-namespace OpenFDM {
+-
+-/// Linear spring damper model
+-class LinearSpring :
+-    public Model {
+-public:
+-  LinearSpring(const std::string&amp; name);
+-  virtual ~LinearSpring(void);
+-
+-  virtual bool init(void);
+-  virtual void output(const TaskInfo&amp; taskInfo);
+-
+-  const real_type&amp; getForce(void) const;
+-
+-  real_type getSpringReference(void) const;
+-  void setSpringReference(real_type springReference);
+-
+-  real_type getSpringConstant(void) const;
+-  void setSpringConstant(real_type springConstant);
+-
+-  real_type getDamperConstant(void) const;
+-  void setDamperConstant(real_type damperConstant);
+-
+-private:
+-  real_type mSpringReference;
+-  real_type mSpringConstant;
+-  real_type mDamperConstant;
+-
+-  real_type mForce;
+-
+-  /// The intput port which must provide the position
+-  RealPortHandle mPositionPort;
+-  /// The intput port which must provide the velocity
+-  RealPortHandle mVelocityPort;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Copied: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp (from rev 174, trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.cpp	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.cpp	2006-01-03 14:57:16 UTC (rev 175)
+@@ -0,0 +1,96 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Model.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;LinearSpringDamper.h&quot;
++
++namespace OpenFDM {
++
++LinearSpringDamper::LinearSpringDamper(const std::string&amp; name) :
++  Model(name),
++  mSpringReference(0),
++  mSpringConstant(0),
++  mDamperConstant(0)
++{
++}
++
++LinearSpringDamper::~LinearSpringDamper(void)
++{
++}
++
++bool
++LinearSpringDamper::init(void)
++{
++  if (!getInputPort(0)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mPositionPort = getInputPort(0)-&gt;toRealPortHandle();
++
++  if (!getInputPort(1)-&gt;isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of AirSpring model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++  mVelocityPort = getInputPort(1)-&gt;toRealPortHandle();
++
++  return true;
++}
++
++void
++LinearSpringDamper::output(const TaskInfo&amp; taskInfo)
++{
++  real_type position = mPositionPort.getRealValue();
++  real_type vel = mVelocityPort.getRealValue();
++  real_type displacement = position - mSpringReference;
++  mForce = mSpringConstant*displacement + vel*mDamperConstant;
++}
++
++const real_type&amp;
++LinearSpringDamper::getForce(void) const
++{
++  return mForce;
++}
++
++real_type
++LinearSpringDamper::getSpringReference(void) const
++{
++  return mSpringReference;
++}
++
++void
++LinearSpringDamper::setSpringReference(real_type springReference)
++{
++  mSpringReference = springReference;
++}
++
++real_type
++LinearSpringDamper::getSpringConstant(void) const
++{
++  return mSpringConstant;
++}
++
++void
++LinearSpringDamper::setSpringConstant(real_type springConstant)
++{
++  mSpringConstant = springConstant;
++}
++
++real_type
++LinearSpringDamper::getDamperConstant(void) const
++{
++  return mDamperConstant;
++}
++
++void
++LinearSpringDamper::setDamperConstant(real_type damperConstant)
++{
++  mDamperConstant = damperConstant;
++}
++
++} // namespace OpenFDM
+
+Copied: trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h (from rev 174, trunk/OpenFDM/src/OpenFDM/LinearSpring.h)
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/LinearSpring.h	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/OpenFDM/LinearSpringDamper.h	2006-01-03 14:57:16 UTC (rev 175)
+@@ -0,0 +1,51 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2005 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_LinearSpringDamper_H
++#define OpenFDM_LinearSpringDamper_H
++
++#include &lt;string&gt;
++
++#include &quot;Types.h&quot;
++#include &quot;Model.h&quot;
++
++namespace OpenFDM {
++
++/// Linear spring damper model
++class LinearSpringDamper :
++    public Model {
++public:
++  LinearSpringDamper(const std::string&amp; name);
++  virtual ~LinearSpringDamper(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp; taskInfo);
++
++  const real_type&amp; getForce(void) const;
++
++  real_type getSpringReference(void) const;
++  void setSpringReference(real_type springReference);
++
++  real_type getSpringConstant(void) const;
++  void setSpringConstant(real_type springConstant);
++
++  real_type getDamperConstant(void) const;
++  void setDamperConstant(real_type damperConstant);
++
++private:
++  real_type mSpringReference;
++  real_type mSpringConstant;
++  real_type mDamperConstant;
++
++  real_type mForce;
++
++  /// The intput port which must provide the position
++  RealPortHandle mPositionPort;
++  /// The intput port which must provide the velocity
++  RealPortHandle mVelocityPort;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-03 13:36:18 UTC (rev 174)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-01-03 14:57:16 UTC (rev 175)
+@@ -72,7 +72,7 @@
+   LinAlg/IO.h \
+   LinAlg/Misc.h \
+   LinAlg/Proxy.h \
+-  LinearSpring.h \
++  LinearSpringDamper.h \
+   LogStream.h \
+   Mass.h \
+   Math.h \
+@@ -168,7 +168,7 @@
+   Interact.cpp \
+   ImplicitEuler.cpp \
+   Joint.cpp \
+-  LinearSpring.cpp \
++  LinearSpringDamper.cpp \
+   Logger.cpp \
+   Mass.cpp \
+   MaxModel.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000158.html">[OpenFDM-svn] r174 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000160.html">[OpenFDM-svn] r176 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#159">[ date ]</a>
+              <a href="thread.html#159">[ thread ]</a>
+              <a href="subject.html#159">[ subject ]</a>
+              <a href="author.html#159">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

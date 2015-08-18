@@ -1,0 +1,558 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r661 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r661%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811042156.mA4Lu4bU023938%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000629.html">
+   <LINK REL="Next"  HREF="000631.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r661 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r661%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811042156.mA4Lu4bU023938%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r661 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Nov  4 22:56:04 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000629.html">[OpenFDM-svn] r660 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000631.html">[OpenFDM-svn] r662 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#630">[ date ]</a>
+              <a href="thread.html#630">[ thread ]</a>
+              <a href="subject.html#630">[ subject ]</a>
+              <a href="author.html#630">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-04 22:56:03 +0100 (Tue, 04 Nov 2008)
+New Revision: 661
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+Log:
+Implement pre version of a actuator.
+
+M    src/OpenFDM/CartesianJoint.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/RevoluteActuator.cpp
+M    src/OpenFDM/RevoluteActuator.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-04 19:09:42 UTC (rev 660)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/CartesianJoint.h	2008-11-04 21:56:03 UTC (rev 661)
+@@ -38,7 +38,6 @@
+   void setJointMatrix(const Matrix6N&amp; jointMatrix)
+   { mJointMatrix = jointMatrix; }
+ 
+-  // Minimal implementation, factored out all unneeded
+   void velocity(const MechanicLinkValue&amp; parentLink,
+                 MechanicLinkValue&amp; childLink, const Vector3&amp; position,
+                 const Quaternion&amp; orientation, const Vector6&amp; vel) const
+@@ -46,8 +45,9 @@
+     childLink.setPosAndVel(parentLink, position, orientation, vel);
+   }
+ 
+-  
+-  // Minimal implementation, factored out all unneeded
++  /** Compute the articulation step for a given joint force.
++   *  Use this for usual joints.
++   */
+   void articulation(MechanicLinkValue&amp; parentLink,
+                     const MechanicLinkValue&amp; childLink,
+                     const VectorN&amp; jointForce,
+@@ -85,6 +85,9 @@
+     parentLink.applyInertia(childLink.getFrame().inertiaToParent(I));
+   }
+ 
++  /** Compute the acceleration step for a given joint force.
++   *  Use this for usual joints.
++   */
+   void acceleration(const MechanicLinkValue&amp; parentLink,
+                     MechanicLinkValue&amp; childLink, const VectorN&amp; jointForce,
+                     const Matrix&amp; hIh, Vector&amp; velDot) const
+@@ -99,6 +102,36 @@
+     childLink.setAccel(parentLink, mJointMatrix*velDot);
+   }
+   
++  /** Compute the articulation step for a given velocity derivative.
++   *  Use this for actuators.
++   */
++  void articulation(MechanicLinkValue&amp; parentLink,
++                    const MechanicLinkValue&amp; childLink,
++                    const VectorN&amp; velDot) const
++  {
++    // The formulas conform to Roy Featherstones book eqn (7.36), (7.37)
++
++    // Compute the articulated force and inertia.
++    // This Since there is no projection step with the joint axis, it is clear
++    // that this is just a rigid connection ...
++    SpatialInertia I = childLink.getInertia();
++    Vector6 force = childLink.getForce();
++    force += I*(childLink.getFrame().getHdot() + mJointMatrix*velDot);
++    
++    // Transform to parent link's coordinates and apply to the parent link
++    parentLink.applyForce(childLink.getFrame().forceToParent(force));
++    parentLink.applyInertia(childLink.getFrame().inertiaToParent(I));
++  }
++
++  /** Compute the acceleration step for a given velocity derivative.
++   *  Use this for actuators.
++   */
++  void acceleration(const MechanicLinkValue&amp; parentLink,
++                    MechanicLinkValue&amp; childLink, VectorN&amp; velDot) const
++  {
++    childLink.setAccel(parentLink, mJointMatrix*velDot);
++  }
++
+ private:
+   Matrix6N mJointMatrix;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-04 19:09:42 UTC (rev 660)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-04 21:56:03 UTC (rev 661)
+@@ -249,6 +249,7 @@
+   Joint.cpp \
+   Mass.cpp \
+   MobileRootJoint.cpp \
++  RevoluteActuator.cpp \
+   RevoluteJoint.cpp
+ 
+ 
+@@ -276,7 +277,6 @@
+ #   Output.cpp \
+ #   Product.cpp \
+ #   PrismaticJoint.cpp \
+-#   RevoluteActuator.cpp \
+ #   RigidBody.cpp \
+ #   RootFrame.cpp \
+ #   Saturation.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2008-11-04 19:09:42 UTC (rev 660)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.cpp	2008-11-04 21:56:03 UTC (rev 661)
+@@ -11,174 +11,116 @@
+ #include &quot;Matrix.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+-#include &quot;RevoluteActuatorFrame.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;MechanicContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuator, Joint)
+-  DEF_OPENFDM_PROPERTY(Real, MaxVel, Serialized)
+-  DEF_OPENFDM_PROPERTY(Real, VelGain, Serialized)
+-  DEF_OPENFDM_PROPERTY(Real, VelDotGain, Serialized)
++  DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-BEGIN_OPENFDM_OBJECT_DEF(RevoluteActuatorFrame, Frame)
+-  END_OPENFDM_OBJECT_DEF
+-
+ RevoluteActuator::RevoluteActuator(const std::string&amp; name) :
+-  Joint(name),
+-  mMaxVel(10),
+-  mVelGain(1e2),
+-  mVelDotGain(1e2)
++  CartesianJoint&lt;1&gt;(name, Vector6(Vector3(1, 0, 0), Vector3::zeros())),
++  mInputPort(this, &quot;input&quot;, Size(1, 1), true),
++  mPositionPort(this, &quot;position&quot;, Size(1, 1)),
++  mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
++  mPositionStateInfo(new Vector1StateInfo),
++  mVelocityStateInfo(new Vector1StateInfo),
++  mAxis(Vector3(1, 0, 0))
+ {
+-  setNumContinousStates(2);
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
+ 
+-  mRevoluteActuatorFrame = new RevoluteActuatorFrame(name);
+-
+-  setNumInputPorts(1);
+-  setInputPortName(0, &quot;position&quot;);
+-
+-  setNumOutputPorts(2);
+-  setOutputPort(0, &quot;jointPos&quot;, this, &amp;RevoluteActuator::getJointPos);
+-  setOutputPort(1, &quot;jointVel&quot;, this, &amp;RevoluteActuator::getJointVel);
++  // FIXME
++  setAxis(mAxis);
+ }
+ 
+ RevoluteActuator::~RevoluteActuator(void)
+ {
+ }
+ 
+-bool
+-RevoluteActuator::init(void)
++const Vector3&amp;
++RevoluteActuator::getAxis() const
+ {
+-  mDesiredPositionPort = getInputPort(0)-&gt;toRealPortHandle();
+-  if (!mDesiredPositionPort.isConnected()) {
+-    Log(Model, Error) &lt;&lt; &quot;Initialization of RevoluteActuator model \&quot;&quot;
+-                      &lt;&lt; getName()
+-                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
+-                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-    return false;
+-  }
+-
+-  recheckTopology();
+-  return Joint::init();
++  return mAxis;
+ }
+ 
+ void
+-RevoluteActuator::recheckTopology(void)
++RevoluteActuator::setAxis(const Vector3&amp; axis)
+ {
+-  if (!getOutboardBody() || !getInboardBody())
+-    return;
+-  
+-  // check for the inboard frame
+-  Frame* inFrame = getInboardBody()-&gt;getFrame();
+-  if (!inFrame)
+-    return;
+-  
+-  Frame* outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame) {
+-    getOutboardBody()-&gt;setFrame(mRevoluteActuatorFrame);
+-  }
+-  outFrame = getOutboardBody()-&gt;getFrame();
+-  if (!outFrame-&gt;isDirectChildFrameOf(inFrame)) {
+-    inFrame-&gt;addChildFrame(mRevoluteActuatorFrame);
+-  }
+-}
+-
+-void
+-RevoluteActuator::setJointAxis(const Vector3&amp; axis)
+-{
+   real_type nrm = norm(axis);
+   if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
+     Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
+     return;
+   }
+-  mRevoluteActuatorFrame-&gt;setJointAxis((1/nrm)*axis);
++  mAxis = (1/nrm)*axis;
++  setJointMatrix(Vector6(mAxis, Vector3::zeros()));
+ }
+ 
+-const real_type&amp;
+-RevoluteActuator::getJointPos(void) const
+-{
+-  return mRevoluteActuatorFrame-&gt;getJointPos();
+-}
+-
+ void
+-RevoluteActuator::setJointPos(real_type pos)
++RevoluteActuator::init(const Task&amp;, DiscreteStateValueVector&amp;,
++                       ContinousStateValueVector&amp; continousState,
++                       const PortValueList&amp;) const
+ {
+-  mRevoluteActuatorFrame-&gt;setJointPos(pos);
++  continousState[*mPositionStateInfo] = 0;
++  continousState[*mVelocityStateInfo] = 0;
+ }
+ 
+-const real_type&amp;
+-RevoluteActuator::getJointVel(void) const
+-{
+-  return mRevoluteActuatorFrame-&gt;getJointVel();
+-}
+-
+ void
+-RevoluteActuator::setJointVel(real_type vel)
++RevoluteActuator::velocity(const MechanicLinkValue&amp; parentLink,
++                           MechanicLinkValue&amp; childLink,
++                           const ContinousStateValueVector&amp; states,
++                           PortValueList&amp; portValues) const
+ {
+-  mRevoluteActuatorFrame-&gt;setJointVel(vel);
+-}
++  VectorN jointPos = states[*mPositionStateInfo];
++  if (!mPositionPort.empty())
++    portValues[mPositionPort] = jointPos;
++  
++  VectorN jointVel = states[*mVelocityStateInfo];
++  if (!mVelocityPort.empty())
++    portValues[mVelocityPort] = jointVel;
++  
++  Vector3 position(0, 0, 0);
++  Quaternion orientation(Quaternion::fromAngleAxis(jointPos(0), mAxis));
+ 
+-void
+-RevoluteActuator::setPosition(const Vector3&amp; position)
+-{
+-  mRevoluteActuatorFrame-&gt;setPosition(position);
++  velocity(parentLink, childLink, position, orientation, getJointMatrix()*jointVel);
+ }
+ 
+ void
+-RevoluteActuator::setOrientation(const Quaternion&amp; orientation)
++RevoluteActuator::articulation(MechanicLinkValue&amp; parentLink,
++                            const MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            Matrix&amp;) const
+ {
+-  mRevoluteActuatorFrame-&gt;setZeroOrientation(orientation);
++  VectorN velDot;
++  velDot.clear();
++  articulation(parentLink, childLink, velDot);
+ }
+ 
+ void
+-RevoluteActuator::jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF)
++RevoluteActuator::acceleration(const MechanicLinkValue&amp; parentLink,
++                               MechanicLinkValue&amp; childLink,
++                               const ContinousStateValueVector&amp; states,
++                               PortValueList&amp; portValues,
++                               const Matrix&amp;, Vector&amp; _velDot) const
+ {
+-  // This is a simple second order system with velocity limits.
+-  // the joints accelerations, velocities and positions must fit together
+-  // otherwise the articulated body dynamics get fooled ...
+-
+-  // The desired position input
+-  real_type desiredPos = mDesiredPositionPort.getRealValue();
+-  // Compute the error ...
+-  real_type posErr = desiredPos - mRevoluteActuatorFrame-&gt;getJointPos();
+-  // ... and compute a desired velocity within the given limits from that.
+-  real_type desiredVel = smoothSaturate(mVelGain*posErr, mMaxVel);
+-  // The usual control loops: there we get a velocity error
+-  real_type velErr = desiredVel - mRevoluteActuatorFrame-&gt;getJointVel();
+-  // and accelerate that proportional to that error ...
+-  mRevoluteActuatorFrame-&gt;setJointVelDot(mVelDotGain*velErr);
+-
+-  // now that the joints acceleration is known, compute the articulated
+-  // body force and inertia ...
+-  mRevoluteActuatorFrame-&gt;jointArticulation(artI, artF, outF, outI);
++  VectorN velDot;
++  velDot.clear();
++  _velDot = velDot;
++  acceleration(parentLink, childLink, velDot);
+ }
+ 
+ void
+-RevoluteActuator::setState(const StateStream&amp; state)
++RevoluteActuator::derivative(const DiscreteStateValueVector&amp;,
++                             const ContinousStateValueVector&amp; states,
++                             const PortValueList&amp;, const Vector&amp; velDot,
++                             ContinousStateValueVector&amp; derivative) const
+ {
+-  CartesianActuatorFrame&lt;1&gt;::VectorN v;
+-  state.readSubState(v);
+-  mRevoluteActuatorFrame-&gt;setJointPos(v(0));
+-  state.readSubState(v);
+-  mRevoluteActuatorFrame-&gt;setJointVel(v(0));
++  derivative[*mPositionStateInfo] = states[*mVelocityStateInfo];
++  derivative[*mVelocityStateInfo] = velDot;
+ }
+ 
+-void
+-RevoluteActuator::getState(StateStream&amp; state) const
+-{
+-  state.writeSubState(mRevoluteActuatorFrame-&gt;getJointPos());
+-  state.writeSubState(mRevoluteActuatorFrame-&gt;getJointVel());
+-}
+-
+-void
+-RevoluteActuator::getStateDeriv(StateStream&amp; stateDeriv)
+-{
+-  stateDeriv.writeSubState(mRevoluteActuatorFrame-&gt;getJointVel());
+-  stateDeriv.writeSubState(mRevoluteActuatorFrame-&gt;getJointVelDot());
+-}
+-
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2008-11-04 19:09:42 UTC (rev 660)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RevoluteActuator.h	2008-11-04 21:56:03 UTC (rev 661)
+@@ -9,95 +9,69 @@
+ #include &quot;Object.h&quot;
+ #include &quot;Vector.h&quot;
+ #include &quot;Matrix.h&quot;
++#include &quot;MatrixStateInfo.h&quot;
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+-#include &quot;Frame.h&quot;
+-#include &quot;RigidBody.h&quot;
+ #include &quot;Joint.h&quot;
++#include &quot;MatrixInputPort.h&quot;
++#include &quot;MatrixOutputPort.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;MechanicContext.h&quot;
++#include &quot;CartesianJoint.h&quot;
+ 
+ namespace OpenFDM {
+ 
+-class RevoluteActuatorFrame;
+-
+-class RevoluteActuator : public Joint {
++class RevoluteActuator : public CartesianJoint&lt;1&gt; {
+   OPENFDM_OBJECT(RevoluteActuator, Joint);
+ public:
+   RevoluteActuator(const std::string&amp; name);
+   virtual ~RevoluteActuator(void);
+ 
+-  virtual bool init(void);
+-
+-  virtual void recheckTopology(void);
+-
+   /** Sets the joint axis where this joint is allowed to rotate around.
+    */
+-  void setJointAxis(const Vector3&amp; axis);
++  const Vector3&amp; getAxis() const;
++  void setAxis(const Vector3&amp; axis);
+ 
+-  /** Returns the joint position.
+-   */
+-  const real_type&amp; getJointPos(void) const;
++protected:
+ 
+-  /** Sets the joint position.
+-   */
+-  void setJointPos(real_type pos);
++  virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp;) const;
+ 
+-  /** Returns the joint velocity.
+-   */
+-  const real_type&amp; getJointVel(void) const;
++  virtual void velocity(const MechanicLinkValue&amp; parentLink,
++                        MechanicLinkValue&amp; childLink,
++                        const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const;
++  virtual void articulation(MechanicLinkValue&amp; parentLink,
++                            const MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            Matrix&amp; hIh) const;
++  virtual void acceleration(const MechanicLinkValue&amp; parentLink,
++                            MechanicLinkValue&amp; childLink,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues,
++                            const Matrix&amp; hIh, Vector&amp; velDot) const;
+ 
+-  /** Sets the joint velocity.
+-   */
+-  void setJointVel(real_type vel);
++  virtual void derivative(const DiscreteStateValueVector&amp;,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp; portValues, const Vector&amp; velDot,
++                          ContinousStateValueVector&amp;) const;
+ 
+-  /** Set the position of the joint.
+-   */
+-  void setPosition(const Vector3&amp; position);
++  using CartesianJoint&lt;1&gt;::velocity;
++  using CartesianJoint&lt;1&gt;::articulation;
++  using CartesianJoint&lt;1&gt;::acceleration;
+ 
+-  /** Sets the zero orientation of the joint.
+-   */
+-  void setOrientation(const Quaternion&amp; orientation);
+-
+-  const real_type&amp; getMaxVel(void) const
+-  { return mMaxVel; }
+-  void setMaxVel(const real_type&amp; maxVel)
+-  { mMaxVel = maxVel; }
+-
+-  const real_type&amp; getVelGain(void) const
+-  { return mVelGain; }
+-  void setVelGain(const real_type&amp; velGain)
+-  { mVelGain = velGain; }
+-
+-  const real_type&amp; getVelDotGain(void) const
+-  { return mVelDotGain; }
+-  void setVelDotGain(const real_type&amp; velDotGain)
+-  { mVelDotGain = velDotGain; }
+-
+ private:
+-  /** Computes the inboard articulated inertia and force for
+-      this articulated body. It is part of the articulated body algorithm.
+-   */
+-  virtual void jointArticulation(SpatialInertia&amp; artI, Vector6&amp; artF,
+-                                 const SpatialInertia&amp; outI,
+-                                 const Vector6&amp; outF);
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mPositionPort;
++  MatrixOutputPort mVelocityPort;
+ 
+-  /** Methods for the OpenFDM::Part.
+-   */
+-  virtual void setState(const StateStream&amp; state);
+-  virtual void getState(StateStream&amp; state) const;
+-  virtual void getStateDeriv(StateStream&amp; state);
++  SharedPtr&lt;Vector1StateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
+ 
+-  /// The maximum movement of the controler
+-  real_type mMaxVel;
+-  /// The velocity p gain
+-  real_type mVelGain;
+-  /// The velocity derivative p gain
+-  real_type mVelDotGain;
+-
+-  /// The frame of the mobile root
+-  SharedPtr&lt;RevoluteActuatorFrame&gt; mRevoluteActuatorFrame;
+-
+-  /// Input port for the desired position
+-  RealPortHandle mDesiredPositionPort;
++  Vector3 mAxis;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000629.html">[OpenFDM-svn] r660 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000631.html">[OpenFDM-svn] r662 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#630">[ date ]</a>
+              <a href="thread.html#630">[ thread ]</a>
+              <a href="subject.html#630">[ subject ]</a>
+              <a href="author.html#630">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

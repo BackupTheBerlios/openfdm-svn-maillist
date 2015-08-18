@@ -1,0 +1,295 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r176 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r176%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031552.k03FqvBp030056%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000159.html">
+   <LINK REL="Next"  HREF="000161.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r176 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r176%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601031552.k03FqvBp030056%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r176 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Tue Jan  3 16:52:57 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000159.html">[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000161.html">[OpenFDM-svn] r177 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#160">[ date ]</a>
+              <a href="thread.html#160">[ thread ]</a>
+              <a href="subject.html#160">[ subject ]</a>
+              <a href="author.html#160">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-03 16:52:53 +0100 (Tue, 03 Jan 2006)
+New Revision: 176
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+   trunk/OpenFDM/src/OpenFDM/Contact.cpp
+   trunk/OpenFDM/src/OpenFDM/Force.h
+   trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+Log:
+Zap an other FIXME
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/AeroForce.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-03 14:57:16 UTC (rev 175)
++++ trunk/OpenFDM/src/OpenFDM/AeroForce.cpp	2006-01-03 15:52:53 UTC (rev 176)
+@@ -245,12 +245,16 @@
+ AeroForce::getRefPosition(void) const
+ {
+   if (mDirtyRefPosition) {
+-    const Frame* frame = getParentFrame(0);
+-    OpenFDMAssert(frame);
+-    if (frame) {
+-      // Get the position in the earth centered coordinate frame.
+-      mRefPosition = frame-&gt;posToRef(getPosition());
+-      mDirtyRefPosition = false;
++    const RigidBody* body = getParentRigidBody(0);
++    OpenFDMAssert(body);
++    if (body) {
++      const Frame* frame = body-&gt;getFrame();
++      OpenFDMAssert(frame);
++      if (frame) {
++        // Get the position in the earth centered coordinate frame.
++        mRefPosition = frame-&gt;posToRef(getPosition());
++        mDirtyRefPosition = false;
++      }
+     }
+   }
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getRefPosition()&quot;
+@@ -262,22 +266,26 @@
+ AeroForce::getAirSpeed(void) const
+ {
+   if (mDirtyAirSpeed) {
+-    const Frame* frame = getParentFrame(0);
+-    OpenFDMAssert(frame);
+-    if (frame) {
+-      // FIXME temporary workaround
+-      if (!mEnvironment) {
+-        const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
++    const RigidBody* body = getParentRigidBody(0);
++    OpenFDMAssert(body);
++    if (body) {
++      const Frame* frame = body-&gt;getFrame();
++      OpenFDMAssert(frame);
++      if (frame) {
++        // FIXME temporary workaround
++        if (!mEnvironment) {
++          const_cast&lt;AeroForce*&gt;(this)-&gt;mEnvironment = getEnvironment();
++        }
++        // Get the position in the earth centered coordinate frame.
++        Vector3 pos = frame-&gt;posToRef(getPosition());
++        Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(pos);
++        windVel = frame-&gt;rotFromRef(windVel);
++        Vector6 sAirSpeed = Vector6(Vector3::zeros(), windVel)
++          - frame-&gt;motionFromRef(Vector6::zeros());
++        mAirSpeed = motionTo(getPosition(), getOrientation(), sAirSpeed);
++        
++        mDirtyAirSpeed = false;
+       }
+-      // Get the position in the earth centered coordinate frame.
+-      Vector3 pos = frame-&gt;posToRef(getPosition());
+-      Vector3 windVel = mEnvironment-&gt;getWind()-&gt;getWindVel(pos);
+-      windVel = frame-&gt;rotFromRef(windVel);
+-      Vector6 sAirSpeed = Vector6(Vector3::zeros(), windVel)
+-        - frame-&gt;motionFromRef(Vector6::zeros());
+-      mAirSpeed = motionTo(getPosition(), getOrientation(), sAirSpeed);
+-      
+-      mDirtyAirSpeed = false;
+     }
+   }
+   Log(ArtBody, Debug3) &lt;&lt; &quot;AeroForce::getAirSpeed()&quot;
+@@ -625,16 +633,20 @@
+ AeroForce::getUnitDown(void) const
+ {
+   if (mDirtyUnitDown) {
+-    const Frame* frame = getParentFrame(0);
+-    OpenFDMAssert(frame);
+-    if (frame) {
+-      // Compute the geodetic unit down vector at our current position.
+-      // So we will need the orientation of the horizontal local frame at our
+-      // current position.
+-      Quaternion gcHL = getPlanet()-&gt;getGeocHLOrientation(getRefPosition());
+-      // Transform that unit down vector to the current frame.
+-      mUnitDown = frame-&gt;rotFromRef(gcHL.backTransform(Vector3::unit(3)));
+-      mDirtyUnitDown = false;
++    const RigidBody* body = getParentRigidBody(0);
++    OpenFDMAssert(body);
++    if (body) {
++      const Frame* frame = body-&gt;getFrame();
++      OpenFDMAssert(frame);
++      if (frame) {
++        // Compute the geodetic unit down vector at our current position.
++        // So we will need the orientation of the horizontal local frame at our
++        // current position.
++        Quaternion gcHL = getPlanet()-&gt;getGeocHLOrientation(getRefPosition());
++        // Transform that unit down vector to the current frame.
++        mUnitDown = frame-&gt;rotFromRef(gcHL.backTransform(Vector3::unit(3)));
++        mDirtyUnitDown = false;
++      }
+     }
+   }
+   return mUnitDown;
+@@ -644,12 +656,16 @@
+ AeroForce::getLocalGroundPlane(void) const
+ {
+   if (mDirtyLocalGroundPlane) {
+-    const Frame* frame = getParentFrame(0);
+-    OpenFDMAssert(frame);
+-    if (frame) {
+-      // Transform the plane equation to the local frame.
+-      mLocalGroundPlane = frame-&gt;planeFromRef(mGroundVal.plane);
+-      mDirtyLocalGroundPlane = false;
++    const RigidBody* body = getParentRigidBody(0);
++    OpenFDMAssert(body);
++    if (body) {
++      const Frame* frame = body-&gt;getFrame();
++      OpenFDMAssert(frame);
++      if (frame) {
++        // Transform the plane equation to the local frame.
++        mLocalGroundPlane = frame-&gt;planeFromRef(mGroundVal.plane);
++        mDirtyLocalGroundPlane = false;
++      }
+     }
+   }
+   return mLocalGroundPlane;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Contact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-03 14:57:16 UTC (rev 175)
++++ trunk/OpenFDM/src/OpenFDM/Contact.cpp	2006-01-03 15:52:53 UTC (rev 176)
+@@ -61,9 +61,20 @@
+ void
+ Contact::computeForce(void)
+ {
+-  const Frame* frame = getParentFrame(0);
++  if (!mEnabled) {
++    applyForce(Vector6::zeros());
++    return;
++  }
++
++  const RigidBody* body = getParentRigidBody(0);
++  OpenFDMAssert(body);
++  if (!body) {
++    applyForce(Vector6::zeros());
++    return;
++  }
++  const Frame* frame = body-&gt;getFrame();
+   OpenFDMAssert(frame);
+-  if (!frame || !mEnabled) {
++  if (!frame) {
+     applyForce(Vector6::zeros());
+     return;
+   }
+@@ -127,7 +138,11 @@
+ void
+ Contact::getGround(real_type t)
+ {
+-  const Frame* frame = getParentFrame(0);
++  const RigidBody* body = getParentRigidBody(0);
++  OpenFDMAssert(body);
++  if (!body)
++    return;
++  const Frame* frame = body-&gt;getFrame();
+   OpenFDMAssert(frame);
+   if (!frame)
+     return;
+
+Modified: trunk/OpenFDM/src/OpenFDM/Force.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-03 14:57:16 UTC (rev 175)
++++ trunk/OpenFDM/src/OpenFDM/Force.h	2006-01-03 15:52:53 UTC (rev 176)
+@@ -50,17 +50,6 @@
+     mForce = force;
+   }
+ 
+-  /// FIXME remove
+-  const Frame* getParentFrame(unsigned id = 0) const
+-  {
+-    return getParentRigidBody(id)-&gt;getFrame();
+-  }
+-  /// FIXME remove
+-  Frame* getParentFrame(unsigned id = 0)
+-  {
+-    return getParentRigidBody(id)-&gt;getFrame();
+-  }
+-
+ private:
+   Vector6 mForce;
+ };
+
+Modified: trunk/OpenFDM/src/OpenFDM/WheelContact.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-03 14:57:16 UTC (rev 175)
++++ trunk/OpenFDM/src/OpenFDM/WheelContact.cpp	2006-01-03 15:52:53 UTC (rev 176)
+@@ -55,7 +55,13 @@
+ {
+   // FIXME: check all signs here, I get the feeling that we have
+   // just even much minuses here instead of exactly the right ones ...
+-  const Frame* frame = getParentFrame(0);
++  const RigidBody* body = getParentRigidBody(0);
++  OpenFDMAssert(body);
++  if (!body) {
++    applyForce(Vector6::zeros());
++    return;
++  }
++  const Frame* frame = body-&gt;getFrame();
+   OpenFDMAssert(frame);
+   if (!frame) {
+     applyForce(Vector6::zeros());
+@@ -165,7 +171,11 @@
+ void
+ WheelContact::getGround(real_type t)
+ {
+-  const Frame* frame = getParentFrame(0);
++  const RigidBody* body = getParentRigidBody(0);
++  OpenFDMAssert(body);
++  if (!body)
++    return;
++  const Frame* frame = body-&gt;getFrame();
+   OpenFDMAssert(frame);
+   if (!frame)
+     return;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000159.html">[OpenFDM-svn] r175 - in trunk/OpenFDM/src: JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000161.html">[OpenFDM-svn] r177 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#160">[ date ]</a>
+              <a href="thread.html#160">[ thread ]</a>
+              <a href="subject.html#160">[ subject ]</a>
+              <a href="author.html#160">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,600 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r830 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r830%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200812011829.mB1ITeU9002504%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000797.html">
+   <LINK REL="Next"  HREF="000799.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r830 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r830%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200812011829.mB1ITeU9002504%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r830 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Dec  1 19:29:40 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000797.html">[OpenFDM-svn] r829 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000799.html">[OpenFDM-svn] r831 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#798">[ date ]</a>
+              <a href="thread.html#798">[ thread ]</a>
+              <a href="subject.html#798">[ subject ]</a>
+              <a href="author.html#798">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-01 19:29:38 +0100 (Mon, 01 Dec 2008)
+New Revision: 830
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/constintegral.cpp
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+   branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+   branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+   branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Change port connections.
+
+M    test/harmonic.cpp
+M    test/structure.cpp
+M    test/foucault.cpp
+M    test/simulationtime.cpp
+M    test/mechanic.cpp
+M    test/constintegral.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/constintegral.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/constintegral.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/constintegral.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -23,23 +23,23 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+ 
+   ConstModel* constModel = new ConstModel(&quot;Constant&quot;, 1);
+-  Group::NodeId constModelId = group-&gt;addChild(constModel);
++  group-&gt;addChild(constModel);
+ 
+   Integrator* integrator = new Integrator(&quot;Integrator&quot;);
+   integrator-&gt;setInitialValue(0);
+-  Group::NodeId integratorId = group-&gt;addChild(integrator);
+-  group-&gt;connect(constModelId, &quot;output&quot;, integratorId, &quot;input&quot;);
++  group-&gt;addChild(integrator);
++  group-&gt;connect(constModel-&gt;getPort(&quot;output&quot;), integrator-&gt;getPort(&quot;input&quot;));
+ 
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  Group::NodeId simulationTimeId = group-&gt;addChild(simulationTime);
++  group-&gt;addChild(simulationTime);
+ 
+   Summer* summer = new Summer(&quot;Error to exact Solution&quot;);
+-  Group::NodeId summerId = group-&gt;addChild(summer);
++  group-&gt;addChild(summer);
+   summer-&gt;setNumSummands(2);
+   summer-&gt;setInputSign(0, Summer::Plus);
+-  group-&gt;connect(simulationTimeId, &quot;output&quot;, summerId, &quot;input0&quot;);
++  group-&gt;connect(simulationTime-&gt;getPort(&quot;output&quot;), summer-&gt;getPort(&quot;input0&quot;));
+   summer-&gt;setInputSign(1, Summer::Minus);
+-  group-&gt;connect(integratorId, &quot;output&quot;, summerId, &quot;input1&quot;);
++  group-&gt;connect(integrator-&gt;getPort(&quot;output&quot;), summer-&gt;getPort(&quot;input1&quot;));
+ 
+ 
+   Output* output = new Output(&quot;Error Output&quot;);
+@@ -47,8 +47,8 @@
+   errors = new ErrorCollectorCallback;
+   output-&gt;setCallback(errors);
+ //   output-&gt;addSampleTime(rate);
+-  Group::NodeId outputId = group-&gt;addChild(output);
+-  group-&gt;connect(summerId, &quot;output&quot;, outputId, &quot;input&quot;);
++  group-&gt;addChild(output);
++  group-&gt;connect(summer-&gt;getPort(&quot;output&quot;), output-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Constant Integration&quot;);
+   system-&gt;setNode(group);
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -39,26 +39,26 @@
+   FixedRootJoint* fixedRootJoint = new FixedRootJoint(&quot;Root&quot;);
+   fixedRootJoint-&gt;setPosition(planet-&gt;toCart(geodetic));
+   fixedRootJoint-&gt;setOrientation(planet-&gt;getGeodHLOrientation(geodetic));
+-  Group::NodeId fixedRootJointId = group-&gt;addChild(fixedRootJoint);
++  group-&gt;addChild(fixedRootJoint);
+   RotationalJoint* rotationalJoint1 = new RotationalJoint(&quot;Rotational Joint 1&quot;);
+-  Group::NodeId rotationalJoint1Id = group-&gt;addChild(rotationalJoint1);
++  group-&gt;addChild(rotationalJoint1);
+   RigidBody* rigidBody1 = new RigidBody(&quot;Rigid Body 1&quot;);
+   rigidBody1-&gt;addLink(&quot;sensorLink&quot;);
+-  Group::NodeId rigidBody1Id = group-&gt;addChild(rigidBody1);
++  group-&gt;addChild(rigidBody1);
+ 
+   Mass* mass = new Mass(&quot;Mass&quot;, 28, InertiaMatrix(1, 0, 0, 1, 0, 1));
+   mass-&gt;setPosition(Vector3(3, 0, 67));
+-  Group::NodeId massId = group-&gt;addChild(mass);
++  group-&gt;addChild(mass);
+ 
+   Sensor* sensor = new Sensor(&quot;Sensor&quot;);
+   sensor-&gt;setPosition(mass-&gt;getPosition());
+   sensor-&gt;setEnableAll(true);
+-  Group::NodeId sensorId = group-&gt;addChild(sensor);
++  group-&gt;addChild(sensor);
+ 
+-  group-&gt;connect(fixedRootJointId, 0, rotationalJoint1Id, 0);
+-  group-&gt;connect(rotationalJoint1Id, 1, rigidBody1Id, 0);
+-  group-&gt;connect(rigidBody1Id, 1, massId, 0);
+-  group-&gt;connect(rigidBody1Id, &quot;sensorLink&quot;, sensorId, &quot;link&quot;);
++  group-&gt;connect(fixedRootJoint-&gt;getPort(0), rotationalJoint1-&gt;getPort(0));
++  group-&gt;connect(rotationalJoint1-&gt;getPort(1), rigidBody1-&gt;getPort(0));
++  group-&gt;connect(rigidBody1-&gt;getPort(1), mass-&gt;getPort(0));
++  group-&gt;connect(rigidBody1-&gt;getPort(&quot;sensorLink&quot;), sensor-&gt;getPort(&quot;link&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, group);
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/test/harmonic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/harmonic.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -25,73 +25,74 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+ 
+   // Build up a harmonic oszilator
+-  Group::NodeId gainId = group-&gt;addChild(new Gain(&quot;gain&quot;, -omega*omega));
++  Gain* gain = new Gain(&quot;gain&quot;, -omega*omega);
++  group-&gt;addChild(gain);
+   Integrator* integrator0 = new Integrator(&quot;Velocity Integrator&quot;);
+   integrator0-&gt;setInitialValue(omega);
+-  Group::NodeId integrator0Id = group-&gt;addChild(integrator0);
++  group-&gt;addChild(integrator0);
+   Integrator* integrator1 = new Integrator(&quot;Position Integrator&quot;);
+   integrator1-&gt;setInitialValue(0);
+-  Group::NodeId integrator1Id = group-&gt;addChild(integrator1);
++  group-&gt;addChild(integrator1);
+ 
+-  group-&gt;connect(gainId, &quot;output&quot;, integrator0Id, &quot;input&quot;);
+-  group-&gt;connect(integrator0Id, &quot;output&quot;, integrator1Id, &quot;input&quot;);
+-  group-&gt;connect(integrator1Id, &quot;output&quot;, gainId, &quot;input&quot;);
++  group-&gt;connect(gain-&gt;getPort(&quot;output&quot;), integrator0-&gt;getPort(&quot;input&quot;));
++  group-&gt;connect(integrator0-&gt;getPort(&quot;output&quot;), integrator1-&gt;getPort(&quot;input&quot;));
++  group-&gt;connect(integrator1-&gt;getPort(&quot;output&quot;), gain-&gt;getPort(&quot;input&quot;));
+ 
+   // Build up the exact solution
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  Group::NodeId simulationTimeId = group-&gt;addChild(simulationTime);
++  group-&gt;addChild(simulationTime);
+ 
+   Gain* cosInputGain = new Gain(&quot;Cosinus Input Gain&quot;, omega);
+-  Group::NodeId cosInputGainId = group-&gt;addChild(cosInputGain);
+-  group-&gt;connect(simulationTimeId, &quot;output&quot;, cosInputGainId, &quot;input&quot;);
++  group-&gt;addChild(cosInputGain);
++  group-&gt;connect(simulationTime-&gt;getPort(&quot;output&quot;), cosInputGain-&gt;getPort(&quot;input&quot;));
+ 
+   UnaryFunction* cosFunction;
+   cosFunction = new UnaryFunction(&quot;Exact Vel Solution&quot;, UnaryFunction::Cos);
+-  Group::NodeId cosFunctionId = group-&gt;addChild(cosFunction);
+-  group-&gt;connect(cosInputGainId, &quot;output&quot;, cosFunctionId, &quot;input&quot;);
++  group-&gt;addChild(cosFunction);
++  group-&gt;connect(cosInputGain-&gt;getPort(&quot;output&quot;), cosFunction-&gt;getPort(&quot;input&quot;));
+ 
+   Gain* velOutputGain = new Gain(&quot;Velocity Output Gain&quot;, omega);
+-  Group::NodeId velOutputGainId = group-&gt;addChild(velOutputGain);
+-  group-&gt;connect(cosFunctionId, &quot;output&quot;, velOutputGainId, &quot;input&quot;);
++  group-&gt;addChild(velOutputGain);
++  group-&gt;connect(cosFunction-&gt;getPort(&quot;output&quot;), velOutputGain-&gt;getPort(&quot;input&quot;));
+ 
+   UnaryFunction* sinFunction;
+   sinFunction = new UnaryFunction(&quot;Exact Pos Solution&quot;, UnaryFunction::Sin);
+-  Group::NodeId sinFunctionId = group-&gt;addChild(sinFunction);
+-  group-&gt;connect(cosInputGainId, &quot;output&quot;, sinFunctionId, &quot;input&quot;);
++  group-&gt;addChild(sinFunction);
++  group-&gt;connect(cosInputGain-&gt;getPort(&quot;output&quot;), sinFunction-&gt;getPort(&quot;input&quot;));
+ 
+ 
+   // Now build the differences
+ 
+   Summer* summer0 = new Summer(&quot;Velocity Error to exact Solution&quot;);
+-  Group::NodeId summer0Id = group-&gt;addChild(summer0);
++  group-&gt;addChild(summer0);
+   summer0-&gt;setNumSummands(2);
+   summer0-&gt;setInputSign(0, Summer::Plus);
+-  group-&gt;connect(velOutputGainId, &quot;output&quot;, summer0Id, &quot;input0&quot;);
++  group-&gt;connect(velOutputGain-&gt;getPort(&quot;output&quot;), summer0-&gt;getPort(&quot;input0&quot;));
+   summer0-&gt;setInputSign(1, Summer::Minus);
+-  group-&gt;connect(integrator0Id, &quot;output&quot;, summer0Id, &quot;input1&quot;);
++  group-&gt;connect(integrator0-&gt;getPort(&quot;output&quot;), summer0-&gt;getPort(&quot;input1&quot;));
+ 
+   Output* output0 = new Output(&quot;Velocity Error Output&quot;);
+   SharedPtr&lt;ErrorCollectorCallback&gt; velErrorCallback;
+   velErrorCallback = new ErrorCollectorCallback;
+   output0-&gt;setCallback(velErrorCallback);
+-  Group::NodeId output0Id = group-&gt;addChild(output0);
+-  group-&gt;connect(summer0Id, &quot;output&quot;, output0Id, &quot;input&quot;);
++  group-&gt;addChild(output0);
++  group-&gt;connect(summer0-&gt;getPort(&quot;output&quot;), output0-&gt;getPort(&quot;input&quot;));
+ 
+ 
+   Summer* summer1 = new Summer(&quot;Position Error to exact Solution&quot;);
+-  Group::NodeId summer1Id = group-&gt;addChild(summer1);
++  group-&gt;addChild(summer1);
+   summer1-&gt;setNumSummands(2);
+   summer1-&gt;setInputSign(0, Summer::Plus);
+-  group-&gt;connect(sinFunctionId, &quot;output&quot;, summer1Id, &quot;input0&quot;);
++  group-&gt;connect(sinFunction-&gt;getPort(&quot;output&quot;), summer1-&gt;getPort(&quot;input0&quot;));
+   summer1-&gt;setInputSign(1, Summer::Minus);
+-  group-&gt;connect(integrator1Id, &quot;output&quot;, summer1Id, &quot;input1&quot;);
++  group-&gt;connect(integrator1-&gt;getPort(&quot;output&quot;), summer1-&gt;getPort(&quot;input1&quot;));
+ 
+   Output* output1 = new Output(&quot;Position Error Output&quot;);
+   SharedPtr&lt;ErrorCollectorCallback&gt; posErrorCallback;
+   posErrorCallback = new ErrorCollectorCallback;
+   output1-&gt;setCallback(posErrorCallback);
+-  Group::NodeId output1Id = group-&gt;addChild(output1);
+-  group-&gt;connect(summer1Id, &quot;output&quot;, output1Id, &quot;input&quot;);
++  group-&gt;addChild(output1);
++  group-&gt;connect(summer1-&gt;getPort(&quot;output&quot;), output1-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
+   system-&gt;setNode(group);
+
+Modified: branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -23,21 +23,21 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+ 
+   MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
+-  Group::NodeId rootJointId = group-&gt;addChild(mobileRootJoint);
++  group-&gt;addChild(mobileRootJoint);
+   RigidBody* rigidBody = new RigidBody(&quot;Rigid Body&quot;);
+   rigidBody-&gt;addLink(&quot;sensorLink&quot;);
+-  Group::NodeId rigidBodyId = group-&gt;addChild(rigidBody);
++  group-&gt;addChild(rigidBody);
+   Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
+-  Group::NodeId massId = group-&gt;addChild(mass);
++  group-&gt;addChild(mass);
+ 
+   Sensor* sensor = new Sensor(&quot;Sensor&quot;);
+   sensor-&gt;setPosition(mass-&gt;getPosition());
+   sensor-&gt;setEnableAll(true);
+-  Group::NodeId sensorId = group-&gt;addChild(sensor);
++  group-&gt;addChild(sensor);
+ 
+-  group-&gt;connect(rootJointId, &quot;link&quot;, rigidBodyId, &quot;link0&quot;);
+-  group-&gt;connect(rigidBodyId, &quot;link1&quot;, massId, &quot;link&quot;);
+-  group-&gt;connect(rigidBodyId, &quot;sensorLink&quot;, sensorId, &quot;link&quot;);
++  group-&gt;connect(mobileRootJoint-&gt;getPort(&quot;link&quot;), rigidBody-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link1&quot;), mass-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;sensorLink&quot;), sensor-&gt;getPort(&quot;link&quot;));
+ 
+   return group.release();
+ }
+@@ -47,46 +47,46 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+ 
+   MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
+-  Group::NodeId rootJointId = group-&gt;addChild(mobileRootJoint);
++  group-&gt;addChild(mobileRootJoint);
+ 
+   RigidBody *rigidBody = new RigidBody(&quot;Rigid Body&quot;);
+   rigidBody-&gt;addLink(&quot;link2&quot;);
+   rigidBody-&gt;addLink(&quot;sensorLink&quot;);
+-  Group::NodeId rigidBodyId = group-&gt;addChild(rigidBody);
++  group-&gt;addChild(rigidBody);
+   InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
+   Mass* mass = new Mass(&quot;Mass&quot;, 1, inertia);
+-  Group::NodeId massId = group-&gt;addChild(mass);
++  group-&gt;addChild(mass);
+   RevoluteJoint* revoluteJoint = new RevoluteJoint(&quot;Revolute Joint&quot;);
+   revoluteJoint-&gt;setEnableExternalForce(true);
+-  Group::NodeId revoluteId = group-&gt;addChild(revoluteJoint);
++  group-&gt;addChild(revoluteJoint);
+   RigidBody *rigidBody2 = new RigidBody(&quot;Rigid Body 2&quot;);
+   rigidBody2-&gt;addLink(&quot;sensorLink&quot;);
+-  Group::NodeId rigidBody2Id = group-&gt;addChild(rigidBody2);
++  group-&gt;addChild(rigidBody2);
+   Mass* mass2 = new Mass(&quot;Mass 2&quot;, 1, inertia);
+-  Group::NodeId mass2Id = group-&gt;addChild(mass2);
++  group-&gt;addChild(mass2);
+ 
+   Sensor* sensor = new Sensor(&quot;Sensor&quot;);
+   sensor-&gt;setPosition(mass-&gt;getPosition());
+   sensor-&gt;setEnableAll(true);
+-  Group::NodeId sensorId = group-&gt;addChild(sensor);
++  group-&gt;addChild(sensor);
+ 
+   Sensor* sensor2 = new Sensor(&quot;Sensor 2&quot;);
+   sensor2-&gt;setPosition(mass2-&gt;getPosition());
+   sensor2-&gt;setEnableAll(true);
+-  Group::NodeId sensorId2 = group-&gt;addChild(sensor2);
++  group-&gt;addChild(sensor2);
+ 
+-  group-&gt;connect(rootJointId, &quot;link&quot;, rigidBodyId, &quot;link0&quot;);
+-  group-&gt;connect(rigidBodyId, &quot;link1&quot;, massId, &quot;link&quot;);
+-  group-&gt;connect(rigidBodyId, &quot;link2&quot;, revoluteId, &quot;link0&quot;);
+-  group-&gt;connect(revoluteId, &quot;link1&quot;, rigidBody2Id, &quot;link0&quot;);
+-  group-&gt;connect(rigidBody2Id, &quot;link1&quot;, mass2Id, &quot;link&quot;);
+-  group-&gt;connect(rigidBodyId, &quot;sensorLink&quot;, sensorId, &quot;link&quot;);
+-  group-&gt;connect(rigidBody2Id, &quot;sensorLink&quot;, sensorId2, &quot;link&quot;);
++  group-&gt;connect(mobileRootJoint-&gt;getPort(&quot;link&quot;), rigidBody-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link1&quot;), mass-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link2&quot;), revoluteJoint-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(revoluteJoint-&gt;getPort(&quot;link1&quot;), rigidBody2-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody2-&gt;getPort(&quot;link1&quot;), mass2-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;sensorLink&quot;), sensor-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody2-&gt;getPort(&quot;sensorLink&quot;), sensor2-&gt;getPort(&quot;link&quot;));
+ 
+   ConstModel* jointForce = new ConstModel(&quot;Joint Force&quot;, 1);
+-  Group::NodeId jointForceId = group-&gt;addChild(jointForce);
++  group-&gt;addChild(jointForce);
+ 
+-  group-&gt;connect(jointForceId, &quot;output&quot;, revoluteId, &quot;force&quot;);
++  group-&gt;connect(jointForce-&gt;getPort(&quot;output&quot;), revoluteJoint-&gt;getPort(&quot;force&quot;));
+ 
+   return group.release();
+ }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/simulationtime.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -36,13 +36,13 @@
+   system-&gt;setNode(group);
+   
+   SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
+-  Group::NodeId simTimeId = group-&gt;addChild(simulationTime);
++  group-&gt;addChild(simulationTime);
+ 
+   Output* output = new Output(&quot;Simulation Time Output&quot;);
+-  Group::NodeId outputId = group-&gt;addChild(output);
++  group-&gt;addChild(output);
+   SharedPtr&lt;CollectOutputCallback&gt; simTimeCallback = new CollectOutputCallback;
+   output-&gt;setCallback(simTimeCallback);
+-  if (!group-&gt;connect(simTimeId, &quot;output&quot;, outputId, &quot;input&quot;)) {
++  if (!group-&gt;connect(simTime-&gt;getPort(&quot;output&quot;), output-&gt;getPort(&quot;input&quot;))) {
+     std::cout &lt;&lt; &quot;Could not connect ports&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+   }
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-12-01 18:07:13 UTC (rev 829)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-12-01 18:29:38 UTC (rev 830)
+@@ -18,8 +18,9 @@
+ bool testSelfReferencingDirectInput()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+-  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;Gain&quot;));
+-  group-&gt;connect(gain, &quot;output&quot;, gain, &quot;input&quot;);
++  Gain* gain = new Gain(&quot;Gain&quot;);
++  group-&gt;addChild(gain);
++  group-&gt;connect(gain-&gt;getPort(&quot;output&quot;), gain-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Self referencing Gain&quot;);
+   system-&gt;setNode(group);
+@@ -36,10 +37,12 @@
+ bool testCyclicDependency()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+-  Group::NodeId gain1 = group-&gt;addChild(new Gain(&quot;Gain 1&quot;));
+-  Group::NodeId gain2 = group-&gt;addChild(new Gain(&quot;Gain 2&quot;));
+-  group-&gt;connect(gain1, &quot;output&quot;, gain2, &quot;input&quot;);
+-  group-&gt;connect(gain2, &quot;output&quot;, gain1, &quot;input&quot;);
++  Gain* gain1 = new Gain(&quot;Gain 1&quot;);
++  group-&gt;addChild(gain1);
++  Gain* gain2 = new Gain(&quot;Gain 1&quot;);
++  group-&gt;addChild(gain2);
++  group-&gt;connect(gain1-&gt;getPort(&quot;output&quot;), gain2-&gt;getPort(&quot;input&quot;));
++  group-&gt;connect(gain2-&gt;getPort(&quot;output&quot;), gain1-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Cyclic loop&quot;);
+   system-&gt;setNode(group);
+@@ -56,13 +59,15 @@
+ bool testCyclicDependencyWithGroup1()
+ {
+   SharedPtr&lt;Group&gt; group1 = new Group(&quot;Group 1&quot;);
+-  Group::NodeId groupInput1 = group1-&gt;addChild(new GroupInput(&quot;Input 1&quot;));
+-  Group::NodeId groupOutput1 = group1-&gt;addChild(new GroupOutput(&quot;Output 1&quot;));
+-  group1-&gt;connect(groupInput1, &quot;output&quot;, groupOutput1, &quot;input&quot;);
++  GroupInput* groupInput = new GroupInput(&quot;Input 1&quot;);
++  group1-&gt;addChild(groupInput);
++  GroupOutput* groupOutput = new GroupOutput(&quot;Output 1&quot;);
++  group1-&gt;addChild(groupOutput);
++  group1-&gt;connect(groupInput-&gt;getPort(&quot;output&quot;), groupOutput-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+-  Group::NodeId groupId1 = group-&gt;addChild(group1);
+-  group-&gt;connect(groupId1, &quot;output&quot;, groupId1, &quot;input&quot;);
++  group-&gt;addChild(group1);
++  group-&gt;connect(group1-&gt;getPort(&quot;output&quot;), group1-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Cyclic loop through groups&quot;);
+   system-&gt;setNode(group);
+@@ -78,24 +83,30 @@
+ bool testCyclicDependencyWithGroup2()
+ {
+   SharedPtr&lt;Group&gt; group1 = new Group(&quot;Group 1&quot;);
+-  Group::NodeId groupInput1 = group1-&gt;addChild(new GroupInput(&quot;Input 1&quot;));
+-  Group::NodeId gain1 = group1-&gt;addChild(new Gain(&quot;Gain 1&quot;));
+-  Group::NodeId groupOutput1 = group1-&gt;addChild(new GroupOutput(&quot;Output 1&quot;));
+-  group1-&gt;connect(groupInput1, &quot;output&quot;, gain1, &quot;input&quot;);
+-  group1-&gt;connect(gain1, &quot;output&quot;, groupOutput1, &quot;input&quot;);
++  GroupInput* groupInput1 = new GroupInput(&quot;Input 1&quot;);
++  group1-&gt;addChild(groupInput1);
++  Gain* gain1 = new Gain(&quot;Gain 1&quot;);
++  group1-&gt;addChild(gain1);
++  GroupOutput* groupOutput1 = new GroupOutput(&quot;Output 1&quot;);
++  group1-&gt;addChild(groupOutput1);
++  group1-&gt;connect(groupInput1-&gt;getPort(&quot;output&quot;), gain1-&gt;getPort(&quot;input&quot;));
++  group1-&gt;connect(gain1-&gt;getPort(&quot;output&quot;), groupOutput1-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;Group&gt; group2 = new Group(&quot;Group 2&quot;);
+-  Group::NodeId groupInput2 = group2-&gt;addChild(new GroupInput(&quot;Input 2&quot;));
+-  Group::NodeId gain2 = group2-&gt;addChild(new Gain(&quot;Gain 2&quot;));
+-  Group::NodeId groupOutput2 = group2-&gt;addChild(new GroupOutput(&quot;Output 2&quot;));
+-  group2-&gt;connect(groupInput2, &quot;output&quot;, gain2, &quot;input&quot;);
+-  group2-&gt;connect(gain2, &quot;output&quot;, groupOutput2, &quot;input&quot;);
++  GroupInput* groupInput2 = new GroupInput(&quot;Input 2&quot;);
++  group2-&gt;addChild(groupInput2);
++  Gain* gain2 = new Gain(&quot;Gain 2&quot;);
++  group2-&gt;addChild(gain2);
++  GroupOutput* groupOutput2 = new GroupOutput(&quot;Output 2&quot;);
++  group2-&gt;addChild(groupOutput2);
++  group2-&gt;connect(groupInput2-&gt;getPort(&quot;output&quot;), gain2-&gt;getPort(&quot;input&quot;));
++  group2-&gt;connect(gain2-&gt;getPort(&quot;output&quot;), groupOutput2-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+-  Group::NodeId groupId1 = group-&gt;addChild(group1);
+-  Group::NodeId groupId2 = group-&gt;addChild(group2);
+-  group-&gt;connect(groupId1, &quot;output&quot;, groupId2, &quot;input&quot;);
+-  group-&gt;connect(groupId2, &quot;output&quot;, groupId1, &quot;input&quot;);
++  group-&gt;addChild(group1);
++  group-&gt;addChild(group2);
++  group-&gt;connect(group1-&gt;getPort(&quot;output&quot;), group2-&gt;getPort(&quot;input&quot;));
++  group-&gt;connect(group2-&gt;getPort(&quot;output&quot;), group1-&gt;getPort(&quot;input&quot;));
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Cyclic loop through groups&quot;);
+   system-&gt;setNode(group);
+@@ -108,84 +119,6 @@
+   return true;
+ }
+ 
+-Node* buildContinousExample()
+-{
+-  SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+-  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;, -1));
+-  Integrator* i1 = new Integrator(&quot;I1&quot;);
+-  i1-&gt;setInitialValue(1);
+-  Group::NodeId integrator1 = group-&gt;addChild(i1);
+-  Group::NodeId integrator2 = group-&gt;addChild(new Integrator(&quot;I2&quot;));
+-  Group::NodeId output = group-&gt;addChild(new Output(&quot;O&quot;));
+-  Group::NodeId delay = group-&gt;addChild(new Delay(&quot;D&quot;));
+-  Group::NodeId outputDelay = group-&gt;addChild(new Output(&quot;OD&quot;));
+-
+-  Summer* summer = new Summer(&quot;S&quot;);
+-  Group::NodeId summerId = group-&gt;addChild(summer);
+-
+-  group-&gt;connect(integrator1, &quot;output&quot;, integrator2, &quot;input&quot;);
+-  group-&gt;connect(integrator2, &quot;output&quot;, gain, &quot;input&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, integrator1, &quot;input&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, summerId, &quot;input0&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, summerId, &quot;input1&quot;);
+-  group-&gt;connect(integrator2, &quot;output&quot;, output, &quot;input&quot;);
+-  group-&gt;connect(summerId, &quot;output&quot;, delay, &quot;input&quot;);
+-  group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+-
+-  Group::NodeId groupOutputNode = group-&gt;addChild(new GroupOutput(&quot;GIO&quot;));
+-  group-&gt;connect(integrator2, &quot;output&quot;, groupOutputNode, &quot;input&quot;);
+-
+-  SharedPtr&lt;Group&gt; topGroup = new Group(&quot;G1&quot;);
+-  Group::NodeId child = topGroup-&gt;addChild(group);
+-
+-  Group::NodeId output0 = topGroup-&gt;addChild(new Output(&quot;Output&quot;));
+-  topGroup-&gt;connect(child, 0, output0, 0);
+-
+-  return topGroup.release();
+-}
+-
+-Node* buildDiscreteExample()
+-{
+-  SharedPtr&lt;Group&gt; group = new Group(&quot;G0&quot;);
+-  Group::NodeId gain = group-&gt;addChild(new Gain(&quot;gain&quot;, -1));
+-  DiscreteIntegrator* di1 = new DiscreteIntegrator(&quot;I1&quot;);
+-  Matrix v(1, 1);
+-  v(0, 0) = 10;
+-  di1-&gt;setInitialValue(v);
+-  Group::NodeId integrator1 = group-&gt;addChild(di1);
+-  Group::NodeId integrator2 = group-&gt;addChild(new DiscreteIntegrator(&quot;I2&quot;));
+-  Group::NodeId output = group-&gt;addChild(new Output(&quot;O&quot;));
+-  Group::NodeId delay = group-&gt;addChild(new Delay(&quot;D&quot;));
+-  Group::NodeId outputDelay = group-&gt;addChild(new Output(&quot;OD&quot;));
+-
+-  group-&gt;connect(integrator1, &quot;output&quot;, integrator2, &quot;input&quot;);
+-  group-&gt;connect(integrator2, &quot;output&quot;, gain, &quot;input&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, integrator1, &quot;input&quot;);
+-  group-&gt;connect(integrator2, &quot;output&quot;, output, &quot;input&quot;);
+-  group-&gt;connect(gain, &quot;output&quot;, delay, &quot;input&quot;);
+-  group-&gt;connect(delay, &quot;output&quot;, outputDelay, &quot;input&quot;);
+-
+-  return group.release();
+-}
+-
+-Node* buildLibraryNodeExample()
+-{
+-  SharedPtr&lt;Node&gt; node = buildDiscreteExample();
+-  SharedPtr&lt;LibraryModel&gt; libraryModel = new LibraryModel(&quot;Library Model&quot;);
+-  libraryModel-&gt;setNode(node);
+-  
+-  SharedPtr&lt;LibraryNode&gt; libraryNode1 = new LibraryNode(&quot;Library Node 1&quot;);
+-  libraryNode1-&gt;setLibraryModel(libraryModel);
+-
+-  SharedPtr&lt;LibraryNode&gt; libraryNode2 = new LibraryNode(&quot;Library Node 2&quot;);
+-  libraryNode2-&gt;setLibraryModel(libraryModel);
+-
+-  SharedPtr&lt;Group&gt; group = new Group(&quot;Group&quot;);
+-  group-&gt;addChild(libraryNode1);
+-  group-&gt;addChild(libraryNode2);
+-  return group.release();
+-}
+-
+ int main()
+ {
+   // Check a self referencing gain model, to see if cyclic loops
+@@ -204,18 +137,6 @@
+   if (!testCyclicDependencyWithGroup2())
+     return EXIT_FAILURE;
+ 
+-
+-  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildContinousExample());
+-//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildDiscreteExample());
+-//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildLibraryNodeExample());
+-
+-  system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;system.h5&quot;));
+-
+-  if (!system-&gt;init())
+-    return 1;
+-
+-  system-&gt;simulate(10);
+-
+   std::cout &lt;&lt; &quot;PASSED&quot; &lt;&lt; std::endl;
+ 
+   return 0;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000797.html">[OpenFDM-svn] r829 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000799.html">[OpenFDM-svn] r831 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#798">[ date ]</a>
+              <a href="thread.html#798">[ thread ]</a>
+              <a href="subject.html#798">[ subject ]</a>
+              <a href="author.html#798">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,669 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r243 - in trunk/OpenFDM/src: JSBSim OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r243%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200602121445.k1CEjZYG005144%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000222.html">
+   <LINK REL="Next"  HREF="000224.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r243 - in trunk/OpenFDM/src: JSBSim OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r243%20-%20in%20trunk/OpenFDM/src%3A%20JSBSim%20OpenFDM&In-Reply-To=%3C200602121445.k1CEjZYG005144%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r243 - in trunk/OpenFDM/src: JSBSim OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Sun Feb 12 15:45:35 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000222.html">[OpenFDM-svn] r242 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000224.html">[OpenFDM-svn] r244 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#223">[ date ]</a>
+              <a href="thread.html#223">[ thread ]</a>
+              <a href="subject.html#223">[ subject ]</a>
+              <a href="author.html#223">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-02-12 15:45:14 +0100 (Sun, 12 Feb 2006)
+New Revision: 243
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+   trunk/OpenFDM/src/OpenFDM/Launchbar.h
+Modified:
+   trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+   trunk/OpenFDM/src/OpenFDM/Ground.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+A first cut of a carrier launchbar.
+
+
+Modified: trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/JSBSim/JSBSimReader.cpp	2006-02-12 14:45:14 UTC (rev 243)
+@@ -22,6 +22,7 @@
+ #include &lt;OpenFDM/Gain.h&gt;
+ #include &lt;OpenFDM/Input.h&gt;
+ #include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/Launchbar.h&gt;
+ #include &lt;OpenFDM/LinearSpringDamper.h&gt;
+ #include &lt;OpenFDM/MaxModel.h&gt;
+ #include &lt;OpenFDM/AirSpring.h&gt;
+@@ -678,6 +679,7 @@
+         std::string numStr = sstr.str();
+         std::string name = (*it)-&gt;getAttribute(&quot;name&quot;);
+ 
++        Vector3 parentPos = structToBody(Vector3::zeros());
+         Vector3 compressJointPos = locationData((*it)-&gt;getElement(&quot;location&quot;));
+         // Model steering here ...
+         // normally we connect the compressible part to the top level body, but
+@@ -698,13 +700,13 @@
+           sj-&gt;setJointAxis(Vector3(0, 0, 1));
+           sj-&gt;setJointPos(0);
+           sj-&gt;setJointVel(0);
+-          sj-&gt;setPosition(structToBody(compressJointPos)
+-                          + Vector3(0.05, 0, 0));
++          parentPos = structToBody(compressJointPos) + Vector3(0.05, 0, 0);
++          sj-&gt;setPosition(parentPos);
+           sj-&gt;setOrientation(Quaternion::unit());
+           
+           Port* port = lookupJSBExpression(&quot;fcs/steer-cmd-norm&quot;);
+           sj-&gt;getInputPort(0)-&gt;connect(port);
+-          
++  
+           strutParent = steer;
+           
+           // Prepare outputs
+@@ -721,6 +723,40 @@
+                          &quot;gear/gear[&quot; + numStr + &quot;]/steering-pos-deg&quot;);
+         }
+         
++        const XMLElement* launchbarElem = (*it)-&gt;getElement(&quot;launchbar&quot;);
++        if (launchbarElem) {
++          Launchbar* launchbar = new Launchbar(name + &quot; Launchbar&quot;);
++          real_type length = realData(launchbarElem-&gt;getElement(&quot;length&quot;), 0.5);
++          launchbar-&gt;setLength(length);
++          real_type upAngle = realData(launchbarElem-&gt;getElement(&quot;upAngle&quot;), 30);
++          launchbar-&gt;setUpAngle(convertFrom(uDegree, upAngle));
++          real_type downAngle = realData(launchbarElem-&gt;getElement(&quot;downAngle&quot;), -50);
++          launchbar-&gt;setDownAngle(convertFrom(uDegree, downAngle));
++          real_type force = realData(launchbarElem-&gt;getElement(&quot;launchForce&quot;), 1000);
++          launchbar-&gt;setLaunchForce(force);
++          Vector3 loc = structToBody(locationData(launchbarElem-&gt;getElement(&quot;location&quot;)));
++          launchbar-&gt;setPosition(loc - parentPos);
++          addMultiBodyModel(launchbar);
++          strutParent-&gt;addInteract(launchbar);
++
++          Port* port = lookupJSBExpression(&quot;/controls/gear/launchbar&quot;);
++          launchbar-&gt;getInputPort(&quot;tryMount&quot;)-&gt;connect(port);
++          port = lookupJSBExpression(&quot;/controls/gear/catapult-launch-cmd&quot;);
++          launchbar-&gt;getInputPort(&quot;launchCommand&quot;)-&gt;connect(port);
++
++          // expose the launchbar position
++          port = launchbar-&gt;getOutputPort(0);
++          std::string nameBase = &quot;Launchbar Position&quot;;
++          addOutputModel(port, nameBase, &quot;gear/launchbar-pos-rad&quot;);
++          UnitConversionModel* unitModel
++            = new UnitConversionModel(nameBase + &quot; converter&quot;,
++                                      UnitConversionModel::SiToUnit, uDegree);
++          unitModel-&gt;getInputPort(0)-&gt;connect(port);
++          addFCSModel(unitModel);
++          addOutputModel(unitModel-&gt;getOutputPort(0), nameBase + &quot; Deg&quot;,
++                         &quot;gear/launchbar-pos-deg&quot;);
++        }
++
+         
+         // Now the compressible part of the strut
+         RigidBody* arm = new RigidBody(name + &quot; Strut&quot;);
+@@ -732,10 +768,8 @@
+         strutParent-&gt;addInteract(pj);
+         arm-&gt;setInboardJoint(pj);
+         pj-&gt;setJointAxis(Vector3(0, 0, -1));
+-        if (strutParent == mVehicle-&gt;getTopBody())
+-          pj-&gt;setPosition(structToBody(compressJointPos));
+-        else
+-          pj-&gt;setPosition(Vector3(-0.05, 0, 0));
++        pj-&gt;setPosition(structToBody(compressJointPos) - parentPos);
++        parentPos = structToBody(compressJointPos);
+         
+         // The damper element
+         const XMLElement* airSpringElem = (*it)-&gt;getElement(&quot;damper&quot;);
+@@ -746,8 +780,7 @@
+         addMultiBodyModel(aoDamp);
+         
+         // Attach a wheel to that strut part.
+-        attachWheel((*it)-&gt;getElement(&quot;wheel&quot;), name, numStr, arm,
+-                    structToBody(compressJointPos));
++        attachWheel((*it)-&gt;getElement(&quot;wheel&quot;), name, numStr, arm, parentPos);
+         
+         // Prepare some outputs ...
+         Port* port = pj-&gt;getOutputPort(0);
+
+Modified: trunk/OpenFDM/src/OpenFDM/Ground.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Ground.h	2006-02-12 14:45:14 UTC (rev 243)
+@@ -13,14 +13,24 @@
+ 
+ struct GroundValues {
+   GroundValues(const Plane&amp; p = Plane(), const Vector6&amp; v = Vector6::zeros(),
+-               real_type fr = 1)
+-    : plane(p), vel(v), friction(fr)
+-  {}
++               real_type fr = 1) :
++    plane(p), vel(v), friction(fr) {}
+   Plane plane;
+   Vector6 vel;
+   real_type friction;
+ };
+ 
++struct CatapultValues {
++  /// The position of the catapult start in reference coordinates
++  Vector3 position;
++  /// The orientation of the catapult frame
++  Quaternion orientation;
++  /// The spatial velocity of the catapult frame
++  Vector6 velocity;
++  /// The catapult length
++  real_type length;
++};
++
+ /**
+  * The Ground class.
+  */
+@@ -37,6 +47,15 @@
+ 
+   virtual GroundValues
+   getGroundPlane(real_type t, const Vector3&amp; refPos) const = 0;
++
++  /** Returns true if a catapult is within some reasonable range to
++      the reference position. The reference position is usually the
++      position of the launchbar.
++   */
++  virtual bool
++  getCatapultValues(real_type t, const Vector3&amp; refPos,
++                    CatapultValues&amp; catVal) const
++  { return false; }
+ };
+ 
+ } // namespace OpenFDM
+
+Added: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.cpp	2006-02-12 14:45:14 UTC (rev 243)
+@@ -0,0 +1,302 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Environment.h&quot;
++#include &quot;Launchbar.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(Launchbar, ExternalForce)
++  END_OPENFDM_OBJECT_DEF
++
++Launchbar::Launchbar(const std::string&amp; name)
++  : ExternalForce(name),
++    mLength(0.6),
++    mHoldbackLength(1.5),
++    mHoldBackMount(0, 0, 0.1),
++    mUpAngle(0.5),
++    mDownAngle(-0.5),
++    mAngularVelocity(1),
++    mLaunchForce(0)
++{
++  mCatFrame = new FreeFrame(&quot;Catapult frame&quot;);
++  mMountFrame-&gt;addChildFrame(mCatFrame);
++
++  setNumDiscreteStates(1);
++
++  // FIXME??
++  addSampleTime(SampleTime::PerTimestep);
++  addSampleTime(SampleTime::Continous);
++
++  setNumInputPorts(2);
++  setInputPortName(0, &quot;tryMount&quot;);
++  setInputPortName(1, &quot;launchCommand&quot;);
++
++  setNumOutputPorts(1);
++  setOutputPort(0, &quot;angle&quot;, this, &amp;Launchbar::getAngle);
++}
++
++Launchbar::~Launchbar(void)
++{
++}
++
++bool
++Launchbar::init(void)
++{
++  mState = Unmounted;
++  mAngleCommand = mUpAngle;
++
++  mTryMountPort = getInputPort(0)-&gt;toRealPortHandle();
++  if (!mTryMountPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of Launchbar model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(0)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++
++  mLaunchCommandPort = getInputPort(1)-&gt;toRealPortHandle();
++  if (!mLaunchCommandPort.isConnected()) {
++    Log(Model, Error) &lt;&lt; &quot;Initialization of Launchbar model \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; failed: Input port \&quot;&quot; &lt;&lt; getInputPortName(1)
++                      &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
++    return false;
++  }
++
++  mEnvironment = getEnvironment();
++  if (!mEnvironment)
++    return false;
++  return ExternalForce::init();
++}
++
++void
++Launchbar::output(const TaskInfo&amp; taskInfo)
++{
++  if (nonZeroIntersection(taskInfo.getSampleTimeSet(),
++                          SampleTime::PerTimestep)) {
++    Log(Model, Debug) &lt;&lt; &quot;Launchbar::output(): \&quot;&quot; &lt;&lt; getName()
++                      &lt;&lt; &quot;\&quot; computing ground plane below&quot; &lt;&lt; endl;
++    getGround(taskInfo.getTime());
++  }
++
++  // The launchbar angle
++  mAngle = computeCurrentLaunchbarAngle();
++
++  // Ok, apply the tension at the launchbar and have the holdback
++  if (mState != Mounted &amp;&amp; mState != Launching) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // Query the catapult, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type catLen;
++  if (!computeCatFrame(taskInfo.getTime(), catLen)) {
++    setForce(Vector6::zeros());
++    return;
++  }
++
++  // The catapult direction vector
++  Vector3 catPos0 = mCatFrame-&gt;posToParent(Vector3::zeros());
++  Vector3 catDir = mCatFrame-&gt;rotToParent(Vector3::unit(1));
++
++  // The launchbar's tip position
++  Vector3 lbTip(cos(mAngle)*mLength, 0, -sin(mAngle)*mLength);
++  
++  // The tension applied over the launchbar
++  // allways pulls the aircraft back to the cat ...
++  // project the launchbar tip to the catpult line ...
++  Vector3 lbTipOnCat = catPos0 + dot(lbTip - catPos0, catDir)*catDir;
++  Vector6 force = Vector6::zeros();
++  if (mState == Mounted) {
++    force.setLinear(mLaunchForce/5*normalize(lbTipOnCat));
++  } else {
++    force.setLinear(mLaunchForce*normalize(lbTipOnCat));
++  }
++  
++  if (mState == Mounted) {
++    // the position of the holdback's deck mount
++    Vector3 hbDeckMount = mCatFrame-&gt;posToParent(mPosOnCat*Vector3::unit(1));
++
++    // ok, for now the holback is a stiff spring, will model that different
++    // when loop closure contranits are availble ...
++    Vector3 hbDir = mHoldBackMount - hbDeckMount;
++    real_type hbLen = norm(hbDir);
++    if (mHoldbackLength &lt; hbLen) {
++      Vector3 hbForce = (2*mLaunchForce*(mHoldbackLength - hbLen)/hbLen)*hbDir;
++      force += forceFrom(mHoldBackMount, hbForce);
++    }
++
++    // Some damping force, just at the position the launchbar applies its force
++    force += mLaunchForce/2*mCatFrame-&gt;motionToParent(mCatFrame-&gt;getRelVel());
++  }
++  
++  setForce(force);
++}
++
++void
++Launchbar::update(const TaskInfo&amp; taskInfo)
++{
++  real_type unlagedAngleCommand = mUpAngle;
++
++  // Query the catapult, write the result into the attached frame
++  // ... yes this function works through sideffects ... :-/
++  real_type catLen;
++  if (!computeCatFrame(taskInfo.getTime(), catLen)) {
++    mState = Unmounted;
++    unlagedAngleCommand = mUpAngle;
++  } else {
++    // Ok, here we know that the catapult frame contains some sensible values
++
++    // The catapult direction vector
++    Vector3 catPos0 = mCatFrame-&gt;posToParent(Vector3::zeros());
++    Vector3 catDir = mCatFrame-&gt;rotToParent(Vector3::unit(1));
++    
++    real_type angle = computeCurrentLaunchbarAngle();
++    // The launchbar's tip position
++    Vector3 lbTip(cos(angle)*mLength, 0, -sin(angle)*mLength);
++    
++    // Compute the distance from the launchbar tip to the catapult
++    real_type dist = norm(lbTip-catPos0-dot(catDir, lbTip - catPos0)*catDir);
++    
++    if (mState == Unmounted) {
++      bool tryMount = mTryMountPort.getRealValue();
++      if (tryMount) {
++        unlagedAngleCommand = mDownAngle;
++        
++        // can only mount if we are near enough
++        if (dist &lt; 0.1) {
++          // Now compute a reference position on the catapult line which
++          // will be used as the reference for the holdback
++          
++          // compute the nearest point on the catapult line to the holdback
++          // mount
++          Vector3 hbNearest = catPos0
++            + dot(mHoldBackMount - catPos0, catDir)*catDir;
++          
++          // Find the distance backwards from that point matching
++          // the holdback length
++          real_type sqrCatx = mHoldbackLength*mHoldbackLength
++            - dot(hbNearest, hbNearest);
++          /// There is something wrong if the holdback mount is too far
++          if (0 &lt;= sqrCatx) {
++            Vector3 hbDeckMount = hbNearest - sqrt(sqrCatx)*catDir;
++            
++            // The reference position
++            mPosOnCat = dot(catDir, hbDeckMount - catPos0);
++            //           if (mPosOnCat &lt; 30)
++            
++            // Ok, survived, mounted now ...
++            mState = Mounted;
++          }
++        }
++      } else
++        unlagedAngleCommand = mUpAngle;
++      
++    } else if (mState == Mounted) {
++      if (mLaunchCommandPort.getRealValue())
++        mState = Launching;
++      
++      if (dist &gt; 1)
++        mState = Unmounted;
++      
++      unlagedAngleCommand = mDownAngle;
++    } else {
++      // Launching
++      if (dist &gt; 1)
++        mState = Unmounted;
++      
++      Vector3 catPos1 = mCatFrame-&gt;posToParent(catLen*Vector3::unit(1));
++      if (dot(catPos1, catDir) &lt; 0)
++        mState = Unmounted;
++      
++      unlagedAngleCommand = mDownAngle;
++    }
++  }
++
++  real_type angleError = unlagedAngleCommand - mAngleCommand;
++  angleError = sign(angleError)*min(mAngularVelocity, 40*fabs(angleError));
++  /// FIXME: isPerTimestep sample times do not contain the step size ...
++  /// hardwire that ATM
++  mAngleCommand += 1/120.0*angleError;
++}
++
++void
++Launchbar::setDiscreteState(const StateStream&amp; state)
++{
++  state.readSubState(mAngleCommand);
++}
++
++void
++Launchbar::getDiscreteState(StateStream&amp; state) const
++{
++  state.writeSubState(mAngleCommand);
++}
++
++void
++Launchbar::getGround(real_type t)
++{
++  // FIXME
++  if (!mEnvironment) {
++    mEnvironment = getEnvironment();
++  }
++
++  // Get the position of the contact in the reference system.
++  Vector3 pos = mMountFrame-&gt;getRefPosition();
++  // Query for the ground parameters at this point.
++  mGroundVal = mEnvironment-&gt;getGround()-&gt;getGroundPlane(t, pos);
++}
++
++bool
++Launchbar::computeCatFrame(real_type t, real_type&amp; catLen)
++{
++  Vector3 refPos = mMountFrame-&gt;getRefPosition();
++  CatapultValues catVals;
++  const Ground* ground = mEnvironment-&gt;getGround();
++  // Early return if no cat in range
++  if (!ground-&gt;getCatapultValues(t, refPos, catVals))
++    return false;
++
++  mCatFrame-&gt;setRefPosition(catVals.position);
++  mCatFrame-&gt;setRefOrientation(catVals.orientation);
++  Vector6 locVel(mCatFrame-&gt;rotFromRef(catVals.velocity.getAngular()),
++                 mCatFrame-&gt;rotFromRef(catVals.velocity.getLinear()));
++  mCatFrame-&gt;setRefVel(locVel);
++  catLen = catVals.length;
++
++  return true;
++}
++
++real_type
++Launchbar::computeCurrentLaunchbarAngle(void)
++{
++  // Transform the plane equation to the local frame.
++  Plane lp = mMountFrame-&gt;planeFromRef(mGroundVal.plane);
++  
++  // Get the distance to ground
++  // negative values are above ground
++  real_type distToGround = lp.getDist(Vector3::zeros());
++  // The angle between the local x-axis and the launchbar, positive upwards
++  real_type aCosAngle = distToGround/mLength;
++  if (aCosAngle &lt; -1)
++    aCosAngle = -1;
++  if (1 &lt; aCosAngle)
++    aCosAngle = 1;
++  /// FIXME: could be done different ????
++  real_type angle = - acos(aCosAngle) + pi05;
++  // limit to the range of movement
++  if (angle &lt; mAngleCommand)
++    angle = mAngleCommand;
++  if (mUpAngle &lt; angle)
++    angle = mUpAngle;
++
++  return angle;
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Launchbar.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Launchbar.h	2006-02-12 14:45:14 UTC (rev 243)
+@@ -0,0 +1,95 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_Launchbar_H
++#define OpenFDM_Launchbar_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
++#include &quot;Force.h&quot;
++#include &quot;Ground.h&quot;
++#include &quot;Environment.h&quot;
++
++namespace OpenFDM {
++
++class Launchbar : public ExternalForce {
++  OPENFDM_OBJECT(Launchbar, ExternalForce);
++public:
++  Launchbar(const std::string&amp; name);
++  virtual ~Launchbar(void);
++
++  virtual bool init(void);
++  virtual void output(const TaskInfo&amp;);
++  virtual void update(const TaskInfo&amp;);
++
++  virtual void setDiscreteState(const StateStream&amp; state);
++  virtual void getDiscreteState(StateStream&amp; state) const;
++
++  const real_type&amp; getAngle(void) const
++  { return mAngle; }
++
++  const real_type&amp; getLength(void) const
++  { return mLength; }
++  void setLength(const real_type&amp; length)
++  { mLength = length; }
++
++  const real_type&amp; getUpAngle(void) const
++  { return mUpAngle; }
++  void setUpAngle(const real_type&amp; upAngle)
++  { mUpAngle = upAngle; }
++
++  const real_type&amp; getDownAngle(void) const
++  { return mDownAngle; }
++  void setDownAngle(const real_type&amp; downAngle)
++  { mDownAngle = downAngle; }
++
++  const real_type&amp; getLaunchForce(void) const
++  { return mLaunchForce; }
++  void setLaunchForce(const real_type&amp; launchForce)
++  { mLaunchForce = launchForce; }
++
++private:
++  void getGround(real_type t);
++  bool computeCatFrame(real_type t, real_type&amp; catLen);
++  real_type computeCurrentLaunchbarAngle(void);
++
++  enum State {
++    Unmounted,
++    Mounted,
++    Launching
++  };
++
++  real_type mLength;
++  real_type mHoldbackLength;
++  // The mount point of the holdback at the strut
++  Vector3 mHoldBackMount;
++  real_type mUpAngle;
++  real_type mDownAngle;
++  real_type mAngularVelocity;
++  // The launch force
++  real_type mLaunchForce;
++
++  /// Continous output of the launchbar angle
++  real_type mAngle;
++  /// discrete state of the laged launchbar position following the command
++  real_type mAngleCommand;
++
++  real_type mPosOnCat;
++  State mState;
++
++  RealPortHandle mTryMountPort;
++  RealPortHandle mLaunchCommandPort;
++
++  /// The frame where the catapult values are put in
++  SharedPtr&lt;FreeFrame&gt; mCatFrame;
++
++  GroundValues mGroundVal;
++  SharedPtr&lt;Environment&gt; mEnvironment;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: trunk/OpenFDM/src/OpenFDM/Launchbar.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 10:47:04 UTC (rev 242)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-02-12 14:45:14 UTC (rev 243)
+@@ -59,6 +59,7 @@
+   ImplicitEuler.h \
+   Inertia.h \
+   Joint.h \
++  Launchbar.h \
+   Limits.h \
+   LinAlg/Algorithm.h \
+   LinAlg/Array.h \
+@@ -163,6 +164,7 @@
+   Interact.cpp \
+   ImplicitEuler.cpp \
+   Joint.cpp \
++  Launchbar.cpp \
+   LinearSpringDamper.cpp \
+   Logger.cpp \
+   Mass.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000222.html">[OpenFDM-svn] r242 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000224.html">[OpenFDM-svn] r244 - trunk/flightgear
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#223">[ date ]</a>
+              <a href="thread.html#223">[ thread ]</a>
+              <a href="subject.html#223">[ subject ]</a>
+              <a href="author.html#223">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

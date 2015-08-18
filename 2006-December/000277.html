@@ -1,0 +1,168 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r299 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r299%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200612131850.kBDIowSj021919%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   
+   <LINK REL="Next"  HREF="000278.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r299 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r299%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200612131850.kBDIowSj021919%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r299 - trunk/OpenFDM/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec 13 19:50:58 CET 2006</I>
+    <P><UL>
+        
+        <LI>Next message: <A HREF="000278.html">[OpenFDM-svn] r300 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#277">[ date ]</a>
+              <a href="thread.html#277">[ thread ]</a>
+              <a href="subject.html#277">[ subject ]</a>
+              <a href="author.html#277">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-12-13 19:50:57 +0100 (Wed, 13 Dec 2006)
+New Revision: 299
+
+Added:
+   trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Atomic.h
+   trunk/OpenFDM/src/OpenFDM/Makefile.am
+Log:
+Make it work without -march= on i386
+
+
+Added: trunk/OpenFDM/src/OpenFDM/Atomic.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2006-11-10 05:36:02 UTC (rev 298)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.cpp	2006-12-13 18:50:57 UTC (rev 299)
+@@ -0,0 +1,47 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2006 Mathias Froehlich 
++ *
++ */
++
++#include &quot;Atomic.h&quot;
++
++#if defined(OpenFDM_USE_GCC4_BUILTINS) &amp;&amp; defined(__i386__)
++
++// Usually the apropriate functions are inlined by gcc.
++// But if gcc is called with something aequivalent to -march=i386,
++// it will not assume that there is a lock instruction and instead
++// calls this pair of functions. We will provide them here in this case.
++// Note that this assembler code will not work on a i386 chip anymore.
++// But I hardly believe that we can assume to run at least on a i486 ...
++
++extern &quot;C&quot; {
++
++unsigned __sync_sub_and_fetch_4(volatile void *ptr, unsigned value)
++{
++  register volatile unsigned* mem = reinterpret_cast&lt;volatile unsigned*&gt;(ptr);
++  register unsigned result;
++  __asm__ __volatile__(&quot;lock; xadd{l} {%0,%1|%1,%0}&quot;
++                       : &quot;=r&quot; (result), &quot;=m&quot; (*mem)
++                       : &quot;0&quot; (-value), &quot;m&quot; (*mem)
++                       : &quot;memory&quot;);
++  return result;
++}
++
++unsigned __sync_add_and_fetch_4(volatile void *ptr, unsigned value)
++{
++  register volatile unsigned* mem = reinterpret_cast&lt;volatile unsigned*&gt;(ptr);
++  register unsigned result;
++  __asm__ __volatile__(&quot;lock; xadd{l} {%0,%1|%1,%0}&quot;
++                       : &quot;=r&quot; (result), &quot;=m&quot; (*mem)
++                       : &quot;0&quot; (value), &quot;m&quot; (*mem)
++                       : &quot;memory&quot;);
++  return result;
++}
++
++void __sync_synchronize()
++{
++  __asm__ __volatile__(&quot;&quot;: : : &quot;memory&quot;);
++}
++
++} // extern &quot;C&quot;
++
++#endif
+
+Modified: trunk/OpenFDM/src/OpenFDM/Atomic.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Atomic.h	2006-11-10 05:36:02 UTC (rev 298)
++++ trunk/OpenFDM/src/OpenFDM/Atomic.h	2006-12-13 18:50:57 UTC (rev 299)
+@@ -5,7 +5,8 @@
+ #ifndef OpenFDM_Atomic_H
+ #define OpenFDM_Atomic_H
+ 
+-#if defined(__GNUC__) &amp;&amp; (4 &lt;= __GNUC__) &amp;&amp; (1 &lt;= __GNUC_MINOR__)
++#if defined(__GNUC__) &amp;&amp; (4 &lt;= __GNUC__) &amp;&amp; (1 &lt;= __GNUC_MINOR__) \
++  &amp;&amp; (defined(__i386__) || defined(__x86_64__))
+ // No need to include something. Is a Compiler API ...
+ # define OpenFDM_USE_GCC4_BUILTINS
+ #elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
+@@ -63,9 +64,13 @@
+   Atomic(const Atomic&amp;);
+   Atomic&amp; operator=(const Atomic&amp;);
+ 
+-#if !defined(OpenFDM_USE_GCC4_BUILTINS) &amp;&amp; !defined(OpenFDM_USE_WIN32_INTERLOCKED)
++#if !defined(OpenFDM_USE_GCC4_BUILTINS) \
++  &amp;&amp; !defined(OpenFDM_USE_WIN32_INTERLOCKED)
+   mutable Mutex mMutex;
+ #endif
++#ifdef OpenFDM_USE_WIN32_INTERLOCKED
++  __declspec(align(32))
++#endif
+   unsigned mValue;
+ };
+ 
+
+Modified: trunk/OpenFDM/src/OpenFDM/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-11-10 05:36:02 UTC (rev 298)
++++ trunk/OpenFDM/src/OpenFDM/Makefile.am	2006-12-13 18:50:57 UTC (rev 299)
+@@ -151,6 +151,7 @@
+   Assert.cpp \
+   Atmosphere.cpp \
+   AtmosphereSTD1976.cpp \
++  Atomic.cpp \
+   Bias.cpp \
+   BinaryFunctionModel.cpp \
+   Connection.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	
+	<LI>Next message: <A HREF="000278.html">[OpenFDM-svn] r300 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#277">[ date ]</a>
+              <a href="thread.html#277">[ thread ]</a>
+              <a href="subject.html#277">[ subject ]</a>
+              <a href="author.html#277">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,104 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1083%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091058.n79Awq96010272%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001041.html">
+   <LINK REL="Next"  HREF="001043.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1083%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908091058.n79Awq96010272%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1083 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Aug  9 12:58:52 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001041.html">[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+        <LI>Next message: <A HREF="001043.html">[OpenFDM-svn] r1084 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1042">[ date ]</a>
+              <a href="thread.html#1042">[ thread ]</a>
+              <a href="subject.html#1042">[ subject ]</a>
+              <a href="author.html#1042">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-09 12:58:43 +0200 (Sun, 09 Aug 2009)
+New Revision: 1083
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+Log:
+Implement reading abs functions.
+
+M    JSBSimReader.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-09 10:44:30 UTC (rev 1082)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-09 10:58:43 UTC (rev 1083)
+@@ -1698,12 +1698,22 @@
+   std::list&lt;const XMLElement*&gt;::const_iterator ait;
+   for (ait = args.begin(); ait != args.end(); ++ait) {
+     if ((*ait)-&gt;getName() == &quot;value&quot;) {
+-      std::stringstream stream((*ait)-&gt;getData());
+-      real_type value;
+-      stream &gt;&gt; value;
++      real_type value = asciiToReal((*ait)-&gt;getData());
+       inputs.push_back(addMultiBodyConstModel(name + &quot; Constant&quot;, value));
+     } else if ((*ait)-&gt;getName() == &quot;property&quot;) {
+       inputs.push_back(lookupJSBExpression(stringData(*ait), path));
++    } else if ((*ait)-&gt;getName() == &quot;abs&quot;) {
++      std::list&lt;const Port*&gt; absInput = readFunctionInputs(*ait, &quot;abs-&quot; + name);
++      if (absInput.size() != 1) {
++          error(&quot;abs function inputtag must have 2DTable data does not have 2 inputs!&quot;);
++          return std::list&lt;const Port*&gt;();
++      }
++      
++      SharedPtr&lt;UnaryFunction&gt; absModel;
++      absModel = new UnaryFunction(&quot;Abs &quot; + name, UnaryFunction::Abs);
++      addMultiBodyModel(absModel);
++      mTopLevelGroup-&gt;connect(absInput.front(), absModel-&gt;getInputPort(0));
++      inputs.push_back(absModel-&gt;getOutputPort());
+     } else if ((*ait)-&gt;getName() == &quot;table&quot;) {
+       unsigned dim = getNumTableDims(*ait);
+       if (dim == 1) {
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001041.html">[OpenFDM-svn] r1082 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+	<LI>Next message: <A HREF="001043.html">[OpenFDM-svn] r1084 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1042">[ date ]</a>
+              <a href="thread.html#1042">[ thread ]</a>
+              <a href="subject.html#1042">[ subject ]</a>
+              <a href="author.html#1042">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

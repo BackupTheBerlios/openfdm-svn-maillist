@@ -1,0 +1,321 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r638%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810201718.m9KHI8KD019542%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000606.html">
+   <LINK REL="Next"  HREF="000608.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r638%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810201718.m9KHI8KD019542%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r638 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Oct 20 19:18:08 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000606.html">[OpenFDM-svn] r637 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000608.html">[OpenFDM-svn] r639 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#607">[ date ]</a>
+              <a href="thread.html#607">[ thread ]</a>
+              <a href="subject.html#607">[ subject ]</a>
+              <a href="author.html#607">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-20 19:17:59 +0200 (Mon, 20 Oct 2008)
+New Revision: 638
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+Log:
+Make use of Frame in MechanicLinkValue.
+
+M    src/OpenFDM/MobileRootJoint.cpp
+M    src/OpenFDM/Frame.h
+M    src/OpenFDM/MechanicContext.h
+M    src/OpenFDM/MechanicLinkValue.h
+M    src/OpenFDM/RigidBody.cpp
+M    src/OpenFDM/HDF5SystemOutput.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Frame.h	2008-10-20 17:17:59 UTC (rev 638)
+@@ -26,6 +26,25 @@
+   Frame();
+   ~Frame(void);
+ 
++  void setPosAndVel(const Frame&amp; parent)
++  {
++    mPosition = Vector3::zeros();
++    mOrientation = Quaternion::unit();
++    mRelVel = Vector6::zeros();
++
++    mRefOrient = parent.getRefOrientation();
++    mRefPos = parent.getRefPosition();
++
++    mParentSpVel = parent.getSpVel();
++    mRefVel = parent.getRefVel();
++  }
++
++  void setAccel(const Frame&amp; parent)
++  {
++    mRelVelDot = Vector6::zeros();
++    mParentSpAccel = parent.getSpAccel();
++  }
++
+   void setPosAndVel(const Frame&amp; parent, const Vector3&amp; position,
+                     const Quaternion&amp; orientation, const Vector6&amp; velocity)
+   {
+@@ -367,7 +386,7 @@
+    * this frame is attached to.
+    * It is measured in the topmost frames coordinates.
+    */
+-  const Rotation&amp; getRefOrientation(void) const
++  const Quaternion&amp; getRefOrientation(void) const
+   { return mRefOrient; }
+ 
+   /** Reference position.
+@@ -402,7 +421,7 @@
+   Vector6 mParentSpVel;
+   Vector6 mParentSpAccel;
+ 
+-  Rotation mRefOrient;
++  Quaternion mRefOrient;
+   Vector3 mRefPos;
+   Vector6 mRefVel;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/HDF5SystemOutput.h	2008-10-20 17:17:59 UTC (rev 638)
+@@ -334,13 +334,13 @@
+     { }
+     virtual void append()
+     {
+-      _position.append(mMechanicLinkValue-&gt;mPosition);
+-      _orientation.append(mMechanicLinkValue-&gt;mOrientation);
+-      _eulerAngle.append(mMechanicLinkValue-&gt;mOrientation.getEuler());
+-      _velocity.append(mMechanicLinkValue-&gt;mSpatialVelocity);
+-      _acceleration.append(mMechanicLinkValue-&gt;mSpatialAcceleration);
+-      _force.append(mMechanicLinkValue-&gt;mArticulatedForce);
+-      _inertia.append(mMechanicLinkValue-&gt;mArticulatedInertia);
++      _position.append(mMechanicLinkValue-&gt;getFrame().getPosition());
++      _orientation.append(mMechanicLinkValue-&gt;getFrame().getOrientation());
++      _eulerAngle.append(mMechanicLinkValue-&gt;getFrame().getOrientation().getEuler());
++      _velocity.append(mMechanicLinkValue-&gt;getFrame().getSpVel());
++      _acceleration.append(mMechanicLinkValue-&gt;getFrame().getSpAccel());
++      _force.append(mMechanicLinkValue-&gt;getForce());
++      _inertia.append(mMechanicLinkValue-&gt;getInertia());
+     }
+     virtual HDF5Object getObject()
+     { return _group; }
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-20 17:17:59 UTC (rev 638)
+@@ -43,7 +43,7 @@
+     mRelOrientation = relOr;
+     mRelVelocity = relVel;
+     mParentSpVel = motionTo(mRelPosition, mRelOrientation,
+-                            parentLink.mSpatialVelocity);
++                            parentLink.getFrame().getSpVel());
+     mHDot = Vector6(cross(mParentSpVel.getAngular(), relVel.getAngular()),
+                     cross(mParentSpVel.getAngular(), relVel.getLinear()) +
+                     cross(mParentSpVel.getLinear(), relVel.getAngular()));
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-20 17:17:59 UTC (rev 638)
+@@ -7,8 +7,7 @@
+ 
+ #include &quot;Inertia.h&quot;
+ #include &quot;PortValue.h&quot;
+-#include &quot;Rotation.h&quot;
+-#include &quot;Vector.h&quot;
++#include &quot;Frame.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -19,6 +18,21 @@
+   virtual MechanicLinkValue* toMechanicLinkValue() { return this; }
+   virtual const MechanicLinkValue* toMechanicLinkValue() const { return this; }
+ 
++  const Frame&amp; getFrame() const
++  { return mFrame; }
++  Frame&amp; getFrame()
++  { return mFrame; }
++
++  const SpatialInertia&amp; getInertia() const
++  { return mArticulatedInertia; }
++  void setInertia(const SpatialInertia&amp; inertia)
++  { mArticulatedInertia = inertia; }
++
++  const Vector6&amp; getForce() const
++  { return mArticulatedForce; }
++  void setForce(const Vector6&amp; force)
++  { mArticulatedForce = force; }
++
+   void applyForce(const Vector6&amp; force)
+   { mArticulatedForce = force; }
+   void applyForce(const Vector3&amp; force)
+@@ -29,24 +43,28 @@
+   void applyInertia(const SpatialInertia&amp; inertia)
+   { mArticulatedInertia = inertia; }
+ 
++
++  void setPosAndVel(const MechanicLinkValue&amp; linkValue)
++  {
++    mFrame.setPosAndVel(linkValue.getFrame());
++  }
++  void setPosAndVel(const MechanicLinkValue&amp; linkValue, const Vector3&amp; position,
++                    const Quaternion&amp; orientation, const Vector6&amp; velocity)
++  {
++    mFrame.setPosAndVel(linkValue.getFrame(), position, orientation, velocity);
++  }
++
+   void applyArticulation(const MechanicLinkValue&amp; linkValue)
+   {
+     applyForce(linkValue.mArticulatedForce);
+     applyInertia(linkValue.mArticulatedInertia);
+   }
+ 
+-// protected:
+-  // FIXME:
+-  // Since the interact side is the provider port, an interact might provide
+-  // different typed ports, the Rigid body can test for at init time and
+-  // avoid inertia computations for ports not contributing that ...
++protected:
+   // May be build a class hierarchy that accounts for different inputs
+   // and outputs a rigid body can have.
+   // Example: force port, force and inertia, frame port, velocity port
+-  Vector3 mPosition;
+-  Quaternion mOrientation;
+-  Vector6 mSpatialVelocity;
+-  Vector6 mSpatialAcceleration;
++  Frame mFrame;
+   Vector6 mArticulatedForce;
+   SpatialInertia mArticulatedInertia;
+ };
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-20 17:17:59 UTC (rev 638)
+@@ -58,9 +58,9 @@
+   frameData.setVelocity(getAngularBaseVelocity(),
+                         position, orientation, velocity);
+ 
+-  portValues[mMechanicLink].mPosition = position;
+-  portValues[mMechanicLink].mOrientation = orientation;
+-  portValues[mMechanicLink].mSpatialVelocity = velocity + frameData.mParentSpVel;
++  portValues[mMechanicLink].getFrame().setPosAndVel(getAngularBaseVelocity(),
++                                                    position, orientation,
++                                                    velocity);
+ }
+ 
+ void
+@@ -85,8 +85,8 @@
+   // FIXME
+   Vector6 grav = Vector6(Vector3::zeros(), Vector3(0, 0, 9.81));
+ 
+-  SpatialInertia inertia = portValues[mMechanicLink].mArticulatedInertia;
+-  Vector6 force = portValues[mMechanicLink].mArticulatedForce;
++  SpatialInertia inertia = portValues[mMechanicLink].getInertia();
++  Vector6 force = portValues[mMechanicLink].getForce();
+ 
+   Vector6 parentSpAccel = Vector6::zeros();
+ 
+@@ -95,7 +95,7 @@
+   Vector6 acceleration = grav - solve(inertia, force) - parentSpAccel - frameData.mHDot;
+   frameData.mRelVelocityDot = acceleration;
+ 
+-  portValues[mMechanicLink].mSpatialAcceleration = acceleration;
++  portValues[mMechanicLink].getFrame().setAccel(acceleration);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-20 05:57:35 UTC (rev 637)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-20 17:17:59 UTC (rev 638)
+@@ -42,15 +42,9 @@
+ {
+   unsigned numLinkValues = mMechanicLinks.size();
+ 
+-  Vector3 position = portValues[mMechanicLinks.front()].mPosition;
+-  Quaternion orientation = portValues[mMechanicLinks.front()].mOrientation;
+-  Vector6 velocity = portValues[mMechanicLinks.front()].mSpatialVelocity;
+-
+-  for (unsigned i = 1; i &lt; numLinkValues; ++i) {
+-    portValues[mMechanicLinks[i]].mPosition = position;
+-    portValues[mMechanicLinks[i]].mOrientation = orientation;
+-    portValues[mMechanicLinks[i]].mSpatialVelocity = velocity;
+-  }
++  const Frame&amp; frame = portValues[mMechanicLinks.front()].getFrame();
++  for (unsigned i = 1; i &lt; numLinkValues; ++i)
++    portValues[mMechanicLinks[i]].getFrame().setPosAndVel(frame);
+ }
+ 
+ void
+@@ -69,9 +63,9 @@
+                         PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+   unsigned numLinkValues = mMechanicLinks.size();
+-  Vector6 accel = portValues[mMechanicLinks.front()].mSpatialAcceleration;
++  const Frame&amp; frame = portValues[mMechanicLinks.front()].getFrame();
+   for (unsigned i = 1; i &lt; numLinkValues; ++i)
+-    portValues[mMechanicLinks[i]].mSpatialAcceleration = accel;
++    portValues[mMechanicLinks[i]].getFrame().setAccel(frame);
+ }
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000606.html">[OpenFDM-svn] r637 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000608.html">[OpenFDM-svn] r639 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#607">[ date ]</a>
+              <a href="thread.html#607">[ thread ]</a>
+              <a href="subject.html#607">[ subject ]</a>
+              <a href="author.html#607">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

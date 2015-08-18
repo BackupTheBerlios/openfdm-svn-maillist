@@ -1,0 +1,313 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r373 - trunk/OpenFDM/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-March/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r373%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200803081131.m28BVKbd024413%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000345.html">
+   <LINK REL="Next"  HREF="000347.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r373 - trunk/OpenFDM/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r373%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200803081131.m28BVKbd024413%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r373 - trunk/OpenFDM/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Mar  8 12:31:20 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000345.html">[OpenFDM-svn] r372 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000347.html">[OpenFDM-svn] r374 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#346">[ date ]</a>
+              <a href="thread.html#346">[ thread ]</a>
+              <a href="subject.html#346">[ subject ]</a>
+              <a href="author.html#346">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-03-08 12:31:18 +0100 (Sat, 08 Mar 2008)
+New Revision: 373
+
+Added:
+   trunk/OpenFDM/src/test/limit.cpp
+Modified:
+   trunk/OpenFDM/src/test/Makefile.am
+   trunk/OpenFDM/src/test/harmonic.cpp
+   trunk/OpenFDM/src/test/quattest.cpp
+Log:
+Add limits test. Adjust tolerance for euler angles.
+
+
+Modified: trunk/OpenFDM/src/test/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/test/Makefile.am	2008-03-08 11:25:14 UTC (rev 372)
++++ trunk/OpenFDM/src/test/Makefile.am	2008-03-08 11:31:18 UTC (rev 373)
+@@ -1,7 +1,7 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some unit tests
+-check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic
++check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic limit
+ TESTS          = $(check_PROGRAMS)
+ 
+ unitstest_SOURCES = unitstest.cpp
+@@ -18,3 +18,6 @@
+ 
+ harmonic_SOURCES = harmonic.cpp
+ harmonic_LDADD = ../OpenFDM/libOpenFDM.la
++
++limit_SOURCES = limit.cpp
++limit_LDADD = ../OpenFDM/libOpenFDM.la
+
+Modified: trunk/OpenFDM/src/test/harmonic.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/harmonic.cpp	2008-03-08 11:25:14 UTC (rev 372)
++++ trunk/OpenFDM/src/test/harmonic.cpp	2008-03-08 11:31:18 UTC (rev 373)
+@@ -19,10 +19,10 @@
+ int
+ main(int argc, char *argv[])
+ {
+-  real_type omega = 2;
++  real_type omega = 20;
+ 
+   SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
+-  system-&gt;addSampleTime(real_type(1)/real_type(100));
++  system-&gt;addSampleTime(real_type(1)/real_type(100000));
+   system-&gt;setTimestepper(new DoPri5);
+   
+   Integrator* integrator0 = new Integrator(&quot;Acceleration Integrator&quot;);
+@@ -120,19 +120,19 @@
+   system-&gt;simulate(10);
+ 
+   real_type posError = posErrorCallback-&gt;error();
++  std::cout &lt;&lt; &quot;Position error check with error = &quot; &lt;&lt; posError &lt;&lt; std::endl;
++  real_type velError = velErrorCallback-&gt;error();
++  std::cout &lt;&lt; &quot;Velocity error check with error = &quot; &lt;&lt; velError &lt;&lt; std::endl;
+   if (1e-6 &lt; posError) {
+-    std::cerr &lt;&lt; &quot;Position error of &quot; &lt;&lt; posError &lt;&lt; &quot; is too big&quot; &lt;&lt; std::endl;
++    std::cerr &lt;&lt; &quot;Position error of is too big!&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+   }
+-  std::cout &lt;&lt; &quot;Passed position error check with error = &quot;
+-            &lt;&lt; posError &lt;&lt; std::endl;
+-  real_type velError = velErrorCallback-&gt;error();
++  std::cout &lt;&lt; &quot;Passed position error check.&quot; &lt;&lt; std::endl;
+   if (1e-6 &lt; velError) {
+-    std::cerr &lt;&lt; &quot;Velocity error of &quot; &lt;&lt; velError &lt;&lt; &quot; is too big&quot; &lt;&lt; std::endl;
++    std::cerr &lt;&lt; &quot;Velocity error of is too big!&quot; &lt;&lt; std::endl;
+     return EXIT_FAILURE;
+   }
+-  std::cout &lt;&lt; &quot;Passed velocity error check with error = &quot;
+-            &lt;&lt; velError &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Passed velocity error check.&quot; &lt;&lt; std::endl;
+ 
+   return EXIT_SUCCESS;
+ }
+
+Added: trunk/OpenFDM/src/test/limit.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/limit.cpp	2008-03-08 11:25:14 UTC (rev 372)
++++ trunk/OpenFDM/src/test/limit.cpp	2008-03-08 11:31:18 UTC (rev 373)
+@@ -0,0 +1,115 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;iostream&gt;
++#include &lt;fstream&gt;
++#include &lt;OpenFDM/Types.h&gt;
++#include &lt;OpenFDM/Limits.h&gt;
++
++using namespace OpenFDM;
++
++static real_type estimateEps()
++{
++  // Ok, totally useless outputs, but makes sure that the floating point
++  // registers get dumped out into memory. This actually works around that
++  // totally boring i387 fpu ...
++  std::ofstream dummy(&quot;/dev/null&quot;);
++
++  real_type eps = 1;
++  dummy &lt;&lt; &quot;Compute Epsilon&quot; &lt;&lt; std::endl;
++  while (1 + eps != 1) {
++    eps /= 2;
++    dummy &lt;&lt; eps &lt;&lt; &quot;, &quot;;
++  }
++  eps *= 2;
++  return eps;
++}
++
++static real_type estimateMin(const real_type&amp; eps)
++{
++  // Ok, totally useless outputs, but makes sure that the floating point
++  // registers get dumped out into memory. This actually works around that
++  // totally boring i387 fpu ...
++  std::ofstream dummy(&quot;/dev/null&quot;);
++
++  real_type minTry = eps;
++  real_type min = eps;
++  while (minTry != 0) {
++    min = minTry;
++    minTry = ldexp(minTry, -128*128);
++    dummy &lt;&lt; minTry &lt;&lt; &quot;, &quot;;
++  }
++  minTry = min;
++  while (minTry != 0) {
++    min = minTry;
++    minTry = ldexp(minTry, -128);
++    dummy &lt;&lt; minTry &lt;&lt; &quot;, &quot;;
++  }
++  minTry = min;
++  while (minTry != 0) {
++    min = minTry;
++    minTry /= 2;
++    dummy &lt;&lt; minTry &lt;&lt; &quot;, &quot;;
++  }
++  return min;
++}
++
++static real_type estimateMax(const real_type&amp; eps)
++{
++  // Ok, totally useless outputs, but makes sure that the floating point
++  // registers get dumped out into memory. This actually works around that
++  // totally boring i387 fpu ...
++  std::ofstream dummy(&quot;/dev/null&quot;);
++
++  real_type maxTry = 1 - eps;
++  real_type max = 1 - eps;
++  while (isfinite(maxTry)) {
++    max = maxTry;
++    maxTry = ldexp(maxTry, 128*128);
++    dummy &lt;&lt; maxTry &lt;&lt; &quot;, &quot;;
++  }
++  maxTry = max;
++  while (isfinite(maxTry)) {
++    max = maxTry;
++    maxTry = ldexp(maxTry, 128);
++    dummy &lt;&lt; maxTry &lt;&lt; &quot;, &quot;;
++  }
++  maxTry = max;
++  while (isfinite(maxTry)) {
++    max = maxTry;
++    maxTry *= 2;
++    dummy &lt;&lt; maxTry &lt;&lt; &quot;, &quot;;
++  }
++  return max;
++}
++
++int
++main(int argc, char *argv[])
++{
++  real_type eps = estimateEps();
++  std::cout &lt;&lt; &quot;Computed Eps = &quot; &lt;&lt; eps &lt;&lt; std::endl;
++  real_type min = estimateMin(eps);
++  std::cout &lt;&lt; &quot;Computed Min = &quot; &lt;&lt; min &lt;&lt; std::endl;
++  real_type max = estimateMax(eps);
++  std::cout &lt;&lt; &quot;Computed Max = &quot; &lt;&lt; max &lt;&lt; std::endl;
++
++  std::cout &lt;&lt; &quot;Epsilon = &quot; &lt;&lt; Limits&lt;real_type&gt;::epsilon() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Min = &quot; &lt;&lt; Limits&lt;real_type&gt;::min() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Safe Min = &quot; &lt;&lt; Limits&lt;real_type&gt;::safe_min() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Max = &quot; &lt;&lt; Limits&lt;real_type&gt;::max() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Round Error = &quot; &lt;&lt; Limits&lt;real_type&gt;::round_error() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Infinity = &quot; &lt;&lt; Limits&lt;real_type&gt;::infinity() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Quiet NaN = &quot; &lt;&lt; Limits&lt;real_type&gt;::quiet_NaN() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Signaling NaN = &quot; &lt;&lt; Limits&lt;real_type&gt;::signaling_NaN() &lt;&lt; std::endl;
++  std::cout &lt;&lt; &quot;Denormlized Min = &quot; &lt;&lt; Limits&lt;real_type&gt;::denorm_min() &lt;&lt; std::endl;
++
++  if (eps != Limits&lt;real_type&gt;::epsilon())
++    return EXIT_FAILURE;
++  if (min != Limits&lt;real_type&gt;::min())
++    return EXIT_FAILURE;
++  if (max != Limits&lt;real_type&gt;::max())
++    return EXIT_FAILURE;
++
++  return EXIT_SUCCESS;
++}
+
+Modified: trunk/OpenFDM/src/test/quattest.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/quattest.cpp	2008-03-08 11:25:14 UTC (rev 372)
++++ trunk/OpenFDM/src/test/quattest.cpp	2008-03-08 11:31:18 UTC (rev 373)
+@@ -123,21 +123,23 @@
+   // Test euler angle to quaternion and back conversion.
+   // special fixed cases
+   int fail = 0;
+-  fail += eulerTest(Quaternion::fromEuler(0, 0, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, 0, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, 0, pi05), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(0, 0, pi05), 100*eps);
++  // Ok, since this conversion has an instability, check with a special eps
++  real_type eulerEps = max(real_type(1e-10), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, 0, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, 0, pi05), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(0, 0, pi05), eulerEps);
+   // special fixed cases at the gimbal lock
+-  fail += eulerTest(Quaternion::fromEuler(0, pi05, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, pi05), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(0, pi05, pi05), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(0, -pi05, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, 0), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, pi05), 100*eps);
+-  fail += eulerTest(Quaternion::fromEuler(0, -pi05, pi05), 100*eps);
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, pi05, pi05), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(0, pi05, pi05), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, 0), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(pi05, -pi05, pi05), eulerEps);
++  fail += eulerTest(Quaternion::fromEuler(0, -pi05, pi05), eulerEps);
+ 
+-  real_type gimbalEps = 1e3*eps;
++  real_type gimbalEps = 1e3*eulerEps;
+   // special cases around the gimbal lock
+   for (unsigned i = 0; i &lt; nTests; ++i) {
+     for (unsigned k = 1; k &lt; 1024; k *= 2) {
+@@ -163,7 +165,7 @@
+   }
+   // arbitrary cases
+   for (unsigned i = 0; i &lt; nTests; ++i)
+-    fail += eulerTest(rnQuat(), 100*eps);
++    fail += eulerTest(rnQuat(), eulerEps);
+ 
+   if (fail)
+     return -1;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000345.html">[OpenFDM-svn] r372 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000347.html">[OpenFDM-svn] r374 - trunk/OpenFDM/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#346">[ date ]</a>
+              <a href="thread.html#346">[ thread ]</a>
+              <a href="subject.html#346">[ subject ]</a>
+              <a href="author.html#346">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

@@ -1,0 +1,158 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r482 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-September/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r482%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809160539.m8G5dQEt018557%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000453.html">
+   <LINK REL="Next"  HREF="000455.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r482 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r482%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200809160539.m8G5dQEt018557%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r482 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Sep 16 07:39:26 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000453.html">[OpenFDM-svn] r481 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000455.html">[OpenFDM-svn] r483 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#454">[ date ]</a>
+              <a href="thread.html#454">[ thread ]</a>
+              <a href="subject.html#454">[ subject ]</a>
+              <a href="author.html#454">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-09-16 07:39:24 +0200 (Tue, 16 Sep 2008)
+New Revision: 482
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Add check for cyclic loops.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-16 04:33:09 UTC (rev 481)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-09-16 05:39:24 UTC (rev 482)
+@@ -114,6 +114,10 @@
+   const Node&amp; getNode() const
+   { return getNodeContext().getNode(); }
+ 
++  /// FIXME: is te wrong value, but sufficient for now to debug ...
++  const std::string&amp; getPathString() const
++  { return getNodeContext().getNode().getName(); }
++
+   /// FIXME: put this to some global place
+ //   typedef std::vector&lt;SharedPtr&lt;const Node&gt; &gt; NodePath;
+ //   const NodePath&amp; getNodePath() const { return mNodePath; }
+@@ -363,7 +367,7 @@
+       SharedPtr&lt;NodeInstance&gt; nodeInstance = portDataList-&gt;mNodeInstance;
+       if (!nodeInstance)
+         return std::string();
+-      return nodeInstance-&gt;getNode().getName();
++      return nodeInstance-&gt;getPathString();
+     }
+ 
+     WeakPtr&lt;PortDataList&gt; mParentPortDataList;
+@@ -813,7 +817,6 @@
+   typedef std::map&lt;SharedPtr&lt;NodeInstance&gt;,SharedPtr&lt;PortDataHelper::PortDataList&gt; &gt; PortDataListMap;
+   PortDataListMap _portDataListMap;
+ 
+-
+   // method to sort the leafs according to their dependency
+   bool sortModelList()
+   {
+@@ -826,16 +829,41 @@
+       for (i = sortedModelInstanceList.begin();
+            i != sortedModelInstanceList.end();
+            ++i) {
+-
+         if (!(*i)-&gt;dependsOn(modelInstance))
+           continue;
+-        sortedModelInstanceList.insert(i, modelInstance);
++
++        // Something already sorted in depends on modelInstance,
++        // so schedule that new thing just before.
++        Log(Schedule, Info)
++          &lt;&lt; &quot;Inserting Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getPathString()
++          &lt;&lt; &quot;\&quot; before Model \&quot;&quot; &lt;&lt; (*i)-&gt;getPathString() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++        i = sortedModelInstanceList.insert(i, modelInstance);
+         break;
+       }
+-      if (i == sortedModelInstanceList.end())
++      if (i == sortedModelInstanceList.end()) {
++        // nothing found so far that depends on model instance.
++        // So put it at the end.
++        Log(Schedule, Info)
++          &lt;&lt; &quot;Appending Model \&quot;&quot; &lt;&lt; modelInstance-&gt;getPathString()
++          &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++
+         sortedModelInstanceList.push_back(modelInstance);
++      } else {
++        // If it cannot be put at the end, check if modelInstance depends
++        // on any model that is already scheduled behind to detect cyclic loops.
++        for (; i != sortedModelInstanceList.end(); ++i) {
++          if (!modelInstance-&gt;dependsOn(*i))
++            continue;
++          Log(Schedule,Error)
++            &lt;&lt; &quot;Detected cyclic loop: Model \&quot;&quot;
++            &lt;&lt; modelInstance-&gt;getPathString() &lt;&lt; &quot;\&quot; depends on Model \&quot;&quot;
++            &lt;&lt; (*i)-&gt;getPathString() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++          return false;
++        }
++      }
+     }
+     _modelInstanceList.swap(sortedModelInstanceList);
++    return true;
+   }
+ 
+   typedef std::vector&lt;SharedPtr&lt;ModelInstance&gt; &gt; ModelContextList;
+@@ -889,7 +917,7 @@
+   {
+     ModelInstanceList::iterator i;
+     for (i = _modelInstanceList.begin(); i != _modelInstanceList.end(); ++i) {
+-      std::cout &lt;&lt; &quot;Model \&quot;&quot; &lt;&lt; (*i)-&gt;getNode().getName() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
++      std::cout &lt;&lt; &quot;Model \&quot;&quot; &lt;&lt; (*i)-&gt;getPathString() &lt;&lt; &quot;\&quot;&quot; &lt;&lt; std::endl;
+       PortDataHelper::PortDataList* portDataList = _portDataListMap[*i];
+       if (!portDataList)
+         continue;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000453.html">[OpenFDM-svn] r481 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000455.html">[OpenFDM-svn] r483 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#454">[ date ]</a>
+              <a href="thread.html#454">[ thread ]</a>
+              <a href="subject.html#454">[ subject ]</a>
+              <a href="author.html#454">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

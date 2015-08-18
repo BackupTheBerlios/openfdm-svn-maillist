@@ -1,0 +1,564 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r883 - in branches/OpenFDM-StateSeparation/src:	OpenFDM/LinAlg test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-December/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r883%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM/LinAlg%20test&In-Reply-To=%3C200812240844.mBO8iPcb025525%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000850.html">
+   <LINK REL="Next"  HREF="000852.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r883 - in branches/OpenFDM-StateSeparation/src:	OpenFDM/LinAlg test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r883%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM/LinAlg%20test&In-Reply-To=%3C200812240844.mBO8iPcb025525%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r883 - in branches/OpenFDM-StateSeparation/src:	OpenFDM/LinAlg test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Dec 24 09:44:25 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000850.html">[OpenFDM-svn] r882 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000852.html">[OpenFDM-svn] r884 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#851">[ date ]</a>
+              <a href="thread.html#851">[ thread ]</a>
+              <a href="subject.html#851">[ subject ]</a>
+              <a href="author.html#851">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-12-24 09:44:24 +0100 (Wed, 24 Dec 2008)
+New Revision: 883
+
+Added:
+   branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Algorithm.h
+   branches/OpenFDM-StateSeparation/src/test/Makefile.am
+Log:
+Add hacking area for inertia navigation.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Algorithm.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Algorithm.h	2008-12-16 06:04:48 UTC (rev 882)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/LinAlg/Algorithm.h	2008-12-24 08:44:24 UTC (rev 883)
+@@ -559,7 +559,7 @@
+   return ret;
+ }
+ 
+-/** Cross product multiplication.
++/** Cross product matrix.
+  */
+ template&lt;typename Impl1&gt;
+ OpenFDM_FORCE_INLINE
+@@ -574,11 +574,47 @@
+   return ret;
+ }
+ 
++/** Cross product kernel.
++ *  Compute x so that
++ *    || cross(a, x) - b ||_2 = min!, where || x ||_2 = min!
++ *  Note that the whole minimum solution space of the cross product
++ *  matrix equation is formed by
++ *    crossKern(a, x) + alpha*a
++ *  for scalar alpha.
++ */
++template&lt;typename Impl1, typename Impl2&gt;
++OpenFDM_FORCE_INLINE
++Vector3&lt;typename Impl1::value_type&gt;
++crossKern(const MatrixRValue&lt;Impl1,3,1&gt;&amp; a, const MatrixRValue&lt;Impl2,3,1&gt;&amp; b)
++{
++  typedef typename Impl1::value_type value_type;
++
++  value_type a2 = dot(a, a);
++  if (fabs(a2) &lt;= Limits&lt;value_type&gt;::safe_min())
++    return Vector3&lt;value_type&gt;(0, 0, 0);
++
++  // Cache the 1/a2 value
++  value_type ra2 = value_type(1)/a2;
++  
++  // Since a cross product with a cannot result in components directing into
++  // a, project out components of b in direction of a.
++  // So in effect we solve cross(a, x) - bPer = 0, where || x ||_2 = min!
++  Vector3&lt;value_type&gt; bPer = b - (dot(a, b)*ra2)*a;
++  
++  // The solution must be perpandicular to bPer and a.
++  Vector3&lt;value_type&gt; xPrime = cross(bPer, a);
++  
++  // Comparison of coefficients:
++  // Put x' = cross(bPer, a) into the original equation.
++  // Look at
++  //  cross(a, x') = cross(a, cross(bPer, a)) = dot(a, a)*bPer + dot(a, bPer)*a
++  // since we have a perpandicular to bPer this is
++  //  cross(a, x') - dot(a, a)*bPer = 0
++  // So we need to rescale x' with 1/dot(a, a)
++  return ra2*xPrime;
++}
++
+ // return any normalized vector perpendicular to v
+-// template&lt;typename Impl1, typename Impl2&gt;
+-// OpenFDM_FORCE_INLINE
+-// Vector&lt;typename Impl1::value_type,3&gt;
+-// cross(const MatrixRValue&lt;Impl1,3,1&gt;&amp; u, const MatrixRValue&lt;Impl2,3,1&gt;&amp; v)
+ template&lt;typename T&gt;
+ OpenFDM_FORCE_INLINE
+ Vector3&lt;T&gt;
+
+Modified: branches/OpenFDM-StateSeparation/src/test/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-16 06:04:48 UTC (rev 882)
++++ branches/OpenFDM-StateSeparation/src/test/Makefile.am	2008-12-24 08:44:24 UTC (rev 883)
+@@ -1,7 +1,7 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some util programs
+-bin_PROGRAMS = foucault mechanic structure tiretestrig coordsys
++bin_PROGRAMS = foucault inertianav mechanic structure tiretestrig coordsys
+ 
+ # define some unit tests
+ check_PROGRAMS = constintegral harmonic limit linalg quattest simulationtime unitstest
+@@ -22,6 +22,9 @@
+ mechanic_SOURCES = mechanic.cpp
+ mechanic_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++inertianav_SOURCES = inertianav.cpp
++inertianav_LDADD = ../OpenFDM/libOpenFDM.la
++
+ linalg_SOURCES = linalg.cpp
+ linalg_LDADD = ../OpenFDM/libOpenFDM.la
+ 
+
+Added: branches/OpenFDM-StateSeparation/src/test/inertianav.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2008-12-16 06:04:48 UTC (rev 882)
++++ branches/OpenFDM-StateSeparation/src/test/inertianav.cpp	2008-12-24 08:44:24 UTC (rev 883)
+@@ -0,0 +1,394 @@
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/InternalSensor.h&gt;
++#include &lt;OpenFDM/LinearSpringDamper.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
++#include &lt;OpenFDM/MobileRootJoint.h&gt;
++#include &lt;OpenFDM/RevoluteJoint.h&gt;
++#include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Sensor.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/SystemOutput.h&gt;
++
++using namespace OpenFDM;
++
++class AccelerationTracking : public Interact {
++public:
++  AccelerationTracking() :
++    Interact(&quot;AccelerationTracking&quot;),
++    mMechanicLink(newMechanicLink(&quot;link&quot;)),
++//     mAccelerationInputPort0(this, &quot;accelerationInput0&quot;, Size(3, 1), true),
++//     mAccelerationInputPort1(this, &quot;accelerationInput1&quot;, Size(3, 1), true),
++//     mVelocityPort(this, &quot;velocity&quot;, Size(6, 1), true),
++    mAccelerationPort(this, &quot;acceleration&quot;, Size(6, 1), true)
++  { }
++
++  virtual void initDesignPosition(PortValueList&amp;) const
++  {
++  }
++  virtual void velocity(const Task&amp; task, const Environment&amp; environment,
++                        const ContinousStateValueVector&amp;,
++                        PortValueList&amp;) const
++  {
++  }
++  virtual void acceleration(const Task&amp;, const Environment&amp; environment,
++                            const ContinousStateValueVector&amp;,
++                            PortValueList&amp; portValues) const
++  {
++    Vector3 p1(0, 1, 0);
++    Vector3 p2(0, -1, 0);
++
++    const Frame&amp; frame = portValues[mMechanicLink].getFrame();
++
++    CoordinateSystem csys0 = portValues[mMechanicLink].getCoordinateSystem();
++
++    CoordinateSystem csys1 = csys0.getRelative(p1);
++    CoordinateSystem csys2 = csys0.getRelative(p2);
++
++    Frame frame1;
++    frame1.setPosAndVel(frame, p1, Quaternion::unit(), Vector6::zeros());
++    frame1.setAccel(frame, Vector6::zeros());
++    Frame frame2;
++    frame2.setPosAndVel(frame, p2, Quaternion::unit(), Vector6::zeros());
++    frame2.setAccel(frame, Vector6::zeros());
++
++    Vector3 refPosition = csys0.getPosition();
++    Vector3 gravity = environment.getGravityAcceleration(refPosition);
++    gravity = frame.rotFromRef(gravity);
++
++    Vector3 a1 = frame1.getClassicAccel().getLinear() - gravity;
++    Vector3 a2 = frame2.getClassicAccel().getLinear() - gravity;
++   
++    /// Here we have constructed the synthetic example
++//     std::cout &lt;&lt; trans(a1) &lt;&lt; &quot; &quot; &lt;&lt; trans(a2) &lt;&lt; std::endl;
++
++    Vector6 v = frame.getSpVel();
++    Vector6 aExact = frame.getSpAccel();
++
++    Vector3 dp = p2 - p1;
++    
++    Vector3 omega0 = v.getAngular();
++    Vector3 v0 = v.getLinear();
++    
++//   Vector6 getClassicAccel(void) const
++//   {
++//     Vector6 iv = getSpVel();
++//     return getRelVelDot() + getParentSpAccel() + getHdot()
++//       + Vector6(Vector3::zeros(), cross(iv.getAngular(), iv.getLinear()));
++//   }
++
++//   /** FIXME belongs into the joints.
++//    */
++//   Vector6 getHdot(void) const
++//   {
++//     /**
++//        This is the cross product of the inertial spatial velocity
++//        vector with the relative spatial velocity vector (motion type
++//        cross product). Since the inertial velocity is the transformed
++//        inertial velocity of the parent frame plus the relative
++//        velocity of the current frame, all the relative velocity
++//        components cancel out in this expression. What remains is the
++//        transformed spatial velocity of the parent frame cross the
++//        relative velocity.
++//      */
++//     Vector6 pivel = getParentSpVel();
++//     return Vector6(cross(pivel.getAngular(), getAngularRelVel()),
++//                    cross(pivel.getAngular(), getLinearRelVel()) + 
++//                    cross(pivel.getLinear(), getAngularRelVel()));
++//   }
++
++//   Vector6 getSpVel(void) const
++//   { return getRelVel() + getParentSpVel(); }
++
++//     Vector3 a1_ = aExact.getLinear() - cross(p1, aExact.getAngular())
++//       - cross(omega0, cross(p1, omega0)) + cross(omega0, v0) - gravity;
++//     Vector3 a2_ = aExact.getLinear() - cross(p2, aExact.getAngular())
++//       - cross(omega0, cross(p2, omega0)) + cross(omega0, v0) - gravity;
++//     std::cout &lt;&lt; trans(a1) &lt;&lt; &quot; &quot; &lt;&lt; trans(a1_) &lt;&lt; std::endl;
++
++    Vector3 dpOmega = -(a2 - a1 + cross(omega0, cross(dp, omega0)));
++
++//     Vector3 dpOmegaExact = cross(dp, aExact.getAngular());
++//     std::cout &lt;&lt; trans(dpOmega) &lt;&lt; &quot; &quot; &lt;&lt; trans(dpOmegaExact) &lt;&lt; std::endl;
++
++
++    Vector3 omegaDot = crossKern(dp, dpOmega);
++
++//     std::cout &lt;&lt; trans(dpOmega) &lt;&lt; &quot; &quot; &lt;&lt; trans(cross(dp, omegaDot)) &lt;&lt; &quot; &quot; &lt;&lt; std::endl;
++//     std::cout &lt;&lt; trans(omegaDot) &lt;&lt; &quot; &quot; &lt;&lt; trans(aExact.getAngular()) &lt;&lt; std::endl;
++    
++    Vector3 vDot1 = a1 + cross(p1, omegaDot) + cross(omega0, cross(p1, omega0)) - cross(omega0, v0) + gravity;
++    Vector3 vDot2 = a2 + cross(p2, omegaDot) + cross(omega0, cross(p2, omega0)) - cross(omega0, v0) + gravity;
++
++    Vector6 a(omegaDot, vDot1);
++
++    std::cout &lt;&lt; trans(a) &lt;&lt; &quot; &quot; &lt;&lt; trans(frame.getSpAccel()) &lt;&lt; std::endl;
++
++    portValues[mAccelerationPort] = a;
++  }
++
++protected:
++  MechanicLink mMechanicLink;
++  MatrixInputPort mVelocityPort;
++  MatrixInputPort mAccelerationInputPort0;
++  MatrixInputPort mAccelerationInputPort1;
++  MatrixOutputPort mAccelerationPort;
++};
++
++
++class MobileRootJoint2 : public RootJoint {
++  OPENFDM_OBJECT(MobileRootJoint2, RootJoint);
++public:
++  MobileRootJoint2(const std::string&amp; name) :
++    RootJoint(name),
++    mAccelerationPort(this, &quot;acceleration&quot;, Size(6, 1), true),
++    mVelocityPort(this, &quot;velocity&quot;, Size(6, 1)),
++    mPositionPort(this, &quot;position&quot;, Size(3, 1)),
++    mOrientationPort(this, &quot;orientation&quot;, Size(4, 1)),
++    mPositionStateInfo(new Vector3StateInfo),
++    mOrientationStateInfo(new Vector4StateInfo),
++    mVelocityStateInfo(new Vector6StateInfo)
++  {
++    addContinousStateInfo(mPositionStateInfo);
++    addContinousStateInfo(mOrientationStateInfo);
++    addContinousStateInfo(mVelocityStateInfo);
++  }
++  virtual ~MobileRootJoint2() {}
++
++
++  void init(const Task&amp;, DiscreteStateValueVector&amp;,
++            ContinousStateValueVector&amp; continousState,
++            const PortValueList&amp; portValues) const
++  {
++    continousState[*mPositionStateInfo] = Vector3::zeros();
++    continousState[*mOrientationStateInfo] = Quaternion::unit();
++    continousState[*mVelocityStateInfo] = Vector6::zeros();
++  }
++
++  void initDesignPosition(PortValueList&amp; portValues) const
++  {
++//     portValues[mMechanicLink].setDesignPosition(Vector3::zeros());
++  }
++
++  void velocity(const Task&amp; task, const Environment&amp; environment,
++                const ContinousStateValueVector&amp; continousState,
++                PortValueList&amp; portValues) const
++  {
++//     const Environment* environment;
++//     environment = portValues[mMechanicLink].getEnvironment();
++//     Vector3 angularBaseVelocity = environment-&gt;getAngularVelocity(task.getTime());
++    
++//     Vector3 position = continousState[*mPositionStateInfo];
++//     Quaternion orientation = continousState[*mOrientationStateInfo];
++//     Vector6 velocity = continousState[*mVelocityStateInfo];
++    
++//     portValues[mMechanicLink].setCoordinateSystem(CoordinateSystem(position,
++//                                                                    orientation));
++//     portValues[mMechanicLink].setPosAndVel(angularBaseVelocity,
++//                                            position, orientation, velocity);
++  }
++
++  void articulation(const Task&amp;, const Environment&amp; environment,
++                    const ContinousStateValueVector&amp;, PortValueList&amp;) const
++  {
++    /// In this case a noop.
++  }
++  
++  void acceleration(const Task&amp; task, const Environment&amp; environment,
++                    const ContinousStateValueVector&amp;,
++                    PortValueList&amp; portValues) const
++  {
++//     const Environment* environment;
++//     environment = portValues[mMechanicLink].getEnvironment();
++//     Vector6 spatialAcceleration = environment-&gt;getAcceleration(task.getTime());
++    Vector6 spatialAcceleration = Vector6::zeros();
++    
++//     SpatialInertia inertia = portValues[mMechanicLink].getInertia();
++//     Vector6 force = portValues[mMechanicLink].getForce();
++    
++    spatialAcceleration = portValues[mAccelerationPort];
++//     portValues[mMechanicLink].getFrame().setSpAccel(spatialAcceleration);
++  }
++  
++  void derivative(const Environment&amp; environment,
++                  const DiscreteStateValueVector&amp;,
++                  const ContinousStateValueVector&amp; continousState,
++                  const PortValueList&amp; portValues,
++                  ContinousStateValueVector&amp; derivatives) const
++  {
++    Quaternion orientation = continousState[*mOrientationStateInfo];
++    Vector6 velocity = continousState[*mVelocityStateInfo];
++    
++    Vector3 pDot = orientation.backTransform(velocity.getLinear());
++    
++    // Compute the derivative term originating from the angular velocity.
++    // Correction term to keep the quaternion normalized.
++    // That is if |q| &lt; 1 add a little radial component outward,
++    // if |q| &gt; 1 add a little radial component inward
++    Quaternion q = orientation;
++    Vector3 angVel = velocity.getAngular();
++    Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
++    
++//     Vector6 velDeriv = portValues[mMechanicLink].getFrame().getRelVelDot();
++    
++    derivatives[*mPositionStateInfo] = pDot;
++    derivatives[*mOrientationStateInfo] = qderiv;
++//     derivatives[*mVelocityStateInfo] = velDeriv;
++  }
++private:
++  MatrixInputPort mAccelerationPort;
++  MatrixOutputPort mVelocityPort;
++  MatrixOutputPort mPositionPort;
++  MatrixOutputPort mOrientationPort;
++  
++  SharedPtr&lt;Vector3StateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;Vector4StateInfo&gt; mOrientationStateInfo;
++  SharedPtr&lt;Vector6StateInfo&gt; mVelocityStateInfo;
++};
++
++
++
++Node* buildSimpleMechanicExample()
++{
++  /// sensible test cases:
++  /// drop: gravity
++  /// throw: just this test with a different start condition
++  /// harmonic oszilator: compare with 2nd order linear system
++  /// arrow: see if the tip stays in front
++  /// satellit: coriolis
++  /// paris pendulum: coriolis
++
++  SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
++
++  MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  group-&gt;addChild(mobileRootJoint);
++  RigidBody* rigidBody = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBody-&gt;addLink(&quot;sensorLink&quot;);
++  group-&gt;addChild(rigidBody);
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  group-&gt;addChild(mass);
++
++  Sensor* sensor = new Sensor(&quot;Sensor&quot;);
++  sensor-&gt;setPosition(mass-&gt;getPosition());
++  sensor-&gt;setEnableAllOutputs(true);
++  group-&gt;addChild(sensor);
++
++  group-&gt;connect(mobileRootJoint-&gt;getPort(&quot;link&quot;), rigidBody-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link1&quot;), mass-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;sensorLink&quot;), sensor-&gt;getPort(&quot;link&quot;));
++
++  return group.release();
++}
++
++Node* buildSimpleMechanicExample2()
++{
++  SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
++
++  MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  group-&gt;addChild(mobileRootJoint);
++
++  RigidBody *rigidBody = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBody-&gt;addLink(&quot;link2&quot;);
++  rigidBody-&gt;addLink(&quot;sensorLink&quot;);
++  rigidBody-&gt;addLink(&quot;internalSensorLink&quot;);
++  rigidBody-&gt;addLink(&quot;internalSensorLink2&quot;);
++  rigidBody-&gt;addLink(&quot;accelerationTrackerLink&quot;);
++  group-&gt;addChild(rigidBody);
++  InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, inertia);
++  group-&gt;addChild(mass);
++  RevoluteJoint* revoluteJoint = new RevoluteJoint(&quot;Revolute Joint&quot;);
++  revoluteJoint-&gt;setEnableExternalForce(true);
++  group-&gt;addChild(revoluteJoint);
++  RigidBody *rigidBody2 = new RigidBody(&quot;Rigid Body 2&quot;);
++  rigidBody2-&gt;addLink(&quot;sensorLink&quot;);
++  rigidBody2-&gt;addLink(&quot;internalSensorLink&quot;);
++  rigidBody2-&gt;addLink(&quot;internalSensorLink2&quot;);
++  group-&gt;addChild(rigidBody2);
++  Mass* mass2 = new Mass(&quot;Mass 2&quot;, 1, inertia);
++  group-&gt;addChild(mass2);
++
++  Sensor* sensor = new Sensor(&quot;Sensor&quot;);
++  sensor-&gt;setPosition(mass-&gt;getPosition());
++  sensor-&gt;setEnableAllOutputs(true);
++  group-&gt;addChild(sensor);
++
++  Sensor* sensor2 = new Sensor(&quot;Sensor 2&quot;);
++  sensor2-&gt;setPosition(mass2-&gt;getPosition());
++  sensor2-&gt;setEnableAllOutputs(true);
++  group-&gt;addChild(sensor2);
++
++  group-&gt;connect(mobileRootJoint-&gt;getPort(&quot;link&quot;), rigidBody-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link1&quot;), mass-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;link2&quot;), revoluteJoint-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(revoluteJoint-&gt;getPort(&quot;link1&quot;), rigidBody2-&gt;getPort(&quot;link0&quot;));
++  group-&gt;connect(rigidBody2-&gt;getPort(&quot;link1&quot;), mass2-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody-&gt;getPort(&quot;sensorLink&quot;), sensor-&gt;getPort(&quot;link&quot;));
++  group-&gt;connect(rigidBody2-&gt;getPort(&quot;sensorLink&quot;), sensor2-&gt;getPort(&quot;link&quot;));
++
++  ConstModel* jointForce = new ConstModel(&quot;Joint Force&quot;, 1);
++  group-&gt;addChild(jointForce);
++
++  group-&gt;connect(jointForce-&gt;getPort(&quot;output&quot;),
++                 revoluteJoint-&gt;getPort(&quot;force&quot;));
++
++  InternalSensor* internalSensor = new InternalSensor(&quot;Internal Sensor&quot;);
++  internalSensor-&gt;setPosition0(Vector3(0, 0, 1));
++  internalSensor-&gt;setPosition1(Vector3(0, 0, 0.8));
++  internalSensor-&gt;setEnableAllOutputs(true);
++  internalSensor-&gt;setEnableForce(true);
++  group-&gt;addChild(internalSensor);
++  group-&gt;connect(internalSensor-&gt;getPort(&quot;link0&quot;),
++                 rigidBody-&gt;getPort(&quot;internalSensorLink&quot;));
++  group-&gt;connect(internalSensor-&gt;getPort(&quot;link1&quot;),
++                 rigidBody2-&gt;getPort(&quot;internalSensorLink&quot;));
++
++
++  InternalSensor* internalSensor2 = new InternalSensor(&quot;Internal Sensor 2&quot;);
++  internalSensor2-&gt;setPosition0(Vector3(0, 0, 0.8));
++  internalSensor2-&gt;setPosition1(Vector3(0, 0, 1));
++  internalSensor2-&gt;setEnableAllOutputs(true);
++  group-&gt;addChild(internalSensor2);
++  group-&gt;connect(internalSensor2-&gt;getPort(&quot;link1&quot;),
++                 rigidBody-&gt;getPort(&quot;internalSensorLink2&quot;));
++  group-&gt;connect(internalSensor2-&gt;getPort(&quot;link0&quot;),
++                 rigidBody2-&gt;getPort(&quot;internalSensorLink2&quot;));
++
++  LinearSpringDamper* damper = new LinearSpringDamper(&quot;LinearSpringDamper&quot;);
++  damper-&gt;setSpringConstant(0.5);
++  damper-&gt;setDamperConstant(1);
++  group-&gt;addChild(damper);
++  group-&gt;connect(damper-&gt;getPort(&quot;velocity&quot;),
++                 internalSensor-&gt;getPort(&quot;velocity&quot;));
++  group-&gt;connect(damper-&gt;getPort(&quot;position&quot;),
++                 internalSensor-&gt;getPort(&quot;distance&quot;));
++  group-&gt;connect(damper-&gt;getPort(&quot;force&quot;),
++                 internalSensor-&gt;getPort(&quot;force&quot;));
++
++
++  AccelerationTracking* accelerationTracking = new AccelerationTracking;
++  group-&gt;addChild(accelerationTracking);
++  group-&gt;connect(accelerationTracking-&gt;getPort(&quot;link&quot;),
++                 rigidBody-&gt;getPort(&quot;accelerationTrackerLink&quot;));
++
++  return group.release();
++}
++
++int main()
++{
++//   SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildSimpleMechanicExample());
++  SharedPtr&lt;System&gt; system = new System(&quot;System&quot;, buildSimpleMechanicExample2());
++
++  system-&gt;attach(SystemOutput::newDefaultSystemOutput(&quot;mechanic&quot;));
++
++  if (!system-&gt;init())
++    return 1;
++
++  system-&gt;simulate(10);
++
++  return 0;
++}
++
++// Kabelbaum &lt;-&gt; PortBundle ??? Original Kabelbaum == Cabel Bundle
++// Oder Cable Set &lt;-&gt; Port Set???
++
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000850.html">[OpenFDM-svn] r882 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000852.html">[OpenFDM-svn] r884 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#851">[ date ]</a>
+              <a href="thread.html#851">[ thread ]</a>
+              <a href="subject.html#851">[ subject ]</a>
+              <a href="author.html#851">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

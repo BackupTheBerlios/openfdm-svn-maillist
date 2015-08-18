@@ -1,0 +1,217 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1066 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1066%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200908052144.n75Li4EW001472%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001025.html">
+   <LINK REL="Next"  HREF="001027.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1066 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1066%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200908052144.n75Li4EW001472%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1066 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Aug  5 23:44:04 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001025.html">[OpenFDM-svn] r1065 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001027.html">[OpenFDM-svn] r1067 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1026">[ date ]</a>
+              <a href="thread.html#1026">[ thread ]</a>
+              <a href="subject.html#1026">[ subject ]</a>
+              <a href="author.html#1026">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-05 23:44:04 +0200 (Wed, 05 Aug 2009)
+New Revision: 1066
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+Log:
+Improove the ballistic model.
+
+M    test/ballistic.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/ballistic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-08-05 21:39:40 UTC (rev 1065)
++++ branches/OpenFDM-StateSeparation/src/test/ballistic.cpp	2009-08-05 21:44:04 UTC (rev 1066)
+@@ -10,8 +10,10 @@
+ #include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/Product.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
++#include &lt;OpenFDM/UnaryFunction.h&gt;
+ #include &lt;OpenFDM/WindAxis.h&gt;
+ #include &lt;OpenFDM/WindAxisForce.h&gt;
+ 
+@@ -31,11 +33,15 @@
+   rigidBody-&gt;addLink(&quot;externalInteractLink&quot;);
+   group-&gt;addChild(rigidBody);
+ 
+-  Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  real_type m = 0.01;
++  real_type length = 1;
++  real_type radius = 0.01;
++  InertiaMatrix I = InertiaMatrix::cylinderInertia(m, length, radius);
++  Mass* mass = new Mass(&quot;Mass&quot;, m, I);
+   group-&gt;addChild(mass);
+ 
+   ExternalInteract* externalInteract = new ExternalInteract(&quot;ExternalInteract&quot;);
+-  externalInteract-&gt;setPosition(mass-&gt;getPosition());
++  externalInteract-&gt;setPosition(mass-&gt;getPosition() - Vector3(0.3, 0, 0));
+   externalInteract-&gt;setEnableAllOutputs(true);
+   group-&gt;addChild(externalInteract);
+ 
+@@ -83,73 +89,58 @@
+   group-&gt;connect(windAxisForce-&gt;getPort(&quot;bodyForce&quot;),
+                  externalInteract-&gt;getPort(&quot;bodyForce&quot;));
+ 
+-  ConstModel* zeroConst = new ConstModel(&quot;ConstModel 0&quot;);
+-  group-&gt;addChild(zeroConst);
++  UnaryFunction* alphaAbs = new UnaryFunction(&quot;Alpha Abs&quot;, UnaryFunction::Abs);
++  group-&gt;addChild(alphaAbs);
+ 
+-  group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
+-                 windAxisForce-&gt;getPort(&quot;side&quot;));
+-  group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
+-                 windAxisForce-&gt;getPort(&quot;lift&quot;));
++  group-&gt;connect(alphaAbs-&gt;getPort(&quot;input&quot;),
++                 windAxis-&gt;getPort(&quot;alpha&quot;));
+ 
+-  Gain* dragCoeficient = new Gain(&quot;Drag Coeficient&quot;);
+-  dragCoeficient-&gt;setGain(0.01);
+-  group-&gt;addChild(dragCoeficient);
++  UnaryFunction* betaAbs = new UnaryFunction(&quot;Beta Abs&quot;, UnaryFunction::Abs);
++  group-&gt;addChild(betaAbs);
+ 
+-  group-&gt;connect(dragCoeficient-&gt;getPort(&quot;input&quot;),
+-                 dynamicPressure-&gt;getPort(&quot;dynamicPressure&quot;));
++  group-&gt;connect(betaAbs-&gt;getPort(&quot;input&quot;),
++                 windAxis-&gt;getPort(&quot;beta&quot;));
+ 
+-  group-&gt;connect(dragCoeficient-&gt;getPort(&quot;output&quot;),
+-                 windAxisForce-&gt;getPort(&quot;drag&quot;));
++  ConstModel* dragAtZeroAlpha = new ConstModel(&quot;Drag at zero Alpha&quot;, 1);
++  group-&gt;addChild(dragAtZeroAlpha);
+ 
++  Summer* dragFactor = new Summer(&quot;Drag Factor&quot;);
++  dragFactor-&gt;setNumSummands(3);
++  group-&gt;addChild(dragFactor);
+ 
+-  Product* alphaProduct = new Product(&quot;Alpha Product&quot;);
+-  group-&gt;addChild(alphaProduct);
++  group-&gt;connect(dragFactor-&gt;getPort(&quot;input0&quot;),
++                 dragAtZeroAlpha-&gt;getPort(&quot;output&quot;));
++  group-&gt;connect(dragFactor-&gt;getPort(&quot;input1&quot;),
++                 alphaAbs-&gt;getPort(&quot;output&quot;));
++  group-&gt;connect(dragFactor-&gt;getPort(&quot;input2&quot;),
++                 betaAbs-&gt;getPort(&quot;output&quot;));
+ 
+-  group-&gt;connect(alphaProduct-&gt;getPort(&quot;input0&quot;),
+-                 dynamicPressure-&gt;getPort(&quot;dynamicPressure&quot;));
+-  group-&gt;connect(alphaProduct-&gt;getPort(&quot;input1&quot;),
+-                 windAxis-&gt;getPort(&quot;alpha&quot;));
++  Gain* dragCoeficient = new Gain(&quot;Drag Coeficient&quot;, 0.0001);
++  group-&gt;addChild(dragCoeficient);
+ 
+-  Gain* alphaCoeficient = new Gain(&quot;Alpha Coeficient&quot;);
+-  alphaCoeficient-&gt;setGain(-10);
+-  group-&gt;addChild(alphaCoeficient);
++  group-&gt;connect(dragCoeficient-&gt;getPort(&quot;input&quot;),
++                 dragFactor-&gt;getPort(&quot;output&quot;));
+ 
+-  group-&gt;connect(alphaCoeficient-&gt;getPort(&quot;input&quot;),
+-                 alphaProduct-&gt;getPort(&quot;output&quot;));
++  Product* drag = new Product(&quot;Drag&quot;);
++  drag-&gt;setNumFactors(2);
++  group-&gt;addChild(drag);
+ 
+-
+-
+-  Product* betaProduct = new Product(&quot;Beta Product&quot;);
+-  group-&gt;addChild(betaProduct);
+-
+-  group-&gt;connect(betaProduct-&gt;getPort(&quot;input0&quot;),
++  group-&gt;connect(drag-&gt;getPort(&quot;input0&quot;),
+                  dynamicPressure-&gt;getPort(&quot;dynamicPressure&quot;));
+-  group-&gt;connect(betaProduct-&gt;getPort(&quot;input1&quot;),
+-                 windAxis-&gt;getPort(&quot;beta&quot;));
++  group-&gt;connect(drag-&gt;getPort(&quot;input1&quot;),
++                 dragCoeficient-&gt;getPort(&quot;output&quot;));
+ 
+-  Gain* betaCoeficient = new Gain(&quot;Beta Coeficient&quot;);
+-  betaCoeficient-&gt;setGain(-10);
+-  group-&gt;addChild(betaCoeficient);
+ 
+-  group-&gt;connect(betaCoeficient-&gt;getPort(&quot;input&quot;),
+-                 betaProduct-&gt;getPort(&quot;output&quot;));
++  ConstModel* zeroConst = new ConstModel(&quot;ConstModel 0&quot;);
++  group-&gt;addChild(zeroConst);
+ 
+-
+-
+-  MatrixConcat* torque = new MatrixConcat(&quot;Torque&quot;);
+-  group-&gt;addChild(torque);
+-
++  group-&gt;connect(drag-&gt;getPort(&quot;output&quot;),
++                 windAxisForce-&gt;getPort(&quot;drag&quot;));
+   group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
+-                 torque-&gt;addInputPort(&quot;x&quot;));
+-  group-&gt;connect(alphaCoeficient-&gt;getPort(&quot;output&quot;),
+-                 torque-&gt;addInputPort(&quot;y&quot;));
+-  group-&gt;connect(betaCoeficient-&gt;getPort(&quot;output&quot;),
+-                 torque-&gt;addInputPort(&quot;z&quot;));
++                 windAxisForce-&gt;getPort(&quot;side&quot;));
++  group-&gt;connect(zeroConst-&gt;getPort(&quot;output&quot;),
++                 windAxisForce-&gt;getPort(&quot;lift&quot;));
+ 
+-  externalInteract-&gt;setEnableBodyTorque(true);
+-  group-&gt;connect(torque-&gt;getPort(&quot;output&quot;),
+-                 externalInteract-&gt;getPort(&quot;bodyTorque&quot;));
+-
+   return group.release();
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001025.html">[OpenFDM-svn] r1065 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001027.html">[OpenFDM-svn] r1067 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1026">[ date ]</a>
+              <a href="thread.html#1026">[ thread ]</a>
+              <a href="subject.html#1026">[ subject ]</a>
+              <a href="author.html#1026">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

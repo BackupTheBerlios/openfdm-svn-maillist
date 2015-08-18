@@ -1,0 +1,395 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r948%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901191745.n0JHjEOp030380%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000912.html">
+   <LINK REL="Next"  HREF="000914.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r948%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901191745.n0JHjEOp030380%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Mon Jan 19 18:45:14 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000912.html">[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000914.html">[OpenFDM-svn] r949 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#913">[ date ]</a>
+              <a href="thread.html#913">[ thread ]</a>
+              <a href="subject.html#913">[ subject ]</a>
+              <a href="author.html#913">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-19 18:45:13 +0100 (Mon, 19 Jan 2009)
+New Revision: 948
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp
+Log:
+Reorder methods.
+Handle low normal force cases.
+
+M    src/OpenFDM/Pacejka89.h
+M    src/OpenFDM/PacejkaTire.cpp
+M    src/OpenFDM/Pacejka89.cpp
+M    src/OpenFDM/Pacejka94.h
+M    src/OpenFDM/Pacejka94.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp	2009-01-17 21:34:44 UTC (rev 947)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.cpp	2009-01-19 17:45:13 UTC (rev 948)
+@@ -9,6 +9,7 @@
+ BEGIN_OPENFDM_OBJECT_DEF(Pacejka89, PacejkaTire)
+   DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, DampingConstant, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, FzMin, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A0, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A1, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A2, Serialized)
+@@ -59,6 +60,8 @@
+   mSpringConstant(0),
+   mDampingConstant(0),
+ 
++  mFzMin(0),
++
+   mA0(2),
+   mA1(0), mA2(1000),
+   mA3(1000), mA4(10), mA5(0),
+@@ -85,30 +88,6 @@
+ {
+ }
+ 
+-void
+-Pacejka89::setSpringConstant(const real_type&amp; springConstant)
+-{
+-  mSpringConstant = springConstant;
+-}
+-
+-const real_type&amp;
+-Pacejka89::getSpringConstant(void) const
+-{
+-  return mSpringConstant;
+-}
+-
+-void
+-Pacejka89::setDampingConstant(const real_type&amp; dampingConstant)
+-{
+-  mDampingConstant = dampingConstant;
+-}
+-
+-const real_type&amp;
+-Pacejka89::getDampingConstant(void) const
+-{
+-  return mDampingConstant;
+-}
+-
+ Vector6
+ Pacejka89::getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                     const real_type&amp; alpha, const real_type&amp; kappa,
+@@ -120,8 +99,21 @@
+   // The normal force
+   real_type Fz = rho*mSpringConstant + mDampingConstant*rhoDot;
+   // The normal force cannot get negative here.
+-  Fz = 1e-3*max(real_type(0), Fz);
++  Fz = max(real_type(0), Fz);
+ 
++  // Pacejka's equations tend to provide infinitesimal stiff tires at low
++  // normal forces. Limit the input to the magic formula to a minimal
++  // normal load and rescale the output force according to the original
++  // load.
++  real_type FzRatio = 1;
++  if (Fz &lt; mFzMin) {
++    FzRatio = Fz/mFzMin;
++    Fz = mFzMin;
++  }
++
++  // The normal force is mean to be in kN
++  Fz *= 1e-3;
++
+   //
+   // Longitudinal force (Pure longitudinal slip)
+   //
+@@ -199,7 +191,31 @@
+   real_type Bza = Bz*alphaz;
+   real_type Mz = Dz*sin(Cz*atan(Bza - Ez*(Bza - atan(Bza)))) + SVz;
+ 
+-  return Vector6(Vector3(0, 0, Mz), Vector3(Fx, Fy, 1e3*Fz));
++  return FzRatio*Vector6(Vector3(0, 0, Mz), Vector3(Fx, Fy, 1e3*Fz));
+ }
+ 
++void
++Pacejka89::setSpringConstant(const real_type&amp; springConstant)
++{
++  mSpringConstant = springConstant;
++}
++
++const real_type&amp;
++Pacejka89::getSpringConstant(void) const
++{
++  return mSpringConstant;
++}
++
++void
++Pacejka89::setDampingConstant(const real_type&amp; dampingConstant)
++{
++  mDampingConstant = dampingConstant;
++}
++
++const real_type&amp;
++Pacejka89::getDampingConstant(void) const
++{
++  return mDampingConstant;
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h	2009-01-17 21:34:44 UTC (rev 947)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka89.h	2009-01-19 17:45:13 UTC (rev 948)
+@@ -15,18 +15,19 @@
+   Pacejka89(const std::string&amp; name);
+   virtual ~Pacejka89(void);
+ 
+-  /** Stuff that should move into the tire force implementation.
+-   */
++  // Helper function to compute the resulting force
++  virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
++                           const real_type&amp; alpha, const real_type&amp; kappa,
++                           const real_type&amp; gamma, const real_type&amp; phi) const;
++
+   void setSpringConstant(const real_type&amp; springConstant);
+   const real_type&amp; getSpringConstant(void) const;
+ 
+   void setDampingConstant(const real_type&amp; dampingConstant);
+   const real_type&amp; getDampingConstant(void) const;
+ 
+-  // Helper function to compute the resulting force
+-  virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+-                           const real_type&amp; alpha, const real_type&amp; kappa,
+-                           const real_type&amp; gamma, const real_type&amp; phi) const;
++  const real_type&amp; getFzMin() const { return mFzMin; }
++  void setFzMin(const real_type&amp; value) { mFzMin = value; }
+ 
+   const real_type&amp; getA0() const { return mA0; }
+   void setA0(const real_type&amp; value) { mA0 = value; }
+@@ -163,6 +164,8 @@
+   real_type mSpringConstant;
+   real_type mDampingConstant;
+ 
++  real_type mFzMin;
++
+   real_type mA0;
+   real_type mA1, mA2;
+   real_type mA3, mA4, mA5;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp	2009-01-17 21:34:44 UTC (rev 947)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.cpp	2009-01-19 17:45:13 UTC (rev 948)
+@@ -9,6 +9,7 @@
+ BEGIN_OPENFDM_OBJECT_DEF(Pacejka94, PacejkaTire)
+   DEF_OPENFDM_PROPERTY(Real, SpringConstant, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, DampingConstant, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, FzMin, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A0, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A1, Serialized)
+   DEF_OPENFDM_PROPERTY(Real, A2, Serialized)
+@@ -73,6 +74,8 @@
+   mSpringConstant(0),
+   mDampingConstant(0),
+ 
++  mFzMin(0),
++
+   mA0(2),
+   mA1(0), mA2(1000), mA15(0),
+   mA3(1000), mA4(10), mA5(0),
+@@ -102,30 +105,6 @@
+ {
+ }
+ 
+-void
+-Pacejka94::setSpringConstant(const real_type&amp; springConstant)
+-{
+-  mSpringConstant = springConstant;
+-}
+-
+-const real_type&amp;
+-Pacejka94::getSpringConstant(void) const
+-{
+-  return mSpringConstant;
+-}
+-
+-void
+-Pacejka94::setDampingConstant(const real_type&amp; dampingConstant)
+-{
+-  mDampingConstant = dampingConstant;
+-}
+-
+-const real_type&amp;
+-Pacejka94::getDampingConstant(void) const
+-{
+-  return mDampingConstant;
+-}
+-
+ Vector6
+ Pacejka94::getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+                     const real_type&amp; alpha, const real_type&amp; kappa,
+@@ -137,8 +116,21 @@
+   // The normal force
+   real_type Fz = rho*mSpringConstant + mDampingConstant*rhoDot;
+   // The normal force cannot get negative here.
+-  Fz = 1e-3*max(real_type(0), Fz);
++  Fz = max(real_type(0), Fz);
+ 
++  // Pacejka's equations tend to provide infinitesimal stiff tires at low
++  // normal forces. Limit the input to the magic formula to a minimal
++  // normal load and rescale the output force according to the original
++  // load.
++  real_type FzRatio = 1;
++  if (Fz &lt; mFzMin) {
++    FzRatio = Fz/mFzMin;
++    Fz = mFzMin;
++  }
++
++  // The normal force is mean to be in kN
++  Fz *= 1e-3;
++
+   //
+   // Longitudinal force (Pure longitudinal slip)
+   //
+@@ -216,7 +208,31 @@
+   real_type Bza = Bz*alphaz;
+   real_type Mz = Dz*sin(Cz*atan(Bza - Ez*(Bza - atan(Bza)))) + SVz;
+ 
+-  return Vector6(Vector3(0, 0, Mz), Vector3(Fx, Fy, 1e3*Fz));
++  return FzRatio*Vector6(Vector3(0, 0, Mz), Vector3(Fx, Fy, 1e3*Fz));
+ }
+ 
++void
++Pacejka94::setSpringConstant(const real_type&amp; springConstant)
++{
++  mSpringConstant = springConstant;
++}
++
++const real_type&amp;
++Pacejka94::getSpringConstant(void) const
++{
++  return mSpringConstant;
++}
++
++void
++Pacejka94::setDampingConstant(const real_type&amp; dampingConstant)
++{
++  mDampingConstant = dampingConstant;
++}
++
++const real_type&amp;
++Pacejka94::getDampingConstant(void) const
++{
++  return mDampingConstant;
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h	2009-01-17 21:34:44 UTC (rev 947)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Pacejka94.h	2009-01-19 17:45:13 UTC (rev 948)
+@@ -15,6 +15,11 @@
+   Pacejka94(const std::string&amp; name);
+   virtual ~Pacejka94(void);
+ 
++  // Helper function to compute the resulting force
++  virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
++                           const real_type&amp; alpha, const real_type&amp; kappa,
++                           const real_type&amp; gamma, const real_type&amp; phi) const;
++
+   /** Stuff that should move into the tire force implementation.
+    */
+   void setSpringConstant(const real_type&amp; springConstant);
+@@ -23,10 +28,8 @@
+   void setDampingConstant(const real_type&amp; dampingConstant);
+   const real_type&amp; getDampingConstant(void) const;
+ 
+-  // Helper function to compute the resulting force
+-  virtual Vector6 getForce(const real_type&amp; rho, const real_type&amp; rhoDot,
+-                           const real_type&amp; alpha, const real_type&amp; kappa,
+-                           const real_type&amp; gamma, const real_type&amp; phi) const;
++  const real_type&amp; getFzMin() const { return mFzMin; }
++  void setFzMin(const real_type&amp; value) { mFzMin = value; }
+ 
+   const real_type&amp; getA0() const { return mA0; }
+   void setA0(const real_type&amp; value) { mA0 = value; }
+@@ -205,6 +208,8 @@
+   real_type mSpringConstant;
+   real_type mDampingConstant;
+ 
++  real_type mFzMin;
++
+   real_type mA0;
+   real_type mA1, mA2, mA15;
+   real_type mA3, mA4, mA5;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp	2009-01-17 21:34:44 UTC (rev 947)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PacejkaTire.cpp	2009-01-19 17:45:13 UTC (rev 948)
+@@ -122,7 +122,9 @@
+     // The wheel revolution speed
+     real_type omega = dot(rotVel, s);
+ 
+-    // The rotational velocity of the hub system wrt ground
++    // The rotational velocity of the hub system wrt ground,
++    // Note that this does *not* include the wheels own spin
++    // rate around the wheel axis.
+     Vector3 rotVelHub = relVel.getAngular() - omega*s;
+  
+     // FIXME ????
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000912.html">[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000914.html">[OpenFDM-svn] r949 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#913">[ date ]</a>
+              <a href="thread.html#913">[ thread ]</a>
+              <a href="subject.html#913">[ subject ]</a>
+              <a href="author.html#913">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

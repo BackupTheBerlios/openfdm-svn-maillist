@@ -1,0 +1,445 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r947%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901172134.n0HLYjDc026670%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000911.html">
+   <LINK REL="Next"  HREF="000913.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r947%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901172134.n0HLYjDc026670%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r947 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sat Jan 17 22:34:45 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000911.html">[OpenFDM-svn] r946 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+        <LI>Next message: <A HREF="000913.html">[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#912">[ date ]</a>
+              <a href="thread.html#912">[ thread ]</a>
+              <a href="subject.html#912">[ subject ]</a>
+              <a href="author.html#912">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-17 22:34:44 +0100 (Sat, 17 Jan 2009)
+New Revision: 947
+
+Added:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Add a prismatic actuator model.
+
+AM   PrismaticActuator.cpp
+AM   PrismaticActuator.h
+M    Makefile.am
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-17 21:33:28 UTC (rev 946)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-17 21:34:44 UTC (rev 947)
+@@ -262,6 +262,7 @@
+   Pacejka89.h \
+   Pacejka94.h \
+   PacejkaTire.h \
++  PrismaticActuator.h \
+   PrismaticJoint.h \
+   RevoluteActuator.h \
+   RevoluteJoint.h \
+@@ -284,6 +285,7 @@
+   Pacejka89.cpp \
+   Pacejka94.cpp \
+   PacejkaTire.cpp \
++  PrismaticActuator.cpp \
+   PrismaticJoint.cpp \
+   RevoluteActuator.cpp \
+   RevoluteJoint.cpp \
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.cpp	2009-01-17 21:33:28 UTC (rev 946)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.cpp	2009-01-17 21:34:44 UTC (rev 947)
+@@ -0,0 +1,228 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;PrismaticActuator.h&quot;
++#include &quot;Assert.h&quot;
++#include &quot;LogStream.h&quot;
++#include &quot;Limits.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;MechanicContext.h&quot;
++
++namespace OpenFDM {
++
++BEGIN_OPENFDM_OBJECT_DEF(PrismaticActuator, Joint)
++  DEF_OPENFDM_PROPERTY(Vector3, Axis, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialPosition, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, InitialVelocity, Serialized)
++  DEF_OPENFDM_PROPERTY(Bool, VelocityControl, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, MaxVel, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, VelGain, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, VelDotGain, Serialized)
++  END_OPENFDM_OBJECT_DEF
++
++PrismaticActuator::PrismaticActuator(const std::string&amp; name) :
++  CartesianJoint&lt;1&gt;(name),
++  mInputPort(this, &quot;input&quot;, Size(1, 1), true),
++  mPositionPort(this, &quot;position&quot;, Size(1, 1)),
++  mVelocityPort(this, &quot;velocity&quot;, Size(1, 1)),
++  mPositionStateInfo(new Vector1StateInfo),
++  mVelocityStateInfo(new Vector1StateInfo),
++  mAxis(Vector3(1, 0, 0)),
++  mInitialPosition(0),
++  mInitialVelocity(0),
++  mVelocityControl(false),
++  mVelGain(1),
++  mVelDotGain(1),
++  mMaxVel(1)
++{
++  addContinousStateInfo(mPositionStateInfo);
++  addContinousStateInfo(mVelocityStateInfo);
++
++  // FIXME
++  setAxis(mAxis);
++}
++
++PrismaticActuator::~PrismaticActuator(void)
++{
++}
++
++const Vector3&amp;
++PrismaticActuator::getAxis() const
++{
++  return mAxis;
++}
++
++void
++PrismaticActuator::setAxis(const Vector3&amp; axis)
++{
++  real_type nrm = norm(axis);
++  if (nrm &lt;= Limits&lt;real_type&gt;::min()) {
++    Log(Initialization, Error) &lt;&lt; &quot;JointAxis is zero ...&quot; &lt;&lt; endl;
++    return;
++  }
++  mAxis = (1/nrm)*axis;
++}
++
++const real_type&amp;
++PrismaticActuator::getInitialPosition() const
++{
++  return mInitialPosition;
++}
++
++void
++PrismaticActuator::setInitialPosition(const real_type&amp; initialPosition)
++{
++  mInitialPosition = initialPosition;
++}
++
++const real_type&amp;
++PrismaticActuator::getInitialVelocity() const
++{
++  return mInitialVelocity;
++}
++
++void
++PrismaticActuator::setInitialVelocity(const real_type&amp; initialVelocity)
++{
++  mInitialVelocity = initialVelocity;
++}
++
++const bool&amp;
++PrismaticActuator::getVelocityControl(void) const
++{
++  return mVelocityControl;
++}
++
++void
++PrismaticActuator::setVelocityControl(const bool&amp; velocityControl)
++{
++  mVelocityControl = velocityControl;
++}
++
++const real_type&amp;
++PrismaticActuator::getMaxVel(void) const
++{
++  return mMaxVel;
++}
++
++void
++PrismaticActuator::setMaxVel(const real_type&amp; maxVel)
++{
++  mMaxVel = maxVel;
++}
++
++const real_type&amp;
++PrismaticActuator::getVelGain(void) const
++{
++  return mVelGain;
++}
++
++void
++PrismaticActuator::setVelGain(const real_type&amp; velGain)
++{
++  mVelGain = velGain;
++}
++
++const real_type&amp;
++PrismaticActuator::getVelDotGain(void) const
++{
++  return mVelDotGain;
++}
++
++void
++PrismaticActuator::setVelDotGain(const real_type&amp; velDotGain)
++{
++  mVelDotGain = velDotGain;
++}
++
++void
++PrismaticActuator::init(const Task&amp;, DiscreteStateValueVector&amp;,
++                       ContinousStateValueVector&amp; continousState,
++                       const PortValueList&amp;) const
++{
++  continousState[*mPositionStateInfo] = mInitialPosition;
++  continousState[*mVelocityStateInfo] = mInitialVelocity;
++}
++
++PrismaticActuator::Matrix6N
++PrismaticActuator::getJointMatrix() const
++{
++  return Vector6(Vector3::zeros(), mAxis);
++}
++
++void
++PrismaticActuator::velocity(const Task&amp;, Context&amp; context,
++                        const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const
++{
++  VectorN jointPos = states[*mPositionStateInfo];
++  if (!mPositionPort.empty())
++    portValues[mPositionPort] = jointPos;
++  
++  VectorN jointVel = states[*mVelocityStateInfo];
++  if (!mVelocityPort.empty())
++    portValues[mVelocityPort] = jointVel;
++  
++  context.setPosAndVel(mAxis*jointPos, Quaternion::unit(), jointVel);
++}
++
++void
++PrismaticActuator::articulation(const Task&amp;, Context&amp; context,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues) const
++{
++  // This is a simple second order system with velocity limits.
++  // the joints accelerations, velocities and positions must fit together
++  // otherwise the articulated body dynamics get fooled ...
++
++  VectorN velDot;
++  if (!mVelocityControl) {
++    // The desired position input
++    VectorN desiredPos = portValues[mInputPort];
++    // Compute the error ...
++    VectorN posErr = desiredPos - states[*mPositionStateInfo];
++    // ... and compute a desired velocity within the given limits from that.
++    VectorN desiredVel;
++    desiredVel(0) = smoothSaturate(mVelGain*posErr(0), mMaxVel);
++    // The usual control loops: there we get a velocity error
++    VectorN velErr = desiredVel - states[*mVelocityStateInfo];
++    // and accelerate that proportional to that error ...
++    velDot = mVelDotGain*velErr;
++  } else {
++    // The desired velocity input
++    VectorN desiredVel = portValues[mInputPort];
++    // The usual control loops: there we get a velocity error
++    VectorN velErr = desiredVel - states[*mVelocityStateInfo];
++    // and accelerate that proportional to that error ...
++    velDot = mVelDotGain*velErr;
++  }
++
++  context.applyActuatorForce(velDot);
++}
++
++void
++PrismaticActuator::acceleration(const Task&amp;, Context&amp; context,
++                            const ContinousStateValueVector&amp;,
++                            PortValueList&amp;) const
++{
++  context.accelerateDueToVelDot();
++}
++
++void
++PrismaticActuator::derivative(const Task&amp;, Context&amp; context,
++                          const ContinousStateValueVector&amp; states,
++                          const PortValueList&amp;,
++                          ContinousStateValueVector&amp; derivative) const
++{
++  derivative[*mPositionStateInfo] = states[*mVelocityStateInfo];
++  derivative[*mVelocityStateInfo] = context.getVelDot();
++}
++
++} // namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.h	2009-01-17 21:33:28 UTC (rev 946)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.h	2009-01-17 21:34:44 UTC (rev 947)
+@@ -0,0 +1,94 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_PrismaticActuator_H
++#define OpenFDM_PrismaticActuator_H
++
++#include &quot;Assert.h&quot;
++#include &quot;Object.h&quot;
++#include &quot;Vector.h&quot;
++#include &quot;Matrix.h&quot;
++#include &quot;MatrixStateInfo.h&quot;
++#include &quot;Quaternion.h&quot;
++#include &quot;Inertia.h&quot;
++#include &quot;Joint.h&quot;
++#include &quot;MatrixInputPort.h&quot;
++#include &quot;MatrixOutputPort.h&quot;
++#include &quot;ContinousStateValueVector.h&quot;
++#include &quot;PortValueList.h&quot;
++#include &quot;MechanicContext.h&quot;
++#include &quot;CartesianJoint.h&quot;
++
++namespace OpenFDM {
++
++class PrismaticActuator : public CartesianJoint&lt;1&gt; {
++  OPENFDM_OBJECT(PrismaticActuator, Joint);
++public:
++  PrismaticActuator(const std::string&amp; name);
++  virtual ~PrismaticActuator(void);
++
++  /** Sets the joint axis where this joint is allowed to rotate around.
++   */
++  const Vector3&amp; getAxis() const;
++  void setAxis(const Vector3&amp; axis);
++
++  const real_type&amp; getInitialPosition() const;
++  void setInitialPosition(const real_type&amp; initialPosition);
++
++  const real_type&amp; getInitialVelocity() const;
++  void setInitialVelocity(const real_type&amp; initialVelocity);
++
++  const bool&amp; getVelocityControl(void) const;
++  void setVelocityControl(const bool&amp; velocityControl);
++
++  const real_type&amp; getMaxVel(void) const;
++  void setMaxVel(const real_type&amp; maxVel);
++
++  const real_type&amp; getVelGain(void) const;
++  void setVelGain(const real_type&amp; velGain);
++
++  const real_type&amp; getVelDotGain(void) const;
++  void setVelDotGain(const real_type&amp; velDotGain);
++
++protected:
++
++  virtual void init(const Task&amp;, DiscreteStateValueVector&amp;,
++                    ContinousStateValueVector&amp; continousState,
++                    const PortValueList&amp;) const;
++  virtual Matrix6N getJointMatrix() const;
++
++  virtual void velocity(const Task&amp; task, Context&amp; context,
++                        const ContinousStateValueVector&amp; states,
++                        PortValueList&amp; portValues) const;
++  virtual void articulation(const Task&amp; task, Context&amp; context,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues) const;
++  virtual void acceleration(const Task&amp; task, Context&amp; context,
++                            const ContinousStateValueVector&amp; states,
++                            PortValueList&amp; portValues) const;
++  virtual void derivative(const Task&amp; task, Context&amp; context,
++                          const ContinousStateValueVector&amp;,
++                          const PortValueList&amp; portValues,
++                          ContinousStateValueVector&amp;) const;
++
++private:
++  MatrixInputPort mInputPort;
++  MatrixOutputPort mPositionPort;
++  MatrixOutputPort mVelocityPort;
++
++  SharedPtr&lt;Vector1StateInfo&gt; mPositionStateInfo;
++  SharedPtr&lt;Vector1StateInfo&gt; mVelocityStateInfo;
++
++  Vector3 mAxis;
++  real_type mInitialPosition;
++  real_type mInitialVelocity;
++  bool mVelocityControl;
++  real_type mVelGain;
++  real_type mVelDotGain;
++  real_type mMaxVel;
++};
++
++} // namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/OpenFDM/PrismaticActuator.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000911.html">[OpenFDM-svn] r946 - branches/OpenFDM-StateSeparation/src/test
+</A></li>
+	<LI>Next message: <A HREF="000913.html">[OpenFDM-svn] r948 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#912">[ date ]</a>
+              <a href="thread.html#912">[ thread ]</a>
+              <a href="subject.html#912">[ subject ]</a>
+              <a href="author.html#912">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

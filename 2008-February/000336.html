@@ -1,0 +1,450 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r362 - trunk/OpenFDM/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-February/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r362%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200802202109.m1KL9Pk3011466%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000335.html">
+   <LINK REL="Next"  HREF="000337.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r362 - trunk/OpenFDM/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r362%20-%20trunk/OpenFDM/src/test&In-Reply-To=%3C200802202109.m1KL9Pk3011466%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r362 - trunk/OpenFDM/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Feb 20 22:09:25 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000335.html">[OpenFDM-svn] r361 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000337.html">[OpenFDM-svn] r364 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#336">[ date ]</a>
+              <a href="thread.html#336">[ thread ]</a>
+              <a href="subject.html#336">[ subject ]</a>
+              <a href="author.html#336">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-02-20 22:09:25 +0100 (Wed, 20 Feb 2008)
+New Revision: 362
+
+Added:
+   trunk/OpenFDM/src/test/ErrorCollectorCallback.h
+   trunk/OpenFDM/src/test/constintegral.cpp
+   trunk/OpenFDM/src/test/harmonic.cpp
+   trunk/OpenFDM/src/test/simulationtime.cpp
+Modified:
+   trunk/OpenFDM/src/test/Makefile.am
+Log:
+Add some unit test for the systems
+
+
+Added: trunk/OpenFDM/src/test/ErrorCollectorCallback.h
+===================================================================
+--- trunk/OpenFDM/src/test/ErrorCollectorCallback.h	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/ErrorCollectorCallback.h	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,33 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;vector&gt;
++#include &lt;OpenFDM/Vector.h&gt;
++#include &lt;OpenFDM/Output.h&gt;
++
++#ifndef ErrorCollectorCallback_H
++#define ErrorCollectorCallback_H
++
++class ErrorCollectorCallback : public OpenFDM::Output::Callback {
++public:
++  virtual void setValue(OpenFDM::real_type value)
++  { values.push_back(value); }
++  void print() const
++  {
++    std::vector&lt;OpenFDM::real_type&gt;::const_iterator i;
++    for (i = values.begin(); i != values.end(); ++i)
++      std::cout &lt;&lt; *i &lt;&lt; std::endl;
++  }
++  OpenFDM::real_type error() const
++  {
++    OpenFDM::Vector errors(values.size());
++    for (unsigned i = 0; i &lt; values.size(); ++i)
++      errors(i) = values[i];
++    return normInf(errors);
++  }
++private:
++  std::vector&lt;OpenFDM::real_type&gt; values;
++};
++
++#endif
+
+Modified: trunk/OpenFDM/src/test/Makefile.am
+===================================================================
+--- trunk/OpenFDM/src/test/Makefile.am	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/Makefile.am	2008-02-20 21:09:25 UTC (rev 362)
+@@ -1,7 +1,7 @@
+ INCLUDES = -I$(srcdir)/..
+ 
+ # define some unit tests
+-check_PROGRAMS = quattest unitstest
++check_PROGRAMS = quattest unitstest simulationtime constintegral harmonic
+ TESTS          = $(check_PROGRAMS)
+ 
+ unitstest_SOURCES = unitstest.cpp
+@@ -10,3 +10,11 @@
+ quattest_SOURCES = quattest.cpp
+ quattest_LDADD = ../OpenFDM/libOpenFDM.la
+ 
++simulationtime_SOURCES = simulationtime.cpp
++simulationtime_LDADD = ../OpenFDM/libOpenFDM.la
++
++constintegral_SOURCES = constintegral.cpp
++constintegral_LDADD = ../OpenFDM/libOpenFDM.la
++
++harmonic_SOURCES = harmonic.cpp
++harmonic_LDADD = ../OpenFDM/libOpenFDM.la
+
+Added: trunk/OpenFDM/src/test/constintegral.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/constintegral.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/constintegral.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,81 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;cstdlib&gt;
++#include &lt;iostream&gt;
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/Integrator.h&gt;
++#include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/SimulationTime.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &quot;ErrorCollectorCallback.h&quot;
++
++using namespace OpenFDM;
++
++int
++main(int argc, char *argv[])
++{
++  real_type rate = 0.1;
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Constant Integration&quot;);
++
++  Matrix m(1, 1);
++  m(0, 0) = 1;
++
++  ConstModel* constModel = new ConstModel(&quot;Constant&quot;, m);
++  system-&gt;addModel(constModel);
++
++  Integrator* integrator = new Integrator(&quot;Integrator&quot;);
++  system-&gt;addModel(integrator);
++  m(0, 0) = 0;
++  integrator-&gt;setInitialValue(m);
++
++  Connection::connect(integrator-&gt;getInputPort(0),
++                      constModel-&gt;getOutputPort(0));
++
++  SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
++  system-&gt;addModel(simulationTime);
++
++  Summer* summer = new Summer(&quot;Error to exact Solution&quot;);
++  system-&gt;addModel(summer);
++  summer-&gt;setNumSummands(2);
++  summer-&gt;setInputSign(0, Summer::Plus);
++  Connection::connect(simulationTime-&gt;getOutputPort(0),
++                      summer-&gt;getInputPort(0));
++  summer-&gt;setInputSign(1, Summer::Minus);
++  Connection::connect(integrator-&gt;getOutputPort(0),
++                      summer-&gt;getInputPort(1));
++
++  Output* output = new Output(&quot;Error Output&quot;);
++  SharedPtr&lt;ErrorCollectorCallback&gt; errors;
++  errors = new ErrorCollectorCallback;
++  output-&gt;setCallback(errors);
++  output-&gt;addSampleTime(rate);
++  system-&gt;addModel(output);
++  Connection::connect(output-&gt;getInputPort(0), summer-&gt;getOutputPort(0));
++
++  if (!system-&gt;init()) {
++    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system-&gt;simulate(10);
++
++  real_type expectedRoundoff;
++  expectedRoundoff = 64*Limits&lt;real_type&gt;::epsilon()*system-&gt;getTime()/rate;
++  real_type error = errors-&gt;error();
++  if (expectedRoundoff &lt; error) {
++    std::cerr &lt;&lt; &quot;Maximum simulation time error &quot; &lt;&lt; error
++              &lt;&lt; &quot; exceeds limit of expected roundoff &quot;
++              &lt;&lt; expectedRoundoff &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  std::cout &lt;&lt; &quot;Maximum simulation time error &quot; &lt;&lt; error
++            &lt;&lt; &quot; passes limit of expected roundoff &quot;
++            &lt;&lt; expectedRoundoff &lt;&lt; std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+Added: trunk/OpenFDM/src/test/harmonic.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/harmonic.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/harmonic.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,138 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;cstdlib&gt;
++#include &lt;iostream&gt;
++#include &lt;OpenFDM/DoPri5.h&gt;
++#include &lt;OpenFDM/Gain.h&gt;
++#include &lt;OpenFDM/Integrator.h&gt;
++#include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/SimulationTime.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++#include &lt;OpenFDM/UnaryFunctionModel.h&gt;
++#include &quot;ErrorCollectorCallback.h&quot;
++
++using namespace OpenFDM;
++
++int
++main(int argc, char *argv[])
++{
++  real_type omega = 2;
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Harmonic Oszilator&quot;);
++  system-&gt;addSampleTime(0.01);
++  system-&gt;setTimestepper(new DoPri5);
++  
++  Integrator* integrator0 = new Integrator(&quot;Acceleration Integrator&quot;);
++  Matrix initialValue(1, 1);
++  initialValue(0, 0) = 0;
++  integrator0-&gt;setInitialValue(initialValue);
++  system-&gt;addModel(integrator0);
++
++  Integrator* integrator1 = new Integrator(&quot;Velocity Integrator&quot;);
++  initialValue(0, 0) = 1;
++  integrator1-&gt;setInitialValue(initialValue);
++  system-&gt;addModel(integrator1);
++
++  Gain* gain = new Gain(&quot;Gain&quot;);
++  gain-&gt;setGain(-omega*omega);
++  system-&gt;addModel(gain);
++
++  Connection::connect(gain-&gt;getInputPort(0),
++                      integrator1-&gt;getOutputPort(0));
++  Connection::connect(integrator1-&gt;getInputPort(0),
++                      integrator0-&gt;getOutputPort(0));
++  Connection::connect(integrator0-&gt;getInputPort(0),
++                      gain-&gt;getOutputPort(0));
++
++  SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
++  system-&gt;addModel(simulationTime);
++
++  gain = new Gain(&quot;Cosinus Input Gain&quot;);
++  system-&gt;addModel(gain);
++  gain-&gt;setGain(omega);
++  Connection::connect(gain-&gt;getInputPort(0),
++                      simulationTime-&gt;getOutputPort(0));
++
++  UnaryFunctionModel* cosFunction
++    = new UnaryFunctionModel(&quot;Exact Pos Solution&quot;, UnaryFunctionModel::Cos);
++  system-&gt;addModel(cosFunction);
++  Connection::connect(cosFunction-&gt;getInputPort(0),
++                      gain-&gt;getOutputPort(0));
++
++  UnaryFunctionModel* sinFunction
++    = new UnaryFunctionModel(&quot;Exact Vel Solution&quot;, UnaryFunctionModel::Sin);
++  system-&gt;addModel(sinFunction);
++  Connection::connect(sinFunction-&gt;getInputPort(0),
++                      gain-&gt;getOutputPort(0));
++
++  gain = new Gain(&quot;Cosinus Output Gain&quot;);
++  system-&gt;addModel(gain);
++  gain-&gt;setGain(-omega);
++  Connection::connect(gain-&gt;getInputPort(0),
++                      sinFunction-&gt;getOutputPort(0));
++
++
++  Summer* summer0 = new Summer(&quot;Position Error to exact Solution&quot;);
++  system-&gt;addModel(summer0);
++  summer0-&gt;setNumSummands(2);
++  summer0-&gt;setInputSign(0, Summer::Plus);
++  Connection::connect(cosFunction-&gt;getOutputPort(0),
++                      summer0-&gt;getInputPort(0));
++  summer0-&gt;setInputSign(1, Summer::Minus);
++  Connection::connect(integrator1-&gt;getOutputPort(0),
++                      summer0-&gt;getInputPort(1));
++
++  Output* output = new Output(&quot;Position Error Output&quot;);
++  SharedPtr&lt;ErrorCollectorCallback&gt; posErrorCallback;
++  posErrorCallback = new ErrorCollectorCallback;
++  output-&gt;setCallback(posErrorCallback);
++  output-&gt;addSampleTime(0.1);
++  system-&gt;addModel(output);
++  Connection::connect(output-&gt;getInputPort(0), summer0-&gt;getOutputPort(0));
++
++
++  Summer* summer1 = new Summer(&quot;Velocity Error to exact Solution&quot;);
++  system-&gt;addModel(summer1);
++  summer1-&gt;setNumSummands(2);
++  summer1-&gt;setInputSign(0, Summer::Plus);
++  Connection::connect(gain-&gt;getOutputPort(0),
++                      summer1-&gt;getInputPort(0));
++  summer1-&gt;setInputSign(1, Summer::Minus);
++  Connection::connect(integrator0-&gt;getOutputPort(0),
++                      summer1-&gt;getInputPort(1));
++
++  output = new Output(&quot;Velocity Error Output&quot;);
++  SharedPtr&lt;ErrorCollectorCallback&gt; velErrorCallback;
++  velErrorCallback = new ErrorCollectorCallback;
++  output-&gt;setCallback(velErrorCallback);
++  output-&gt;addSampleTime(0.1);
++  system-&gt;addModel(output);
++  Connection::connect(output-&gt;getInputPort(0), summer1-&gt;getOutputPort(0));
++
++  if (!system-&gt;init()) {
++    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system-&gt;simulate(10);
++
++  real_type posError = posErrorCallback-&gt;error();
++  if (1e-6 &lt; posError) {
++    std::cerr &lt;&lt; &quot;Position error of &quot; &lt;&lt; posError &lt;&lt; &quot; is too big&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++  std::cout &lt;&lt; &quot;Passed position error check with error = &quot;
++            &lt;&lt; posError &lt;&lt; std::endl;
++  real_type velError = velErrorCallback-&gt;error();
++  if (1e-6 &lt; velError) {
++    std::cerr &lt;&lt; &quot;Velocity error of &quot; &lt;&lt; velError &lt;&lt; &quot; is too big&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++  std::cout &lt;&lt; &quot;Passed velocity error check with error = &quot;
++            &lt;&lt; velError &lt;&lt; std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+Added: trunk/OpenFDM/src/test/simulationtime.cpp
+===================================================================
+--- trunk/OpenFDM/src/test/simulationtime.cpp	2008-02-20 20:33:28 UTC (rev 361)
++++ trunk/OpenFDM/src/test/simulationtime.cpp	2008-02-20 21:09:25 UTC (rev 362)
+@@ -0,0 +1,72 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
++ *
++ */
++
++#include &lt;cstdlib&gt;
++#include &lt;vector&gt;
++#include &lt;iostream&gt;
++#include &lt;OpenFDM/Output.h&gt;
++#include &lt;OpenFDM/SimulationTime.h&gt;
++#include &lt;OpenFDM/System.h&gt;
++
++using namespace OpenFDM;
++
++class CollectOutputCallback : public Output::Callback {
++public:
++  virtual void setValue(real_type value)
++  { values.push_back(value); }
++  void print() const
++  {
++    std::vector&lt;real_type&gt;::const_iterator i;
++    for (i = values.begin(); i != values.end(); ++i)
++      std::cout &lt;&lt; *i &lt;&lt; std::endl;
++  }
++  std::vector&lt;real_type&gt; values;
++};
++
++int
++main(int argc, char *argv[])
++{
++  real_type rate = 0.1;
++
++  SharedPtr&lt;System&gt; system = new System(&quot;Simulation Time System&quot;);
++  
++  SimulationTime* simulationTime = new SimulationTime(&quot;Simulation Time&quot;);
++  system-&gt;addModel(simulationTime);
++
++  Output* output = new Output(&quot;Simulation Time Output&quot;);
++  system-&gt;addModel(output);
++  SharedPtr&lt;CollectOutputCallback&gt; simTimeCallback = new CollectOutputCallback;
++  output-&gt;setCallback(simTimeCallback);
++  output-&gt;addSampleTime(rate);
++  Connection::connect(output-&gt;getInputPort(0),
++                      simulationTime-&gt;getOutputPort(0));
++
++  if (!system-&gt;init()) {
++    std::cout &lt;&lt; &quot;Could not initialize the system&quot; &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  system-&gt;simulate(10);
++
++  Vector errors(simTimeCallback-&gt;values.size());
++  for (unsigned i = 0; i &lt; simTimeCallback-&gt;values.size(); ++i) {
++    errors(i) = simTimeCallback-&gt;values[i] - i*rate;
++  }
++
++  real_type expectedRoundoff;
++  expectedRoundoff = Limits&lt;real_type&gt;::epsilon()*system-&gt;getTime()/rate;
++  real_type error = normInf(errors);
++  if (expectedRoundoff &lt; error) {
++    std::cerr &lt;&lt; &quot;Maximum simulation time error &quot; &lt;&lt; error
++              &lt;&lt; &quot; exceeds limit of expected roundoff &quot;
++              &lt;&lt; expectedRoundoff &lt;&lt; std::endl;
++    return EXIT_FAILURE;
++  }
++
++  std::cout &lt;&lt; &quot;Maximum simulation time error &quot; &lt;&lt; error
++            &lt;&lt; &quot; passes limit of expected roundoff &quot;
++            &lt;&lt; expectedRoundoff &lt;&lt; std::endl;
++
++  return EXIT_SUCCESS;
++}
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000335.html">[OpenFDM-svn] r361 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000337.html">[OpenFDM-svn] r364 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#336">[ date ]</a>
+              <a href="thread.html#336">[ thread ]</a>
+              <a href="subject.html#336">[ subject ]</a>
+              <a href="author.html#336">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

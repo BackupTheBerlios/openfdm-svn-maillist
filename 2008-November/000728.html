@@ -1,0 +1,221 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r759 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r759%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811191932.mAJJWjUj004791%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000727.html">
+   <LINK REL="Next"  HREF="000729.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r759 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r759%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811191932.mAJJWjUj004791%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r759 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Wed Nov 19 20:32:45 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000727.html">[OpenFDM-svn] r758 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000729.html">[OpenFDM-svn] r760 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#728">[ date ]</a>
+              <a href="thread.html#728">[ thread ]</a>
+              <a href="subject.html#728">[ subject ]</a>
+              <a href="author.html#728">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-19 20:32:45 +0100 (Wed, 19 Nov 2008)
+New Revision: 759
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+Log:
+Reactivate some numerical algorithms.
+
+M    src/OpenFDM/ImplicitEuler.cpp
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/ImplicitEuler.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.cpp	2008-11-19 18:57:16 UTC (rev 758)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.cpp	2008-11-19 19:32:45 UTC (rev 759)
+@@ -13,10 +13,35 @@
+ 
+ namespace OpenFDM {
+ 
++class ImplicitEuler::IEFunction : public Function {
++public:
++  IEFunction(ImplicitEuler* i) : ie(i) {}
++  
++  virtual size_type inSize(void) const
++  { return ie-&gt;mFunction-&gt;inSize(); }
++  virtual size_type outSize(void) const
++  { return ie-&gt;mFunction-&gt;outSize(); }
++  virtual void eval(real_type t, const invector_type&amp; v, outvector_type&amp; out)
++  {
++    real_type h = ie-&gt;mCurrentStepsize;
++    ie-&gt;evalFunction(ie-&gt;getTime() + h, ie-&gt;getState() + v, out);
++    out -= (1/h)*v;
++  }
++  virtual void jac(real_type t, const invector_type&amp; v, jacobian_type&amp; jac)
++  {
++    real_type h = ie-&gt;mCurrentStepsize;
++    ie-&gt;evalJacobian(ie-&gt;getTime() + h, ie-&gt;getState() + v, jac);
++    size_type dim = ie-&gt;mFunction-&gt;inSize();
++    jac -= (1/h)*LinAlg::Eye&lt;real_type,0,0&gt;(dim, dim);
++  }
++private:
++  ImplicitEuler* ie;
++};
++
+ ImplicitEuler::ImplicitEuler(void)
+ {
+   Log(TimeStep, Warning) &lt;&lt; &quot;Using mostly hacked implicit Euler method!!!&quot;
+-                             &lt;&lt; endl;
++                         &lt;&lt; endl;
+   mJacStepsize = 0;
+ }
+ 
+@@ -38,8 +63,7 @@
+   Vector fState(mState.size());
+   fState.clear();
+ 
+-  SharedPtr&lt;System&gt; system = mSystem.lock();
+-  unsigned dim = system-&gt;getNumContinousStates();
++  unsigned dim = mFunction-&gt;inSize();
+ 
+   real_type h = 0;
+   while (!reached(toTEnd)) {
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.h	2008-11-19 18:57:16 UTC (rev 758)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ImplicitEuler.h	2008-11-19 19:32:45 UTC (rev 759)
+@@ -12,8 +12,7 @@
+ 
+ namespace OpenFDM {
+ 
+-class ImplicitEuler
+-  : public ODESolver {
++class ImplicitEuler : public ODESolver {
+ public:
+   ImplicitEuler(void);
+   virtual ~ImplicitEuler(void);
+@@ -23,33 +22,8 @@
+   virtual bool denseOutput(real_type t, Vector&amp; out);
+ 
+ private:
+-  class IEFunction
+-    : public Function {
+-  public:
+-    IEFunction(ImplicitEuler* i) : ie(i) {}
++  class IEFunction;
+ 
+-    virtual size_type inSize(void) const
+-    { return ie-&gt;mSystem.lock()-&gt;getNumContinousStates(); }
+-    virtual size_type outSize(void) const
+-    { return ie-&gt;mSystem.lock()-&gt;getNumContinousStates(); }
+-    virtual void eval(real_type t, const invector_type&amp; v,
+-                      outvector_type&amp; out)
+-    {
+-      real_type h = ie-&gt;mCurrentStepsize;
+-      ie-&gt;evalFunction(ie-&gt;getTime() + h, ie-&gt;getState() + v, out);
+-      out -= (1/h)*v;
+-    }
+-    virtual void jac(real_type t, const invector_type&amp; v, jacobian_type&amp; jac)
+-    {
+-      real_type h = ie-&gt;mCurrentStepsize;
+-      ie-&gt;evalJacobian(ie-&gt;getTime() + h, ie-&gt;getState() + v, jac);
+-      size_type dim = ie-&gt;mSystem.lock()-&gt;getNumContinousStates();
+-      jac -= (1/h)*LinAlg::Eye&lt;real_type,0,0&gt;(dim, dim);
+-    }
+-  private:
+-    ImplicitEuler* ie;
+-  };
+-
+   real_type mCurrentStepsize;
+   real_type mJacStepsize;
+   Matrix mJac;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 18:57:16 UTC (rev 758)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-11-19 19:32:45 UTC (rev 759)
+@@ -142,6 +142,7 @@
+   GroupInput.cpp \
+   GroupMechanicLink.cpp \
+   GroupOutput.cpp \
++  ImplicitEuler.cpp \
+   Interact.cpp \
+   LeafNode.cpp \
+   LibraryModel.cpp \
+@@ -153,6 +154,7 @@
+   MidpointRule.cpp \
+   Model.cpp \
+   ModelContext.cpp \
++  Newton.cpp \
+   Node.cpp \
+   NodeInstance.cpp \
+   NodeVisitor.cpp \
+@@ -173,11 +175,7 @@
+ 
+ #   Environment.cpp \
+ #   EnvironmentObject.cpp \
+-#   ImplicitEuler.cpp \
+-#   Newton.cpp \
+ #   ReaderWriter.cpp \
+-#
+-
+ #   Atmosphere.cpp \
+ #   AtmosphereSTD1976.cpp \
+ #   DefaultGravity.cpp \
+@@ -296,7 +294,7 @@
+ #   Tailhook.cpp \
+ #   Tank.cpp \
+ #   WheelContact.cpp
++#
+ 
+-
+ nobase_OpenFDMinclude_HEADERS = $(OpenFDMCoreHEADERS) $(OpenFDMModelsHEADERS)
+ libOpenFDM_la_SOURCES = $(OpenFDMCoreSOURCES) $(OpenFDMModelsSOURCES) $(OpenFDMMechanicSOURCES)
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000727.html">[OpenFDM-svn] r758 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000729.html">[OpenFDM-svn] r760 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#728">[ date ]</a>
+              <a href="thread.html#728">[ thread ]</a>
+              <a href="subject.html#728">[ subject ]</a>
+              <a href="author.html#728">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

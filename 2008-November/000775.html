@@ -1,0 +1,201 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r807 - branches/OpenFDM-StateSeparation/src/test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r807%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811280701.mAS711Yi025488%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000774.html">
+   <LINK REL="Next"  HREF="000776.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r807 - branches/OpenFDM-StateSeparation/src/test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r807%20-%20branches/OpenFDM-StateSeparation/src/test&In-Reply-To=%3C200811280701.mAS711Yi025488%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r807 - branches/OpenFDM-StateSeparation/src/test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov 28 08:01:01 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000774.html">[OpenFDM-svn] r806 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000776.html">[OpenFDM-svn] r808 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#775">[ date ]</a>
+              <a href="thread.html#775">[ thread ]</a>
+              <a href="subject.html#775">[ subject ]</a>
+              <a href="author.html#775">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-28 08:01:01 +0100 (Fri, 28 Nov 2008)
+New Revision: 807
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+   branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+Log:
+Add sensors to all test cases.
+
+M    test/foucault.cpp
+M    test/mechanic.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/test/foucault.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-28 07:00:24 UTC (rev 806)
++++ branches/OpenFDM-StateSeparation/src/test/foucault.cpp	2008-11-28 07:01:01 UTC (rev 807)
+@@ -35,12 +35,7 @@
+ 
+   Sensor* sensor = new Sensor(&quot;Sensor&quot;);
+   sensor-&gt;setPosition(mass-&gt;getPosition());
+-  sensor-&gt;setEnablePosition(true);
+-  sensor-&gt;setEnableOrientation(true);
+-  sensor-&gt;setEnableEulerAngles(true);
+-  sensor-&gt;setEnableLinearVelocity(true);
+-  sensor-&gt;setEnableAngularVelocity(true);
+-  sensor-&gt;setEnableCentrifugalAcceleration(true);
++  sensor-&gt;setEnableAll(true);
+   Group::NodeId sensorId = group-&gt;addChild(sensor);
+ 
+   group-&gt;connect(fixedRootJointId, 0, rotationalJoint1Id, 0);
+
+Modified: branches/OpenFDM-StateSeparation/src/test/mechanic.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-11-28 07:00:24 UTC (rev 806)
++++ branches/OpenFDM-StateSeparation/src/test/mechanic.cpp	2008-11-28 07:01:01 UTC (rev 807)
+@@ -4,6 +4,7 @@
+ #include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/RevoluteJoint.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
++#include &lt;OpenFDM/Sensor.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+ #include &lt;OpenFDM/SystemOutput.h&gt;
+ 
+@@ -20,41 +21,73 @@
+   /// paris pendulum: coriolis
+ 
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+-  Group::NodeId rootJoint = group-&gt;addChild(new MobileRootJoint(&quot;Root Joint&quot;));
+-  Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
+-  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
+ 
+-  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
+-  group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
++  MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  Group::NodeId rootJointId = group-&gt;addChild(mobileRootJoint);
++  RigidBody* rigidBody = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBody-&gt;addLink(&quot;sensorLink&quot;);
++  Group::NodeId rigidBodyId = group-&gt;addChild(rigidBody);
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1));
++  Group::NodeId massId = group-&gt;addChild(mass);
+ 
++  Sensor* sensor = new Sensor(&quot;Sensor&quot;);
++  sensor-&gt;setPosition(mass-&gt;getPosition());
++  sensor-&gt;setEnableAll(true);
++  Group::NodeId sensorId = group-&gt;addChild(sensor);
++
++  group-&gt;connect(rootJointId, &quot;link&quot;, rigidBodyId, &quot;link0&quot;);
++  group-&gt;connect(rigidBodyId, &quot;link1&quot;, massId, &quot;link&quot;);
++  group-&gt;connect(rigidBodyId, &quot;sensorLink&quot;, sensorId, &quot;link&quot;);
++
+   return group.release();
+ }
+ 
+ Node* buildSimpleMechanicExample2()
+ {
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+-  Group::NodeId rootJoint = group-&gt;addChild(new MobileRootJoint(&quot;Root Joint&quot;));
+-  RigidBody *body = new RigidBody(&quot;Rigid Body&quot;);
+-  body-&gt;addLink(&quot;link2&quot;);
+-  Group::NodeId rigidBody = group-&gt;addChild(body);
++
++  MobileRootJoint* mobileRootJoint = new MobileRootJoint(&quot;Root Joint&quot;);
++  Group::NodeId rootJointId = group-&gt;addChild(mobileRootJoint);
++
++  RigidBody *rigidBody = new RigidBody(&quot;Rigid Body&quot;);
++  rigidBody-&gt;addLink(&quot;link2&quot;);
++  rigidBody-&gt;addLink(&quot;sensorLink&quot;);
++  Group::NodeId rigidBodyId = group-&gt;addChild(rigidBody);
+   InertiaMatrix inertia(1, 0, 0, 1, 0, 1);
+-  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, inertia));
++  Mass* mass = new Mass(&quot;Mass&quot;, 1, inertia);
++  Group::NodeId massId = group-&gt;addChild(mass);
+   RevoluteJoint* revoluteJoint = new RevoluteJoint(&quot;Revolute Joint&quot;);
+   revoluteJoint-&gt;setEnableExternalForce(true);
+-  Group::NodeId revolute = group-&gt;addChild(revoluteJoint);
+-  Group::NodeId rigidBody2 = group-&gt;addChild(new RigidBody(&quot;Rigid Body 2&quot;));
+-  Group::NodeId mass2 = group-&gt;addChild(new Mass(&quot;Mass 2&quot;, 1, inertia));
++  Group::NodeId revoluteId = group-&gt;addChild(revoluteJoint);
++  RigidBody *rigidBody2 = new RigidBody(&quot;Rigid Body 2&quot;);
++  rigidBody2-&gt;addLink(&quot;sensorLink&quot;);
++  Group::NodeId rigidBody2Id = group-&gt;addChild(rigidBody2);
++  Mass* mass2 = new Mass(&quot;Mass 2&quot;, 1, inertia);
++  Group::NodeId mass2Id = group-&gt;addChild(mass2);
+ 
+-  group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link0&quot;);
+-  group-&gt;connect(rigidBody, &quot;link1&quot;, mass, &quot;link&quot;);
+-  group-&gt;connect(rigidBody, &quot;link2&quot;, revolute, &quot;link0&quot;);
+-  group-&gt;connect(revolute, &quot;link1&quot;, rigidBody2, &quot;link0&quot;);
+-  group-&gt;connect(rigidBody2, &quot;link1&quot;, mass2, &quot;link&quot;);
++  Sensor* sensor = new Sensor(&quot;Sensor&quot;);
++  sensor-&gt;setPosition(mass-&gt;getPosition());
++  sensor-&gt;setEnableAll(true);
++  Group::NodeId sensorId = group-&gt;addChild(sensor);
+ 
+-  Group::NodeId jointForce = group-&gt;addChild(new ConstModel(&quot;Joint Force&quot;, 1));
++  Sensor* sensor2 = new Sensor(&quot;Sensor 2&quot;);
++  sensor2-&gt;setPosition(mass2-&gt;getPosition());
++  sensor2-&gt;setEnableAll(true);
++  Group::NodeId sensorId2 = group-&gt;addChild(sensor2);
+ 
+-  group-&gt;connect(jointForce, &quot;output&quot;, revolute, &quot;force&quot;);
++  group-&gt;connect(rootJointId, &quot;link&quot;, rigidBodyId, &quot;link0&quot;);
++  group-&gt;connect(rigidBodyId, &quot;link1&quot;, massId, &quot;link&quot;);
++  group-&gt;connect(rigidBodyId, &quot;link2&quot;, revoluteId, &quot;link0&quot;);
++  group-&gt;connect(revoluteId, &quot;link1&quot;, rigidBody2Id, &quot;link0&quot;);
++  group-&gt;connect(rigidBody2Id, &quot;link1&quot;, mass2Id, &quot;link&quot;);
++  group-&gt;connect(rigidBodyId, &quot;sensorLink&quot;, sensorId, &quot;link&quot;);
++  group-&gt;connect(rigidBody2Id, &quot;sensorLink&quot;, sensorId2, &quot;link&quot;);
+ 
++  ConstModel* jointForce = new ConstModel(&quot;Joint Force&quot;, 1);
++  Group::NodeId jointForceId = group-&gt;addChild(jointForce);
++
++  group-&gt;connect(jointForceId, &quot;output&quot;, revoluteId, &quot;force&quot;);
++
+   return group.release();
+ }
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000774.html">[OpenFDM-svn] r806 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000776.html">[OpenFDM-svn] r808 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#775">[ date ]</a>
+              <a href="thread.html#775">[ thread ]</a>
+              <a href="subject.html#775">[ subject ]</a>
+              <a href="author.html#775">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

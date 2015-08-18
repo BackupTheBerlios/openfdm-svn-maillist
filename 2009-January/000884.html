@@ -1,0 +1,386 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r916 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r916%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041112.n04BCS8Q021576%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000883.html">
+   <LINK REL="Next"  HREF="000885.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r916 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r916%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901041112.n04BCS8Q021576%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r916 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Sun Jan  4 12:12:28 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000883.html">[OpenFDM-svn] r915 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+        <LI>Next message: <A HREF="000885.html">[OpenFDM-svn] r918 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#884">[ date ]</a>
+              <a href="thread.html#884">[ thread ]</a>
+              <a href="subject.html#884">[ subject ]</a>
+              <a href="author.html#884">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-04 12:12:27 +0100 (Sun, 04 Jan 2009)
+New Revision: 916
+
+Removed:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Add ExternalForce functionality to the Sensor.
+Remove the old ExternalForce model.
+
+M    src/OpenFDM/Makefile.am
+D    src/OpenFDM/ExternalForce.cpp
+D    src/OpenFDM/ExternalForce.h
+M    src/OpenFDM/Sensor.cpp
+M    src/OpenFDM/Sensor.h
+
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp	2009-01-04 09:59:43 UTC (rev 915)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.cpp	2009-01-04 11:12:27 UTC (rev 916)
+@@ -1,59 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#include &quot;ExternalForce.h&quot;
+-
+-#include &quot;MechanicLinkValue.h&quot;
+-#include &quot;NumericPortValue.h&quot;
+-#include &quot;PortValueList.h&quot;
+-#include &quot;Task.h&quot;
+-
+-namespace OpenFDM {
+-
+-BEGIN_OPENFDM_OBJECT_DEF(ExternalForce, Sensor)
+-  DEF_OPENFDM_PROPERTY(Bool, LocalCoordinates, Serialized)
+-  END_OPENFDM_OBJECT_DEF
+-
+-ExternalForce::ExternalForce(const std::string&amp; name) :
+-  Sensor(name),
+-  mForcePort(this, &quot;force&quot;, Size(6, 1), true),
+-  mLocalCoordinates(true)
+-{
+-}
+-
+-ExternalForce::~ExternalForce(void)
+-{
+-}
+-
+-void
+-ExternalForce::articulation(const Task&amp;, const Environment&amp;,
+-                            const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const
+-{
+-  // FIXME, for now relative position
+-  Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+-  if (mLocalCoordinates) {
+-    Vector6 force = portValues[mForcePort];
+-    portValues[mMechanicLink].applyForce(position, force);
+-  } else {
+-    const Frame&amp; frame = portValues[mMechanicLink].getFrame();
+-    Vector6 force = portValues[mForcePort];
+-    force = forceTo(Vector3::zeros(), frame.getRefOrientation(), force);
+-    portValues[mMechanicLink].applyForce(position, force);
+-  }
+-}
+-
+-void
+-ExternalForce::setLocalCoordinates(bool localCoordinates)
+-{
+-  mLocalCoordinates = localCoordinates;
+-}
+-
+-bool
+-ExternalForce::getLocalCoordinates() const
+-{
+-  return mLocalCoordinates;
+-}
+-
+-} // namespace OpenFDM
+
+Deleted: branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.h	2009-01-04 09:59:43 UTC (rev 915)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/ExternalForce.h	2009-01-04 11:12:27 UTC (rev 916)
+@@ -1,33 +0,0 @@
+-/* -*-c++-*- OpenFDM - Copyright (C) 2004-2008 Mathias Froehlich 
+- *
+- */
+-
+-#ifndef OpenFDM_ExternalForce_H
+-#define OpenFDM_ExternalForce_H
+-
+-#include &quot;Sensor.h&quot;
+-#include &quot;MatrixInputPort.h&quot;
+-
+-namespace OpenFDM {
+-
+-class ExternalForce : public Sensor {
+-  OPENFDM_OBJECT(ExternalForce, Sensor);
+-public:
+-  ExternalForce(const std::string&amp; name);
+-  virtual ~ExternalForce(void);
+-
+-  virtual void articulation(const Task&amp;, const Environment&amp;,
+-                            const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const;
+-
+-  void setLocalCoordinates(bool localCoordinates);
+-  bool getLocalCoordinates() const;
+-
+-private:
+-  MatrixInputPort mForcePort;
+-  bool mLocalCoordinates;
+-};
+-
+-} // namespace OpenFDM
+-
+-#endif
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-04 09:59:43 UTC (rev 915)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2009-01-04 11:12:27 UTC (rev 916)
+@@ -206,7 +206,6 @@
+   Delay.h \
+   DiscBrake.h \
+   DiscreteIntegrator.h \
+-  ExternalForce.h \
+   FixedRootJoint.h \
+   Force.h \
+   Gain.h \
+@@ -275,7 +274,6 @@
+   Contact.cpp \
+   DoubleLinkInteract.cpp \
+   Joint.cpp \
+-  ExternalForce.cpp \
+   FixedRootJoint.cpp \
+   InternalSensor.cpp \
+   Mass.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-04 09:59:43 UTC (rev 915)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2009-01-04 11:12:27 UTC (rev 916)
+@@ -155,6 +155,33 @@
+ }
+ 
+ void
++Sensor::articulation(const Task&amp;, const Environment&amp;,
++                     const ContinousStateValueVector&amp;,
++                     PortValueList&amp; portValues) const
++{
++  const Frame&amp; frame = portValues[mMechanicLink].getFrame();
++  // FIXME, for now relative position
++  Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
++  
++  if (getEnableBodyForce()) {
++    Vector3 force = portValues[mBodyForcePort];
++    portValues[mMechanicLink].applyForce(position, force);
++  }
++  if (getEnableBodyTorque()) {
++    Vector3 torque = portValues[mBodyTorquePort];
++    portValues[mMechanicLink].applyTorque(torque);
++  }
++  if (getEnableGlobalForce()) {
++    Vector3 force = portValues[mGlobalForcePort];
++    portValues[mMechanicLink].applyForce(position, frame.rotFromRef(force));
++  }
++  if (getEnableGlobalTorque()) {
++    Vector3 torque = portValues[mGlobalTorquePort];
++    portValues[mMechanicLink].applyTorque(frame.rotFromRef(torque));
++  }
++}
++
++void
+ Sensor::acceleration(const Task&amp;, const Environment&amp; environment,
+                      const ContinousStateValueVector&amp;,
+                      PortValueList&amp; portValues) const
+@@ -425,6 +452,74 @@
+ }
+ 
+ void
++Sensor::setEnableBodyForce(bool enable)
++{
++  if (enable == getEnableBodyForce())
++    return;
++  if (enable)
++    mBodyForcePort = MatrixInputPort(this, &quot;bodyForce&quot;, Size(3, 1), true);
++  else
++    mBodyForcePort.clear();
++}
++
++bool
++Sensor::getEnableBodyForce() const
++{
++  return !mBodyForcePort.empty();
++}
++
++void
++Sensor::setEnableBodyTorque(bool enable)
++{
++  if (enable == getEnableBodyTorque())
++    return;
++  if (enable)
++    mBodyTorquePort = MatrixInputPort(this, &quot;bodyTorque&quot;, Size(3, 1), true);
++  else
++    mBodyTorquePort.clear();
++}
++
++bool
++Sensor::getEnableBodyTorque() const
++{
++  return !mBodyTorquePort.empty();
++}
++
++void
++Sensor::setEnableGlobalForce(bool enable)
++{
++  if (enable == getEnableGlobalForce())
++    return;
++  if (enable)
++    mGlobalForcePort = MatrixInputPort(this, &quot;globalForce&quot;, Size(3, 1), true);
++  else
++    mGlobalForcePort.clear();
++}
++
++bool
++Sensor::getEnableGlobalForce() const
++{
++  return !mGlobalForcePort.empty();
++}
++
++void
++Sensor::setEnableGlobalTorque(bool enable)
++{
++  if (enable == getEnableGlobalTorque())
++    return;
++  if (enable)
++    mGlobalTorquePort = MatrixInputPort(this, &quot;globalTorque&quot;, Size(3, 1), true);
++  else
++    mGlobalTorquePort.clear();
++}
++
++bool
++Sensor::getEnableGlobalTorque() const
++{
++  return !mGlobalTorquePort.empty();
++}
++
++void
+ Sensor::setEnableAllOutputs(bool enable)
+ {
+   setEnablePosition(enable);
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-04 09:59:43 UTC (rev 915)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2009-01-04 11:12:27 UTC (rev 916)
+@@ -6,6 +6,7 @@
+ #define OpenFDM_Sensor_H
+ 
+ #include &quot;SingleLinkInteract.h&quot;
++#include &quot;MatrixInputPort.h&quot;
+ #include &quot;MatrixOutputPort.h&quot;
+ #include &quot;MechanicLink.h&quot;
+ #include &quot;RealOutputPort.h&quot;
+@@ -28,8 +29,7 @@
+                         PortValueList&amp;) const;
+   virtual void articulation(const Task&amp;, const Environment&amp; environment,
+                             const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;) const
+-  { }
++                            PortValueList&amp;) const;
+   virtual void acceleration(const Task&amp;, const Environment&amp;,
+                             const ContinousStateValueVector&amp;,
+                             PortValueList&amp;) const;
+@@ -108,6 +108,28 @@
+   bool getEnableAboveGroundLevel() const;
+ 
+ 
++  /// Set availabilty of the body force input port
++  void setEnableBodyForce(bool enable);
++  /// Get availabilty of the body force input port
++  bool getEnableBodyForce() const;
++
++  /// Set availabilty of the body torque input port
++  void setEnableBodyTorque(bool enable);
++  /// Get availabilty of the body torque input port
++  bool getEnableBodyTorque() const;
++
++
++  /// Set availabilty of the global force input port
++  void setEnableGlobalForce(bool enable);
++  /// Get availabilty of the global force input port
++  bool getEnableGlobalForce() const;
++
++  /// Set availabilty of the global torque input port
++  void setEnableGlobalTorque(bool enable);
++  /// Get availabilty of the global torque input port
++  bool getEnableGlobalTorque() const;
++
++
+   /// Set availabilty of all output ports
+   /// This is mostly for convinience in testing
+   void setEnableAllOutputs(bool enable);
+@@ -132,6 +154,11 @@
+ 
+   RealOutputPort mAltitudePort;
+   RealOutputPort mAboveGroundLevelPort;
++
++  MatrixInputPort mBodyForcePort;
++  MatrixInputPort mBodyTorquePort;
++  MatrixInputPort mGlobalForcePort;
++  MatrixInputPort mGlobalTorquePort;
+ };
+ 
+ } // namespace OpenFDM
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000883.html">[OpenFDM-svn] r915 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+</A></li>
+	<LI>Next message: <A HREF="000885.html">[OpenFDM-svn] r918 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#884">[ date ]</a>
+              <a href="thread.html#884">[ thread ]</a>
+              <a href="subject.html#884">[ subject ]</a>
+              <a href="author.html#884">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

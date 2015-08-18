@@ -1,0 +1,202 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r958 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r958%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901230602.n0N62U4f014565%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000922.html">
+   <LINK REL="Next"  HREF="000924.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r958 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r958%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200901230602.n0N62U4f014565%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r958 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Jan 23 07:02:30 CET 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000922.html">[OpenFDM-svn] r957 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000924.html">[OpenFDM-svn] r959 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#923">[ date ]</a>
+              <a href="thread.html#923">[ thread ]</a>
+              <a href="subject.html#923">[ subject ]</a>
+              <a href="author.html#923">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-01-23 07:02:27 +0100 (Fri, 23 Jan 2009)
+New Revision: 958
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+Log:
+Pull port values from a connect struct instead of pusshing them.
+
+M    OpenFDM/System.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-01-22 21:25:21 UTC (rev 957)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/System.cpp	2009-01-23 06:02:27 UTC (rev 958)
+@@ -262,15 +262,17 @@
+   struct PortConnectSet : public Referenced {
+     bool setPortValue(PortValue* portValue)
+     {
+-      while (!mParentPortData.empty()) {
+-        SharedPtr&lt;PortData&gt; portData = mParentPortData.back().lock();
+-        mParentPortData.pop_back();
+-        if (!portData-&gt;setPortValue(portValue))
+-          return false;
+-      }
++      if (!portValue)
++        return false;
++      mPortValue = portValue;
+       return true;
+     }
++    PortValue* getPortValue()
++    {
++      return mPortValue;
++    }
+     std::vector&lt;WeakPtr&lt;PortData&gt; &gt; mParentPortData;
++    SharedPtr&lt;PortValue&gt; mPortValue;
+   };
+ 
+   struct PortData : public WeakReferenced {
+@@ -376,11 +378,7 @@
+     {
+       if (!mPortValueCreator)
+         return true;
+-      SharedPtr&lt;InstanceData&gt; instanceData = mInstanceData.lock();
+-      if (!instanceData)
+-        return false;
+-      // FIXME
+-      if (instanceData-&gt;getPortValue(*getPortInfo()))
++      if (getPortValue())
+         return true;
+       SharedPtr&lt;PortValue&gt; portValue = getPortInfo()-&gt;newValue();
+       if (!portValue)
+@@ -390,6 +388,11 @@
+       return true;
+     }
+ 
++    PortValue* getPortValue()
++    {
++      return mPortConnectSet-&gt;getPortValue();
++    }
++
+   private:
+     WeakPtr&lt;InstanceData&gt; mInstanceData;
+     SharedPtr&lt;const PortInfo&gt; mPortInfo;
+@@ -466,15 +469,15 @@
+     std::string getNodeNamePath() const
+     { return Node::toNodePathName(mNodePath); }
+ 
+-    bool allocPortValues()
++    bool createPortValues()
+     {
+       for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
+-        Log(Schedule, Debug3) &lt;&lt; &quot;Try to to allocate port value \&quot;&quot;
++        Log(Schedule, Debug3) &lt;&lt; &quot;Try to create port value \&quot;&quot;
+                               &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
+                               &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; getNodeNamePath()
+                               &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
+         if (!mPortDataVector[i]-&gt;createPortValue()) {
+-          Log(Schedule, Warning) &lt;&lt; &quot;Failed to allocate port value \&quot;&quot;
++          Log(Schedule, Warning) &lt;&lt; &quot;Failed to create port value \&quot;&quot;
+                                  &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
+                                  &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; getNodeNamePath()
+                                  &lt;&lt; &quot;\&quot;.\nAborting!&quot; &lt;&lt; endl;
+@@ -485,6 +488,27 @@
+       return true;
+     }
+ 
++    bool fetchPortValues()
++    {
++      for (unsigned i = 0; i &lt; mPortDataVector.size(); ++i) {
++        Log(Schedule, Debug3) &lt;&lt; &quot;Try to fetch port value \&quot;&quot;
++                              &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
++                              &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; getNodeNamePath()
++                              &lt;&lt; &quot;\&quot;&quot; &lt;&lt; endl;
++        PortValue* portValue = mPortDataVector[i]-&gt;getPortValue();
++        if (!portValue) {
++          Log(Schedule, Warning) &lt;&lt; &quot;Failed to fetch port value \&quot;&quot;
++                                 &lt;&lt; mPortDataVector[i]-&gt;getPortInfo()-&gt;getName()
++                                 &lt;&lt; &quot;\&quot; of \&quot;&quot; &lt;&lt; getNodeNamePath()
++                                 &lt;&lt; &quot;\&quot;.\nAborting!&quot; &lt;&lt; endl;
++
++          return false;
++        }
++        mPortValueList.setPortValue(i, portValue);
++      }
++      return true;
++    }
++
+     const SampleTime&amp; getSampleTime() const
+     { return mSampleTime; }
+ 
+@@ -1298,23 +1322,14 @@
+     // alloc port values
+     InstanceDataMap::const_iterator i;
+     for (i = mInstanceDataMap.begin(); i != mInstanceDataMap.end(); ++i) {
+-      if (!i-&gt;second-&gt;allocPortValues())
++      if (!i-&gt;second-&gt;createPortValues())
+         return false;
+     }
+ 
+-    // check port values and report unconnected mandatory values.
++    // check port values and report unconnected values.
+     for (i = mInstanceDataMap.begin(); i != mInstanceDataMap.end(); ++i) {
+-      const Node* node = i-&gt;second-&gt;getNode();
+-      for (unsigned k = 0; k &lt; node-&gt;getNumPorts(); ++k) {
+-        SharedPtr&lt;const PortInfo&gt; portInfo = node-&gt;getPort(k);
+-        if (!i-&gt;second-&gt;getPortValue(*portInfo)) {
+-          Log(Schedule, Warning) &lt;&lt; &quot;Mandatory port value for port \&quot;&quot;
+-                                 &lt;&lt; portInfo-&gt;getName() &lt;&lt; &quot;\&quot; for model \&quot;&quot;
+-                                 &lt;&lt; i-&gt;second-&gt;getNodeNamePath()
+-                                 &lt;&lt; &quot;\&quot; is not connected!&quot; &lt;&lt; endl;
+-          return false;
+-        }
+-      }
++      if (!i-&gt;second-&gt;fetchPortValues())
++        return false;
+     }
+ 
+     // Create the contexts
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000922.html">[OpenFDM-svn] r957 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000924.html">[OpenFDM-svn] r959 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#923">[ date ]</a>
+              <a href="thread.html#923">[ thread ]</a>
+              <a href="subject.html#923">[ subject ]</a>
+              <a href="author.html#923">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

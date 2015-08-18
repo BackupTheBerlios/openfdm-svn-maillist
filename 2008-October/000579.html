@@ -1,0 +1,403 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r609 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r609%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810140548.m9E5mN8B026395%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000578.html">
+   <LINK REL="Next"  HREF="000580.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r609 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r609%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200810140548.m9E5mN8B026395%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r609 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Tue Oct 14 07:48:23 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000578.html">[OpenFDM-svn] r608 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000580.html">[OpenFDM-svn] r610 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#579">[ date ]</a>
+              <a href="thread.html#579">[ thread ]</a>
+              <a href="subject.html#579">[ subject ]</a>
+              <a href="author.html#579">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-14 07:48:22 +0200 (Tue, 14 Oct 2008)
+New Revision: 609
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+Log:
+Crude, but add a whole context reference for the mechanics for now.
+Implement a mobile root joint.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicContext.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -6,9 +6,10 @@
+ #define OpenFDM_MechanicContext_H
+ 
+ #include &lt;list&gt;
+-#include &quot;SharedPtr.h&quot;
+ #include &quot;LeafContext.h&quot;
+ #include &quot;MechanicNode.h&quot;
++#include &quot;SharedPtr.h&quot;
++#include &quot;Transform.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -30,21 +31,16 @@
+   { mMechanicNode-&gt;init(task, mDiscreteState, mContinousState, mPortValueList); }
+ 
+   void velocities(const Task&amp; task)
+-  { mMechanicNode-&gt;velocity(task, mContinousState, mPortValueList); }
++  { mMechanicNode-&gt;velocity(task, mContinousState, mPortValueList, *this); }
+   void articulation(const Task&amp; task)
+-  { mMechanicNode-&gt;articulation(task, mContinousState, mPortValueList); }
++  { mMechanicNode-&gt;articulation(task, mContinousState, mPortValueList, *this); }
+   void accelerations(const Task&amp; task)
+-  { mMechanicNode-&gt;acceleration(task, mContinousState, mPortValueList); }
++  { mMechanicNode-&gt;acceleration(task, mContinousState, mPortValueList, *this); }
+ 
+   void derivative(const Task&amp;)
+   { mMechanicNode-&gt;derivative(mDiscreteState, mContinousState, mPortValueList,
+-                              mContinousStateDerivative); }
++                              *this, mContinousStateDerivative); }
+  
+-//   void outputVelocities()
+-//   { }
+-//   void outputAcceperation()
+-//   { }
+-
+   void update(const DiscreteTask&amp; discreteTask)
+   {
+     mMechanicNode-&gt;update(discreteTask, mDiscreteState,
+@@ -53,6 +49,13 @@
+ 
+   bool isConnectedTo(const MechanicContext&amp; mechanicContext) const;
+ 
++  // Stores some values persistent accross velocity/articulation/acceleration
++  unsigned mParentLinkIndex;
++  Vector6 mParentSpVel;
++  Vector6 mParentSpAccel;
++  Vector6 mHDot;
++  Vector6 mRelVelDot;
++
+ private:
+   SharedPtr&lt;const MechanicNode&gt; mMechanicNode;
+ 
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -28,18 +28,11 @@
+   // and outputs a rigid body can have.
+   // Example: force port, force and inertia, frame port, velocity port
+   Vector3 mPosition;
+-  Rotation mOrientation;
++  Quaternion mOrientation;
+   Vector6 mSpatialVelocity;
+   Vector6 mSpatialAcceleration;
+   Vector6 mArticulatedForce;
+   SpatialInertia mArticulatedInertia;
+-  // Frame????
+-  // FIXME: how to show who is responsible for setting the values???
+-  // Solution:
+-  // Ok, if set the joint is responsible for filling the velocities
+-  // and accelerations, the body is responsible for the inertia -
+-  // if unset it is the other way round ...
+-  bool mDownStream;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicNode.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -14,6 +14,7 @@
+ class DiscreteTask;
+ class PortValueList;
+ class Task;
++class MechanicContext;
+ 
+ class MechanicNode : public LeafNode {
+   OPENFDM_OBJECT(MechanicNode, LeafNode);
+@@ -25,18 +26,18 @@
+   virtual void accept(ConstNodeVisitor&amp; visitor) const;
+ 
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+-                        PortValueList&amp;) const
++                        PortValueList&amp;, MechanicContext&amp;) const
+   { }
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;) const
++                            PortValueList&amp;, MechanicContext&amp;) const
+   { }
+   // hmm, may be this should be output???
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp;) const
++                            PortValueList&amp;, MechanicContext&amp;) const
+   { }
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+-                          const PortValueList&amp;,
++                          const PortValueList&amp;, MechanicContext&amp;,
+                           ContinousStateValueVector&amp;) const
+   { }
+   virtual void update(const DiscreteTask&amp;, DiscreteStateValueVector&amp;,
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.cpp	2008-10-14 05:48:22 UTC (rev 609)
+@@ -13,6 +13,7 @@
+ #include &quot;Quaternion.h&quot;
+ #include &quot;Inertia.h&quot;
+ #include &quot;Gravity.h&quot;
++#include &quot;MechanicContext.h&quot;
+ 
+ namespace OpenFDM {
+ 
+@@ -43,29 +44,88 @@
+ }
+ 
+ void
+-MobileRootJoint::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+-                          PortValueList&amp;) const
++MobileRootJoint::velocity(const Task&amp;,
++                          const ContinousStateValueVector&amp; continousState,
++                          PortValueList&amp; portValues, MechanicContext&amp; context) const
+ {
++  Vector3 position = continousState[*mPositionStateInfo];
++  Quaternion orientation = continousState[*mOrientationStateInfo];
++  Vector6 velocity = continousState[*mVelocityStateInfo];
++
++  /// FIXME, plug in the earths rotation here ...
++  Vector6 mBaseFrameVelocity = Vector6::zeros();
++
++  Vector6 parentSpatialVelocity = motionTo(position, orientation,
++                                           mBaseFrameVelocity);
++
++  context.mParentSpVel = parentSpatialVelocity;
++  context.mParentSpAccel = Vector6::zeros();
++  Vector6 pivel = parentSpatialVelocity;
++  context.mHDot = Vector6(cross(pivel.getAngular(), velocity.getAngular()),
++                          cross(pivel.getAngular(), velocity.getLinear()) + 
++                          cross(pivel.getLinear(), velocity.getAngular()));
++
++  portValues[mMechanicLink].mPosition = position;
++  portValues[mMechanicLink].mOrientation = orientation;
++  portValues[mMechanicLink].mSpatialVelocity = velocity + parentSpatialVelocity;
+ }
+ 
+ void
+ MobileRootJoint::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                              PortValueList&amp;) const
++                              PortValueList&amp;, MechanicContext&amp;) const
+ {
++  /// In this case a noop.
+ }
+ 
+ void
+ MobileRootJoint::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                              PortValueList&amp;) const
++                              PortValueList&amp; portValues, MechanicContext&amp; context) const
+ {
++  // Assumption: body is small compared to the distance to the planets
++  // center of mass. That means gravity could be considered equal for the
++  // whole vehicle.
++  // See Featherstone, Orin: Equations and Algorithms
++//   Vector3 ga = gravity-&gt;gravityAccel(getRefPosition());
++//     Vector6 grav = Vector6(Vector3::zeros(), rotFromRef(ga));
++
++  // FIXME
++  Vector6 grav = Vector6(Vector3::zeros(), Vector3(0, 0, 9.81));
++
++  SpatialInertia inertia = portValues[mMechanicLink].mArticulatedInertia;
++  Vector6 force = portValues[mMechanicLink].mArticulatedForce;
++
++  // FIXME
++//   mRelVelDot = grav - solve(inertia, force) - getParentSpAccel() - getHdot();
++  Vector6 acceleration = grav - solve(inertia, force) - context.mParentSpAccel - context.mHDot;
++  context.mRelVelDot = acceleration;
++  
++
++  portValues[mMechanicLink].mSpatialAcceleration = acceleration;
+ }
+ 
+ void
+ MobileRootJoint::derivative(const DiscreteStateValueVector&amp;,
+-                            const ContinousStateValueVector&amp;,
+-                            const PortValueList&amp;,
+-                            ContinousStateValueVector&amp;) const
++                            const ContinousStateValueVector&amp; continousState,
++                            const PortValueList&amp; portValues,
++                            MechanicContext&amp; context,
++                            ContinousStateValueVector&amp; derivatives) const
+ {
++  Quaternion orientation = continousState[*mOrientationStateInfo];
++  Vector6 velocity = continousState[*mVelocityStateInfo];
++
++  Vector3 pDot = orientation.backTransform(velocity.getLinear());
++
++  // Compute the derivative term originating from the angular velocity.
++  // Correction term to keep the quaternion normalized.
++  // That is if |q| &lt; 1 add a little radial component outward,
++  // if |q| &gt; 1 add a little radial component inward
++  Quaternion q = orientation;
++  Vector3 angVel = velocity.getAngular();
++  Vector4 qderiv = LinAlg::derivative(q, angVel) + 1e1*(normalize(q) - q);
++
++  derivatives[*mPositionStateInfo] = pDot; 
++  derivatives[*mOrientationStateInfo] = qderiv;
++  derivatives[*mVelocityStateInfo] = context.mRelVelDot;
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MobileRootJoint.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -26,14 +26,14 @@
+                     ContinousStateValueVector&amp;,
+                     const PortValueList&amp;) const;
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp; states,
+-                        PortValueList&amp; portValues) const;
++                        PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const;
++                            PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const;
++                            PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void derivative(const DiscreteStateValueVector&amp;,
+                           const ContinousStateValueVector&amp;,
+-                          const PortValueList&amp; portValues,
++                          const PortValueList&amp; portValues, MechanicContext&amp;,
+                           ContinousStateValueVector&amp;) const;
+ private:
+   MechanicLink mMechanicLink;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Node.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -58,6 +58,10 @@
+   /// Return all node paths this Node is currently attached to.
+   NodePathList getNodePathList() const;
+ 
++  /// Hmm, here or in the leaf stuff:
++  /// AbstractNodeInstance* newNodeInstance() ??
++  /// AbstractNodeContext* newNodeContext() ??
++
+ protected:
+ 
+   friend class Group;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-14 05:48:22 UTC (rev 609)
+@@ -37,7 +37,7 @@
+ 
+ void
+ RigidBody::velocity(const Task&amp;, const ContinousStateValueVector&amp;,
+-                    PortValueList&amp; portValues) const
++                    PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+   unsigned numLinkValues = mMechanicLinks.size();
+ 
+@@ -54,11 +54,11 @@
+ 
+ void
+ RigidBody::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                        PortValueList&amp; portValues) const
++                        PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+   unsigned numLinkValues = mMechanicLinks.size();
+ 
+-  SpatialInertia inertia = SpatialInertia::zeros();
++  SpatialInertia inertia(InertiaMatrix(1, 0, 0, 1, 0, 1), 1);
+   Vector6 force = Vector6::zeros();
+ 
+   for (unsigned i = 1; i &lt; numLinkValues; ++i) {
+@@ -72,7 +72,7 @@
+ 
+ void
+ RigidBody::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                        PortValueList&amp; portValues) const
++                        PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+   unsigned numLinkValues = mMechanicLinks.size();
+   Vector6 accel = portValues[mMechanicLinks.front()].mSpatialAcceleration;
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-10-13 20:22:42 UTC (rev 608)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.h	2008-10-14 05:48:22 UTC (rev 609)
+@@ -28,11 +28,11 @@
+   /// parent link???
+ 
+   virtual void velocity(const Task&amp;, const ContinousStateValueVector&amp; states,
+-                        PortValueList&amp; portValues) const;
++                        PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const;
++                            PortValueList&amp; portValues, MechanicContext&amp;) const;
+   virtual void acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+-                            PortValueList&amp; portValues) const;
++                            PortValueList&amp; portValues, MechanicContext&amp;) const;
+ 
+ private:
+   std::vector&lt;MechanicLink&gt; mMechanicLinks;
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000578.html">[OpenFDM-svn] r608 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000580.html">[OpenFDM-svn] r610 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#579">[ date ]</a>
+              <a href="thread.html#579">[ thread ]</a>
+              <a href="subject.html#579">[ subject ]</a>
+              <a href="author.html#579">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

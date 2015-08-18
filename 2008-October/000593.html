@@ -1,0 +1,361 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r623 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-October/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r623%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810160548.m9G5mKOj029700%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000592.html">
+   <LINK REL="Next"  HREF="000594.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r623 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r623%20-%20in%20branches/OpenFDM-StateSeparation/src%3A%0A%09OpenFDM%20test&In-Reply-To=%3C200810160548.m9G5mKOj029700%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r623 - in branches/OpenFDM-StateSeparation/src:	OpenFDM test">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Thu Oct 16 07:48:20 CEST 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000592.html">[OpenFDM-svn] r622 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000594.html">[OpenFDM-svn] r624 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#593">[ date ]</a>
+              <a href="thread.html#593">[ thread ]</a>
+              <a href="subject.html#593">[ subject ]</a>
+              <a href="author.html#593">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-10-16 07:48:19 +0200 (Thu, 16 Oct 2008)
+New Revision: 623
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+   branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+   branches/OpenFDM-StateSeparation/src/test/structure.cpp
+Log:
+Readd mass implementation, make use of it.
+
+M    src/test/structure.cpp
+M    src/OpenFDM/Mass.h
+M    src/OpenFDM/Makefile.am
+M    src/OpenFDM/Mass.cpp
+M    src/OpenFDM/MechanicLinkValue.h
+M    src/OpenFDM/RigidBody.cpp
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Makefile.am	2008-10-16 05:48:19 UTC (rev 623)
+@@ -241,6 +241,7 @@
+   SimulationTime.cpp
+ 
+ OpenFDMMechanicSOURCES = \
++  Mass.cpp \
+   MobileRootJoint.cpp
+ 
+ 
+@@ -264,7 +265,6 @@
+ #   Joint.cpp \
+ #   Launchbar.cpp \
+ #   LinearSpringDamper.cpp \
+-#   Mass.cpp \
+ #   MaxModel.cpp \
+ #   MinModel.cpp \
+ #   Output.cpp \
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.cpp	2008-10-16 05:48:19 UTC (rev 623)
+@@ -4,19 +4,27 @@
+ 
+ #include &quot;Mass.h&quot;
+ 
++#include &quot;PortValueList.h&quot;
++#include &quot;Transform.h&quot;
++
+ namespace OpenFDM {
+ 
+ BEGIN_OPENFDM_OBJECT_DEF(Mass, Interact)
+   DEF_OPENFDM_PROPERTY(Vector3, Position, Serialized)
+-  DEF_OPENFDM_PROPERTY(SpatialInertia, Inertia, Serialized)
++  DEF_OPENFDM_PROPERTY(Inertia, Inertia, Serialized)
++  DEF_OPENFDM_PROPERTY(Real, Mass, Serialized)
+   END_OPENFDM_OBJECT_DEF
+ 
+-Mass::Mass(const std::string&amp; name, const SpatialInertia&amp; inertia) :
+-  Interact(name, 1),
++Mass::Mass(const std::string&amp; name, const real_type&amp; mass,
++           const InertiaMatrix&amp; inertia, const Vector3&amp; position) :
++  Interact(name),
++  mMechanicLink(newMechanicLink(&quot;link&quot;)),
++  mMass(mass),
+   mInertia(inertia),
+-  mUntransformedInertia(inertia),
+-  mPosition(Vector3::zeros())
++  mPosition(position),
++  mSpatialInertia(0)
+ {
++  setInertia(mMass, mInertia, mPosition);
+ }
+ 
+ Mass::~Mass(void)
+@@ -24,28 +32,39 @@
+ }
+ 
+ void
+-Mass::interactWith(RigidBody* rigidBody)
++Mass::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
++                   PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+-  rigidBody-&gt;contributeLocalInertia(mInertia);
++  // Hardcoding that gravity happens in the roots??
++  // Vectro3 position = portValues[mMechanicLink].mPosition;
++  Vector3 gravity = Vector3::zeros();
++
++  portValues[mMechanicLink].addInertia(mSpatialInertia);
++  portValues[mMechanicLink].applyForce(gravity);
+ }
+ 
+-void
+-Mass::setInertia(real_type mass)
++const InertiaMatrix&amp;
++Mass::getInertia(void) const
+ {
+-  setInertia(SpatialInertia(mass));
++  return mInertia;
+ }
+ 
+ void
+-Mass::setInertia(real_type mass, const InertiaMatrix&amp; inertia)
++Mass::setInertia(const InertiaMatrix&amp; inertia)
+ {
+-  setInertia(SpatialInertia(inertia, mass));
++  setInertia(mMass, inertia, mPosition);
+ }
+ 
++const real_type&amp;
++Mass::getMass() const
++{
++  return mMass;
++}
++
+ void
+-Mass::setInertia(const SpatialInertia&amp; I)
++Mass::setMass(const real_type&amp; mass)
+ {
+-  mUntransformedInertia = I;
+-  mInertia = inertiaFrom(mPosition, mUntransformedInertia);
++  setInertia(mass, mInertia, mPosition);
+ }
+ 
+ const Vector3&amp;
+@@ -57,8 +76,17 @@
+ void
+ Mass::setPosition(const Vector3&amp; position)
+ {
++  setInertia(mMass, mInertia, position);
++}
++
++void
++Mass::setInertia(const real_type&amp; mass, const InertiaMatrix&amp; inertia,
++                 const Vector3&amp; position)
++{
++  mMass = mass;
++  mInertia = inertia;
+   mPosition = position;
+-  mInertia = inertiaFrom(mPosition, mUntransformedInertia);
++  mSpatialInertia = inertiaFrom(mPosition, SpatialInertia(mInertia, mMass));
+ }
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Mass.h	2008-10-16 05:48:19 UTC (rev 623)
+@@ -13,14 +13,16 @@
+ class Mass : public Interact {
+   OPENFDM_OBJECT(Mass, Interact);
+ public:
+-  Mass(const std::string&amp; name,
+-       const SpatialInertia&amp; inertia = SpatialInertia(0));
++  Mass(const std::string&amp; name, const real_type&amp; mass = 0,
++       const InertiaMatrix&amp; inertia = InertiaMatrix(0, 0, 0, 0, 0, 0),
++       const Vector3&amp; position = Vector3::zeros());
+   virtual ~Mass(void);
+ 
+-  virtual void interactWith(RigidBody* rigidBody);
++  virtual void articulation(const Task&amp;, const ContinousStateValueVector&amp;,
++                            PortValueList&amp;, MechanicContext&amp;) const;
+ 
+-  const SpatialInertia&amp; getInertia(void) const
+-  { return mInertia; }
++  const InertiaMatrix&amp; getInertia(void) const;
++  void setInertia(const InertiaMatrix&amp; inertia);
+ 
+   /** Set the local spatial inertia.
+       @param mass mass in kg.
+@@ -32,27 +34,33 @@
+       With such a singular matrix there is no way to simulate rotational
+       motion.
+    */
+-  void setInertia(real_type mass);
++  const real_type&amp; getMass() const;
++  void setMass(const real_type&amp; mass);
+ 
++  /** Set a position offset for the inertia given.
++   */
++  const Vector3&amp; getPosition(void) const;
++  void setPosition(const Vector3&amp; position);
++
+   /** Set the local spatial inertia.
+       @param mass mass in kg.
+       @param inertia inertia matrix in kg*m^2.
+       Sets the spatial inertia of the current rigid body to a simple
+       point mass of the mass and inertia given in the argument.
+    */
+-  void setInertia(real_type mass, const InertiaMatrix&amp; inertia);
++  void setInertia(const real_type&amp; mass, const InertiaMatrix&amp; inertia,
++                  const Vector3&amp; position);
+ 
+-  /** Set the local spatial inertia.
+-   */
+-  void setInertia(const SpatialInertia&amp; I);
++private:
++  MechanicLink mMechanicLink;
+ 
+-  const Vector3&amp; getPosition(void) const;
+-  void setPosition(const Vector3&amp; position);
++  /// The paremeters that can be set from outside
++  real_type mMass;
++  InertiaMatrix mInertia;
++  Vector3 mPosition;
+ 
+-private:
+-  SpatialInertia mInertia;
+-  SpatialInertia mUntransformedInertia;
+-  Vector3 mPosition;
++  /// The resulting local spatial inertia matrix
++  SpatialInertia mSpatialInertia;
+ };
+ 
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/MechanicLinkValue.h	2008-10-16 05:48:19 UTC (rev 623)
+@@ -29,6 +29,12 @@
+   void addInertia(const SpatialInertia&amp; inertia)
+   { mArticulatedInertia = inertia; }
+ 
++  void applyArticulation(const MechanicLinkValue&amp; linkValue)
++  {
++    applyForce(linkValue.mArticulatedForce);
++    addInertia(linkValue.mArticulatedInertia);
++  }
++
+ // protected:
+   // FIXME:
+   // Since the interact side is the provider port, an interact might provide
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/RigidBody.cpp	2008-10-16 05:48:19 UTC (rev 623)
+@@ -17,6 +17,7 @@
+   MechanicNode(name)
+ {
+   mMechanicLinks.push_back(newMechanicLink(&quot;link&quot;));
++  mMechanicLinks.push_back(newMechanicLink(&quot;link2&quot;));
+ }
+ 
+ RigidBody::~RigidBody()
+@@ -56,18 +57,11 @@
+ RigidBody::articulation(const Task&amp;, const ContinousStateValueVector&amp;,
+                         PortValueList&amp; portValues, MechanicContext&amp;) const
+ {
+-  unsigned numLinkValues = mMechanicLinks.size();
++  MechanicLinkValue&amp; parentLink = portValues[mMechanicLinks.front()];
+ 
+-  SpatialInertia inertia(InertiaMatrix(1, 0, 0, 1, 0, 1), 1);
+-  Vector6 force = Vector6::zeros();
+-
+-  for (unsigned i = 1; i &lt; numLinkValues; ++i) {
+-    inertia += portValues[mMechanicLinks[i]].mArticulatedInertia;
+-    force += portValues[mMechanicLinks[i]].mArticulatedForce;
+-  }
+-
+-  portValues[mMechanicLinks.front()].mArticulatedInertia = inertia;
+-  portValues[mMechanicLinks.front()].mArticulatedForce = force;
++  unsigned numLinkValues = mMechanicLinks.size();
++  for (unsigned i = 1; i &lt; numLinkValues; ++i)
++    parentLink.applyArticulation(portValues[mMechanicLinks[i]]);
+ }
+ 
+ void
+
+Modified: branches/OpenFDM-StateSeparation/src/test/structure.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-16 05:39:29 UTC (rev 622)
++++ branches/OpenFDM-StateSeparation/src/test/structure.cpp	2008-10-16 05:48:19 UTC (rev 623)
+@@ -6,6 +6,7 @@
+ #include &lt;OpenFDM/Group.h&gt;
+ #include &lt;OpenFDM/LibraryNode.h&gt;
+ #include &lt;OpenFDM/LibraryModel.h&gt;
++#include &lt;OpenFDM/Mass.h&gt;
+ #include &lt;OpenFDM/MobileRootJoint.h&gt;
+ #include &lt;OpenFDM/RigidBody.h&gt;
+ #include &lt;OpenFDM/System.h&gt;
+@@ -188,8 +189,10 @@
+   SharedPtr&lt;Group&gt; group = new Group(&quot;G&quot;);
+   Group::NodeId rootJoint = group-&gt;addChild(new MobileRootJoint(&quot;Root Joint&quot;));
+   Group::NodeId rigidBody = group-&gt;addChild(new RigidBody(&quot;Rigid Body&quot;));
++  Group::NodeId mass = group-&gt;addChild(new Mass(&quot;Mass&quot;, 1, InertiaMatrix(1, 0, 0, 1, 0, 1)));
+ 
+   group-&gt;connect(rootJoint, &quot;link&quot;, rigidBody, &quot;link&quot;);
++  group-&gt;connect(rigidBody, &quot;link2&quot;, mass, &quot;link&quot;);
+ 
+   return group.release();
+ }
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000592.html">[OpenFDM-svn] r622 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000594.html">[OpenFDM-svn] r624 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#593">[ date ]</a>
+              <a href="thread.html#593">[ thread ]</a>
+              <a href="subject.html#593">[ subject ]</a>
+              <a href="author.html#593">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

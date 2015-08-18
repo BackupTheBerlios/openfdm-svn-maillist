@@ -1,0 +1,199 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r805 - branches/OpenFDM-StateSeparation/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2008-November/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r805%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811280653.mAS6rw4l014112%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000772.html">
+   <LINK REL="Next"  HREF="000774.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r805 - branches/OpenFDM-StateSeparation/src/OpenFDM</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r805%20-%20branches/OpenFDM-StateSeparation/src/OpenFDM&In-Reply-To=%3C200811280653.mAS6rw4l014112%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r805 - branches/OpenFDM-StateSeparation/src/OpenFDM">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Nov 28 07:53:58 CET 2008</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000772.html">[OpenFDM-svn] r804 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000774.html">[OpenFDM-svn] r806 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#773">[ date ]</a>
+              <a href="thread.html#773">[ thread ]</a>
+              <a href="subject.html#773">[ subject ]</a>
+              <a href="author.html#773">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2008-11-28 07:53:56 +0100 (Fri, 28 Nov 2008)
+New Revision: 805
+
+Modified:
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+   branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+Log:
+Implement load in the sensor.
+Add an enableAll method.
+
+M    OpenFDM/Sensor.cpp
+M    OpenFDM/Sensor.h
+
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-27 19:39:10 UTC (rev 804)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.cpp	2008-11-28 06:53:56 UTC (rev 805)
+@@ -95,22 +95,31 @@
+ Sensor::acceleration(const Task&amp;, const ContinousStateValueVector&amp;,
+                      PortValueList&amp; portValues, const Matrix&amp;, Vector&amp;) const
+ {
++  const Environment* environment;
++  environment = portValues[mMechanicLink].getEnvironment();
+   const Frame&amp; frame = portValues[mMechanicLink].getFrame();
+ 
+   // FIXME, for now relative position
+   Vector3 position = mPosition - portValues[mMechanicLink].getDesignPosition();
+ 
+-  if (getEnableCentrifugalAcceleration()) {
++  bool enableCentrifugalAcceleration = getEnableCentrifugalAcceleration();
++  bool enableLoad = getEnableLoad();
++  if (enableCentrifugalAcceleration || enableLoad) {
+     Vector6 spatialVel = motionTo(position, frame.getSpVel());
+     Vector6 spatialAccel = motionTo(position, frame.getSpAccel());
+     Vector3 centrifugalAccel = spatialAccel.getLinear();
+     centrifugalAccel += cross(spatialVel.getAngular(), spatialVel.getLinear());
+ 
+-    portValues[mCentrifugalAccelerationPort] = centrifugalAccel;
++    if (enableCentrifugalAcceleration)
++      portValues[mCentrifugalAccelerationPort] = centrifugalAccel;
++    if (enableLoad) {
++      // May be cache that from the velocity step??
++      Vector3 refPosition = frame.posToRef(position);
++      Vector3 gravity = environment-&gt;getGravityAcceleration(refPosition);
++      gravity = frame.rotFromRef(gravity);
++      portValues[mLoadPort] = centrifugalAccel - gravity;
++    }
+   }
+-
+-//   if (getEnableLoadAcceleration())
+-//     portValues[mLoadAccelerationPort] = centrifugalAccel + gravity;
+ }
+ 
+ void
+@@ -230,6 +239,23 @@
+ }
+ 
+ void
++Sensor::setEnableLoad(bool enable)
++{
++  if (enable == getEnableLoad())
++    return;
++  if (enable)
++    mLoadPort = MatrixOutputPort(this, &quot;load&quot;, Size(3, 1), true);
++  else
++    mLoadPort.clear();
++}
++
++bool
++Sensor::getEnableLoad() const
++{
++  return !mLoadPort.empty();
++}
++
++void
+ Sensor::setEnableWindVelocity(bool enable)
+ {
+   if (enable == getEnableWindVelocity())
+@@ -280,4 +306,19 @@
+   return !mPressurePort.empty();
+ }
+ 
++void
++Sensor::setEnableAll(bool enable)
++{
++  setEnablePosition(enable);
++  setEnableOrientation(enable);
++  setEnableEulerAngles(enable);
++  setEnableLinearVelocity(enable);
++  setEnableAngularVelocity(enable);
++  setEnableCentrifugalAcceleration(enable);
++  setEnableLoad(enable);
++  setEnableWindVelocity(enable);
++  setEnableTemperature(enable);
++  setEnablePressure(enable);
++}
++
+ } // namespace OpenFDM
+
+Modified: branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-27 19:39:10 UTC (rev 804)
++++ branches/OpenFDM-StateSeparation/src/OpenFDM/Sensor.h	2008-11-28 06:53:56 UTC (rev 805)
+@@ -60,7 +60,12 @@
+   /// Get availabilty of the linear acceleration output port
+   bool getEnableCentrifugalAcceleration() const;
+ 
++  /// Set availabilty of the load output port
++  void setEnableLoad(bool enable);
++  /// Get availabilty of the load output port
++  bool getEnableLoad() const;
+ 
++
+   /// Set availabilty of the wind velocity output port
+   void setEnableWindVelocity(bool enable);
+   /// Get availabilty of the wind velocity output port
+@@ -77,6 +82,10 @@
+   /// Get availabilty of the pressure output port
+   bool getEnablePressure() const;
+ 
++  /// Set availabilty of all output ports
++  /// This is mostly for convinience in testing
++  void setEnableAll(bool enable);
++
+ private:
+   MechanicLink mMechanicLink;
+ 
+@@ -90,6 +99,7 @@
+   MatrixOutputPort mAngularVelocityPort;
+ 
+   MatrixOutputPort mCentrifugalAccelerationPort;
++  MatrixOutputPort mLoadPort;
+ 
+   MatrixOutputPort mWindVelocityPort;
+ 
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000772.html">[OpenFDM-svn] r804 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000774.html">[OpenFDM-svn] r806 - branches/OpenFDM-StateSeparation/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#773">[ date ]</a>
+              <a href="thread.html#773">[ thread ]</a>
+              <a href="subject.html#773">[ subject ]</a>
+              <a href="author.html#773">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

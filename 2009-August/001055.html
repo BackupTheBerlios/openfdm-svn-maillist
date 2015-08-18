@@ -1,0 +1,420 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2009-August/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1097%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142149.n7ELnhNq005376%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="001054.html">
+   <LINK REL="Next"  HREF="001056.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim</H1>
+    <B>frohlich at BerliOS</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r1097%20-%20branches/OpenFDM-StateSeparation/src/JSBSim&In-Reply-To=%3C200908142149.n7ELnhNq005376%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r1097 - branches/OpenFDM-StateSeparation/src/JSBSim">frohlich at mail.berlios.de
+       </A><BR>
+    <I>Fri Aug 14 23:49:43 CEST 2009</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="001054.html">[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="001056.html">[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1055">[ date ]</a>
+              <a href="thread.html#1055">[ thread ]</a>
+              <a href="subject.html#1055">[ subject ]</a>
+              <a href="author.html#1055">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2009-08-14 23:49:42 +0200 (Fri, 14 Aug 2009)
+New Revision: 1097
+
+Added:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h
+Modified:
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimFCSComponent.h
+   branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+   branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+Log:
+Add kind of pid model.
+
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimFCSComponent.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimFCSComponent.h	2009-08-14 19:46:08 UTC (rev 1096)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimFCSComponent.h	2009-08-14 21:49:42 UTC (rev 1097)
+@@ -21,8 +21,7 @@
+ /// the available OpenFDM discrete systems.
+ /// As JSBSim usually munges several independent things into one thing,
+ /// this is a Group for the first cut.
+-class JSBSimFCSComponent :
+-    public Referenced {
++class JSBSimFCSComponent : public Referenced {
+ public:
+   JSBSimFCSComponent(const std::string&amp; name);
+   virtual ~JSBSimFCSComponent(void);
+@@ -43,6 +42,8 @@
+   GroupOutput* getOutputModel(void);
+   GroupOutput* getOutputNormModel(void);
+ 
++  // FIXME clipto??? here ???
++
+   Group* getGroup(void)
+   { return mGroup; }
+ private:
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp	2009-08-14 19:46:08 UTC (rev 1096)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp	2009-08-14 21:49:42 UTC (rev 1097)
+@@ -0,0 +1,165 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#include &quot;JSBSimPID.h&quot;
++
++#include &lt;OpenFDM/DiscreteIntegrator.h&gt;
++#include &lt;OpenFDM/Group.h&gt;
++#include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/Summer.h&gt;
++#include &lt;OpenFDM/TimeDerivative.h&gt;
++
++namespace OpenFDM {
++
++JSBSimPID::JSBSimPID(const std::string&amp; name) :
++  JSBSimFCSComponent(name)
++{
++  // The error input of the JSBSim PID controller
++  GroupInput* groupInput = new GroupInput(&quot;Input&quot;);
++  getGroup()-&gt;addChild(groupInput);
++
++
++  mKIProduct = new Product(&quot;Integrator Gain&quot;);
++  mKIProduct-&gt;setNumFactors(2);
++  getGroup()-&gt;addChild(mKIProduct);
++  getGroup()-&gt;connect(mKIProduct-&gt;getInputPort(0),
++                      groupInput-&gt;getPort(&quot;output&quot;));
++
++  DiscreteIntegrator* mIntegrator = new DiscreteIntegrator(&quot;Integrator&quot;);
++  getGroup()-&gt;addChild(mIntegrator);
++  getGroup()-&gt;connect(mKIProduct-&gt;getOutputPort(),
++                      mIntegrator-&gt;getPort(&quot;input&quot;));
++
++  
++  mKPProduct = new Product(&quot;Proportional Gain&quot;);
++  mKPProduct-&gt;setNumFactors(2);
++  getGroup()-&gt;addChild(mKPProduct);
++  getGroup()-&gt;connect(mKPProduct-&gt;getInputPort(0),
++                      groupInput-&gt;getPort(&quot;output&quot;));
++
++
++  mKDProduct = new Product(&quot;Derivative Gain&quot;);
++  mKDProduct-&gt;setNumFactors(2);
++  getGroup()-&gt;addChild(mKDProduct);
++  getGroup()-&gt;connect(mKDProduct-&gt;getInputPort(0),
++                      groupInput-&gt;getPort(&quot;output&quot;));
++
++  TimeDerivative* mDerivative = new TimeDerivative(&quot;Derivative&quot;);
++  getGroup()-&gt;addChild(mDerivative);
++  getGroup()-&gt;connect(mKDProduct-&gt;getOutputPort(),
++                      mDerivative-&gt;getPort(&quot;input&quot;));
++
++  Summer* mControlSum = new Summer(&quot;Control Sum&quot;);
++  mControlSum-&gt;setNumSummands(3);
++  getGroup()-&gt;addChild(mControlSum);
++  getGroup()-&gt;connect(mIntegrator-&gt;getPort(&quot;output&quot;),
++                      mControlSum-&gt;getInputPort(0));
++  getGroup()-&gt;connect(mKPProduct-&gt;getPort(&quot;output&quot;),
++                      mControlSum-&gt;getInputPort(1));
++  getGroup()-&gt;connect(mDerivative-&gt;getPort(&quot;output&quot;),
++                      mControlSum-&gt;getInputPort(2));
++
++  // That single output port is this one
++  getGroup()-&gt;connect(getInternalOutputPort(),
++                      mControlSum-&gt;getOutputPort());
++}
++
++JSBSimPID::~JSBSimPID(void)
++{
++}
++
++void
++JSBSimPID::setKI(real_type ki)
++{
++  if (mKIGroupInput) {
++    getGroup()-&gt;removeChild(mKIGroupInput);
++    mKIGroupInput = 0;
++    // FIXME disconnect ...
++  }
++  mKIConstant = new ConstModel(&quot;ki&quot;, ki);
++  getGroup()-&gt;addChild(mKIConstant);
++  getGroup()-&gt;connect(mKIConstant-&gt;getPort(&quot;output&quot;),
++                      mKIProduct-&gt;getInputPort(1));
++}
++
++const Port*
++JSBSimPID::getKIPort()
++{
++  if (mKIConstant) {
++    getGroup()-&gt;removeChild(mKIConstant);
++    mKIConstant = 0;
++    // FIXME disconnect ...
++  }
++  mKIGroupInput = new GroupInput(&quot;ki&quot;);
++  getGroup()-&gt;addChild(mKIConstant);
++  mKIGroupInput-&gt;setExternalPortName(&quot;ki&quot;);
++  getGroup()-&gt;connect(mKIGroupInput-&gt;getPort(&quot;output&quot;),
++                      mKIProduct-&gt;getInputPort(1));
++  
++  return getGroup()-&gt;getPort(mKIGroupInput-&gt;getExternalPortIndex());
++}
++
++void
++JSBSimPID::setKP(real_type kp)
++{
++  if (mKPGroupInput) {
++    getGroup()-&gt;removeChild(mKPGroupInput);
++    mKPGroupInput = 0;
++    // FIXME disconnect ...
++  }
++  mKPConstant = new ConstModel(&quot;kp&quot;, kp);
++  getGroup()-&gt;addChild(mKPConstant);
++  getGroup()-&gt;connect(mKPConstant-&gt;getPort(&quot;output&quot;),
++                      mKPProduct-&gt;getInputPort(1));
++}
++
++const Port*
++JSBSimPID::getKPPort()
++{
++  if (mKPConstant) {
++    getGroup()-&gt;removeChild(mKPConstant);
++    mKPConstant = 0;
++    // FIXME disconnect ...
++  }
++  mKPGroupInput = new GroupInput(&quot;kp&quot;);
++  getGroup()-&gt;addChild(mKPConstant);
++  mKPGroupInput-&gt;setExternalPortName(&quot;kp&quot;);
++  getGroup()-&gt;connect(mKPGroupInput-&gt;getPort(&quot;output&quot;),
++                      mKPProduct-&gt;getInputPort(1));
++
++  return getGroup()-&gt;getPort(mKPGroupInput-&gt;getExternalPortIndex());
++}
++
++void
++JSBSimPID::setKD(real_type kd)
++{
++  if (mKDGroupInput) {
++    getGroup()-&gt;removeChild(mKDGroupInput);
++    mKDGroupInput = 0;
++    // FIXME disconnect ...
++  }
++  mKDConstant = new ConstModel(&quot;kd&quot;, kd);
++  getGroup()-&gt;addChild(mKDConstant);
++  getGroup()-&gt;connect(mKDConstant-&gt;getPort(&quot;output&quot;),
++                      mKDProduct-&gt;getInputPort(1));
++}
++
++const Port*
++JSBSimPID::getKDPort()
++{
++  if (mKDConstant) {
++    getGroup()-&gt;removeChild(mKDConstant);
++    mKDConstant = 0;
++    // FIXME disconnect ...
++  }
++  mKDGroupInput = new GroupInput(&quot;kd&quot;);
++  getGroup()-&gt;addChild(mKDConstant);
++  mKDGroupInput-&gt;setExternalPortName(&quot;kd&quot;);
++  getGroup()-&gt;connect(mKDGroupInput-&gt;getPort(&quot;output&quot;),
++                      mKDProduct-&gt;getInputPort(1));
++
++  return getGroup()-&gt;getPort(mKDGroupInput-&gt;getExternalPortIndex());
++}
++
++} //namespace OpenFDM
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.cpp
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Added: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h	2009-08-14 19:46:08 UTC (rev 1096)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h	2009-08-14 21:49:42 UTC (rev 1097)
+@@ -0,0 +1,48 @@
++/* -*-c++-*- OpenFDM - Copyright (C) 2004-2009 Mathias Froehlich 
++ *
++ */
++
++#ifndef OpenFDM_JSBSimPID_H
++#define OpenFDM_JSBSimPID_H
++
++#include &quot;JSBSimFCSComponent.h&quot;
++#include &lt;OpenFDM/ConstModel.h&gt;
++#include &lt;OpenFDM/GroupInput.h&gt;
++#include &lt;OpenFDM/Product.h&gt;
++#include &lt;OpenFDM/SharedPtr.h&gt;
++
++namespace OpenFDM {
++
++/// Just a small container mapping the JSBSim PID parameters to
++/// the OpenFDM models.
++class JSBSimPID : public JSBSimFCSComponent {
++public:
++  JSBSimPID(const std::string&amp; name);
++  virtual ~JSBSimPID(void);
++
++  void setKI(real_type ki);
++  const Port* getKIPort();
++
++  void setKP(real_type kp);
++  const Port* getKPPort();
++
++  void setKD(real_type kd);
++  const Port* getKDPort();
++
++private:
++  SharedPtr&lt;ConstModel&gt; mKIConstant;
++  SharedPtr&lt;GroupInput&gt; mKIGroupInput;
++  SharedPtr&lt;Product&gt; mKIProduct;
++
++  SharedPtr&lt;ConstModel&gt; mKPConstant;
++  SharedPtr&lt;GroupInput&gt; mKPGroupInput;
++  SharedPtr&lt;Product&gt; mKPProduct;
++
++  SharedPtr&lt;ConstModel&gt; mKDConstant;
++  SharedPtr&lt;GroupInput&gt; mKDGroupInput;
++  SharedPtr&lt;Product&gt; mKDProduct;
++};
++
++} //namespace OpenFDM
++
++#endif
+
+
+Property changes on: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimPID.h
+___________________________________________________________________
+Name: svn:eol-style
+   + native
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-14 19:46:08 UTC (rev 1096)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/JSBSimReader.cpp	2009-08-14 21:49:42 UTC (rev 1097)
+@@ -51,10 +51,28 @@
+ 
+ #include &quot;JSBSimAerosurfaceScale.h&quot;
+ #include &quot;JSBSimKinemat.h&quot;
++#include &quot;JSBSimPID.h&quot;
+ #include &quot;JSBSimScheduledGain.h&quot;
+ 
+ namespace OpenFDM {
+ 
++static bool
++isReal(const std::string&amp; s)
++{
++  std::stringstream stream(s);
++  real_type value;
++  stream &gt;&gt; value;
++  return stream;
++}
++
++static bool
++isReal(const XMLElement* element)
++{
++  if (!element)
++    return false;
++  return isReal(element-&gt;getData());
++}
++
+ static real_type
+ asciiToReal(const std::string&amp; s, const real_type&amp; def = 0)
+ {
+@@ -1591,8 +1609,26 @@
+     out = summer-&gt;getOutputPort();
+ 
+   } else if (type == &quot;PID&quot; || type == &quot;pid&quot;) {
+-    std::cout &lt;&lt; &quot;Ignoring PID&quot; &lt;&lt; std::endl;
++    SharedPtr&lt;JSBSimPID&gt; pid = new JSBSimPID(name);
++    addFCSModel(pid-&gt;getGroup());
+ 
++    std::string data = stringData(fcsComponent-&gt;getElement(&quot;ki&quot;));
++    if (!connectJSBExpression(data, pid-&gt;getKIPort())){
++      pid-&gt;setKI(realData(fcsComponent-&gt;getElement(&quot;ki&quot;), 0));
++    }
++
++    data = stringData(fcsComponent-&gt;getElement(&quot;kp&quot;));
++    if (!connectJSBExpression(data, pid-&gt;getKPPort())){
++      pid-&gt;setKP(realData(fcsComponent-&gt;getElement(&quot;kp&quot;), 0));
++    }
++
++    data = stringData(fcsComponent-&gt;getElement(&quot;kd&quot;));
++    if (!connectJSBExpression(data, pid-&gt;getKDPort())){
++      pid-&gt;setKD(realData(fcsComponent-&gt;getElement(&quot;kd&quot;), 0));
++    }
++    model = pid-&gt;getGroup();
++    out = pid-&gt;getOutputPort();
++
+   } else if (type == &quot;PROPERTY&quot; || type == &quot;property&quot;) {
+     name = fcsComponent-&gt;getData();
+     real_type value = asciiToReal(fcsComponent-&gt;getAttribute(&quot;value&quot;), 0);
+
+Modified: branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am
+===================================================================
+--- branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-14 19:46:08 UTC (rev 1096)
++++ branches/OpenFDM-StateSeparation/src/JSBSim/Makefile.am	2009-08-14 21:49:42 UTC (rev 1097)
+@@ -20,6 +20,7 @@
+   JSBSimAerosurfaceScale.h \
+   JSBSimFCSComponent.h \
+   JSBSimKinemat.h \
++  JSBSimPID.h \
+   JSBSimPropertyManager.h \
+   JSBSimReader.h \
+   JSBSimReaderBase.h \
+@@ -33,6 +34,7 @@
+   JSBSimAerosurfaceScale.cpp \
+   JSBSimFCSComponent.cpp \
+   JSBSimKinemat.cpp \
++  JSBSimPID.cpp \
+   JSBSimPropertyManager.cpp \
+   JSBSimReader.cpp \
+   JSBSimReaderBase.cpp \
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="001054.html">[OpenFDM-svn] r1096 - in branches/OpenFDM-StateSeparation/src:	JSBSim OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="001056.html">[OpenFDM-svn] r1098 - branches/OpenFDM-StateSeparation/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#1055">[ date ]</a>
+              <a href="thread.html#1055">[ thread ]</a>
+              <a href="subject.html#1055">[ subject ]</a>
+              <a href="author.html#1055">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

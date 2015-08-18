@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r206 - trunk/OpenFDM/src/OpenFDM
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r206%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601161948.k0GJmJTC004397%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000188.html">
+   <LINK REL="Next"  HREF="000190.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r206 - trunk/OpenFDM/src/OpenFDM</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r206%20-%20trunk/OpenFDM/src/OpenFDM&In-Reply-To=%3C200601161948.k0GJmJTC004397%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r206 - trunk/OpenFDM/src/OpenFDM">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan 16 20:48:19 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000188.html">[OpenFDM-svn] r205 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000190.html">[OpenFDM-svn] r207 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#189">[ date ]</a>
+              <a href="thread.html#189">[ thread ]</a>
+              <a href="subject.html#189">[ subject ]</a>
+              <a href="author.html#189">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-16 20:48:11 +0100 (Mon, 16 Jan 2006)
+New Revision: 206
+
+Modified:
+   trunk/OpenFDM/src/OpenFDM/Object.cpp
+   trunk/OpenFDM/src/OpenFDM/Object.h
+Log:
+Remove an other part of an obsolete interface
+
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.cpp
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.cpp	2006-01-16 19:46:50 UTC (rev 205)
++++ trunk/OpenFDM/src/OpenFDM/Object.cpp	2006-01-16 19:48:11 UTC (rev 206)
+@@ -28,16 +28,6 @@
+   return 0;
+ }
+ 
+-Property
+-Object::getProperty(const std::string&amp; name)
+-{
+-  // Check if this one exists and return its value.
+-  if (0 &lt; mProperties.count(name))
+-    return mProperties[name];
+-  else
+-    return Property();
+-}
+-
+ std::list&lt;std::string&gt;
+ Object::listProperties(void) const
+ {
+@@ -53,22 +43,33 @@
+ Variant
+ Object::getPropertyValue(const std::string&amp; name) const
+ {
+-  // Just use the current property system for now
+-
+   // Return an empty variant if this property does not exist.
+   if (mProperties.count(name) &lt;= 0)
+     return Variant();
+ 
++  // safety check
++  Property property = mProperties.find(name)-&gt;second;
++  if (!property.isValid())
++    return Variant();
++
+   // Return the value of the property
+-  // FIXME: properties, like they are now, do not preserve constness
+-  return ((Property&amp;)(mProperties.find(name)-&gt;second)).getValue();
++  return property.getValue();
+ }
+ 
+ void
+ Object::setPropertyValue(const std::string&amp; name, const Variant&amp; value)
+ {
+   // Just use the current property system for now
+-  getProperty(name).setValue(value);
++  if (mProperties.count(name) &lt;= 0)
++    return;
++
++  // safety check
++  Property property = mProperties[name];
++  if (!property.isValid())
++    return;
++
++  // set the property by the setter
++  property.setValue(value);
+ }
+ 
+ void
+
+Modified: trunk/OpenFDM/src/OpenFDM/Object.h
+===================================================================
+--- trunk/OpenFDM/src/OpenFDM/Object.h	2006-01-16 19:46:50 UTC (rev 205)
++++ trunk/OpenFDM/src/OpenFDM/Object.h	2006-01-16 19:48:11 UTC (rev 206)
+@@ -34,7 +34,6 @@
+   /// Return the typeinfo for that Object.
+   virtual const TypeInfo* const getTypeInfo(void) const;
+   
+-  Property getProperty(const std::string&amp; name);
+   std::list&lt;std::string&gt; listProperties(void) const;
+ 
+   /// Returns the objects property named name
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000188.html">[OpenFDM-svn] r205 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000190.html">[OpenFDM-svn] r207 - trunk/OpenFDM/src/JSBSim
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#189">[ date ]</a>
+              <a href="thread.html#189">[ thread ]</a>
+              <a href="subject.html#189">[ subject ]</a>
+              <a href="author.html#189">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>

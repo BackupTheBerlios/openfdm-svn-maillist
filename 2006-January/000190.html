@@ -1,0 +1,428 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [OpenFDM-svn] r207 - trunk/OpenFDM/src/JSBSim
+   </TITLE>
+   <LINK REL="Index" HREF="http://lists.berlios.de/pipermail/openfdm-svn/2006-January/index.html" >
+   <LINK REL="made" HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r207%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200601161949.k0GJnRHl004711%40sheep.berlios.de%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="000189.html">
+   <LINK REL="Next"  HREF="000191.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[OpenFDM-svn] r207 - trunk/OpenFDM/src/JSBSim</H1>
+    <B>frohlich at berlios.de</B> 
+    <A HREF="mailto:openfdm-svn%40lists.berlios.de?Subject=Re%3A%20%5BOpenFDM-svn%5D%20r207%20-%20trunk/OpenFDM/src/JSBSim&In-Reply-To=%3C200601161949.k0GJnRHl004711%40sheep.berlios.de%3E"
+       TITLE="[OpenFDM-svn] r207 - trunk/OpenFDM/src/JSBSim">frohlich at berlios.de
+       </A><BR>
+    <I>Mon Jan 16 20:49:27 CET 2006</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="000189.html">[OpenFDM-svn] r206 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+        <LI>Next message: <A HREF="000191.html">[OpenFDM-svn] r210 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#190">[ date ]</a>
+              <a href="thread.html#190">[ thread ]</a>
+              <a href="subject.html#190">[ subject ]</a>
+              <a href="author.html#190">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Author: frohlich
+Date: 2006-01-16 20:49:24 +0100 (Mon, 16 Jan 2006)
+New Revision: 207
+
+Modified:
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+   trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+Log:
+Ok, just safe the current state of the legacy JSBSim reader
+
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-16 19:48:11 UTC (rev 206)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.cpp	2006-01-16 19:49:24 UTC (rev 207)
+@@ -1167,7 +1167,7 @@
+ 
+ #if 0
+       // Well, we use an air spring for that. It is directly in the
+-      // revolute joint. That is wring, but at the moment aprioriate.
++      // revolute joint. That is wrong, but at the moment aprioriate.
+       AirSpring* aoDamp = new AirSpring(name + &quot; Air Spring Force&quot;);
+       aoDamp-&gt;setPullPressure(pullPress);
+       aoDamp-&gt;setPushPressure(pushPress);
+@@ -1938,21 +1938,10 @@
+   std::list&lt;SharedPtr&lt;XMLElement&gt; &gt;::const_iterator it;
+   for (it = elems.begin(); it != elems.end(); ++it) {
+     if ((*it)-&gt;getName() == &quot;AC_ENGINE&quot;) {
+-//       std::string engineFile = mEnginePath+(*it)-&gt;getAttribute(&quot;FILE&quot;)+&quot;.xml&quot;;
+-//       std::ifstream infile;
+-//       infile.open(engineFile.c_str());
+-//       if (!infile.is_open())
+-//         return;
+-
+-//       XMLDomParser parser;
+-//       if (!parser.parseXML(infile))
+-//         return;
+-//       infile.close();
+-
+       std::stringstream sstr;
+       sstr &lt;&lt; engineNumber;
+       ++engineNumber;
+-      if (!convertEngine((*it)-&gt;getData(), (*it)-&gt;getName(), sstr.str()))
++      if (!convertEngine(*it, sstr.str()))
+         return error(&quot;Cannot parse engine&quot;);
+     }
+     else if ((*it)-&gt;getName() == &quot;AC_TANK&quot;) {
+@@ -2058,12 +2047,10 @@
+ }
+ 
+ bool
+-LegacyJSBSimReader::convertEngine(const std::string&amp; data,
+-                                  const std::string&amp; type,
++LegacyJSBSimReader::convertEngine(const XMLElement* engine,
+                                   const std::string&amp; number)
+ {
+-  std::stringstream datastr(data);
+-
++  std::stringstream datastr(engine-&gt;getData());
+   Vector3 loc = Vector3::zeros();
+   real_type pitch = 0;
+   real_type yaw = 0;
+@@ -2096,12 +2083,224 @@
+     } else
+       return error(&quot;Unknown parameter in engine configuration&quot;);
+   }
++  loc = structToBody(loc);
++  Quaternion orientation = Quaternion::fromHeadAttBank(pitch, 0, yaw);
+ 
+ 
++  // Engines are distinguished between that turbine model which effectively
++  // moslty produces thrust by itself and the ones having a propeller and an
++  // engine driving that.
++  // The first one has its own single model.
++  // For the second, the engine is modelled with a joint force/driver
++  // the propeller with an aerodynamic table lookup system.
++  std::string engineName = engine-&gt;getAttribute(&quot;FILE&quot;);
++  std::string eFileName = engineName + &quot;.xml&quot;;
++  std::ifstream eFileStream;
++  if (!openFile(mEnginePath, eFileName, eFileStream))
++    return error(&quot;Can not find engine \&quot;&quot; + engineName + &quot;\&quot;&quot;);
+ 
++  XMLDomParser eParser;
++  if (!eParser.parseXML(eFileStream))
++    return error(&quot;Error parsing engine \&quot;&quot; + engineName + &quot;\&quot;&quot;);
++  eFileStream.close();
++
++  const XMLDocument* engineDoc = eParser.getDocument();
++  // Be paranoid ...
++  if (!engineDoc)
++    return error(&quot;Error reading engine \&quot;&quot; + engineName + &quot;\&quot;&quot;);
++
++  const XMLElement* engineTopElem = engineDoc-&gt;getElement();
++  if (!engineTopElem)
++    return error(&quot;No toplevel xml element found for engine \&quot;&quot;
++                 + engineName + &quot;\&quot;&quot;);
++
++  if (engineTopElem-&gt;getName() == &quot;FG_TURBINE&quot;) {
++    if (!convertTurbine(engineTopElem, number, loc, orientation, 0))
++      return error(&quot;Error readinge turbine configuration&quot;);
++    
++  } else if (engineTopElem-&gt;getName() == &quot;FG_PISTON&quot;) {
++    if (!convertPiston(engineTopElem, number, 0))
++      return error(&quot;Error readinge piston configuration&quot;);
++
++  } else if (engineTopElem-&gt;getName() == &quot;FG_ROCKET&quot;) {
++    return error(&quot;FG_ROCKET's are not (yet?) supported!&quot;);
++
++  } else if (engineTopElem-&gt;getName() == &quot;FG_ELECTRIC&quot;) {
++    if (!convertElectric(engineTopElem, number, 0))
++      return error(&quot;Error readinge electric configuration&quot;);
++
++  } else
++    return error(&quot;Unknown toplevel xml element for engine file \&quot;&quot;
++                 + eFileName + &quot;\&quot;&quot;);
++
++
++  // Thruster
++  const XMLElement* thruster = engine-&gt;getElement(&quot;AC_THRUSTER&quot;);
++  std::string thrusterName = thruster-&gt;getAttribute(&quot;FILE&quot;);
++  std::string tFileName = thrusterName + &quot;.xml&quot;;
++  std::ifstream tFileStream;
++  if (!openFile(mEnginePath, tFileName, tFileStream))
++    return error(&quot;Can not find thruster \&quot;&quot; + thrusterName + &quot;\&quot;&quot;);
++
++  XMLDomParser tParser;
++  if (!tParser.parseXML(tFileStream))
++    return error(&quot;Error parsing thruster \&quot;&quot; + thrusterName + &quot;\&quot;&quot;);
++  tFileStream.close();
++
++  const XMLDocument* thrusterDoc = tParser.getDocument();
++  // Be paranoid ...
++  if (!thrusterDoc)
++    return error(&quot;Error reading thruster \&quot;&quot; + thrusterName + &quot;\&quot;&quot;);
++
++  const XMLElement* thrusterTopElem = thrusterDoc-&gt;getElement();
++  if (!thrusterTopElem)
++    return error(&quot;No toplevel xml element found for thruster \&quot;&quot;
++                 + thrusterName + &quot;\&quot;&quot;);
++
++  if (thrusterTopElem-&gt;getName() == &quot;FG_DIRECT&quot;) {
++  } else if (thrusterTopElem-&gt;getName() == &quot;FG_NOZZLE&quot;) {
++  } else if (thrusterTopElem-&gt;getName() == &quot;FG_PROPELLER&quot;) {
++  } else
++    return error(&quot;Unknown toplevel xml element for thruster file \&quot;&quot;
++                 + tFileName + &quot;\&quot;&quot;);
++
++
++
++
++
++
++
++
++
++
++
++
++
++//   RevoluteJoint* wj = new RevoluteJoint(name + &quot; Wheel Joint&quot;);
++//   parent-&gt;addInteract(wj);
++//   wheel-&gt;setInLDoboardJoint(wj);
++//   wj-&gt;setJointAxis(Vector3(0, 1, 0));
++//   wj-&gt;setPosition(pos);
++//   wj-&gt;setOrientation(Quaternion::unit());
++//   wj-&gt;setJointPos(0);
++//   wj-&gt;setJointVel(0);
++
++//     DiscBrake* brakeF = new DiscBrake(name + &quot; Brake Force&quot;);
++//     brakeF-&gt;setMinForce(8e1);
++//     brakeF-&gt;setMaxForce(1e4);
++//     if (brake == &quot;LEFT&quot;) {
++//       Port* port = lookupJSBExpression(&quot;gear/left-brake-pos-norm&quot;);
++//       brakeF-&gt;getInputPort(0)-&gt;connect(port);
++//     } else if (brake == &quot;RIGHT&quot;) {
++//       Port* port = lookupJSBExpression(&quot;gear/right-brake-pos-norm&quot;);
++//       brakeF-&gt;getInputPort(0)-&gt;connect(port);
++//     }
++//     // That one reads the joint position and velocity ...
++//     brakeF-&gt;getInputPort(1)-&gt;connect(wj-&gt;getOutputPort(1));
++//     // ... and provides an output force
++//     wj-&gt;getInputPort(0)-&gt;connect(brakeF-&gt;getOutputPort(0));
++//     addMultiBodyModel(brakeF);
++
++
++
++
++
++
++//   std::string namestr = &quot;Engine&lt;&quot; + number + &quot;&gt;&quot;;
++//   ConstModel* fullForce = new ConstModel(namestr + &quot; full&quot;,
++//                                          Vector6(0, 0, 0, 4.4*1.5e4, 0, 0));
++//   addMultiBodyModel(fullForce);
++
++//   Product* prod = new Product(namestr + &quot; modulation&quot;);
++//   std::string throttlename = &quot;fcs/throttle-cmd-norm[&quot; + number + &quot;]&quot;;
++//   prod-&gt;getInputPort(0)-&gt;connect(lookupJSBExpression(throttlename));
++//   prod-&gt;getInputPort(1)-&gt;connect(fullForce-&gt;getOutputPort(0));
++//   addMultiBodyModel(prod);
++
++//   ExternalForceModel* engineForce = new ExternalForceModel(namestr);
++//   engineForce-&gt;setPosition(structToBody(loc));
++//   engineForce-&gt;setOrientation(orientation);
++
++//   engineForce-&gt;getInputPort(0)-&gt;connect(prod-&gt;getOutputPort(0));
++
++//   mVehicle-&gt;getTopBody()-&gt;addInteract(engineForce);
++
++//   return true;
++}
++
++bool
++LegacyJSBSimReader::convertTurbine(const XMLElement* turbine,
++                                   const std::string&amp; number,
++                                   const Vector3&amp; pos,
++                                   const Quaternion&amp; orientation,
++                                   Port* thrusterDriver)
++{
++  // Undercarriage parsing.
++  std::stringstream datastr(turbine-&gt;getData());
++
++  // At the moment we have a *very* insufficient engine, just modulate the
++  // thrust between 0 and max
++  real_type maxThrust = 0;
++
++  while (datastr) {
++    std::string token;
++    datastr &gt;&gt; token;
++    if (token.empty())
++      continue;
++
++    if (token == &quot;MILTHRUST&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++      maxThrust = max(maxThrust, value);
++    } else if (token == &quot;MAXTHRUST&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++      maxThrust = max(maxThrust, value);
++    } else if (token == &quot;BYPASSRATIO&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;BLEED&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;TSFC&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;ATSFC&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;IDLEN1&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;IDLEN2&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;MAXN1&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;MAXN2&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;AUGMENTED&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;AUGMETHOD&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;INJECTED&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else if (token == &quot;MINTHROTTLE&quot;) {
++      real_type value;
++      datastr &gt;&gt; value;
++    } else
++      return error(&quot;unknown tubine configuration token \&quot;&quot; + token + &quot;\&quot;&quot;);
++  }
++
++  
++
+   std::string namestr = &quot;Engine&lt;&quot; + number + &quot;&gt;&quot;;
+-  ConstModel* fullForce = new ConstModel(namestr + &quot; full&quot;,
+-                                         Vector6(0, 0, 0, 4.4*1.5e4, 0, 0));
++  ConstModel* fullForce = new ConstModel(namestr + &quot; full&quot;);
++  fullForce-&gt;setValue(Vector6(0, 0, 0, convertFrom(uPoundForce, maxThrust), 0, 0));
+   addMultiBodyModel(fullForce);
+ 
+   Product* prod = new Product(namestr + &quot; modulation&quot;);
+@@ -2111,8 +2310,8 @@
+   addMultiBodyModel(prod);
+ 
+   ExternalForceModel* engineForce = new ExternalForceModel(namestr);
+-  engineForce-&gt;setPosition(structToBody(loc));
+-  engineForce-&gt;setOrientation(Quaternion::fromHeadAttBank(pitch, 0, yaw));
++  engineForce-&gt;setPosition(pos);
++  engineForce-&gt;setOrientation(orientation);
+ 
+   engineForce-&gt;getInputPort(0)-&gt;connect(prod-&gt;getOutputPort(0));
+ 
+@@ -2122,6 +2321,22 @@
+ }
+ 
+ bool
++LegacyJSBSimReader::convertElectric(const XMLElement* turbine,
++                                    const std::string&amp; number,
++                                    Port* thrusterDriver)
++{
++  return true;
++}
++
++bool
++LegacyJSBSimReader::convertPiston(const XMLElement* turbine,
++                                  const std::string&amp; number,
++                                  Port* thrusterDriver)
++{
++  return true;
++}
++
++bool
+ LegacyJSBSimReader::convertAerodynamics(const XMLElement* aerodynamics)
+ {
+   std::list&lt;SharedPtr&lt;XMLElement&gt; &gt; elems = aerodynamics-&gt;getElements();
+@@ -2295,7 +2510,7 @@
+     TableLookup lookup;
+     if (!parseTable1D(datastr, table, lookup))
+       // FIXME
+-      std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; std::endl;
++      std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; data &lt;&lt; std::endl;
+ 
+     Table1D* table1D = new Table1D(prod-&gt;getName() + &quot; Table&quot;);
+     addMultiBodyModel(table1D);
+@@ -2340,7 +2555,7 @@
+     TableLookup lookup[3];
+     if (!parseTable3D(datastr, table, lookup))
+       // FIXME
+-      std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; std::endl;
++      std::cerr &lt;&lt; &quot;Cannot parse &quot; + type + &quot; table&quot; &lt;&lt; data &lt;&lt; std::endl;
+ 
+     Table3D* table3D = new Table3D(prod-&gt;getName() + &quot; Table&quot;);
+     addMultiBodyModel(table3D);
+
+Modified: trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h
+===================================================================
+--- trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-16 19:48:11 UTC (rev 206)
++++ trunk/OpenFDM/src/JSBSim/LegacyJSBSimReader.h	2006-01-16 19:49:24 UTC (rev 207)
+@@ -198,8 +198,17 @@
+   bool convertThruster(const std::string&amp; data, const std::string&amp; type,
+                        const std::string&amp; number);
+   /// converts FG_ENGINE data
+-  bool convertEngine(const std::string&amp; data, const std::string&amp; type,
+-                     const std::string&amp; number);
++  bool convertEngine(const XMLElement* engine, const std::string&amp; number);
++  /// converts FG_TURBINE data
++  bool convertTurbine(const XMLElement* turbine, const std::string&amp; number,
++                      const Vector3&amp; pos, const Quaternion&amp; orientation,
++                      Port* thrusterDriver);
++  /// converts FG_PISTON data
++  bool convertPiston(const XMLElement* turbine, const std::string&amp; number,
++                      Port* thrusterDriver);
++  /// converts FG_ELECTRIC data
++  bool convertElectric(const XMLElement* turbine, const std::string&amp; number,
++                      Port* thrusterDriver);
+   /// converts AERODYNAMICS elements
+   bool convertAerodynamics(const XMLElement* aerodynamics);
+   /// converts recursively AERODYNAMICS summands, factors and grooups
+
+
+</PRE>
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="000189.html">[OpenFDM-svn] r206 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+	<LI>Next message: <A HREF="000191.html">[OpenFDM-svn] r210 - trunk/OpenFDM/src/OpenFDM
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#190">[ date ]</a>
+              <a href="thread.html#190">[ thread ]</a>
+              <a href="subject.html#190">[ subject ]</a>
+              <a href="author.html#190">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="https://lists.berlios.de/mailman/listinfo/openfdm-svn">More information about the OpenFDM-svn
+mailing list</a><br>
+</body></html>
